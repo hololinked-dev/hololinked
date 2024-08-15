@@ -217,7 +217,7 @@ class JPEGImageHandler(RPCHandler):
         """
         sets default headers for image handling. The general headers are listed as follows:
 
-        .. code-block:: http 
+        .. code-block:: yaml 
 
             Content-Type: image/jpeg
             Access-Control-Allow-Credentials: true
@@ -233,7 +233,7 @@ class PNGImageHandler(RPCHandler):
         """
         sets default headers for image handling. The general headers are listed as follows:
 
-        .. code-block:: http 
+        .. code-block:: yaml 
 
             Content-Type: image/png
             Access-Control-Allow-Credentials: true
