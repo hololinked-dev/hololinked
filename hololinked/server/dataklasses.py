@@ -344,22 +344,22 @@ class ZMQResource(SerializableDataclass):
     what : str 
     class_name : str # just metadata
     instance_name : str 
-    instruction : str
-    obj_name : str
-    qualname : str
-    doc : typing.Optional[str]
-    top_owner : bool 
+    id : str # identification on the server
+    obj_name : str # what looks on the client
+    qualname : str # qualified name to use by the client 
+    doc : typing.Optional[str] # 
+    top_owner : bool # in case of object compisition
     argument_schema : typing.Optional[JSON]
     return_value_schema : typing.Optional[JSON]
     request_as_argument : bool = field(default=False)
 
-    def __init__(self, *, what : str, class_name : str, instance_name : str, instruction : str, obj_name : str,
+    def __init__(self, *, what : str, class_name : str, instance_name : str, id : str, obj_name : str,
                 qualname : str, doc : str, top_owner : bool, argument_schema : typing.Optional[JSON] = None,
                 return_value_schema : typing.Optional[JSON] = None, request_as_argument : bool = False) -> None:
         self.what = what 
         self.class_name = class_name
         self.instance_name = instance_name
-        self.instruction = instruction
+        self.id = id
         self.obj_name = obj_name 
         self.qualname = qualname
         self.doc = doc
