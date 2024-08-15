@@ -11,7 +11,7 @@ from types import FunctionType, MethodType
 
 from ..param.parameters import String, Boolean, Tuple, TupleSelector, ClassSelector, Parameter
 from ..param.parameterized import ParameterizedMetaclass, ParameterizedFunction
-from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, ResourceTypes, http_methods 
+from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, JSONSerializable, ResourceTypes, http_methods 
 from .utils import get_signature, getattr_without_descriptor_read, pep8_to_URL_path
 from .config import global_config
 from .schema_validators import BaseSchemaValidator
@@ -393,6 +393,7 @@ class ServerSentEvent(SerializableDataclass):
         is it a property, method/action or event?
     """
     name : str = field(default=UNSPECIFIED)
+    class_name : str = field(default=UNSPECIFIED)
     obj_name : str = field(default=UNSPECIFIED)
     class_name : str = field(default=UNSPECIFIED) # just metadata  
     unique_identifier : str = field(default=UNSPECIFIED)
@@ -401,7 +402,8 @@ class ServerSentEvent(SerializableDataclass):
     what : str = field(default=ResourceTypes.EVENT)
 
 
-def build_our_temp_TD(instance):
+def build_our_temp_TD(instance, authority : typing.Optional[str] = None , 
+                    ignore_errors : bool = False) -> typing.Dict[str, JSONSerializable]:
     """
     A temporary extension of TD used to build GUI of thing control panel.
     Will be later replaced by a more sophisticated TD builder which is compliant to the actual spec & its theory.
@@ -410,7 +412,7 @@ def build_our_temp_TD(instance):
 
     assert isinstance(instance, Thing), f"got invalid type {type(instance)}"
     
-    our_TD = instance.get_thing_description(ignore_errors=True)
+    our_TD = instance.get_thing_description(authority=authority, ignore_errors=ignore_errors)
     our_TD["inheritance"] = [class_.__name__ for class_ in instance.__class__.mro()]
 
     for instruction, remote_info in instance.instance_resources.items(): 

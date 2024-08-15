@@ -617,9 +617,8 @@ class Tuple(Iterable):
     def __init__(self, default : typing.Any = None, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
             length: typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_list : bool = False, deepcopy_default : bool = False, 
-            doc : typing.Optional[str] = None, constant : bool = False, 
-            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
+            doc : typing.Optional[str] = None, constant : bool = False, URL_path : str = USE_OBJECT_NAME, 
+            readonly : bool = False, allow_None : bool = True, label : typing.Optional[str] = None, 
             http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
                                                         (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
@@ -677,9 +676,8 @@ class List(Iterable):
     def __init__(self, default: typing.Any = None, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
             length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_tuple : bool = False, deepcopy_default : bool = False, 
-            doc : typing.Optional[str] = None, constant : bool = False, 
-            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
+            doc : typing.Optional[str] = None, constant : bool = False, URL_path : str = USE_OBJECT_NAME, 
+            readonly : bool = False, allow_None : bool = True, label : typing.Optional[str] = None, 
             http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
                                                         (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,

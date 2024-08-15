@@ -1,8 +1,9 @@
 import asyncio
+from tornado.httputil import HTTPServerRequest
 import zmq.asyncio
 import typing
 import uuid
-from tornado.web import RequestHandler, StaticFileHandler
+from tornado.web import Application, RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
 
@@ -209,6 +210,37 @@ class RPCHandler(BaseHandler):
                 self.write(reply)
         self.finish()
         
+
+class JPEGImageHandler(RPCHandler):
+
+    def set_headers(self) -> None:
+        """
+        sets default headers for image handling. The general headers are listed as follows:
+
+        .. code-block:: http 
+
+            Content-Type: image/jpeg
+            Access-Control-Allow-Credentials: true
+            Access-Control-Allow-Origin: <client>
+        """
+        self.set_header("Content-Type", "image/jpeg")
+        self.set_header("Access-Control-Allow-Credentials", "true")
+
+
+class PNGImageHandler(RPCHandler):
+
+    def set_headers(self) -> None:
+        """
+        sets default headers for image handling. The general headers are listed as follows:
+
+        .. code-block:: http 
+
+            Content-Type: image/png
+            Access-Control-Allow-Credentials: true
+            Access-Control-Allow-Origin: <client>
+        """
+        self.set_header("Content-Type", "image/png")
+        self.set_header("Access-Control-Allow-Credentials", "true")
     
         
 class EventHandler(BaseHandler):
@@ -268,7 +300,7 @@ class EventHandler(BaseHandler):
         called by GET method and handles the event.
         """
         try:                        
-            event_consumer_cls = EventConsumer if self.owner._zmq_inproc_event_context else AsyncEventConsumer
+            event_consumer_cls = EventConsumer if self.owner._zmq_inproc_event_context is not None else AsyncEventConsumer
             # synchronous context with INPROC pub or asynchronous context with IPC or TCP pub, we handle both in async 
             # fashion as HTTP server should be running purely sync(or normal) python method.
             event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 

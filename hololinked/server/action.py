@@ -13,6 +13,32 @@ from .config import global_config
 
 
 __action_kw_arguments__ = ['safe', 'idempotent', 'synchronous'] 
+
+
+class Action:
+
+    def __init__(self, obj, owner) -> None:
+        self.obj = obj
+        self.owner = owner
+
+    @property
+    def _remote_info(self) -> ActionInfoValidator:
+        return self.obj._remote_info
+    
+
+class SyncAction(Action):  
+
+    def __call__(self, *args : typing.Any, **kwargs : typing.Any) -> typing.Any:
+        return self.obj(*args, **kwargs)
+
+
+class AsyncAction(Action):
+
+    async def __call__(self, *args : typing.Any, **kwargs : typing.Any) -> typing.Any:
+        return await self.obj(*args, **kwargs)
+
+
+
    
 def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
             state : typing.Optional[typing.Union[str, Enum]] = None, input_schema : typing.Optional[JSON] = None,

@@ -486,6 +486,7 @@ class ObjectProxy:
         event = getattr(self, name, None) # type: _Event
         if not isinstance(event, _Event):
             raise AttributeError(f"No event named {name}")
+        event._deserialize = deserialize
         if event._subscribed:
             event.add_callbacks(callbacks)
         else: 
@@ -808,6 +809,7 @@ class _Event:
                     else: 
                         threading.Thread(target=cb, args=(data,)).start()
             except Exception as ex:
+                print(ex)
                 warnings.warn(f"Uncaught exception from {self._name} event - {str(ex)}", 
                                 category=RuntimeWarning)
         try:
