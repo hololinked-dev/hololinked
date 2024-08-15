@@ -120,10 +120,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
     zmq_resources = Property(readonly=True, URL_path='/resources/zmq-object-proxy',
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.",
                         fget=lambda self: self._zmq_resources) # type: typing.Dict[str, ZMQResource]
-    gui_resources = Property(readonly=True, URL_path='/resources/portal-app',
-                        doc="""object's data read by hololinked-portal GUI client, similar to http_resources but differs 
-                        in details.""",
-                        fget=lambda self: build_our_temp_TD(self)) # type: typing.Dict[str, typing.Any]
     GUI = Property(default=None, allow_None=True, URL_path='/resources/web-gui', fget = lambda self : self._gui,
                         doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool")
     object_info = Property(doc="contains information about this object like the class name, script location etc.",
@@ -504,7 +500,17 @@ class Thing(Parameterized, metaclass=ThingMeta):
                                     allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)
 
 
-    @action(URL_path='/exit', http_method=HTTP_METHODS.POST)
+    @action(URL_path='/resources/portal-app', http_method=HTTP_METHODS.GET)
+    def get_our_temp_thing_description(self, authority : typing.Optional[str] = None,
+                                       ignore_errors : bool = False) -> typing.Dict[str, typing.Any]:
+        """
+        object's data read by hololinked-portal GUI client, similar to http_resources but differs 
+        in details.
+        """
+        return build_our_temp_TD(self, authority=authority, ignore_errors=ignore_errors)
+
+
+    @action(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
     def exit(self) -> None:
         """
         Exit the object without killing the eventloop that runs this object. If Thing was 

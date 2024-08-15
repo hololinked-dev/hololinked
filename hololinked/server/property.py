@@ -1,5 +1,4 @@
 import typing
-from types import FunctionType, MethodType
 from enum import Enum
 
 
@@ -143,7 +142,7 @@ class Property(Parameter):
                 URL_path : str = USE_OBJECT_NAME, 
                 http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
                                                             (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
-                observable : bool = False, change_comparator : typing.Optional[typing.Union[FunctionType, MethodType]] = None,
+                observable : bool = False, 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, remote : bool = True,
                 class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
@@ -162,7 +161,7 @@ class Property(Parameter):
                                                             (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
-                observable : bool = False, class_member : bool = False, model = None, 
+                observable : bool = False, model : typing.Optional["BaseModel"] = None, class_member : bool = False, 
                 fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
                 fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
                 deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
@@ -177,7 +176,7 @@ class Property(Parameter):
         self.fcomparator = fcomparator
         self.metadata = metadata
         self._observable = observable
-        self._observable_event_descriptor : Event = None
+        self._observable_event_descriptor = None # typing.Optional[Event]
         self._remote_info = None
         if remote:
             self._remote_info = RemoteResourceInfoValidator(
@@ -348,6 +347,28 @@ class ClassProperties(ClassParameters):
                 info[param.name][field] = state.get(field, None) 
         return info 
 
+try: 
+    from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
+    def wrap_plain_types_in_rootmodel(model : type) -> type["BaseModel"]:
+        """
+        Ensure a type is a subclass of BaseModel.
+
+        If a `BaseModel` subclass is passed to this function, we will pass it
+        through unchanged. Otherwise, we wrap the type in a RootModel.
+        In the future, we may explicitly check that the argument is a type
+        and not a model instance.
+        """
+        try:  # This needs to be a `try` as basic types are not classes
+            assert issubclass(model, BaseModel)
+            return model
+        except (TypeError, AssertionError):
+            return create_model(f"{model!r}", root=(model, ...), __base__=RootModel)
+        except NameError:
+            raise ImportError("pydantic is not installed, please install it to use this feature") from None
+except ImportError:
+    def wrap_plain_types_in_rootmodel(model : type) -> type:
+        raise ImportError("pydantic is not installed, please install it to use this feature") from None
+    
     
 try: 
     from pydantic import BaseModel, RootModel, create_model
