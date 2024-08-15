@@ -1,11 +1,12 @@
 import asyncio
-from dataclasses import dataclass
+from types import FunctionType, MethodType
 import zmq
 import zmq.asyncio
 import logging
 import socket
 import ssl
 import typing
+from dataclasses import dataclass
 from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
@@ -26,6 +27,17 @@ from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .events import Event
 from .eventloop import EventLoop
 from .config import global_config
+from .property import Property
+from .action import Action
+from .events import Event
+
+
+@dataclass 
+class __interaction_affordance_added_locally__:
+    obj : typing.Union[Property, Action, Event]
+    http_methods : typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
+    handler : BaseHandler
+    kwargs : dict
 
 
 
@@ -154,7 +166,8 @@ class HTTPServer(Parameterized):
         self._zmq_protocol = ZMQ_PROTOCOLS.IPC
         self._zmq_inproc_socket_context = None 
         self._zmq_inproc_event_context = None
-        self._local_rules = dict() # type: typing.Dict[str, typing.List[InteractionAffordance]]
+        self._local_rules = dict() # type: typing.Dict[str, typing.Dict[str, __interaction_affordance_added_locally__]]
+        self._checked = False
  
     @property
     def all_ok(self) -> bool:
@@ -197,6 +210,7 @@ class HTTPServer(Parameterized):
         #     self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
         # else:
         self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
+        self._checked = True
         return True
     
 
@@ -239,7 +253,8 @@ class HTTPServer(Parameterized):
         Start HTTP server. This method is blocking, async event loops intending to schedule the HTTP server should instead use  
         the inner tornado instance's (``HTTPServer.tornado_instance``) listen() method. 
         """
-        assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
+        if not self._checked:
+            assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
         self.tornado_event_loop = ioloop.IOLoop.current()
         self.tornado_instance.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
@@ -274,6 +289,28 @@ class HTTPServer(Parameterized):
             return 
         self.logger.info(f"attempting to update router with thing {client.instance_name}.")
         self._lost_things[client.instance_name] = client
+        self.logger.info(f"attempting to update router with remote object {client.instance_name}.")
+
+        def added_local_object(self : HTTPServer, handlers : typing.List[BaseHandler], 
+                               interaction : typing.Union[Property, Action, Event]) -> bool: 
+            if resource.class_name in self._local_rules:
+                objects = self._local_rules[resource.class_name]
+                for path, interaction_affordance_added_locally in objects.items():
+                    if not isinstance(interaction_affordance_added_locally.obj, interaction):
+                        continue 
+                    if f'/{client.instance_name}/{path}' == resource.fullpath:
+                        handlers.append((resource.fullpath, interaction_affordance_added_locally.handler, dict(
+                                                                            **dict(
+                                                                                resource=resource,
+                                                                                validator=None,
+                                                                                owner=self
+                                                                            ),
+                                                                            **interaction_affordance_added_locally.kwargs
+                                                                        )))
+                        return True
+                return False
+            return False
+        
         while True:
             try:
                 await client.handshake_complete()
@@ -286,8 +323,19 @@ class HTTPServer(Parameterized):
 
                 handlers = []
                 for instruction, http_resource in resources.items():
-                    if http_resource["what"] in [ResourceTypes.PROPERTY, ResourceTypes.ACTION]:
+                    if http_resource["what"] == ResourceTypes.PROPERTY:
                         resource = HTTPResource(**http_resource)
+                        if added_local_object(self, handlers, Property):
+                            continue
+                        handlers.append((resource.fullpath, self.request_handler, dict(
+                                                            resource=resource,
+                                                            validator=self.schema_validator(resource.argument_schema) if global_config.validate_schema_on_client and resource.argument_schema else None,
+                                                            owner=self 
+                                                        )))
+                    if http_resource["what"] == ResourceTypes.ACTION:
+                        resource = HTTPResource(**http_resource)
+                        if added_local_object(self, handlers, Action):
+                            continue
                         handlers.append((resource.fullpath, self.request_handler, dict(
                                                                 resource=resource,
                                                                 validator=self.schema_validator(resource.argument_schema) if global_config.validate_schema_on_client and resource.argument_schema else None,
@@ -295,17 +343,13 @@ class HTTPServer(Parameterized):
                                                             )))
                     elif http_resource["what"] == ResourceTypes.EVENT:
                         resource = ServerSentEvent(**http_resource)
-                        if resource.class_name in self._local_rules and any(ia.obj._obj_name == resource.obj_name for ia in self._local_rules[resource.class_name]):
-                            for ia in self._local_rules[resource.class_name]:
-                                if ia.obj._obj_name == resource.obj_name:
-                                    handlers.append((f'/{client.instance_name}{ia.URL_path}', ia.handler, dict(resource=resource, validator=None, 
-                                                                                owner=self, **ia.kwargs)))
-                        else:
-                            handlers.append((instruction, self.event_handler, dict(
-                                                                resource=resource,
-                                                                validator=None,
-                                                                owner=self 
-                                                            )))
+                        if added_local_object(self, handlers, Event):
+                            continue
+                        handlers.append((instruction, self.event_handler, dict(
+                                                            resource=resource,
+                                                            validator=None,
+                                                            owner=self 
+                                                        )))
                     """
                     for handler based tornado rule matcher, the Rule object has following
                     signature
@@ -365,36 +409,52 @@ class HTTPServer(Parameterized):
         self._lost_things.pop(client.instance_name)
 
 
-    def add_event(self, URL_path : str, event : Event, handler : typing.Optional[BaseHandler] = None, 
-                **kwargs) -> None:
-        """
-        Add an event to be served by HTTP server
+    def add_things(self, *things : str) -> None:
+        raise NotImplementedError("Not implemented yet")
+        self.things.extend(things)
+        self._lost_things.update({thing : None for thing in things})
+        event_loop = EventLoop.get_async_loop()
+        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
 
-        Parameters
-        ----------
-        URL_path : str
-            URL path to access the event
-        event : Event
-            Event to be served
-        handler : BaseHandler, optional
-            custom handler for the event
-        kwargs : dict
-            additional keyword arguments to be passed to the handler's __init__
+
+    def add_property(self, URL_path : str, http_methods : typing.Tuple[str, typing.Optional[str], typing.Optional[str]], 
+                    property : Property, handler : BaseHandler, **kwargs) -> None:
         """
+        Add a property to be handler by HTTP server
+        """
+        if not isinstance(property, Property):
+            raise TypeError("event should be of type EventDispatcher")
+        if not issubklass(handler, BaseHandler):
+            raise TypeError("handler should be subclass of BaseHandler")
+        if property.owner.__name__ not in self._local_rules:
+            self._local_rules[property.owner.__name__] = dict() 
+        self._local_rules[property.owner.__name__][URL_path] = __interaction_affordance_added_locally__(
+                                                                    property, http_methods, handler, kwargs)
+
+
+    def add_action(self, URL_path : str, http_method : str,
+                        action : Action, handler : BaseHandler, **kwargs) -> None:
+        if not isinstance(action, Action):
+            raise TypeError("event should be of type EventDispatcher")
+        if not issubklass(handler, BaseHandler):
+            raise TypeError("handler should be subclass of BaseHandler")
+        if action.owner.__name__ not in self._local_rules:
+            self._local_rules[action.owner.__name__] = dict() 
+        self._local_rules[action.owner.__name__][URL_path] = __interaction_affordance_added_locally__(
+                                                                    action, http_method, handler, kwargs)
+
+    
+    def add_event(self, URL_path : str, event : Event, handler : BaseHandler, **kwargs) -> None:
         if not isinstance(event, Event):
             raise TypeError("event should be of type Event")
         if not issubklass(handler, BaseHandler):
             raise TypeError("handler should be subclass of BaseHandler")
         if event.owner.__name__ not in self._local_rules:
-            self._local_rules[event.owner.__name__] = []
-        obj = InteractionAffordance(URL_path=URL_path, obj=event,  
-                        http_methods=('GET',), handler=handler or self.event_handler,  
-                        kwargs=kwargs)
-        if obj not in self._local_rules[event.owner.__name__]:
-            self._local_rules[event.owner.__name__].append(obj)
+            self._local_rules[event.owner.__name__] = dict() 
+        self._local_rules[event.owner.__name__][URL_path] = __interaction_affordance_added_locally__(
+                                                                    event, 'GET', handler, kwargs)
 
-    
-    
+
 __all__ = [
     HTTPServer.__name__
 ]

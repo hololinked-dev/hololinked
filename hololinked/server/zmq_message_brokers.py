@@ -2187,7 +2187,13 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         """
         if event._unique_identifier in self.events and event not in self.events:
             raise AttributeError(f"event {event._name} already found in list of events, please use another name.")
-        self.event_ids.add(event._unique_identifier)
+        if isinstance(self.zmq_serializer, JSONSerializer):
+            event._unique_zmq_identifier = event._unique_identifier
+            event._unique_http_identifier = event._unique_identifier  
+        else:
+            event._unique_zmq_identifier = event._unique_identifier + b'-zmq'
+            event._unique_http_identifier = event._unique_identifier + b'-http' 
+        self.event_ids.add(event._unique_identifier)       
         self.events.add(event) 
     
     def unregister(self, event : "EventDispatcher") -> None:
@@ -2205,7 +2211,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         else:
             warnings.warn(f"event {event._name} not found in list of events, please use another name.", UserWarning)
                
-    def publish(self, unique_identifier : bytes, data : typing.Any, *, zmq_clients : bool = True, 
+    def publish(self, event : "EventDispatcher", data : typing.Any, *, zmq_clients : bool = True, 
                         http_clients : bool = True, serialize : bool = True) -> None: 
         """
         publish an event with given unique name. 
@@ -2223,10 +2229,10 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         http_clients: bool, default True
             pushed event to HTTP clients
         """
-        if unique_identifier in self.event_ids:
+        if event._unique_identifier in self.event_ids:
             if serialize:
                 if isinstance(self.zmq_serializer , JSONSerializer):
-                    self.socket.send_multipart([unique_identifier, self.http_serializer.dumps(data)])
+                    self.socket.send_multipart([event._unique_identifier, self.http_serializer.dumps(data)])
                     return
                 if zmq_clients:
                     # TODO - event id should not any longer be unique
@@ -2241,7 +2247,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             else: 
                 self.socket.send_multipart([unique_identifier, data])
         else:
-            raise AttributeError("event name {} not yet registered with socket {}".format(unique_identifier, self.socket_address))
+            raise AttributeError("event name {} not yet registered with socket {}".format(event._unique_identifier, self.socket_address))
         
     def exit(self):
         if not hasattr(self, 'logger'):

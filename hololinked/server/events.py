@@ -88,7 +88,9 @@ class EventDispatcher:
     ``EventDispatcher`` to allow class level definitions of the ``Event`` 
     """
     def __init__(self, unique_identifier : str) -> None:
-        self._unique_identifier = bytes(unique_identifier, encoding='utf-8')         
+        self._unique_identifier = bytes(unique_identifier, encoding='utf-8')   
+        self._unique_zmq_identifier = self._unique_identifier
+        self._unique_http_identifier = self._unique_identifier      
         self._publisher = None
         self._remote_info = ServerSentEvent(unique_identifier=unique_identifier)
         self._owner_inst = None
@@ -117,7 +119,7 @@ class EventDispatcher:
         data: Any
             payload of the event
         serialize: bool, default True
-            serialize the payload before pushing, set to False when supplying raw bytes
+            serialize the payload before pushing, set to False when supplying raw bytes. 
         **kwargs:
             zmq_clients: bool, default True
                 pushes event to RPC clients, irrelevant if ``Thing`` uses only one type of serializer (refer to 
@@ -126,8 +128,8 @@ class EventDispatcher:
                 pushed event to HTTP clients, irrelevant if ``Thing`` uses only one type of serializer (refer to 
                 difference between zmq_serializer and http_serializer).
         """
-        self.publisher.publish(self._unique_identifier, data, zmq_clients=kwargs.get('zmq_clients', True), 
-                                    http_clients=kwargs.get('http_clients', True), serialize=serialize)
+        self.publisher.publish(self, data, zmq_clients=kwargs.get('zmq_clients', True), 
+                                http_clients=kwargs.get('http_clients', True), serialize=serialize)
 
 
 
