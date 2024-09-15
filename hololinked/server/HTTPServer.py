@@ -14,10 +14,10 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 from ..param import Parameterized
-from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
-from .constants import ZMQ_PROTOCOLS, CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
-from .utils import get_IP_from_interface, issubklass
-from .dataklasses import HTTPResource, ServerSentEvent
+from ..param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, String
+from .constants import HTTP_METHODS, ZMQ_PROTOCOLS, CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
+from .utils import get_IP_from_interface, issubklass, pep8_to_dashed_name
+from .dataklasses import ZMQResource, ZMQAction, ZMQEvent
 from .utils import get_default_logger
 from .serializers import JSONSerializer
 from .database import ThingInformation
@@ -28,17 +28,21 @@ from .events import Event
 from .eventloop import EventLoop
 from .config import global_config
 from .property import Property
-from .action import Action
+from .actions import Action
 from .events import Event
+from .thing import Thing
 
 
 @dataclass 
-class __interaction_affordance_added_locally__:
+class InteractionAffordance:
+    URL_path : str
     obj : typing.Union[Property, Action, Event]
     http_methods : typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
     handler : BaseHandler
     kwargs : dict
 
+    def __eq__(self, other : "InteractionAffordance") -> bool:
+        return self.obj == other.obj 
 
 
 
@@ -96,7 +100,9 @@ class HTTPServer(Parameterized):
     #                         doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
     #                         therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
     #                         you may leave this field" ) # type: str
-    request_handler = ClassSelector(default=RPCHandler, class_=RPCHandler, isinstance=False, 
+    property_handler = ClassSelector(default=RPCHandler, class_=RPCHandler, isinstance=False, 
+                            doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, RPCHandler]
+    action_handler = ClassSelector(default=RPCHandler, class_=RPCHandler, isinstance=False, 
                             doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, RPCHandler]
     event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, BaseHandler), isinstance=False, 
                             doc="custom event handler of your choice for handling events") # type: typing.Union[BaseHandler, EventHandler]
@@ -157,7 +163,7 @@ class HTTPServer(Parameterized):
             keyfile=keyfile,
             ssl_context=ssl_context,
             # network_interface='Ethernet',# network_interface,
-            request_handler=kwargs.get('request_handler', RPCHandler),
+            property_handler=kwargs.get('property_handler', RPCHandler),
             event_handler=kwargs.get('event_handler', EventHandler),
             allowed_clients=allowed_clients if allowed_clients is not None else []
         )
@@ -166,7 +172,7 @@ class HTTPServer(Parameterized):
         self._zmq_protocol = ZMQ_PROTOCOLS.IPC
         self._zmq_inproc_socket_context = None 
         self._zmq_inproc_event_context = None
-        self._local_rules = dict() # type: typing.Dict[str, typing.Dict[str, __interaction_affordance_added_locally__]]
+        self._local_rules = dict() # type: typing.Dict[str, typing.List[InteractionAffordance]]
         self._checked = False
  
     @property
@@ -181,8 +187,7 @@ class HTTPServer(Parameterized):
             raise ValueError("Inproc socket context is not provided. Logic Error.")
             
         self.app = Application(handlers=[
-            (r'/remote-objects', ThingsHandler, dict(request_handler=self.request_handler, 
-                                                        event_handler=self.event_handler)),
+            (r'/remote-objects', ThingsHandler, dict(owner=self)),
             (r'/stop', StopHandler, dict(owner=self))
         ])
         
@@ -291,65 +296,46 @@ class HTTPServer(Parameterized):
         self._lost_things[client.instance_name] = client
         self.logger.info(f"attempting to update router with remote object {client.instance_name}.")
 
-        def added_local_object(self : HTTPServer, handlers : typing.List[BaseHandler], 
-                               interaction : typing.Union[Property, Action, Event]) -> bool: 
-            if resource.class_name in self._local_rules:
-                objects = self._local_rules[resource.class_name]
-                for path, interaction_affordance_added_locally in objects.items():
-                    if not isinstance(interaction_affordance_added_locally.obj, interaction):
-                        continue 
-                    if f'/{client.instance_name}/{path}' == resource.fullpath:
-                        handlers.append((resource.fullpath, interaction_affordance_added_locally.handler, dict(
-                                                                            **dict(
-                                                                                resource=resource,
-                                                                                validator=None,
-                                                                                owner=self
-                                                                            ),
-                                                                            **interaction_affordance_added_locally.kwargs
-                                                                        )))
-                        return True
-                return False
-            return False
+        def add_interaction_affordance(self : HTTPServer, handlers : typing.List[BaseHandler], 
+                                zmq_resource : ZMQResource, interaction_affordance : typing.Union[Property, Action, Event]) -> bool: 
+           
+            objects = self._local_rules[zmq_resource.class_name]
+            for path, interaction_affordance_instance in objects.items():
+                if not isinstance(interaction_affordance_instance.obj, interaction_affordance):
+                    continue 
+                handlers.append((f'/{zmq_resource.instance_name}{path}', 
+                                interaction_affordance_instance.handler, 
+                                dict(
+                                    resource=resource,
+                                    validator=self.schema_validator(resource.argument_schema) if global_config.validate_schema_on_client and resource.argument_schema else None,
+                                    owner=self,                                
+                                    **interaction_affordance_instance.kwargs
+                                )))
+                resource.supported_methods = interaction_affordance_instance.http_methods
+                return 
+            raise RuntimeError(f"Unable to add {interaction_affordance.__name__} to router.")
         
         while True:
             try:
                 await client.handshake_complete()
-                resources = dict() # type: typing.Dict[str, HTTPResource]
+                resources = dict() # type: typing.Dict[str, ZMQResource]
                 reply = (await client.async_execute(
-                                instruction=CommonRPC.http_resource_read(client.instance_name), 
+                                instruction=CommonRPC.zmq_resource_read(client.instance_name), 
                                 raise_client_side_exception=True
                             ))[ServerMessage.DATA]
                 resources.update(reply)
 
                 handlers = []
-                for instruction, http_resource in resources.items():
+                for obj_name, http_resource in resources.items():
                     if http_resource["what"] == ResourceTypes.PROPERTY:
-                        resource = HTTPResource(**http_resource)
-                        if added_local_object(self, handlers, Property):
-                            continue
-                        handlers.append((resource.fullpath, self.request_handler, dict(
-                                                            resource=resource,
-                                                            validator=self.schema_validator(resource.argument_schema) if global_config.validate_schema_on_client and resource.argument_schema else None,
-                                                            owner=self 
-                                                        )))
-                    if http_resource["what"] == ResourceTypes.ACTION:
-                        resource = HTTPResource(**http_resource)
-                        if added_local_object(self, handlers, Action):
-                            continue
-                        handlers.append((resource.fullpath, self.request_handler, dict(
-                                                                resource=resource,
-                                                                validator=self.schema_validator(resource.argument_schema) if global_config.validate_schema_on_client and resource.argument_schema else None,
-                                                                owner=self                                                     
-                                                            )))
+                        resource = ZMQResource(**http_resource)
+                        add_interaction_affordance(self, handlers, resource, Property)
+                    elif http_resource["what"] == ResourceTypes.ACTION:
+                        resource = ZMQAction(**http_resource)
+                        add_interaction_affordance(self, handlers, resource, Action)
                     elif http_resource["what"] == ResourceTypes.EVENT:
-                        resource = ServerSentEvent(**http_resource)
-                        if added_local_object(self, handlers, Event):
-                            continue
-                        handlers.append((instruction, self.event_handler, dict(
-                                                            resource=resource,
-                                                            validator=None,
-                                                            owner=self 
-                                                        )))
+                        resource = ZMQEvent(**http_resource)
+                        add_interaction_affordance(self, handlers, resource, Event)
                     """
                     for handler based tornado rule matcher, the Rule object has following
                     signature
@@ -409,51 +395,144 @@ class HTTPServer(Parameterized):
         self._lost_things.pop(client.instance_name)
 
 
-    def add_things(self, *things : str) -> None:
-        raise NotImplementedError("Not implemented yet")
-        self.things.extend(things)
-        self._lost_things.update({thing : None for thing in things})
-        event_loop = EventLoop.get_async_loop()
-        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
-
-
-    def add_property(self, URL_path : str, http_methods : typing.Tuple[str, typing.Optional[str], typing.Optional[str]], 
-                    property : Property, handler : BaseHandler, **kwargs) -> None:
+    def add_things(self, *things : Thing) -> None:
         """
-        Add a property to be handler by HTTP server
+        Add things to be served by the HTTP server
+
+        Parameters
+        ----------
+        *things : str
+            instance name of the things to be served
+        """
+        for thing in things:
+            for prop in thing.properties.descriptors.values():
+                self.add_property(f'/{thing.instance_name}/{pep8_to_dashed_name(prop.name)}', prop,
+                                    ('GET') if prop.readonly else ('GET', 'PUT'),
+                                    handler=self.property_handler)
+            for name, action in thing.actions.items():
+                self.add_action(f'/{thing.instance_name}/{pep8_to_dashed_name(name)}', action, 
+                                    'POST', self.action_handler)
+            for event in thing.events.values():
+                self.add_event(f'/{thing.instance_name}/{pep8_to_dashed_name(event.friendly_name)}', event, 
+                                    self.event_handler)
+  
+
+    def add_property(self, URL_path : str, property : Property, 
+                    http_methods : typing.Tuple[str, typing.Optional[str], typing.Optional[str]] = ('GET', 'PUT', None), 
+                    handler : typing.Optional[BaseHandler] = None, **kwargs) -> None:
+        """
+        Add a property to be accessible by HTTP
+
+        Parameters
+        ----------
+        URL_path : str
+            URL path to access the property
+        http_methods : Tuple[str, str, str]
+            tuple of http methods to be used for read, write and delete
+        property : Property
+            Property to be served
+        handler : BaseHandler, optional
+            custom handler for the property, otherwise the default handler will be used
+        kwargs : dict
+            additional keyword arguments to be passed to the handler's __init__
         """
         if not isinstance(property, Property):
             raise TypeError("event should be of type EventDispatcher")
         if not issubklass(handler, BaseHandler):
             raise TypeError("handler should be subclass of BaseHandler")
         if property.owner.__name__ not in self._local_rules:
-            self._local_rules[property.owner.__name__] = dict() 
-        self._local_rules[property.owner.__name__][URL_path] = __interaction_affordance_added_locally__(
-                                                                    property, http_methods, handler, kwargs)
+            self._local_rules[property.owner.__name__] = [] 
+        http_methods = _comply_http_method(http_methods)
+        read_http_method = write_http_method = delete_http_method = None
+        if len(http_methods) == 1:
+            read_http_method = http_methods[0]
+        elif len(http_methods) == 2:
+            read_http_method, write_http_method = http_methods
+        else:
+            read_http_method, write_http_method, delete_http_method = http_methods
+        if read_http_method != 'GET':
+            raise ValueError("read method should be GET or HEAD")
+        if write_http_method and write_http_method not in ['POST', 'PUT']:
+            raise ValueError("write method should be POST or PUT")
+        if delete_http_method and delete_http_method != 'DELETE':
+            raise ValueError("delete method should be DELETE")
+        obj = InteractionAffordance(URL_path=URL_path, obj=property, 
+                    http_methods=http_methods, handler=handler or self.property_handler, 
+                    kwargs=kwargs)
+        if obj not in self._local_rules[property.owner.__name__]:
+            self._local_rules[property.owner.__name__].append(obj)
 
 
-    def add_action(self, URL_path : str, http_method : str,
-                        action : Action, handler : BaseHandler, **kwargs) -> None:
+    def add_action(self, URL_path : str, action : Action, http_method : typing.Optional[str] = 'POST',
+                                handler : typing.Optional[BaseHandler] = None, **kwargs) -> None:
+        """
+        Add an action to be accessible by HTTP
+
+        Parameters
+        ----------
+        URL_path : str
+            URL path to access the action 
+        http_method : str
+            http method to be used for the action
+        action : Action
+            Action to be served
+        handler : BaseHandler, optional
+            custom handler for the action
+        kwargs : dict
+            additional keyword arguments to be passed to the handler's __init__
+        """
         if not isinstance(action, Action):
-            raise TypeError("event should be of type EventDispatcher")
+            raise TypeError("action should be of type Action")
         if not issubklass(handler, BaseHandler):
             raise TypeError("handler should be subclass of BaseHandler")
         if action.owner.__name__ not in self._local_rules:
-            self._local_rules[action.owner.__name__] = dict() 
-        self._local_rules[action.owner.__name__][URL_path] = __interaction_affordance_added_locally__(
-                                                                    action, http_method, handler, kwargs)
-
+            self._local_rules[action.owner.__name__] = []
+        http_methods = _comply_http_method(http_method)
+        obj = InteractionAffordance(URL_path=URL_path, obj=action, 
+                    http_methods=http_methods, handler=handler or self.action_handler, 
+                    kwargs=kwargs)
+        if obj not in self._local_rules[action.owner.__name__]:
+            self._local_rules[action.owner.__name__].append(obj)
     
-    def add_event(self, URL_path : str, event : Event, handler : BaseHandler, **kwargs) -> None:
+
+    def add_event(self, URL_path : str, event : Event, 
+                    handler : typing.Optional[BaseHandler] = None, **kwargs) -> None:
+        """
+        Add an event to be served by HTTP server
+
+        Parameters
+        ----------
+        URL_path : str
+            URL path to access the event
+        event : Event
+            Event to be served
+        handler : BaseHandler, optional
+            custom handler for the event
+        kwargs : dict
+            additional keyword arguments to be passed to the handler's __init__
+        """
         if not isinstance(event, Event):
             raise TypeError("event should be of type Event")
         if not issubklass(handler, BaseHandler):
             raise TypeError("handler should be subclass of BaseHandler")
         if event.owner.__name__ not in self._local_rules:
-            self._local_rules[event.owner.__name__] = dict() 
-        self._local_rules[event.owner.__name__][URL_path] = __interaction_affordance_added_locally__(
-                                                                    event, 'GET', handler, kwargs)
+            self._local_rules[event.owner.__name__] = []
+        obj = InteractionAffordance(URL_path=URL_path, obj=event,  
+                        http_methods=('GET',), handler=handler or self.event_handler,  
+                        kwargs=kwargs)
+        if obj not in self._local_rules[event.owner.__name__]:
+            self._local_rules[event.owner.__name__].append(obj)
 
+
+def _comply_http_method(http_methods : typing.Any):
+    if isinstance(http_methods, str):
+        http_methods = (http_methods,)
+    if not isinstance(http_methods, tuple):
+        raise TypeError("http_method should be a tuple")
+    for method in http_methods:
+        if method not in HTTP_METHODS.__members__.values():
+            raise ValueError(f"method {method} not supported")
+    return http_methods
 
 __all__ = [
     HTTPServer.__name__
