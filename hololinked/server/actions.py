@@ -1,3 +1,5 @@
+import functools
+import inspect
 import typing
 import jsonschema
 from enum import Enum
@@ -5,61 +7,86 @@ from types import FunctionType, MethodType
 from inspect import iscoroutinefunction, getfullargspec
 
 from ..param.parameterized import ParameterizedFunction
-from .utils import issubklass, pep8_to_URL_path, isclassmethod
-from .dataklasses import ActionInfoValidator
-from .constants import USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON
+from .constants import JSON
 from .config import global_config
-
+from .utils import getattr_without_descriptor_read, issubklass, isclassmethod
+from .exceptions import StateMachineError
+from .dataklasses import ActionInfoValidator, ActionResource
 
 
 __action_kw_arguments__ = ['safe', 'idempotent', 'synchronous'] 
 
 
 class Action:
+    """
+    Object that models an action.
+    """
+    __slots__ = ['obj', 'owner', 'owner_inst', '_execution_info', '_execution_info_validator']
 
-    def __init__(self, obj, owner) -> None:
+    def __init__(self, obj) -> None:
         self.obj = obj
-        self.owner = owner
+        self._execution_info_validator : ActionInfoValidator
 
+    def __post_init__(self):
+        # never called, only type hinting
+        from .thing import Thing, ThingMeta
+        self.owner : ThingMeta  
+        self.owner_inst : Thing
+        
     @property
-    def _remote_info(self) -> ActionInfoValidator:
-        return self.obj._remote_info
+    def execution_info(self) -> ActionResource:
+        return self._execution_info
     
+    @execution_info.setter
+    def execution_info(self, value : ActionResource) -> None:
+        if not isinstance(value, ActionResource):
+            raise TypeError("execution_info must be of type ActionResource")
+        self._execution_info = value
+    
+    def validate_call(self, args, kwargs : typing.Dict[str, typing.Any]) -> None:
+        if self._execution_info.state is None or (hasattr(self.owner_inst, 'state_machine') and 
+                            self.owner_inst.state_machine.current_state in self._execution_info.state):
+                # Note that because we actually find the resource within __prepare_self.owner_inst__, its already bound
+                # and we dont have to separately bind it. 
+                if self._execution_info.schema_validator is not None and len(args) == 0:
+                    self._execution_info.schema_validator.validate(kwargs)
+        else: 
+            raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
+                    self.owner_inst.instance_name, self.owner_inst.state, self._execution_info.state))      
+        if self._execution_info.isparameterized and len(args) > 0:
+            raise RuntimeError("parameterized functions cannot have positional arguments")
+            
 
 class SyncAction(Action):  
-
-    def __call__(self, *args : typing.Any, **kwargs : typing.Any) -> typing.Any:
-        return self.obj(*args, **kwargs)
+    """Non async action call"""
+            
+    def __call__(self, *args, **kwargs):
+        return self.obj(self.owner_inst, *args, **kwargs)
 
 
 class AsyncAction(Action):
+    """Async action call"""
 
-    async def __call__(self, *args : typing.Any, **kwargs : typing.Any) -> typing.Any:
-        return await self.obj(*args, **kwargs)
-
+    async def __call__(self, *args, **kwargs):
+        return await self.obj(self.owner_inst, *args, **kwargs)
 
 
    
-def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
-            state : typing.Optional[typing.Union[str, Enum]] = None, input_schema : typing.Optional[JSON] = None,
-            output_schema : typing.Optional[JSON] = None, create_task : bool = False, **kwargs) -> typing.Callable:
+def action(input_schema : typing.Optional[JSON] = None, output_schema : typing.Optional[JSON] = None, 
+        state : typing.Optional[typing.Union[str, Enum]] = None, create_task : bool = False, **kwargs) -> Action:
     """
     Use this function as a decorate on your methods to make them accessible remotely. For WoT, an action affordance schema 
     for the method is generated.
     
     Parameters
     ----------
-    URL_path: str, optional 
-        The path of URL under which the object is accessible. defaults to name of the object.
-    http_method: str, optional
-        HTTP method (GET, POST, PUT etc.). defaults to POST.
-    state: str | Tuple[str], optional 
-        state machine state under which the object can executed. When not provided,
-        the action can be executed under any state.
     input_schema: JSON 
         schema for arguments to validate them.
     output_schema: JSON 
         schema for return value, currently only used to inform clients which is supposed to validate on its won. 
+    state: str | Tuple[str], optional 
+        state machine state under which the object can executed. When not provided,
+        the action can be executed under any state.
     **kwargs:
         safe: bool 
             indicate in thing description if action is safe to execute 
@@ -67,10 +94,11 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             indicate in thing description if action is idempotent (for example, allows HTTP client to cache return value)
         synchronous: bool
             indicate in thing description if action is synchronous (not long running)
+
     Returns
     -------
     Callable
-        returns the callable object as it is
+        returns the callable object wrapped in an ``Action`` object
     """
     
     def inner(obj):
@@ -82,72 +110,90 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             obj = obj.__func__
         if obj.__name__.startswith('__'):
             raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")
-        if hasattr(obj, '_remote_info') and not isinstance(obj._remote_info, ActionInfoValidator): 
+        if hasattr(obj, '_execution_info_validator') and not isinstance(obj._execution_info_validator, ActionInfoValidator): 
             raise NameError(
-                "variable name '_remote_info' reserved for hololinked package. ",  
+                "variable name '_execution_info_validator' reserved for hololinked package. ",  
                 "Please do not assign this variable to any other object except hololinked.server.dataklasses.ActionInfoValidator."
             )             
         else:
-            obj._remote_info = ActionInfoValidator() 
-        obj_name = obj.__qualname__.split('.')
-        if len(obj_name) > 1: # i.e. its a bound method, used by Thing
-            if URL_path == USE_OBJECT_NAME: 
-                obj._remote_info.URL_path = f'/{pep8_to_URL_path(obj_name[1])}'
-            else:
-                if not URL_path.startswith('/'):
-                    raise ValueError(f"URL_path should start with '/', please add '/' before '{URL_path}'")
-                obj._remote_info.URL_path = URL_path
-            obj._remote_info.obj_name = obj_name[1] 
-        elif len(obj_name) == 1 and isinstance(obj, FunctionType):  # normal unbound function - used by HTTPServer instance
-            if URL_path is USE_OBJECT_NAME:
-                obj._remote_info.URL_path = f'/{pep8_to_URL_path(obj_name[0])}'
-            else:
-                if not URL_path.startswith('/'):
-                    raise ValueError(f"URL_path should start with '/', please add '/' before '{URL_path}'")
-                obj._remote_info.URL_path = URL_path
-            obj._remote_info.obj_name = obj_name[0] 
-        else:
-            raise RuntimeError(f"Undealt option for decorating {obj} or decorators wrongly used")
-        if http_method is not UNSPECIFIED:  
-            if isinstance(http_method, str):
-                obj._remote_info.http_method = (http_method,)
-            else:
-                obj._remote_info.http_method = http_method 
+            execution_info_validator = ActionInfoValidator() 
         if state is not None:
             if isinstance(state, (Enum, str)):
-                obj._remote_info.state = (state,)
+                execution_info_validator.state = (state,)
             else:
-                obj._remote_info.state = state     
+                execution_info_validator.state = state     
         if 'request' in getfullargspec(obj).kwonlyargs:
-            obj._remote_info.request_as_argument = True
-        obj._remote_info.isaction = True
-        obj._remote_info.argument_schema = input_schema
-        obj._remote_info.return_value_schema = output_schema
-        obj._remote_info.obj = original
-        obj._remote_info.create_task = create_task
-        obj._remote_info.safe = kwargs.get('safe', False)
-        obj._remote_info.idempotent = kwargs.get('idempotent', False)
-        obj._remote_info.synchronous = kwargs.get('synchronous', False)
-        
+            execution_info_validator.request_as_argument = True
+        execution_info_validator.isaction = True
+        execution_info_validator.argument_schema = input_schema
+        execution_info_validator.return_value_schema = output_schema
+        execution_info_validator.obj = original
+        execution_info_validator.create_task = create_task
+        execution_info_validator.safe = kwargs.get('safe', False)
+        execution_info_validator.idempotent = kwargs.get('idempotent', False)
+        execution_info_validator.synchronous = kwargs.get('synchronous', False)
+
         if issubklass(obj, ParameterizedFunction):
-            obj._remote_info.iscoroutine = iscoroutinefunction(obj.__call__)
-            obj._remote_info.isparameterized = True
+            execution_info_validator.iscoroutine = iscoroutinefunction(obj.__call__)
+            execution_info_validator.isparameterized = True
         else:
-            obj._remote_info.iscoroutine = iscoroutinefunction(obj)
-            obj._remote_info.isparameterized = False 
+            execution_info_validator.iscoroutine = iscoroutinefunction(obj)
+            execution_info_validator.isparameterized = False 
         if global_config.validate_schemas and input_schema:
             jsonschema.Draft7Validator.check_schema(input_schema)
         if global_config.validate_schemas and output_schema:
             jsonschema.Draft7Validator.check_schema(output_schema)
-        
-        return original
-    if callable(URL_path):
-        raise TypeError("URL_path should be a string, not a function/method, did you decorate your action wrongly?")
+
+        if execution_info_validator.iscoroutine:
+            final_obj = functools.wraps(original)(AsyncAction(original)) # type: Action
+        else:
+            final_obj = functools.wraps(original)(SyncAction(original)) # type: Action
+        final_obj._execution_info_validator = execution_info_validator
+        return final_obj
+    if callable(input_schema):
+        raise TypeError("input schema should be a JSON, not a function/method, did you decorate your action wrongly? " +
+                        "use @action() instead of @action.")
     if any(key not in __action_kw_arguments__ for key in kwargs.keys()):
         raise ValueError("Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, " + 
                         f"unknown arguments found {kwargs.keys()}")
     return inner 
 
+
+
+class RemoteInvokable:
+    """
+    Container class for actions, this class is not meant to be subclassed directly.
+    """
+
+    def __init__(self):
+        super().__init__()
+        for action in self.actions.values():
+            action.owner = self.__class__
+            action.owner_inst = self
+
+
+    @property
+    def actions(self) -> typing.Dict[str, Action]:
+        """
+        returns all actions of the object, methods that are decorated with ``@action``.
+        """
+        try:
+            return getattr(self, f'_{self.instance_name}_actions')
+        except AttributeError:
+            actions = dict()
+            for name, method in inspect._getmembers(
+                        self, 
+                        lambda f : inspect.ismethod(f) or (hasattr(f, '__execution_info_validator') and 
+                                    isinstance(f.__execution_info_validator, ActionInfoValidator)) or \
+                                    isinstance(f, Action) or issubklass(f, ParameterizedFunction),  
+                        getattr_without_descriptor_read
+                    ): 
+                if hasattr(method, '__execution_info_validator'):
+                    actions[name] = method
+                elif isinstance(method, Action) or issubklass(method, ParameterizedFunction):
+                    actions[name] = method
+            setattr(self, f'_{self.instance_name}_actions', actions)
+            return actions
 
 
 __all__ = [

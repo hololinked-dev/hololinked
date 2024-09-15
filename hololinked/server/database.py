@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from ..param import Parameterized
 from .constants import JSONSerializable
 from .config import global_config
-from .utils import pep8_to_URL_path
+from .utils import pep8_to_dashed_name
 from .serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
 from .property import Property
 
@@ -118,7 +118,7 @@ class BaseDB:
         """
         get temporary directory for database files
         """
-        return f"{global_config.TEMP_DIR}{os.sep}databases{os.sep}{pep8_to_URL_path(class_name)}"
+        return f"{global_config.TEMP_DIR}{os.sep}databases{os.sep}{pep8_to_dashed_name(class_name)}"
     
     @classmethod
     def create_postgres_URL(cls, conf : str = None, database : typing.Optional[str] = None, 

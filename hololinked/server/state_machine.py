@@ -72,7 +72,10 @@ class StateMachine:
         # if :
         #     self.state_change_event = Event('state-change') 
 
-    def _prepare(self, owner : Parameterized) -> None:
+    def _prepare(self, owner) -> None:
+        from .thing import Thing
+        assert isinstance(owner, Thing), "state machine can only be attached to a Thing class."
+        
         if self.states is None and self.initial_state is None:    
             self._valid = False 
             self._state = None
@@ -83,7 +86,7 @@ class StateMachine:
         self._state = self._get_machine_compliant_state(self.initial_state)
         self.owner = owner
         owner_properties = owner.parameters.descriptors.values() # same as owner.properties.descriptors.values()
-        owner_methods = [obj[0] for obj in inspect._getmembers(owner, inspect.ismethod, getattr_without_descriptor_read)]
+        owner_methods = owner.actions.values()
         
         if isinstance(self.states, list):
             self.__class__.states.constant = False 
@@ -94,18 +97,18 @@ class StateMachine:
         for state, objects in self.machine.items():
             if state in self:
                 for resource in objects:
-                    if hasattr(resource, '_remote_info'):
-                        assert isinstance(resource._remote_info, RemoteResourceInfoValidator) # type definition
-                        if resource._remote_info.isaction and resource._remote_info.obj_name not in owner_methods: 
+                    if hasattr(resource, '_execution_info_validator'):
+                        assert isinstance(resource._execution_info_validator, RemoteResourceInfoValidator) # type definition
+                        if resource._execution_info_validator.isaction and resource not in owner_methods: 
                             raise AttributeError("Given object {} for state machine does not belong to class {}".format(
                                                                                                 resource, owner))
-                        if resource._remote_info.isproperty and resource not in owner_properties: 
+                        if resource._execution_info_validator.isproperty and resource not in owner_properties: 
                             raise AttributeError("Given object {} - {} for state machine does not belong to class {}".format(
                                                                                                 resource.name, resource, owner))
-                        if resource._remote_info.state is None: 
-                            resource._remote_info.state = self._get_machine_compliant_state(state)
+                        if resource._execution_info_validator.state is None: 
+                            resource._execution_info_validator.state = self._get_machine_compliant_state(state)
                         else: 
-                            resource._remote_info.state = resource._remote_info.state + (self._get_machine_compliant_state(state), ) 
+                            resource._execution_info_validator.state = resource._execution_info_validator.state + (self._get_machine_compliant_state(state), ) 
                     else: 
                         raise AttributeError(f"Object {resource} was not made remotely accessible," + 
                                     " use state machine with properties and actions only.")

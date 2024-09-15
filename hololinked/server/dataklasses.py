@@ -8,11 +8,12 @@ import inspect
 from enum import Enum
 from dataclasses import dataclass, asdict, field, fields
 from types import FunctionType, MethodType
+import warnings
 
-from ..param.parameters import String, Boolean, Tuple, TupleSelector, ClassSelector, Parameter
-from ..param.parameterized import ParameterizedMetaclass, ParameterizedFunction
-from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, JSONSerializable, ResourceTypes, http_methods 
-from .utils import get_signature, getattr_without_descriptor_read, pep8_to_URL_path
+from ..param.parameters import String, Boolean, Tuple, ClassSelector, Parameter
+from ..param.parameterized import ParameterizedMetaclass
+from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, REGEX, JSONSerializable, ResourceTypes
+from .utils import get_signature, pep8_to_dashed_name
 from .config import global_config
 from .schema_validators import BaseSchemaValidator
 
@@ -21,17 +22,10 @@ class RemoteResourceInfoValidator:
     """
     A validator class for saving remote access related information on a resource. Currently callables (functions, 
     methods and those with__call__) and class/instance property store this information as their own attribute under 
-    the variable ``_remote_info``. This is later split into information suitable for HTTP server, RPC client & ``EventLoop``. 
+    the variable ``_execution_info_validator``. This is later split into information suitable for HTTP server, ZMQ client & ``EventLoop``. 
     
     Attributes
     ----------
-    URL_path : str, default - extracted object name 
-        the path in the URL under which the object is accesible.
-        Must follow url-regex ('[\-a-zA-Z0-9@:%._\/\+~#=]{1,256}') requirement. 
-        If not specified, the name of object will be used. Underscores will be converted to dashes 
-        for PEP 8 names. 
-    http_method : str, default POST
-        HTTP request method under which the object is accessible. GET, POST, PUT, DELETE or PATCH are supported. 
     state : str, default None
         State machine state at which a callable will be executed or attribute/property can be 
         written. Does not apply to read-only attributes/properties. 
@@ -46,10 +40,6 @@ class RemoteResourceInfoValidator:
     isproperty : bool, default False
         True for a property
     """
-    URL_path = String(default=USE_OBJECT_NAME,
-                    doc="the path in the URL under which the object is accesible.") # type: str
-    http_method = TupleSelector(default=HTTP_METHODS.POST, objects=http_methods, accept_list=True,
-                    doc="HTTP request method under which the object is accessible. GET, POST, PUT, DELETE or PATCH are supported.") # typing.Tuple[str]
     state = Tuple(default=None, item_type=(Enum, str), allow_None=True, accept_list=True, accept_item=True,
                     doc="State machine state at which a callable will be executed or attribute/property can be written.") # type: typing.Union[Enum, str]
     obj = ClassSelector(default=None, allow_None=True, class_=(FunctionType, MethodType, classmethod, Parameter, ParameterizedMetaclass), # Property will need circular import so we stick to base class Parameter
@@ -66,11 +56,6 @@ class RemoteResourceInfoValidator:
         No full-scale checks for unknown keyword arguments as the class 
         is used by the developer, so please try to be error-proof
         """
-        if kwargs.get('URL_path', None) is not None:
-            if not isinstance(kwargs['URL_path'], str): 
-                raise TypeError(f"URL path must be a string. Given type {type(kwargs['URL_path'])}")
-            if kwargs["URL_path"] != USE_OBJECT_NAME and not kwargs["URL_path"].startswith('/'):
-                raise ValueError(f"URL path must start with '/'. Given value {kwargs['URL_path']}")
         for key, value in kwargs.items(): 
             setattr(self, key, value)
     
@@ -103,7 +88,7 @@ class RemoteResourceInfoValidator:
 class ActionInfoValidator(RemoteResourceInfoValidator):
     """
     request_as_argument : bool, default False
-        if True, http/RPC request object will be passed as an argument to the callable. 
+        if True, http/ZMQ request object will be passed as an argument to the callable. 
         The user is warned to not use this generally. 
     argument_schema: JSON, default None
         JSON schema validations for arguments of a callable. Assumption is therefore arguments will be JSON complaint. 
@@ -167,16 +152,16 @@ class SerializableDataclass:
             setattr(self, key, value)
 
 
-__dataclass_kwargs = dict(frozen=True)
+__dataclass_kwargs = dict()
 if float('.'.join(platform.python_version().split('.')[0:2])) >= 3.11:
     __dataclass_kwargs["slots"] = True
 
-@dataclass(**__dataclass_kwargs)
+@dataclass(frozen=True, **__dataclass_kwargs)
 class RemoteResource(SerializableDataclass):
     """
     This container class is used by the ``EventLoop`` methods (for example ``execute_once()``) to access resource 
     metadata instead of directly using ``RemoteResourceInfoValidator``. Instances of this dataclass is stored under 
-    ``Thing.instance_resources`` dictionary for each property & method/action. Events use similar dataclass with 
+    ``Thing.zmq_resources`` dictionary for each property & method/action. Events use similar dataclass with 
     metadata but with much less information. 
 
     Attributes
@@ -219,7 +204,7 @@ class RemoteResource(SerializableDataclass):
         return json_dict     
 
 
-@dataclass(**__dataclass_kwargs)
+@dataclass(frozen=True, **__dataclass_kwargs)
 class ActionResource(RemoteResource):  
     """
     Attributes
@@ -236,89 +221,11 @@ class ActionResource(RemoteResource):
     # no need safe, idempotent, synchronous
 
 
-@dataclass
-class HTTPMethodInstructions(SerializableDataclass):
-    """
-    contains a map of unique strings that identifies the resource operation for each HTTP method, thus acting as 
-    instructions to be passed to the RPC server. The unique strings are generally made using the URL_path. 
-    """
-    GET :  typing.Optional[str] = field(default=None)
-    POST :  typing.Optional[str] = field(default=None)
-    PUT :  typing.Optional[str] = field(default=None)
-    DELETE :  typing.Optional[str] = field(default=None)
-    PATCH : typing.Optional[str] = field(default=None) 
 
-    def __post_init__(self):
-        self.supported_methods()
-
-    def supported_methods(self): # can be a property
-        try: 
-            return self._supported_methods
-        except: 
-            self._supported_methods = []
-            for method in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
-                if isinstance(self.__dict__[method], str):
-                    self._supported_methods.append(method)
-            return self._supported_methods
-    
-    def __contains__(self, value):
-        return value in self._supported_methods
-
-
-@dataclass
-class HTTPResource(SerializableDataclass):
-    """
-    Representation of the resource used by HTTP server for routing and passing information to RPC server on
-    "what to do with which resource belonging to which thing? - read, write, execute?". 
-    
-    Attributes
-    ----------
-
-    what : str
-        is it a property, method/action or event?
-    instance_name : str
-        The ``instance_name`` of the thing which owns the resource. Used by HTTP server to inform 
-        the message brokers to send the instruction to the correct recipient thing.
-    fullpath : str
-        URL full path used for routing
-    instructions : HTTPMethodInstructions
-        unique string that identifies the resource operation for each HTTP method, generally made using the URL_path 
-        (qualified URL path {instance name}/{URL path}).  
-    argument_schema : JSON
-        argument schema of the method/action for validation before passing over the instruction to the RPC server. 
-    request_as_argument: bool
-        pass the request as a argument to the callable. For HTTP server ``tornado.web.HTTPServerRequest`` will be passed. 
-    """
-    what : str 
-    class_name : str # just metadata
-    instance_name : str 
-    obj_name : str
-    fullpath : str
-    instructions : HTTPMethodInstructions
-    argument_schema : typing.Optional[JSON]
-    request_as_argument : bool = field(default=False)
-    
-                                  
-    def __init__(self, *, what : str, class_name : str, instance_name : str, obj_name : str, fullpath : str, 
-                request_as_argument : bool = False, argument_schema : typing.Optional[JSON] = None, 
-                **instructions) -> None:
-        self.what = what 
-        self.class_name = class_name
-        self.instance_name = instance_name
-        self.obj_name = obj_name
-        self.fullpath = fullpath
-        self.request_as_argument = request_as_argument
-        self.argument_schema = argument_schema
-        if instructions.get('instructions', None):
-            self.instructions = HTTPMethodInstructions(**instructions.get('instructions', None))
-        else: 
-            self.instructions = HTTPMethodInstructions(**instructions)
-    
-
-@dataclass
+@dataclass(**__dataclass_kwargs)
 class ZMQResource(SerializableDataclass): 
     """
-    Representation of resource used by RPC clients for mapping client method/action calls, property read/writes & events
+    Representation of resource used by ZMQ clients for mapping client method/action calls, property read/writes & events
     to a server resource. Used to dynamically populate the ``ObjectProxy``
 
     Attributes
@@ -327,11 +234,8 @@ class ZMQResource(SerializableDataclass):
     what : str
         is it a property, method/action or event?
     instance_name : str
-        The ``instance_name`` of the thing which owns the resource. Used by RPC client to inform 
+        The ``instance_name`` of the thing which owns the resource. Used by ZMQ client to inform 
         message brokers to send the message to the correct recipient.
-    instruction : str
-        unique string that identifies the resource, generally made using the URL_path. Although URL path is a HTTP
-        concept, it is still used as a unique identifier. 
     name : str
         the name of the resource (__name__)
     qualname : str
@@ -339,43 +243,59 @@ class ZMQResource(SerializableDataclass):
     doc : str
         the docstring of the resource
     argument_schema : JSON
-        argument schema of the method/action for validation before passing over the instruction to the RPC server. 
+        argument schema of the method/action for validation before passing over the instruction to the ZMQ server. 
     """
     what : str 
     class_name : str # just metadata
     instance_name : str 
-    id : str # identification on the server
-    obj_name : str # what looks on the client
+    obj_name : str # what looks on the client & the ID of the resource on the server
     qualname : str # qualified name to use by the client 
-    doc : typing.Optional[str] # 
-    top_owner : bool # in case of object compisition
-    argument_schema : typing.Optional[JSON]
-    return_value_schema : typing.Optional[JSON]
+    doc : typing.Optional[str] 
     request_as_argument : bool = field(default=False)
 
-    def __init__(self, *, what : str, class_name : str, instance_name : str, id : str, obj_name : str,
-                qualname : str, doc : str, top_owner : bool, argument_schema : typing.Optional[JSON] = None,
-                return_value_schema : typing.Optional[JSON] = None, request_as_argument : bool = False) -> None:
+    def __init__(self, *, what : str, class_name : str, instance_name : str, obj_name : str,
+                qualname : str, doc : str, request_as_argument : bool = False) -> None:
         self.what = what 
         self.class_name = class_name
         self.instance_name = instance_name
-        self.id = id
         self.obj_name = obj_name 
         self.qualname = qualname
         self.doc = doc
-        self.top_owner = top_owner
-        self.argument_schema = argument_schema
-        self.return_value_schema = return_value_schema
         self.request_as_argument = request_as_argument
 
     def get_dunder_attr(self, __dunder_name : str):
         name = __dunder_name.strip('_')
         name = 'obj_name' if name == 'name' else name
         return getattr(self, name)
+    
+    @property
+    def is_client_representation(self):
+        return self._is_client_representation
+    
+    @is_client_representation.setter
+    def is_client_representation(self, value):
+        if value:
+            self.obj_name = bytes(self.obj_name, encoding='utf-8')
+            self.instance_name = bytes(self.instance_name, encoding='utf-8')
+            self._is_client_representation = True
 
 
-@dataclass
-class ServerSentEvent(SerializableDataclass):
+@dataclass(**__dataclass_kwargs)
+class ZMQAction(ZMQResource):
+    argument_schema : typing.Optional[JSON] = field(default=None)
+    return_value_schema : typing.Optional[JSON] = field(default=None)
+
+    def __init__(self, *, what : str, class_name : str, instance_name : str, obj_name : str,
+                qualname : str, doc : str, argument_schema : typing.Optional[JSON] = None,
+                return_value_schema : typing.Optional[JSON] = None, request_as_argument : bool = False) -> None:
+        super(ZMQAction, self).__init__(what=what, class_name=class_name, instance_name=instance_name, obj_name=obj_name,
+                        qualname=qualname, doc=doc, request_as_argument=request_as_argument)
+        self.argument_schema = argument_schema
+        self.return_value_schema = return_value_schema
+
+
+@dataclass(**__dataclass_kwargs)
+class ZMQEvent(ZMQResource):
     """
     event name and socket address of events to be consumed by clients. 
   
@@ -384,7 +304,7 @@ class ServerSentEvent(SerializableDataclass):
     name : str
         name of the event, must be unique
     obj_name: str
-        name of the event variable used to populate the RPC client
+        name of the event variable used to populate the ZMQ client
     socket_address : str
         address of the socket
     unique_identifier: str
@@ -392,14 +312,21 @@ class ServerSentEvent(SerializableDataclass):
     what: str, default EVENT
         is it a property, method/action or event?
     """
-    name : str = field(default=UNSPECIFIED)
-    class_name : str = field(default=UNSPECIFIED)
-    obj_name : str = field(default=UNSPECIFIED)
-    class_name : str = field(default=UNSPECIFIED) # just metadata  
+    friendly_name : str = field(default=UNSPECIFIED)
     unique_identifier : str = field(default=UNSPECIFIED)
     serialization_specific : bool = field(default=False)
     socket_address : str = field(default=UNSPECIFIED)
-    what : str = field(default=ResourceTypes.EVENT)
+
+    def __init__(self, *, what : str, class_name : str, instance_name : str, obj_name : str,
+                friendly_name : str, qualname : str, unique_identifier : str, 
+                serialization_specific : bool = False, socket_address : str, doc : str) -> None:
+        super(ZMQEvent, self).__init__(what=what, class_name=class_name, instance_name=instance_name, obj_name=obj_name,
+                        qualname=qualname, doc=doc, request_as_argument=False)  
+        self.friendly_name = friendly_name
+        self.unique_identifier = unique_identifier
+        self.serialization_specific = serialization_specific
+        self.socket_address = socket_address
+
 
 
 def build_our_temp_TD(instance, authority : typing.Optional[str] = None , 
@@ -415,7 +342,7 @@ def build_our_temp_TD(instance, authority : typing.Optional[str] = None ,
     our_TD = instance.get_thing_description(authority=authority, ignore_errors=ignore_errors)
     our_TD["inheritance"] = [class_.__name__ for class_ in instance.__class__.mro()]
 
-    for instruction, remote_info in instance.instance_resources.items(): 
+    for instruction, remote_info in instance.zmq_resources.items(): 
         if remote_info.isaction and remote_info.obj_name in our_TD["actions"]:
             if isinstance(remote_info.obj, classmethod):
                 our_TD["actions"][remote_info.obj_name]["type"] = 'classmethod'
@@ -432,138 +359,118 @@ def get_organised_resources(instance):
     so that the specific servers and event loop can use them. 
     """
     from .thing import Thing
+    from .property import Property 
     from .events import Event, EventDispatcher
-    from .property import Property
 
     assert isinstance(instance, Thing), f"got invalid type {type(instance)}"
 
-    httpserver_resources = dict() # type: typing.Dict[str, HTTPResource]
-    # The following dict will be given to the object proxy client
     zmq_resources = dict() # type: typing.Dict[str, ZMQResource]
     # The following dict will be used by the event loop
-    instance_resources = dict() # type: typing.Dict[str, typing.Union[RemoteResource, ActionResource]] 
-    # create URL prefix
+    # create unique identifier for the instance
     if instance._owner is not None: 
-        instance._full_URL_path_prefix = f'{instance._owner._full_URL_path_prefix}/{instance.instance_name}' 
+        instance._qualified_instance_name = f'{instance._owner._qualified_instance_name}.{instance.instance_name}' 
     else:
-        instance._full_URL_path_prefix = f'/{instance.instance_name}' # leading '/' was stripped at init
-    
+        instance._qualified_instance_name = instance.instance_name
+
     # First add methods and callables
     # properties
-    for prop in instance.parameters.descriptors.values():
-        if isinstance(prop, Property) and hasattr(prop, '_remote_info') and prop._remote_info is not None: 
-            if not isinstance(prop._remote_info, RemoteResourceInfoValidator): 
-                raise TypeError("instance member {} has unknown sub-member '_remote_info' of type {}.".format(
-                            prop, type(prop._remote_info))) 
-                # above condition is just a gaurd in case somebody does some unpredictable patching activities
-            remote_info = prop._remote_info
-            fullpath = f"{instance._full_URL_path_prefix}{remote_info.URL_path}"
-            read_http_method = write_http_method = delete_http_method = None
-            if len(remote_info.http_method) == 1:
-                read_http_method = remote_info.http_method[0]
-                instructions = { read_http_method : f"{fullpath}/read" }
-            elif len(remote_info.http_method) == 2:
-                read_http_method, write_http_method = remote_info.http_method
-                instructions = { 
-                    read_http_method : f"{fullpath}/read", 
-                    write_http_method : f"{fullpath}/write"
-                }
-            else:
-                read_http_method, write_http_method, delete_http_method = remote_info.http_method
-                instructions = {
-                    read_http_method : f"{fullpath}/read", 
-                    write_http_method : f"{fullpath}/write", 
-                    delete_http_method : f"{fullpath}/delete"
-                }
-                
-            httpserver_resources[fullpath] = HTTPResource(
-                                                what=ResourceTypes.PROPERTY, 
-                                                class_name=instance.__class__.__name__,
-                                                instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
-                                                obj_name=remote_info.obj_name,
-                                                fullpath=fullpath,
-                                                **instructions
-                                            )
-            zmq_resources[fullpath] = ZMQResource(
-                            what=ResourceTypes.PROPERTY, 
-                            class_name=instance.__class__.__name__,
-                            instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name, 
-                            instruction=fullpath, 
-                            doc=prop.__doc__, 
-                            obj_name=remote_info.obj_name,
-                            qualname=instance.__class__.__name__ + '.' + remote_info.obj_name,
-                            # qualname is not correct probably, does not respect inheritance
-                            top_owner=instance._owner is None,
-                        ) 
-            data_cls = remote_info.to_dataclass(obj=prop, bound_obj=instance) 
-            instance_resources[f"{fullpath}/read"] = data_cls
-            instance_resources[f"{fullpath}/write"] = data_cls  
-            instance_resources[f"{fullpath}/delete"] = data_cls  
-            if prop._observable:
-                # There is no real philosophy behind this logic flow, we just set the missing information.
-                assert isinstance(prop._observable_event_descriptor, Event), f"observable event not yet set for {prop.name}. logic error."
-                evt_fullpath = f"{instance._full_URL_path_prefix}{prop._observable_event_descriptor.URL_path}"
-                dispatcher = EventDispatcher(evt_fullpath)
-                dispatcher._remote_info.class_name = instance.__class__.__name__
-                dispatcher._remote_info.serialization_specific = instance.zmq_serializer != instance.http_serializer
-                setattr(instance, prop._observable_event_descriptor._obj_name, dispatcher)
-                # prop._observable_event_descriptor._remote_info.unique_identifier = evt_fullpath
-                httpserver_resources[evt_fullpath] = dispatcher._remote_info
-                zmq_resources[evt_fullpath] = dispatcher._remote_info
-    # Methods
-    for name, resource in inspect._getmembers(instance, lambda f : inspect.ismethod(f) or (
-                                hasattr(f, '_remote_info') and isinstance(f._remote_info, ActionInfoValidator)),
-                                                 getattr_without_descriptor_read): 
-        if hasattr(resource, '_remote_info'):
-            if not isinstance(resource._remote_info, ActionInfoValidator):
-                raise TypeError("instance member {} has unknown sub-member '_remote_info' of type {}.".format(
-                            resource, type(resource._remote_info))) 
-            remote_info = resource._remote_info
-            # methods are already bound
-            assert remote_info.isaction, ("remote info from inspect.ismethod is not a callable",
-                                "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
-            fullpath = f"{instance._full_URL_path_prefix}{remote_info.URL_path}" 
-            instruction = f"{fullpath}/invoke-on-{remote_info.http_method[0]}" 
-            # needs to be cleaned up for multiple HTTP methods
-            httpserver_resources[instruction] = HTTPResource(
+    for prop in instance.properties.descriptors.values():
+        if not isinstance(prop, Property) or prop._execution_info_validator is None:
+            continue 
+        if not isinstance(prop._execution_info_validator, RemoteResourceInfoValidator): 
+            raise TypeError("instance member {} has unknown sub-member '_execution_info_validator' of type {}.".format(
+                        prop, type(prop._execution_info_validator))) 
+            # above condition is just a gaurd in case somebody does some unpredictable patching activities
+        execution_info = prop._execution_info_validator     
+        if execution_info.obj_name in zmq_resources:
+            raise ValueError(f"Duplicate resource name {execution_info.obj_name} found in {instance.__class__.__name__}")
+        zmq_resources[execution_info.obj_name] = ZMQResource(
+                                    what=ResourceTypes.PROPERTY, 
+                                    class_name=instance.__class__.__name__,
+                                    instance_name=instance.instance_name, 
+                                    obj_name=execution_info.obj_name,
+                                    qualname=instance.__class__.__name__ + '.' + execution_info.obj_name,
+                                    doc=prop.__doc__
+                                ) 
+        prop.execution_info = execution_info.to_dataclass(obj=prop, bound_obj=instance) 
+        del prop._execution_info_validator
+        if not prop._observable:
+            continue
+        # observable properties
+        assert isinstance(prop._observable_event_descriptor, Event), f"observable event not yet set for {prop.name}. logic error."
+        unique_identifier = f"{instance._qualified_instance_name}/{pep8_to_dashed_name(prop._observable_event_descriptor.friendly_name)}"
+        dispatcher = EventDispatcher(unique_identifier=unique_identifier, publisher=prop._observable_event_descriptor._publisher)
+        prop._observable_event_descriptor.__set__(instance, dispatcher)
+        prop._observable_event_descriptor.publisher.register(dispatcher)     
+        remote_info = ZMQEvent(
+                                what=ResourceTypes.EVENT,
+                                class_name=instance.__class__.__name__,
+                                instance_name=instance.instance_name,
+                                obj_name=prop._observable_event_descriptor.name,
+                                friendly_name=prop._observable_event_descriptor.friendly_name,
+                                qualname=f'{instance.__class__.__name__}.{prop._observable_event_descriptor.name}',
+                                unique_identifier=unique_identifier,
+                                socket_address=dispatcher.publisher.socket_address,
+                                serialization_specific=dispatcher._unique_zmq_identifier != dispatcher._unique_zmq_identifier,
+                                doc=prop._observable_event_descriptor.doc
+                            )         
+        if unique_identifier in zmq_resources:
+            raise ValueError(f"Duplicate resource name {unique_identifier} found in {instance.__class__.__name__}")                 
+        zmq_resources[unique_identifier] = remote_info
+    # methods
+    for name, action in instance.actions.items():
+        if not isinstance(action._execution_info_validator, ActionInfoValidator):
+            raise TypeError("instance member {} has unknown sub-member '_execution_info_validator' of type {}.".format(
+                        action, type(action._execution_info_validator)) + 
+                        " This is a reserved variable, please dont modify it.") 
+        execution_info = action._execution_info_validator
+        if execution_info.obj_name in zmq_resources:
+            warnings.warn(f"Duplicate resource name {execution_info.obj_name} found in {instance.__class__.__name__}", 
+                        UserWarning)
+        # methods are already bound
+        assert execution_info.isaction, ("remote info from inspect.ismethod is not a callable",
+                            "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
+        # needs to be cleaned up for multiple HTTP methods
+        zmq_resources[execution_info.obj_name] = ZMQAction(
                                         what=ResourceTypes.ACTION,
                                         class_name=instance.__class__.__name__,
-                                        instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
-                                        obj_name=remote_info.obj_name,
-                                        fullpath=fullpath,
-                                        argument_schema=remote_info.argument_schema,
-                                        request_as_argument=remote_info.request_as_argument,
-                                        **{ http_method : instruction for http_method in remote_info.http_method },
+                                        instance_name=instance.instance_name,
+                                        obj_name=getattr(action, '__name__'),
+                                        qualname=getattr(action, '__qualname__'), 
+                                        doc=getattr(action, '__doc__'),
+                                        argument_schema=execution_info.argument_schema,
+                                        return_value_schema=execution_info.return_value_schema,
+                                        request_as_argument=execution_info.request_as_argument
                                     )
-            zmq_resources[instruction] = ZMQResource(
-                                            what=ResourceTypes.ACTION,
-                                            class_name=instance.__class__.__name__,
-                                            instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
-                                            instruction=instruction,                                                                                                                                                                                        
-                                            obj_name=getattr(resource, '__name__'),
-                                            qualname=getattr(resource, '__qualname__'), 
-                                            doc=getattr(resource, '__doc__'),
-                                            top_owner=instance._owner is None,
-                                            argument_schema=remote_info.argument_schema,
-                                            return_value_schema=remote_info.return_value_schema,
-                                            request_as_argument=remote_info.request_as_argument
-                                        )
-            instance_resources[instruction] = remote_info.to_dataclass(obj=resource, bound_obj=instance)   
+        action.execution_info = execution_info.to_dataclass(obj=action, bound_obj=instance)  
     # Events
-    for name, resource in inspect._getmembers(instance, lambda o : isinstance(o, Event), getattr_without_descriptor_read):
-        assert isinstance(resource, Event), ("thing event query from inspect.ismethod is not an Event",
-                                    "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")    
+    for name, evt in instance.events.items():
+        assert isinstance(evt, Event), ("thing event query from inspect.ismethod is not an Event",
+                                    "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
+        if getattr(instance, name, None):
+            continue
         # above assertion is only a typing convenience
-        fullpath = f"{instance._full_URL_path_prefix}{resource.URL_path}"
-        # resource._remote_info.unique_identifier = fullpath
-        dispatcher = EventDispatcher(fullpath)
-        dispatcher._remote_info.class_name = instance.__class__.__name__
-        dispatcher._remote_info.serialization_specific = instance.zmq_serializer != instance.http_serializer
-        setattr(instance, name, dispatcher) # resource._remote_info.unique_identifier))
-        httpserver_resources[fullpath] = dispatcher._remote_info
-        zmq_resources[fullpath] = dispatcher._remote_info
+        unique_identifier = f"{instance._qualified_instance_name}{pep8_to_dashed_name(evt.friendly_name)}"
+        if unique_identifier in zmq_resources:
+            raise ValueError(f"Duplicate resource name {unique_identifier} found in {instance.__class__.__name__}")
+        dispatcher = EventDispatcher(unique_identifier=unique_identifier, publisher=evt._publisher)
+        evt.__set__(instance, dispatcher)
+        evt._publisher.register(dispatcher)
+        remote_info = ZMQEvent(
+                            what=ResourceTypes.EVENT,
+                            class_name=instance.__class__.__name__,
+                            instance_name=instance.instance_name,
+                            obj_name=name,
+                            friendly_name=evt.friendly_name,
+                            qualname=f'{instance.__class__.__name__}.{name}',
+                            unique_identifier=unique_identifier,
+                            serialization_specific=dispatcher._unique_zmq_identifier != dispatcher._unique_zmq_identifier,
+                            socket_address=dispatcher.publisher.socket_address,
+                            doc=evt.doc,             
+                        )       
+        zmq_resources[unique_identifier] = remote_info
     # Other objects
-    for name, resource in inspect._getmembers(instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
+    for name, resource in instance.sub_things.items():
         assert isinstance(resource, Thing), ("thing children query from inspect.ismethod is not a Thing",
                                     "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
         # above assertion is only a typing convenience
@@ -571,13 +478,21 @@ def get_organised_resources(instance):
             # second condition allows sharing of Things without adding once again to the list of exposed resources
             # for example, a shared logger 
             continue
-        if resource._owner is None:
-            resource._owner = instance
-            resource._prepare_resources()
-        httpserver_resources.update(resource.httpserver_resources)
-        # zmq_resources.update(resource.zmq_resources)
-        instance_resources.update(resource.instance_resources)
+        resource._owner = instance      
+        resource._prepare_resources() # trigger again after the owner has been set to make it work correctly
+        if resource._qualified_instance_name in zmq_resources:
+            raise ValueError(f"Duplicate resource name {resource.instance_name} found in {instance.__class__.__name__}")
+        zmq_resources[resource._qualified_instance_name] = ZMQResource(
+                                                            what=ResourceTypes.THING,
+                                                            class_name=resource.__class__.__name__,
+                                                            instance_name=resource.instance_name,
+                                                            obj_name=name,
+                                                            qualname=f'{instance.__class__.__name__}.{resource.__class__.__name__}',
+                                                            doc=resource.__doc__,
+                                                            request_as_argument=False
+                                                        )
+    
    
     # The above for-loops can be used only once, the division is only for readability
     # following are in _internal_fixed_attributes - allowed to set only once
-    return zmq_resources, httpserver_resources, instance_resources    
+    return zmq_resources

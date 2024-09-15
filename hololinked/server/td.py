@@ -1,18 +1,14 @@
-import typing, inspect
+import typing
 from dataclasses import dataclass, field
 
-
-
-from .constants import JSON, JSONSerializable
-from .utils import getattr_without_descriptor_read
+from .constants import JSON
 from .dataklasses import ActionInfoValidator
 from .events import Event
 from .properties import *
 from .property import Property
 from .thing import Thing
 from .state_machine import StateMachine
-from .eventloop import EventLoop
-
+from .zmq_server import EventLoop
 
 
 @dataclass
@@ -112,7 +108,7 @@ class JSONSchema:
     
     @classmethod
     def register_type_replacement(self, type : typing.Any, json_schema_type : str, 
-                                schema : typing.Optional[typing.Dict[str, JSONSerializable]] = None) -> None:
+                                schema : typing.Optional[JSON] = None) -> None:
         """
         specify a python type as a JSON type.
         schema only supported for array and objects. 
@@ -171,7 +167,7 @@ class DataSchema(Schema):
     format : typing.Optional[str]
     unit : typing.Optional[str]
     type : str
-    oneOf : typing.Optional[typing.List[typing.Dict[str, JSONSerializable]]]
+    oneOf : typing.Optional[typing.List[JSON]]
     enum : typing.Optional[typing.List[typing.Any]]
 
     def __init__(self):
@@ -245,7 +241,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
 
 
     @classmethod
-    def generate_schema(self, property : Property, owner : Thing, authority : str) -> typing.Dict[str, JSONSerializable]:
+    def generate_schema(self, property : Property, owner : Thing, authority : str) -> JSON:
         if not isinstance(property, Property):
             raise TypeError(f"Property affordance schema can only be generated for Property. "
                             f"Given type {type(property)}")
@@ -374,7 +370,7 @@ class ArraySchema(PropertyAffordance):
     Used by List, Tuple, TypedList and TupleSelector
     """
 
-    items : typing.Optional[typing.Dict[str, JSONSerializable]]
+    items : typing.Optional[JSON]
     minItems : typing.Optional[int]
     maxItems : typing.Optional[int]
 
@@ -415,7 +411,7 @@ class ObjectSchema(PropertyAffordance):
     object schema - https://www.w3.org/TR/wot-thing-description11/#objectschema
     Used by TypedDict
     """
-    properties : typing.Optional[typing.Dict[str, JSONSerializable]]
+    properties : typing.Optional[JSON]
     required : typing.Optional[typing.List[str]]
 
     def __init__(self):
@@ -452,9 +448,9 @@ class OneOfSchema(PropertyAffordance):
     custom schema to deal with ClassSelector to fill oneOf field correctly
     https://www.w3.org/TR/wot-thing-description11/#dataschema
     """
-    properties : typing.Optional[typing.Dict[str, JSONSerializable]]
+    properties : typing.Optional[JSON]
     required : typing.Optional[typing.List[str]]
-    items : typing.Optional[typing.Dict[str, JSONSerializable]]
+    items : typing.Optional[JSON]
     minItems : typing.Optional[int]
     maxItems : typing.Optional[int]
     # ClassSelector can technically have a JSON serializable as a class_
@@ -599,8 +595,8 @@ class ActionAffordance(InteractionAffordance):
     creates action affordance schema from actions (or methods).
     schema - https://www.w3.org/TR/wot-thing-description11/#actionaffordance
     """
-    input : typing.Dict[str, JSONSerializable]
-    output : typing.Dict[str, JSONSerializable]
+    input : JSON
+    output : JSON
     safe : bool
     idempotent : bool 
     synchronous : bool 
@@ -635,7 +631,7 @@ class ActionAffordance(InteractionAffordance):
             self.forms.append(form.asdict())
 
     @classmethod
-    def generate_schema(cls, action : typing.Callable, owner : Thing, authority : str) -> typing.Dict[str, JSONSerializable]:
+    def generate_schema(cls, action : typing.Callable, owner : Thing, authority : str) -> JSON:
         schema = ActionAffordance()
         schema.build(action=action, owner=owner, authority=authority) 
         return schema.asdict()
@@ -648,7 +644,7 @@ class EventAffordance(InteractionAffordance):
     schema - https://www.w3.org/TR/wot-thing-description11/#eventaffordance
     """
     subscription : str
-    data : typing.Dict[str, JSONSerializable]
+    data : JSON
     
     def __init__(self):
         super().__init__()
@@ -669,7 +665,7 @@ class EventAffordance(InteractionAffordance):
         self.forms = [form.asdict()]
 
     @classmethod
-    def generate_schema(cls, event : Event, owner : Thing, authority : str) -> typing.Dict[str, JSONSerializable]:
+    def generate_schema(cls, event : Event, owner : Thing, authority : str) -> JSON:
         schema = EventAffordance()
         schema.build(event=event, owner=owner, authority=authority)
         return schema.asdict()
@@ -748,7 +744,7 @@ class ThingDescription(Schema):
         self.allow_loose_schema = allow_loose_schema
         self.ignore_errors = ignore_errors
 
-    def produce(self) -> typing.Dict[str, typing.Any]: 
+    def produce(self) -> JSON: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
         self.id = f"{self.authority}/{self.instance.instance_name}"
         self.title = self.instance.__class__.__name__ 
@@ -762,15 +758,21 @@ class ThingDescription(Schema):
         # self.schemaDefinitions = dict(exception=JSONSchema.get_type(Exception))
 
         self.add_interaction_affordances()
+        self.add_links()
         self.add_top_level_forms()
         self.add_security_definitions()
        
-        return self.asdict()
+        return self
     
 
     def add_interaction_affordances(self):
-        # properties and actions
-        for resource in self.instance.instance_resources.values():
+        # properties 
+        for prop in self.instance.properties.descriptors.values():
+            if not isinstance(prop, Property) or not prop.remote or prop.name in self.skip_properties: 
+                continue
+            if prop.name == 'state' and (not hasattr(self.instance, 'state_machine') or 
+                                not isinstance(self.instance.state_machine, StateMachine)):
+                continue
             try:
                 if (resource.isproperty and resource.obj_name not in self.properties and 
                     resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
@@ -795,24 +797,33 @@ class ThingDescription(Schema):
             except Exception as ex:
                 if not self.ignore_errors:
                     raise ex from None
-                self.instance.logger.error(f"Error while generating schema for {resource.obj_name} - {ex}")
-        # Events
-        for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Event),
-                                                getattr_without_descriptor_read):
-            if not isinstance(resource, Event):
-                continue
-            if '/change-event' in resource.URL_path:
-                continue
+                self.instance.logger.error(f"Error while generating schema for {prop.name} - {ex}")
+        # actions       
+        for name, resource in self.instance.actions.items():
+            if name in self.skip_actions:
+                continue    
+            try:       
+                self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, self.instance, 
+                                                                               self.authority)
+            except Exception as ex:
+                if not self.ignore_errors:
+                    raise ex from None
+                self.instance.logger.error(f"Error while generating schema for {name} - {ex}")
+        # events
+        for name, resource in self.instance.events.items():
             try:
                 self.events[name] = EventAffordance.generate_schema(resource, self.instance, self.authority)
             except Exception as ex:
                 if not self.ignore_errors:
                     raise ex from None
                 self.instance.logger.error(f"Error while generating schema for {resource.obj_name} - {ex}")
-        for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
+    
+    
+    def add_links(self):
+        for name, resource in self.instance.sub_things.items():
             if resource is self.instance or isinstance(resource, EventLoop):
                 continue
-            if self.links is None or self.links == NotImplemented:
+            if self.links is None:
                 self.links = []
             link = Link()
             link.build(resource, self.instance, self.authority)
@@ -856,12 +867,15 @@ class ThingDescription(Schema):
         writemultipleproperties.contentType = "application/json"
         # writemultipleproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
         self.forms.append(writemultipleproperties.asdict())
+  
         
     def add_security_definitions(self):
         self.security = 'unimplemented'
         self.securityDefinitions = SecurityScheme().build('unimplemented', self.instance)
 
 
+    def json(self) -> JSON:
+        return self.asdict()
 
 __all__ = [
     ThingDescription.__name__,

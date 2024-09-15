@@ -56,7 +56,7 @@ def format_exception_as_json(exc : Exception) -> typing.Dict[str, typing.Any]:
     }
 
 
-def pep8_to_URL_path(word : str) -> str: 
+def pep8_to_dashed_name(word : str) -> str: 
     """
     Make an underscored, lowercase form from the expression in the string.
     Example::
@@ -240,16 +240,32 @@ def get_a_filename_from_instance(thing: type, extension: str = 'json') -> str:
     return filename
   
 
+
+def get_current_async_loop():
+    """
+    get or automatically create an asnyc loop for the current thread.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        # set_event_loop_policy() - why not?
+        asyncio.set_event_loop(loop)
+    return loop
+
+
+
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
-    pep8_to_URL_path.__name__,
+    pep8_to_dashed_name.__name__,
     get_default_logger.__name__,
     run_coro_sync.__name__,
     run_callable_somehow.__name__,
     get_signature.__name__,
     isclassmethod.__name__,
-    issubklass.__name__
+    issubklass.__name__,
+    get_current_async_loop.__name__
 ]
 
 
