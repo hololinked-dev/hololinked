@@ -6,9 +6,9 @@ import uuid
 
 
 from ..server.config import global_config
-from ..server.constants import JSON, CommonRPC, ServerMessage, ResourceTypes, ZMQ_PROTOCOLS
+from ..server.constants import JSON, CommonRPC, bOperations, ServerMessage, ResourceTypes, ZMQ_PROTOCOLS
 from ..server.serializers import BaseSerializer
-from ..server.dataklasses import ZMQResource, ServerSentEvent
+from ..server.dataklasses import ZMQAction, ZMQEvent, ZMQResource
 from ..server.zmq_message_brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY
 from ..server.schema_validators import BaseSchemaValidator
 
@@ -61,13 +61,14 @@ class ObjectProxy:
     def __init__(self, instance_name : str, protocol : str = ZMQ_PROTOCOLS.IPC, invokation_timeout : float = 5, 
                     load_thing = True, **kwargs) -> None:
         self._allow_foreign_attributes = kwargs.get('allow_foreign_attributes', False)
+        self._noblock_messages = dict()
+        self._schema_validator = kwargs.get('schema_validator', None)
         self.instance_name = instance_name
         self.invokation_timeout = invokation_timeout
         self.execution_timeout = kwargs.get("execution_timeout", None)
         self.identity = f"{instance_name}|{uuid.uuid4()}"
-        self.logger = kwargs.pop('logger', logging.Logger(self.identity, level=kwargs.get('log_level', logging.INFO)))
-        self._noblock_messages = dict()
-        self._schema_validator = kwargs.get('schema_validator', None)
+        self.logger = kwargs.pop('logger', logging.Logger(self.identity, 
+                                                    level=kwargs.get('log_level', logging.INFO)))
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
@@ -91,7 +92,7 @@ class ObjectProxy:
     def __setattr__(self, __name : str, __value : typing.Any) -> None:
         if (__name in ObjectProxy._own_attrs or (__name not in self.__dict__ and 
                 isinstance(__value, __allowed_attribute_types__)) or self._allow_foreign_attributes):
-            # allowed attribute types are _Property and _RemoteMethod defined after this class
+            # allowed attribute types are _Property and _Action defined after this class
             return super(ObjectProxy, self).__setattr__(__name, __value)
         elif __name in self.__dict__:
             obj = self.__dict__[__name]
@@ -194,8 +195,8 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated 
         """
-        method = getattr(self, method, None) # type: _RemoteMethod 
-        if not isinstance(method, _RemoteMethod):
+        method = getattr(self, method, None) # type: _Action 
+        if not isinstance(method, _Action):
             raise AttributeError(f"No remote method named {method}")
         if oneway:
             method.oneway(*args, **kwargs)
@@ -235,8 +236,8 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated
         """
-        method = getattr(self, method, None) # type: _RemoteMethod 
-        if not isinstance(method, _RemoteMethod):
+        method = getattr(self, method, None) # type: _Action 
+        if not isinstance(method, _Action):
             raise AttributeError(f"No remote method named {method}")
         return await method.async_call(*args, **kwargs)
 
@@ -370,7 +371,7 @@ class ObjectProxy:
         Dict[str, Any]:
             dictionary with names as keys and values corresponding to those keys
         """
-        method = getattr(self, '_get_properties', None) # type: _RemoteMethod
+        method = getattr(self, '_get_properties', None) # type: _Action
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if noblock:
@@ -405,7 +406,7 @@ class ObjectProxy:
         """
         if len(properties) == 0:
             raise ValueError("no properties given to set_properties")
-        method = getattr(self, '_set_properties', None) # type: _RemoteMethod
+        method = getattr(self, '_set_properties', None) # type: _Action
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if oneway:
@@ -432,7 +433,7 @@ class ObjectProxy:
         Dict[str, Any]:
             dictionary with property names as keys and values corresponding to those keys
         """
-        method = getattr(self, '_get_properties', None) # type: _RemoteMethod
+        method = getattr(self, '_get_properties', None) # type: _Action
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         return await method.async_call(names=names)
@@ -456,7 +457,7 @@ class ObjectProxy:
         """
         if len(properties) == 0:
             raise ValueError("no properties given to set_properties")
-        method = getattr(self, '_set_properties', None) # type: _RemoteMethod
+        method = getattr(self, '_set_properties', None) # type: _Action
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         await method.async_call(**properties)
@@ -530,7 +531,7 @@ class ObjectProxy:
                                     raise_client_side_exception=True)
         if not reply:
             raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
-        if isinstance(obj, _RemoteMethod):
+        if isinstance(obj, _Action):
             obj._last_return_value = reply 
             return obj.last_return_value # note the missing underscore
         elif isinstance(obj, _Property):
@@ -542,31 +543,33 @@ class ObjectProxy:
         """
         Get exposed resources from server (methods, properties, events) and remember them as attributes of the proxy.
         """
-        fetch = _RemoteMethod(self.zmq_client, CommonRPC.zmq_resource_read(instance_name=self.instance_name), 
-                                    invokation_timeout=self._invokation_timeout) # type: _RemoteMethod
+        fetch = _Action(self.zmq_client, CommonRPC.zmq_resource_read(instance_name=self.instance_name), 
+                                    invokation_timeout=self._invokation_timeout) # type: _Action
         reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
         for name, data in reply.items():
             if isinstance(data, dict):
                 try:
                     if data["what"] == ResourceTypes.EVENT:
-                        data = ServerSentEvent(**data)
+                        data = ZMQEvent(**data)
+                    elif data["what"] == ResourceTypes.ACTION:
+                        data = ZMQAction(**data)
                     else:
                         data = ZMQResource(**data)
                 except Exception as ex:
                     ex.add_note("Did you correctly configure your serializer? " + 
                             "This exception occurs when given serializer does not work the same way as server serializer")
                     raise ex from None
-            elif not isinstance(data, (ZMQResource, ServerSentEvent)):
+            elif not isinstance(data, ZMQResource):
                 raise RuntimeError("Logic error - deserialized info about server not instance of hololinked.server.data_classes.ZMQResource")
             if data.what == ResourceTypes.ACTION:
-                _add_method(self, _RemoteMethod(self.zmq_client, data.instruction, self.invokation_timeout, 
+                _add_method(self, _Action(self.zmq_client, data.instruction, self.invokation_timeout, 
                                                 self.execution_timeout, data.argument_schema, self.async_zmq_client, self._schema_validator), data)
             elif data.what == ResourceTypes.PROPERTY:
                 _add_property(self, _Property(self.zmq_client, data.instruction, self.invokation_timeout,
                                                 self.execution_timeout, self.async_zmq_client), data)
             elif data.what == ResourceTypes.EVENT:
-                assert isinstance(data, ServerSentEvent)
+                assert isinstance(data, ZMQEvent)
                 event = _Event(self.zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
                             serialization_specific=data.serialization_specific, serializer=self.zmq_client.zmq_serializer, logger=self.logger)
                 _add_event(self, event, data)
@@ -584,17 +587,18 @@ SM_INDEX_MESSAGE_ID = ServerMessage.MESSAGE_ID.value
 SM_INDEX_DATA = ServerMessage.DATA.value
 SM_INDEX_ENCODED_DATA = ServerMessage.ENCODED_DATA.value
 
-class _RemoteMethod:
+class _Action:
     
-    __slots__ = ['_zmq_client', '_async_zmq_client', '_instruction', '_invokation_timeout', '_execution_timeout',
+    __slots__ = ['_zmq_client', '_async_zmq_client', '_resource_info', '_invokation_timeout', '_execution_timeout',
                  '_schema', '_schema_validator', '_last_return_value', '__name__', '__qualname__', '__doc__']
     # method call abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
-    def __init__(self, sync_client : SyncZMQClient, instruction : str, invokation_timeout : typing.Optional[float] = 5, 
-                    execution_timeout : typing.Optional[float] = None, argument_schema : typing.Optional[JSON] = None,
+    def __init__(self, sync_client : SyncZMQClient, resource_info : ZMQAction, 
+                    invokation_timeout : typing.Optional[float] = 5, execution_timeout : typing.Optional[float] = None, 
                     async_client : typing.Optional[AsyncZMQClient] = None, 
-                    schema_validator : typing.Optional[typing.Type[BaseSchemaValidator]] = None) -> None:
+                    schema_validator : typing.Optional[typing.Type[BaseSchemaValidator]] = None
+                ) -> None:
         """
         Parameters
         ----------
@@ -607,11 +611,13 @@ class _RemoteMethod:
         """
         self._zmq_client = sync_client
         self._async_zmq_client = async_client
-        self._instruction = instruction
         self._invokation_timeout = invokation_timeout
         self._execution_timeout = execution_timeout
-        self._schema = argument_schema
-        self._schema_validator = schema_validator(self._schema) if schema_validator and argument_schema and global_config.validate_schema_on_client else None
+        self._resource_info = resource_info
+        self._resource_info.is_client_representation = True
+        self._schema_validator = schema_validator(resource_info.argument_schema) if (schema_validator and 
+                                                                    resource_info.argument_schema and 
+                                                                    global_config.validate_schema_on_client) else None
     
     @property # i.e. cannot have setter
     def last_return_value(self):
@@ -619,7 +625,10 @@ class _RemoteMethod:
         cached return value of the last call to the method
         """
         if len(self._last_return_value[SM_INDEX_ENCODED_DATA]) > 0:
-            return self._last_return_value[SM_INDEX_ENCODED_DATA]
+            if self._last_return_value[SM_INDEX_DATA] is None:
+                return self._last_return_value[SM_INDEX_ENCODED_DATA]
+            else:
+                return self._last_return_value[SM_INDEX_DATA], self._last_return_value[SM_INDEX_ENCODED_DATA]
         return self._last_return_value[SM_INDEX_DATA]
     
     @property
@@ -628,15 +637,23 @@ class _RemoteMethod:
     
     def __call__(self, *args, **kwargs) -> typing.Any:
         """
-        execute method on server
+        execute method/action on server
         """
         if len(args) > 0: 
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        self._last_return_value = self._zmq_client.execute(instruction=self._instruction, arguments=kwargs, 
-                                    invokation_timeout=self._invokation_timeout, execution_timeout=self._execution_timeout,
-                                    raise_client_side_exception=True, argument_schema=self._schema)
+        self._last_return_value = self._zmq_client.execute(
+                                    thing_id=self._resource_info.instance_name,
+                                    objekt=self._resource_info.obj_name,
+                                    operation=bOperations.invokeAction,
+                                    arguments=kwargs,
+                                    server_execution_context=dict(
+                                        invokation_timeout=self._invokation_timeout, 
+                                        execution_timeout=self._execution_timeout
+                                    ),
+                                    raise_client_side_exception=True,
+                                    deserialize_reply=True)
         return self.last_return_value # note the missing underscore
     
     def oneway(self, *args, **kwargs) -> None:
@@ -648,51 +665,73 @@ class _RemoteMethod:
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        self._zmq_client.send_instruction(instruction=self._instruction, arguments=kwargs, 
-                                        invokation_timeout=self._invokation_timeout, execution_timeout=None,
-                                        context=dict(oneway=True), argument_schema=self._schema)
+        self._zmq_client.send_request(
+                                    thing_id=self._resource_info.instance_name, 
+                                    objekt=self._resource_info.obj_name,
+                                    operation=bOperations.invokeAction,
+                                    arguments=kwargs, 
+                                    server_execution_context=dict(
+                                            invokation_timeout=self._invokation_timeout, 
+                                            execution_timeout=self._execution_timeout,
+                                            oneway=True
+                                    ))
 
     def noblock(self, *args, **kwargs) -> None:
         if len(args) > 0: 
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        return self._zmq_client.send_instruction(instruction=self._instruction, arguments=kwargs, 
-                                invokation_timeout=self._invokation_timeout, execution_timeout=self._execution_timeout,
-                                argument_schema=self._schema)
+        return self._zmq_client.send_request(
+                                    thing_id=self._resource_info.instance_name, 
+                                    objekt=self._resource_info.obj_name,
+                                    operation=bOperations.invokeAction,
+                                    arguments=kwargs, 
+                                    server_execution_context=dict(
+                                        invokation_timeout=self._invokation_timeout, 
+                                        execution_timeout=self._execution_timeout,
+                                    ))
      
     async def async_call(self, *args, **kwargs):
         """
         async execute method on server
         """
         if not self._async_zmq_client:
-            raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
+            raise RuntimeError("async calls not possible as async_mixin was not set True at __init__()")
         if len(args) > 0: 
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        self._last_return_value = await self._async_zmq_client.async_execute(instruction=self._instruction, 
-                                        arguments=kwargs, invokation_timeout=self._invokation_timeout, 
-                                        raise_client_side_exception=True,
-                                        argument_schema=self._schema)
+        self._last_return_value = await self._async_zmq_client.async_execute(
+                                                thing_id=self._resource_info.instance_name,
+                                                objekt=self._resource_info.obj_name,
+                                                operation=bOperations.invokeAction,
+                                                arguments=kwargs, 
+                                                server_execution_context=dict(
+                                                    invokation_timeout=self._invokation_timeout, 
+                                                    execution_timeout=self._execution_timeout,
+                                                ),
+                                                raise_client_side_exception=True,
+                                                deserialize_reply=True)
         return self.last_return_value # note the missing underscore
+
 
     
 class _Property:
 
-    __slots__ = ['_zmq_client', '_async_zmq_client', '_read_instruction', '_write_instruction', 
+    __slots__ = ['_zmq_client', '_async_zmq_client', '_resource_info', 
                 '_invokation_timeout', '_execution_timeout', '_last_value', '__name__', '__doc__']   
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
-    def __init__(self, client : SyncZMQClient, instruction : str, invokation_timeout : typing.Optional[float] = 5, 
-                    execution_timeout : typing.Optional[float] = None, async_client : typing.Optional[AsyncZMQClient] = None) -> None:
-        self._zmq_client = client
+    def __init__(self, sync_client : SyncZMQClient, resource_info : ZMQResource, 
+                    invokation_timeout : typing.Optional[float] = 5, execution_timeout : typing.Optional[float] = None, 
+                    async_client : typing.Optional[AsyncZMQClient] = None) -> None:
+        self._zmq_client = sync_client
         self._async_zmq_client = async_client
         self._invokation_timeout = invokation_timeout
         self._execution_timeout = execution_timeout
-        self._read_instruction = instruction + '/read'
-        self._write_instruction = instruction + '/write'
+        self._resource_info = resource_info
+        self._resource_info.is_client_representation = True
 
     @property # i.e. cannot have setter
     def last_read_value(self) -> typing.Any:
@@ -701,6 +740,7 @@ class _Property:
         """
         if len(self._last_value[SM_INDEX_ENCODED_DATA]) > 0:
             return self._last_value[SM_INDEX_ENCODED_DATA]
+            # property should either be encoded or not encoded
         return self._last_value[SM_INDEX_DATA]
     
     @property
@@ -711,46 +751,93 @@ class _Property:
         return self._last_value
     
     def set(self, value : typing.Any) -> None:
-        self._last_value = self._zmq_client.execute(self._write_instruction, dict(value=value),
-                                                        raise_client_side_exception=True)
+        self._last_value = self._zmq_client.execute(
+                                                thing_id=self._resource_info.instance_name, 
+                                                objekt=self._resource_info.obj_name,
+                                                operation=bOperations.writeProperty,
+                                                arguments=value,
+                                                server_execution_context=dict(
+                                                    invokation_timeout=self._invokation_timeout,
+                                                    execution_timeout=self._execution_timeout
+                                                ),
+                                                raise_client_side_exception=True,
+                                                deserialize_reply=True)
      
     def get(self) -> typing.Any:
-        self._last_value = self._zmq_client.execute(self._read_instruction, 
-                                                invokation_timeout=self._invokation_timeout, 
-                                                raise_client_side_exception=True)
+        self._last_value = self._zmq_client.execute(
+                                                thing_id=self._resource_info.instance_name,
+                                                objekt=self._resource_info.obj_name,
+                                                operation=bOperations.readProperty,
+                                                arguments=None,
+                                                server_execution_context=dict(
+                                                    invocation_timeout=self._invokation_timeout,
+                                                    execution_timeout=self._execution_timeout
+                                                ), 
+                                                raise_client_side_exception=True,
+                                                deserialize_reply=True)
         return self.last_read_value 
     
     async def async_set(self, value : typing.Any) -> None:
         if not self._async_zmq_client:
             raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
-        self._last_value = await self._async_zmq_client.async_execute(self._write_instruction, dict(value=value),
-                                                        invokation_timeout=self._invokation_timeout, 
-                                                        execution_timeout=self._execution_timeout,
+        self._last_value = await self._async_zmq_client.async_execute(
+                                                        thing_id=self._resource_info.instance_name,
+                                                        objekt=self._resource_info.obj_name,
+                                                        operation=bOperations.writeProperty,
+                                                        arguments=value,
+                                                        server_execution_context=dict(
+                                                            invokation_timeout=self._invokation_timeout, 
+                                                            execution_timeout=self._execution_timeout
+                                                        ),
                                                         raise_client_side_exception=True)
     
     async def async_get(self) -> typing.Any:
         if not self._async_zmq_client:
             raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
-        self._last_value = await self._async_zmq_client.async_execute(self._read_instruction,
-                                                invokation_timeout=self._invokation_timeout, 
-                                                execution_timeout=self._execution_timeout,
+        self._last_value = await self._async_zmq_client.async_execute(
+                                                thing_id=self._resource_info.instance_name,
+                                                objekt=self._resource_info.obj_name,
+                                                operation=bOperations.readProperty,
+                                                arguments=None,
+                                                server_execution_context=dict(
+                                                    invokation_timeout=self._invokation_timeout, 
+                                                    execution_timeout=self._execution_timeout
+                                                ),
                                                 raise_client_side_exception=True)
         return self.last_read_value 
     
     def noblock_get(self) -> None:
-        return self._zmq_client.send_instruction(self._read_instruction,
-                                            invokation_timeout=self._invokation_timeout, 
-                                            execution_timeout=self._execution_timeout)
+        return self._zmq_client.send_request(
+                                            thing_id=self._resource_info.instance_name,
+                                            objekt=self._resource_info.obj_name,
+                                            operation=bOperations.readProperty,
+                                            arguments=None,
+                                            server_execution_context=dict(
+                                                invokation_timeout=self._invokation_timeout, 
+                                                execution_timeout=self._execution_timeout
+                                            ))
     
     def noblock_set(self, value : typing.Any) -> None:
-        return self._zmq_client.send_instruction(self._write_instruction, dict(value=value), 
+        return self._zmq_client.send_request(   
+                                        thing_id=self._resource_info.instance_name,
+                                        objekt=self._resource_info.obj_name,
+                                        operation=bOperations.writeProperty,
+                                        arguments=value,
+                                        server_execution_context=dict(
                                             invokation_timeout=self._invokation_timeout, 
-                                            execution_timeout=self._execution_timeout)
+                                            execution_timeout=self._execution_timeout
+                                        ))
     
     def oneway_set(self, value : typing.Any) -> None:
-        self._zmq_client.send_instruction(self._write_instruction, dict(value=value), 
-                                            invokation_timeout=self._invokation_timeout, 
-                                            execution_timeout=self._execution_timeout)
+        self._zmq_client.send_request(
+                                    thing_id=self._resource_info.obj_name,
+                                    objekt=self._resource_info.obj_name,
+                                    operation=bOperations.writeProperty,
+                                    arguments=value, 
+                                    server_execution_context=dict(
+                                        invokation_timeout=self._invokation_timeout, 
+                                        execution_timeout=self._execution_timeout
+                                    ))
   
 
 
@@ -828,10 +915,10 @@ class _Event:
 
 
 
-__allowed_attribute_types__ = (_Property, _RemoteMethod, _Event)
+__allowed_attribute_types__ = (_Property, _Action, _Event)
 __WRAPPER_ASSIGNMENTS__ =  ('__name__', '__qualname__', '__doc__')
 
-def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : ZMQResource) -> None:
+def _add_method(client_obj : ObjectProxy, method : _Action, func_info : ZMQResource) -> None:
     if not func_info.top_owner:
         return 
         raise RuntimeError("logic error")
@@ -852,7 +939,7 @@ def _add_property(client_obj : ObjectProxy, property : _Property, property_info 
         setattr(property, attr, property_info.get_dunder_attr(attr))
     client_obj.__setattr__(property_info.obj_name, property)
 
-def _add_event(client_obj : ObjectProxy, event : _Event, event_info : ServerSentEvent) -> None:
+def _add_event(client_obj : ObjectProxy, event : _Event, event_info : ZMQEvent) -> None:
     setattr(client_obj, event_info.obj_name, event)
     
 

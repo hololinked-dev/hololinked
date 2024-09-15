@@ -26,21 +26,21 @@ class ResourceTypes(StrEnum):
     PROPERTY = "PROPERTY"
     ACTION = "ACTION"
     EVENT = "EVENT"
-    IMAGE_STREAM = "IMAGE_STREAM"
     FILE = "FILE"
-
+    THING = "THING"
+    
 
 class CommonRPC(StrEnum):
     """some common RPC and their associated instructions for quick access by lower level code"""
 
-    ZMQ_RESOURCES = '/resources/zmq-object-proxy'
+    ZMQ_RESOURCES = 'zmq-resources'
     HTTP_RESOURCES = '/resources/http-server'
     OBJECT_INFO = '/object-info'
     PING = '/ping'
 
     @classmethod
     def zmq_resource_read(cls, instance_name : str) -> str:
-        return f"/{instance_name}{cls.ZMQ_RESOURCES}/read"
+        return f"{cls.ZMQ_RESOURCES}"
 
     @classmethod
     def http_resource_read(cls, instance_name : str) -> str:
@@ -132,7 +132,7 @@ class ServerTypes(Enum):
     "type of ZMQ servers"
 
     UNKNOWN_TYPE = b'UNKNOWN' 
-    EVENTLOOP = b'EVENTLOOP'  
+    RPC = b'RPC'  
     THING = b'THING'
     POOL = b'POOL'
        
@@ -190,6 +190,16 @@ for name in dir(zmq):
         ZMQ_EVENT_MAP[value] = name
 
 
+
+class Operations(StrEnum):
+    readProperty = 'readProperty'
+    writeProperty = 'writeProperty'
+    invokeAction = 'invokeAction'
+
+class bOperations:
+    readProperty = bytes('readProperty', encoding='utf-8')
+    writeProperty = bytes('writeProperty', encoding='utf-8')
+    invokeAction = bytes('invokeAction', encoding='utf-8')
 
 
 __all__ = [

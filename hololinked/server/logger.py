@@ -11,7 +11,7 @@ from .events import Event
 from .properties import List
 from .properties import Integer, Number
 from .thing import Thing as RemoteObject
-from .action import action as remote_method
+from .actions import action as remote_method
 
 
 
@@ -96,11 +96,11 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         self._push_events = False
         self._events_thread = None
 
-    events = Event(friendly_name='log-events', URL_path='/events', doc='stream logs', 
+    log_events = Event(friendly_name='log-events', doc='stream logs', 
                 schema=log_message_schema)
 
     stream_interval = Number(default=1.0, bounds=(0.025, 60.0), crop_to_bounds=True, step=0.05,
-                        URL_path='/stream-interval', doc="interval at which logs should be published to a client.")
+                            doc="interval at which logs should be published to a client.")
     
     def get_maxlen(self):
         return self._maxlen 
@@ -114,11 +114,11 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         self._critical_logs = deque(maxlen=kwargs.pop('len_critical', int(value/5)))
         self._execution_logs = deque(maxlen=value)
 
-    maxlen = Integer(default=100, bounds=(1, None), crop_to_bounds=True, URL_path='/maxlen',
+    maxlen = Integer(default=100, bounds=(1, None), crop_to_bounds=True, 
                 fget=get_maxlen, fset=set_maxlen, doc="length of execution log history to store")
 
 
-    @remote_method(http_method=HTTP_METHODS.POST, URL_path='/events/start')
+    @remote_method()
     def push_events(self, scheduling : str = 'threaded', stream_interval : float = 1) -> None:
         """
         Push events to client. This method is intended to be called remotely for
@@ -142,7 +142,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         else:
             raise ValueError(f"scheduling can only be 'threaded' or 'async'. Given value {scheduling}")
 
-    @remote_method(http_method=HTTP_METHODS.POST, URL_path='/events/stop')
+    @remote_method()
     def stop_events(self) -> None:
         """
         stop pushing events
@@ -193,22 +193,22 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
             self.diff_logs.clear()
         self._owner.logger.info(f"ending log events.")
            
-    debug_logs = List(default=[], readonly=True, URL_path='/logs/debug', fget=lambda self: self._debug_logs,
+    debug_logs = List(default=[], readonly=True, fget=lambda self: self._debug_logs,
                             doc="logs at logging.DEBUG level")
     
-    warn_logs = List(default=[], readonly=True, URL_path='/logs/warn', fget=lambda self: self._warn_logs,
+    warn_logs = List(default=[], readonly=True, fget=lambda self: self._warn_logs,
                             doc="logs at logging.WARN level")
     
-    info_logs = List(default=[], readonly=True, URL_path='/logs/info', fget=lambda self: self._info_logs,
+    info_logs = List(default=[], readonly=True, fget=lambda self: self._info_logs,
                             doc="logs at logging.INFO level")
        
-    error_logs = List(default=[], readonly=True, URL_path='/logs/error', fget=lambda self: self._error_logs,
+    error_logs = List(default=[], readonly=True, fget=lambda self: self._error_logs,
                             doc="logs at logging.ERROR level")
  
-    critical_logs = List(default=[], readonly=True, URL_path='/logs/critical', fget=lambda self: self._critical_logs,
+    critical_logs = List(default=[], readonly=True, fget=lambda self: self._critical_logs,
                             doc="logs at logging.CRITICAL level")
   
-    execution_logs = List(default=[], readonly=True, URL_path='/logs/execution', fget=lambda self: self._execution_logs,
+    execution_logs = List(default=[], readonly=True, fget=lambda self: self._execution_logs,
                             doc="logs at all levels accumulated in order of collection/execution")
     
 

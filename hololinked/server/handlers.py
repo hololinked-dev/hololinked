@@ -1,13 +1,12 @@
 import asyncio
-from tornado.httputil import HTTPServerRequest
 import zmq.asyncio
 import typing
 import uuid
-from tornado.web import Application, RequestHandler, StaticFileHandler
+from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
 
-from .dataklasses import HTTPResource, ServerSentEvent
+from .dataklasses import ZMQResource, ZMQEvent
 from .utils import *
 from .zmq_message_brokers import AsyncEventConsumer, EventConsumer
 from .schema_validators import BaseSchemaValidator
@@ -18,7 +17,7 @@ class BaseHandler(RequestHandler):
     Base request handler for RPC operations
     """
 
-    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], validator : BaseSchemaValidator, 
+    def initialize(self, resource : typing.Union[ZMQResource], validator : BaseSchemaValidator, 
                             owner = None) -> None:
         """
         Parameters
@@ -170,7 +169,7 @@ class RPCHandler(BaseHandler):
         """
         if not self.has_access_control:
             self.set_status(401, "forbidden")    
-        elif http_method not in self.resource.instructions:
+        elif http_method not in self.resource.supported_methods:
             self.set_status(404, "not found")
         else:
             reply = None
@@ -247,7 +246,7 @@ class EventHandler(BaseHandler):
     """
     handles events emitted by ``Thing`` and tunnels them as HTTP SSE. 
     """
-    def initialize(self, resource, validator: BaseSchemaValidator, owner=None) -> None:
+    def initialize(self, resource: ZMQEvent, validator: BaseSchemaValidator, owner=None) -> None:
         super().initialize(resource, validator, owner)
         self.data_header = b'data: %s\n\n'
 
@@ -346,7 +345,7 @@ class JPEGImageEventHandler(EventHandler):
     """
     handles events with images with image data header
     """
-    def initialize(self, resource, validator: BaseSchemaValidator, owner = None) -> None:
+    def initialize(self, resource: ZMQEvent, validator: BaseSchemaValidator, owner = None) -> None:
         super().initialize(resource, validator, owner)
         self.data_header = b'data:image/jpeg;base64,%s\n\n'
 
@@ -355,7 +354,7 @@ class PNGImageEventHandler(EventHandler):
     """
     handles events with images with image data header
     """
-    def initialize(self, resource, validator: BaseSchemaValidator, owner = None) -> None:
+    def initialize(self, resource: ZMQEvent, validator: BaseSchemaValidator, owner = None) -> None:
         super().initialize(resource, validator, owner)
         self.data_header = b'data:image/png;base64,%s\n\n'
     

@@ -1,11 +1,10 @@
 import typing
 from enum import Enum
 
-
 from ..param.parameterized import Parameter, ClassParameters, Parameterized, ParameterizedMetaclass
-from .utils import issubklass, pep8_to_URL_path
-from .dataklasses import RemoteResourceInfoValidator
-from .constants import USE_OBJECT_NAME, HTTP_METHODS
+from .utils import issubklass
+from .exceptions import StateMachineError
+from .dataklasses import RemoteResource, RemoteResourceInfoValidator
 from .events import Event, EventDispatcher
 from .schema_validators import JsonSchemaValidator
 
@@ -38,10 +37,6 @@ class Property(Parameter):
     allow_None: bool, default False 
         if True, None is accepted as a valid value for this Property, in addition to any other values that are
         allowed. 
-
-    URL_path: str, uses object name by default
-        resource locator under which the attribute is accessible through HTTP. When not given, the variable name 
-        is used and underscores are replaced with dash
 
     http_method: tuple, default ("GET", "PUT", "DELETE")
         http methods for read, write and delete respectively 
@@ -110,55 +105,13 @@ class Property(Parameter):
 
     """
 
-    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', 'model', 'validator', '_remote_info', 
+    __slots__ = ['db_persist', 'db_init', 'db_commit', 'model', 'metadata', '_execution_info_validator', 'execution_info',
                 '_observable', '_observable_event_descriptor', 'fcomparator', '_old_value_internal_name']
-    
-    # RPC only init - no HTTP methods for those who dont like
-    @typing.overload
-    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
-                readonly : bool = False, allow_None : bool = False, observable : bool = False, 
-                state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-                db_persist : bool = False, db_init : bool = False, db_commit : bool = False,  remote : bool = True,
-                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None,
-            ) -> None:
-        ...
 
-    @typing.overload
-    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
-                readonly : bool = False, allow_None : bool = False, URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
-                observable : bool = False, state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-                db_persist : bool = False, db_init : bool = False, db_commit : bool = False, remote : bool = True, 
-                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
-                metadata : typing.Optional[typing.Dict] = None
-            ) -> None:
-        ...
-
-    @typing.overload
-    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
-                readonly : bool = False, allow_None : bool = False, 
-                URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                            (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
-                observable : bool = False, 
-                state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-                db_persist : bool = False, db_init : bool = False, db_commit : bool = False, remote : bool = True,
-                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
-                fcomparator : typing.Optional[typing.Callable] = None, 
-                deepcopy_default : bool = False, per_instance_descriptor : bool = False, 
-                precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None
-            ) -> None:
-        ...
  
     def __init__(self, default: typing.Any = None, *, 
                 doc : typing.Optional[str] = None, constant : bool = False, 
                 readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-                URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                            (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
                 observable : bool = False, model : typing.Optional["BaseModel"] = None, class_member : bool = False, 
@@ -177,11 +130,10 @@ class Property(Parameter):
         self.metadata = metadata
         self._observable = observable
         self._observable_event_descriptor = None # typing.Optional[Event]
-        self._remote_info = None
+        self._execution_info_validator = None
+        self.execution_info = None # type: typing.Optional[RemoteResource]
         if remote:
-            self._remote_info = RemoteResourceInfoValidator(
-                http_method=http_method,
-                URL_path=URL_path,
+            self._execution_info_validator = RemoteResourceInfoValidator(
                 state=state,
                 isproperty=True
             )
@@ -198,32 +150,19 @@ class Property(Parameter):
 
     def __set_name__(self, owner: typing.Any, attrib_name: str) -> None:
         super().__set_name__(owner, attrib_name)
-        self._old_value_internal_name = f'{self._internal_name}_old_value'
-        if self._remote_info is not None:
-            if self._remote_info.URL_path == USE_OBJECT_NAME:
-                self._remote_info.URL_path = f'/{pep8_to_URL_path(self.name)}'
-            elif not self._remote_info.URL_path.startswith('/'): 
-                raise ValueError(f"URL_path should start with '/', please add '/' before '{self._remote_info.URL_path}'")
-            self._remote_info.obj_name = self.name
         if self._observable:
+            self._old_value_internal_name = f'{self._internal_name}_old_value'
             _observable_event_name = f'{self.name}_change_event'  
             # This is a descriptor object, so we need to set it on the owner class
             self._observable_event_descriptor = Event(
                         friendly_name=_observable_event_name,
-                        URL_path=f'{self._remote_info.URL_path}/change-event',
                         doc=f"change event for {self.name}"
                     ) # type: Event
             self._observable_event_descriptor.__set_name__(owner, _observable_event_name)
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
     
 
-    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
-        read_value = super().__get__(obj, objtype)
-        self._push_change_event_if_needed(obj, read_value)
-        return read_value
-      
-
-    def _push_change_event_if_needed(self, obj, value : typing.Any) -> None:
+    def push_change_event(self, obj, value : typing.Any) -> None:
         """
         Pushes change event both on read and write if an event publisher object is available
         on the owning Thing.        
@@ -257,12 +196,30 @@ class Property(Parameter):
         return super().validate_and_adapt(value)
     
 
+    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
+        read_value = super().__get__(obj, objtype)
+        self.push_change_event(obj, read_value)
+        return read_value
+    
+
+    def external_set(self, obj: Parameterized, value : typing.Any) -> None:
+        """
+        Set the value of the property from an external source, e.g. a remote client.
+        """
+        if self.execution_info.state is None or (hasattr(obj, 'state_machine') and  
+                                    obj.state_machine.current_state in self.execution_info.state):
+            return self.__set__(obj, value)
+        else: 
+            raise StateMachineError("Thing {} is in `{}` state, however attribute can be written only in `{}` state".format(
+                obj.instance_name, obj.state_machine.current_state, self.execution_info.state))
+        
+
     def _post_value_set(self, obj, value : typing.Any) -> None:
         if (self.db_persist or self.db_commit) and hasattr(obj, 'db_engine'):
             from .thing import Thing
             assert isinstance(obj, Thing), f"database property {self.name} bound to a non Thing, currently not supported"
             obj.db_engine.set_property(self, value)
-        self._push_change_event_if_needed(obj, value)
+        self.push_change_event(obj, value)
         return super()._post_value_set(obj, value)
     
     
@@ -274,13 +231,39 @@ class Property(Parameter):
         self.fcomparator = func 
         return func
     
+    @property 
+    def is_remote(self):
+        return self._execution_info_validator is not None
+
+try: 
+    from pydantic import BaseModel, RootModel, create_model
+    def wrap_plain_types_in_rootmodel(model : type) -> type["BaseModel"]:
+        """
+        Ensure a type is a subclass of BaseModel.
+
+        If a `BaseModel` subclass is passed to this function, we will pass it
+        through unchanged. Otherwise, we wrap the type in a RootModel.
+        In the future, we may explicitly check that the argument is a type
+        and not a model instance.
+        """
+        try:  # This needs to be a `try` as basic types are not classes
+            assert issubclass(model, BaseModel)
+            return model
+        except (TypeError, AssertionError):
+            return create_model(f"{model!r}", root=(model, ...), __base__=RootModel)
+        except NameError:
+            raise ImportError("pydantic is not installed, please install it to use this feature") from None
+except ImportError:
+    def wrap_plain_types_in_rootmodel(model : type) -> type:
+        raise ImportError("pydantic is not installed, please install it to use this feature") from None
+
+
 
     
 __property_info__ = [
                 'allow_None' , 'class_member', 'db_init', 'db_persist', 
                 'db_commit', 'deepcopy_default', 'per_instance_descriptor', 
                 'state', 'precedence', 'constant', 'default'
-                # 'scada_info', 'property_type' # descriptor related info is also necessary
             ]
 
    
@@ -347,27 +330,7 @@ class ClassProperties(ClassParameters):
                 info[param.name][field] = state.get(field, None) 
         return info 
 
-try: 
-    from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
-    def wrap_plain_types_in_rootmodel(model : type) -> type["BaseModel"]:
-        """
-        Ensure a type is a subclass of BaseModel.
 
-        If a `BaseModel` subclass is passed to this function, we will pass it
-        through unchanged. Otherwise, we wrap the type in a RootModel.
-        In the future, we may explicitly check that the argument is a type
-        and not a model instance.
-        """
-        try:  # This needs to be a `try` as basic types are not classes
-            assert issubclass(model, BaseModel)
-            return model
-        except (TypeError, AssertionError):
-            return create_model(f"{model!r}", root=(model, ...), __base__=RootModel)
-        except NameError:
-            raise ImportError("pydantic is not installed, please install it to use this feature") from None
-except ImportError:
-    def wrap_plain_types_in_rootmodel(model : type) -> type:
-        raise ImportError("pydantic is not installed, please install it to use this feature") from None
     
     
 try: 
