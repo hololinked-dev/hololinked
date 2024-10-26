@@ -7,7 +7,7 @@ from hololinked.server.zmq_message_brokers import (CM_INDEX_ADDRESS, CM_INDEX_CL
 from hololinked.server.zmq_message_brokers import (SM_INDEX_ADDRESS, SM_INDEX_MESSAGE_TYPE, SM_INDEX_MESSAGE_ID,
                                     SM_INDEX_SERVER_TYPE, SM_INDEX_DATA, SM_INDEX_PRE_ENCODED_DATA, SM_MESSAGE_LENGTH)
 from hololinked.server.zmq_message_brokers import PROXY, REPLY, TIMEOUT, INVALID_MESSAGE, HANDSHAKE, EXIT, OPERATION
-from hololinked.server.zmq_message_brokers import AsyncPollingZMQServer, SyncZMQClient, AsyncZMQServer
+from hololinked.server.zmq_message_brokers import AsyncZMQServer, SyncZMQClient
 from hololinked.server.zmq_message_brokers import default_server_execution_context
 from hololinked.server.utils import get_current_async_loop, get_default_logger
 from hololinked.server.dataklasses import ZMQAction, ZMQResource
@@ -26,8 +26,8 @@ except ImportError:
 
 
 
-def start_server(server : typing.Union[AsyncPollingZMQServer, AsyncZMQServer], 
-                owner : "TestMessageBrokers", done_queue : multiprocessing.Queue = None):
+def run_server(server : AsyncZMQServer, owner : "TestServerBroker", 
+                done_queue : multiprocessing.Queue = None) -> None:
     event_loop = get_current_async_loop()
     async def run():
         while True:
@@ -43,26 +43,48 @@ def start_server(server : typing.Union[AsyncPollingZMQServer, AsyncZMQServer],
 
 
 
-class TestMessageBrokers(TestCase):
+class TestServerBroker(TestCase):
 
     @classmethod
-    def setUpClass(self):
-        print("test ZMQ Message Brokers")
-        self.logger = get_default_logger('test-message-brokers', logging.ERROR)        
-        self.done_queue = multiprocessing.Queue()
-        self.last_server_message = None
-        self.server_message_broker = AsyncPollingZMQServer(
+    def setUpServer(self):
+        self.server_message_broker = AsyncZMQServer(
                                                 instance_name='test-message-broker',
                                                 server_type='RPC',
                                                 logger=self.logger
                                             )
-        self._server_thread = threading.Thread(target=start_server, 
+        self._server_thread = threading.Thread(
+                                            target=run_server, 
                                             args=(self.server_message_broker, self, self.done_queue),
-                                            daemon=True)
+                                            daemon=True
+                                        )
         self._server_thread.start()
-        self.client_message_broker = SyncZMQClient(server_instance_name='test-message-broker', logger=self.logger,
-                                                identity='test-client', client_type=PROXY, handshake=False)
         
+
+    @classmethod
+    def setUpClient(self):
+        self.client_message_broker = SyncZMQClient(
+                                            server_instance_name='test-message-broker', 
+                                            logger=self.logger,
+                                            identity='test-client', 
+                                            client_type=PROXY, handshake=False
+                                        )
+
+    """
+    Base class: BaseZMQ, BaseAsyncZMQ, BaseSyncZMQ
+    Servers: BaseZMQServer, AsyncZMQServer, ZMQServerPool
+    Clients: SyncZMQClient, BaseZMQClient, SyncZMQClient, MessageMappedZMQClientPool
+    """
+
+    @classmethod
+    def setUpClass(self):
+        print(f"test ZMQ Message Brokers with {self.__name__}")
+        self.logger = get_default_logger('test-message-brokers', logging.ERROR)        
+        self.done_queue = multiprocessing.Queue()
+        self.last_server_message = None
+        self.setUpServer()
+        self.setUpClient()
+
+
     @classmethod
     def tearDownClass(self):
         print("tear down test message brokers")
@@ -70,6 +92,10 @@ class TestMessageBrokers(TestCase):
     
     def check_server_message(self, message):
         self.assertEqual(len(message), SM_MESSAGE_LENGTH)
+        """
+        SM_INDEX_ADDRESS = 0, SM_INDEX_SERVER_TYPE = 2, SM_INDEX_MESSAGE_TYPE = 3, SM_INDEX_MESSAGE_ID = 4, 
+        SM_INDEX_DATA = 5, SM_INDEX_PRE_ENCODED_DATA = 6, 
+        """
         for index, msg in enumerate(message):
             if index <= 4 or index == 6:
                 self.assertIsInstance(msg, bytes)
@@ -80,8 +106,14 @@ class TestMessageBrokers(TestCase):
         elif message[SM_INDEX_MESSAGE_TYPE] == EXCEPTION:
             self.assertEqual(message[SM_INDEX_DATA]["type"], "Exception")
 
+
     def check_client_message(self, message):
         self.assertEqual(len(message), CM_MESSAGE_LENGTH)
+        """
+        CM_INDEX_ADDRESS = 0, CM_INDEX_CLIENT_TYPE = 2, CM_INDEX_MESSAGE_TYPE = 3, CM_INDEX_MESSAGE_ID = 4, 
+        CM_INDEX_SERVER_EXEC_CONTEXT = 5, CM_INDEX_THING_ID = 7, CM_INDEX_OBJECT = 8, CM_INDEX_OPERATION = 9,
+        CM_INDEX_ARGUMENTS = 10, CM_INDEX_THING_EXEC_CONTEXT = 11
+        """
         for index, msg in enumerate(message):
             if index <= 4 or index == 9 or index == 7:
                 self.assertIsInstance(msg, bytes)
@@ -90,6 +122,10 @@ class TestMessageBrokers(TestCase):
 
 
     def test_1_handshake_complete(self):
+        """
+        Test handshake so that client can connect to server. Once client connects to server,
+        verify a ZMQ internal monitoring socket is available.
+        """
         self.client_message_broker.handshake()
         self.assertTrue(self.client_message_broker._monitor_socket is not None)
         # both directions
@@ -97,6 +133,10 @@ class TestMessageBrokers(TestCase):
 
 
     def test_2_message_contract_indices(self):
+        """
+        Test message composition to freeze message format before production release, 
+        for every composition way possible.
+        """
         # client to server 
         # OPERATION = b'OPERATION' # operation request from client to server
         client_message1 = self.client_message_broker.craft_request_from_arguments(b'test-device', 
@@ -120,10 +160,15 @@ class TestMessageBrokers(TestCase):
         self.assertEqual(self.client_message_broker.zmq_serializer.loads(client_message1[CM_INDEX_ARGUMENTS]), dict())
         self.assertEqual(self.client_message_broker.zmq_serializer.loads(client_message1[CM_INDEX_THING_EXEC_CONTEXT]), 
                             dict())
+        """
+        CM_INDEX_ADDRESS = 0, CM_INDEX_CLIENT_TYPE = 2, CM_INDEX_MESSAGE_TYPE = 3, CM_INDEX_MESSAGE_ID = 4, 
+        CM_INDEX_SERVER_EXEC_CONTEXT = 5, CM_INDEX_THING_ID = 7, CM_INDEX_OBJECT = 8, CM_INDEX_OPERATION = 9,
+        CM_INDEX_ARGUMENTS = 10, CM_INDEX_THING_EXEC_CONTEXT = 11
+        """
 
         server_message1 = self.server_message_broker.craft_response_from_arguments(b'test-device', 
                                                 PROXY, REPLY, client_message1[CM_INDEX_MESSAGE_ID])
-        self.assertEqual(len(server_message1), 7)
+        self.assertEqual(len(server_message1), SM_MESSAGE_LENGTH)
         for msg in server_message1:
             self.assertTrue(isinstance(msg, bytes))
         self.assertEqual(server_message1[SM_INDEX_ADDRESS], b'test-device')
@@ -133,30 +178,37 @@ class TestMessageBrokers(TestCase):
         self.assertIsInstance(UUID(server_message1[SM_INDEX_MESSAGE_ID].decode(), version=4), UUID)
         self.assertEqual(server_message1[SM_INDEX_DATA], self.server_message_broker.zmq_serializer.dumps(None))
         self.assertEqual(server_message1[SM_INDEX_PRE_ENCODED_DATA], b'')
+        """
+        SM_INDEX_ADDRESS = 0, SM_INDEX_SERVER_TYPE = 2, SM_INDEX_MESSAGE_TYPE = 3, SM_INDEX_MESSAGE_ID = 4, 
+        SM_INDEX_DATA = 5, SM_INDEX_PRE_ENCODED_DATA = 6, 
+        """
 
         # test specific way of crafting messages
         # client side - only other second method that generates message
-        client_message2 = self.client_message_broker.craft_empty_message_with_type(b'EXIT')
+        client_message2 = self.client_message_broker.craft_empty_request_with_message_type(b'EXIT')
         self.assertEqual(len(client_message2), CM_MESSAGE_LENGTH)
         for msg in client_message2:
             self.assertTrue(isinstance(msg, bytes))
 
         # server side - only other second method that generates message
-        server_message2 = self.server_message_broker.craft_reply_from_client_message(client_message2)
-        self.assertEqual(len(server_message2), 7)
+        server_message2 = self.server_message_broker.craft_response_from_client_message(client_message2)
+        self.assertEqual(len(server_message2), SM_MESSAGE_LENGTH)
         self.assertEqual(server_message2[CM_INDEX_MESSAGE_TYPE], REPLY)
         for msg in server_message2:
             self.assertTrue(isinstance(msg, bytes))
 
 
     def test_3_message_contract_types(self):
+        """
+        Once composition is checked, check different message types
+        """
         # message types
         client_message = self.client_message_broker.craft_request_from_arguments(b'test-device', 
-                                                                    b'readProperty', b'someProp')
+                                                                b'someProp', b'readProperty')
         
         async def handle_message_types():
             # server to client
-            # REPLY = b'REPLY' # reply for operation
+            # REPLY = b'REPLY' # response for operation
             # TIMEOUT = b'TIMEOUT' # timeout message, operation could not be completed
             # EXCEPTION = b'EXCEPTION' # exception occurred while executing operation
             # INVALID_MESSAGE = b'INVALID_MESSAGE' # invalid message
@@ -170,20 +222,26 @@ class TestMessageBrokers(TestCase):
             
         get_current_async_loop().run_until_complete(handle_message_types())
 
-        # # message types
-        # # both directions
-        # HANDSHAKE = b'HANDSHAKE'
-        # # client to server 
-        # OPERATION = b'OPERATION' # operation request from client to server
-        # EXIT = b'EXIT' # exit the server
-        # # server to client
-        # REPLY = b'REPLY' # reply for operation
-        # TIMEOUT = b'TIMEOUT' # timeout message, operation could not be completed
-        # EXCEPTION = b'EXCEPTION' # exception occurred while executing operation
-        # INVALID_MESSAGE = b'INVALID_MESSAGE' # invalid message
-        # SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' # socket died - zmq's builtin event
-        # # peer to peer
-        # INTERRUPT = b'INTERRUPT' # interrupt a socket while polling 
+        """
+        message types
+
+        both directions
+        HANDSHAKE = b'HANDSHAKE' test_1...
+        
+        client to server 
+        OPERATION = b'OPERATION' test_2_... # operation request from client to server
+        EXIT = b'EXIT' test_7... # exit the server
+        
+        server to client
+        REPLY = b'REPLY' # response for operation
+        TIMEOUT = b'TIMEOUT' # timeout message, operation could not be completed
+        EXCEPTION = b'EXCEPTION' # exception occurred while executing operation
+        INVALID_MESSAGE = b'INVALID_MESSAGE' # invalid message
+        SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' not yet tested # socket died - zmq's builtin event
+        
+        peer to peer
+        INTERRUPT = b'INTERRUPT' not yet tested # interrupt a socket while polling 
+        """
         
         msg = self.client_message_broker.recv_response(client_message[CM_INDEX_MESSAGE_ID])
         self.assertEqual(msg[CM_INDEX_MESSAGE_TYPE], TIMEOUT)
@@ -215,44 +273,65 @@ class TestMessageBrokers(TestCase):
         # # first test the length 
 
 
-    def test_4_action_call_abstraction(self):
+    def test_4_abstractions(self):
+        """
+        Once message types are checked, operations need to be checked. But operations are implemeneted by 
+        event loop so that we skip that here. We check abstractions of message type and operation to a 
+        higher level object, and said higher level object should send the message and message should have 
+        been received by the server.
+        """
+        self._test_action_call_abstraction()
+        self._test_property_abstraction()
+
+
+    def _test_action_call_abstraction(self):
+        """
+        Higher level action object should be able to send messages to server
+        """
         resource_info = ZMQResource(what=ResourceTypes.ACTION, class_name='TestThing', instance_name='test-thing',
                     obj_name='test_echo', qualname='TestThing.test_echo', doc="returns value as it is to the client",
                     request_as_argument=False)
         action_abstractor = _Action(sync_client=self.client_message_broker, resource_info=resource_info,
                     invokation_timeout=5, execution_timeout=5, async_client=None, schema_validator=None)
         action_abstractor.oneway() # because we dont have a thing running
-        self.client_message_broker.handshake() # force a reply from server so that last_server_message is set
-        self.check_client_message(self.last_server_message)
+        self.client_message_broker.handshake() # force a response from server so that last_server_message is set
+        self.check_client_message(self.last_server_message) # last message received by server which is the client message
 
 
-    def test_5_property_abstraction(self):
+    def _test_property_abstraction(self):
+        """
+        Higher level property object should be able to send messages to server
+        """
         resource_info = ZMQResource(what=ResourceTypes.PROPERTY, class_name='TestThing', instance_name='test-thing',
                     obj_name='test_prop', qualname='TestThing.test_prop', doc="a random property",
                     request_as_argument=False)
         property_abstractor = _Property(sync_client=self.client_message_broker, resource_info=resource_info,
                     invokation_timeout=5, execution_timeout=5, async_client=None)
         property_abstractor.oneway_set(5) # because we dont have a thing running
-        self.client_message_broker.handshake() # force a reply from server so that last_server_message is sets
-        self.check_client_message(self.last_server_message)
+        self.client_message_broker.handshake() # force a response from server so that last_server_message is set
+        self.check_client_message(self.last_server_message) # last message received by server which is the client message
 
 
     def test_6_message_broker_async(self):
-
-        async def verify_poll_stop(self : "TestMessageBrokers"):
+        """
+        Test if server can be started and stopped using builtin functions
+        """
+       
+        async def verify_poll_stopped(self : "TestServerBroker"):
             await self.server_message_broker.poll_requests()
             self.server_message_broker.poll_timeout = 1000
             await self.server_message_broker.poll_requests()
             self.done_queue.put(True)
 
-        async def stop_poll(self : "TestMessageBrokers"):
+        async def stop_poll(self : "TestServerBroker"):
             await asyncio.sleep(0.1)
             self.server_message_broker.stop_polling()
             await asyncio.sleep(0.1)
             self.server_message_broker.stop_polling()
-
+        # When the above two functions running, we dont send a message as the thread is
+        # also running
         get_current_async_loop().run_until_complete(
-            asyncio.gather(*[verify_poll_stop(self), stop_poll(self)])
+            asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)])
         )	
 
         self.assertTrue(self.done_queue.get())
@@ -260,6 +339,9 @@ class TestMessageBrokers(TestCase):
 
 
     def test_7_exit(self):
+        """
+        Test if 
+        """
         # EXIT = b'EXIT' # exit the server
         client_message = self.client_message_broker.craft_request_from_arguments(b'test-device', 
                                                                     b'readProperty', b'someProp')
@@ -271,38 +353,42 @@ class TestMessageBrokers(TestCase):
         self._server_thread.join()        
 
 
-    def test_8_broker_with_RPC(self):
-        def start_rpc_server():
-            server = RPCServer(instance_name='test-server', logger=self.logger,
-                        things=[])
-        
-            inner_server = AsyncZMQServer(
-                                instance_name=f'test-server/inner', # hardcoded be very careful
-                                server_type=ServerTypes.THING,
-                                context=server.context,
-                                logger=self.logger,
-                                protocol=ZMQ_PROTOCOLS.INPROC, 
-                            ) 
-            threading.Thread(target=start_server, args=(inner_server, self), 
-                            daemon=True).start()
-            server.run()
 
-        threading.Thread(target=start_rpc_server, daemon=True).start()
+# class TestRPCServer(TestCase):
 
-        client = SyncZMQClient(server_instance_name='test-server', identity='test-client', 
-                    client_type=PROXY) 
-        
-        resource_info = ZMQResource(what=ResourceTypes.ACTION, class_name='TestThing', instance_name='test-thing/inner',
-                    obj_name='test_echo', qualname='TestThing.test_echo', doc="returns value as it is to the client",
-                    request_as_argument=False)
-        action_abstractor = _Action(sync_client=client, resource_info=resource_info,
-                    invokation_timeout=5, execution_timeout=5, async_client=None, schema_validator=None)
-        action_abstractor.oneway() # because we dont have a thing running
-        client.handshake() # force a reply from server so that last_server_message is set
-        self.check_client_message(self.last_server_message)
-        
-        self.assertEqual(self.last_server_message[CM_INDEX_THING_ID], b'test-client/inner')
-        
+
+#     def start_rpc_server():
+#         server = RPCServer(instance_name='test-server', logger=self.logger,
+#                     things=[])
+    
+#         inner_server = AsyncZMQServer(
+#                             instance_name=f'test-server/inner', # hardcoded be very careful
+#                             server_type=ServerTypes.THING,
+#                             context=server.context,
+#                             logger=self.logger,
+#                             protocol=ZMQ_PROTOCOLS.INPROC, 
+#                         ) 
+#         threading.Thread(target=run_server, args=(inner_server, self), 
+#                         daemon=True).start()
+#         server.run()
+
+#     threading.Thread(target=start_rpc_server, daemon=True).start()
+
+#     client = SyncZMQClient(server_instance_name='test-server', identity='test-client', 
+#                 client_type=PROXY) 
+    
+#     resource_info = ZMQResource(what=ResourceTypes.ACTION, class_name='TestThing', instance_name='test-thing/inner',
+#                 obj_name='test_echo', qualname='TestThing.test_echo', doc="returns value as it is to the client",
+#                 request_as_argument=False)
+#     action_abstractor = _Action(sync_client=client, resource_info=resource_info,
+#                 invokation_timeout=5, execution_timeout=5, async_client=None, schema_validator=None)
+#     action_abstractor.oneway() # because we dont have a thing running
+#     client.handshake() # force a response from server so that last_server_message is set
+#     self.check_client_message(self.last_server_message)
+    
+#     self.assertEqual(self.last_server_message[CM_INDEX_THING_ID], b'test-client/inner')
+
+
 
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())
