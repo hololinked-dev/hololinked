@@ -12,7 +12,7 @@ from hololinked.server.zmq_message_brokers import default_server_execution_conte
 from hololinked.server.utils import get_current_async_loop, get_default_logger
 from hololinked.server.dataklasses import ZMQAction, ZMQResource
 from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes
-from hololinked.server.zmq_server import RPCServer
+from hololinked.server.rpc_server import RPCServer
 from hololinked.client.proxy import _Action, _Property
 
 
@@ -26,8 +26,7 @@ except ImportError:
 
 
 
-def run_server(server : AsyncZMQServer, owner : "TestServerBroker", 
-                done_queue : multiprocessing.Queue = None) -> None:
+def run_server(server : AsyncZMQServer, owner : "TestServerBroker", done_queue : multiprocessing.Queue) -> None:
     event_loop = get_current_async_loop()
     async def run():
         while True:
@@ -44,6 +43,7 @@ def run_server(server : AsyncZMQServer, owner : "TestServerBroker",
 
 
 class TestServerBroker(TestCase):
+    """Tests Individual ZMQ Server"""
 
     @classmethod
     def setUpServer(self):
@@ -77,8 +77,8 @@ class TestServerBroker(TestCase):
 
     @classmethod
     def setUpClass(self):
-        print(f"test ZMQ Message Brokers with {self.__name__}")
-        self.logger = get_default_logger('test-message-brokers', logging.ERROR)        
+        print(f"test ZMQ Message Broker with {self.__name__}")
+        self.logger = get_default_logger('test-message-broker', logging.ERROR)        
         self.done_queue = multiprocessing.Queue()
         self.last_server_message = None
         self.setUpServer()
@@ -87,10 +87,13 @@ class TestServerBroker(TestCase):
 
     @classmethod
     def tearDownClass(self):
-        print("tear down test message brokers")
+        print("tear down test message broker")
 
     
     def check_server_message(self, message):
+        """
+        Utility function to check types of indices within the message created by the server
+        """
         self.assertEqual(len(message), SM_MESSAGE_LENGTH)
         """
         SM_INDEX_ADDRESS = 0, SM_INDEX_SERVER_TYPE = 2, SM_INDEX_MESSAGE_TYPE = 3, SM_INDEX_MESSAGE_ID = 4, 
@@ -108,6 +111,9 @@ class TestServerBroker(TestCase):
 
 
     def check_client_message(self, message):
+        """
+        Utility function to check types of indices within the message created by the client
+        """
         self.assertEqual(len(message), CM_MESSAGE_LENGTH)
         """
         CM_INDEX_ADDRESS = 0, CM_INDEX_CLIENT_TYPE = 2, CM_INDEX_MESSAGE_TYPE = 3, CM_INDEX_MESSAGE_ID = 4, 
@@ -115,10 +121,12 @@ class TestServerBroker(TestCase):
         CM_INDEX_ARGUMENTS = 10, CM_INDEX_THING_EXEC_CONTEXT = 11
         """
         for index, msg in enumerate(message):
-            if index <= 4 or index == 9 or index == 7:
+            if index <= 4 or index == 9 or index == 7: # 0, 2, 3, 4, 7, 9 
                 self.assertIsInstance(msg, bytes)
-            elif index >= 10 or index == 8:
+            elif index >= 10 or index == 8: # 8, 10, 11
                 self.assertTrue(not isinstance(msg, bytes))
+            # 1 and 6 are empty bytes
+            # 5 - server execution context is deserialized only by RPC server
 
 
     def test_1_handshake_complete(self):
@@ -340,7 +348,7 @@ class TestServerBroker(TestCase):
 
     def test_7_exit(self):
         """
-        Test if 
+        Test if exit reaches to server
         """
         # EXIT = b'EXIT' # exit the server
         client_message = self.client_message_broker.craft_request_from_arguments(b'test-device', 
@@ -354,29 +362,59 @@ class TestServerBroker(TestCase):
 
 
 
-# class TestRPCServer(TestCase):
+class TestRPCServer(TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        print(f"test RPC Message Broker with {self.__name__}")
+        self.logger = get_default_logger('test-rpc-broker', logging.ERROR)    
+        self.done_queue = multiprocessing.Queue()
+        self.start_rpc_server()
+        self.client_message_broker = SyncZMQClient(
+                                        server_instance_name='test-rpc-server', 
+                                        identity='test-client', 
+                                        client_type=PROXY,
+                                        log_level=logging.ERROR
+                                    ) 
+        
+
+    @classmethod
+    def start_rpc_server(self):
+        self.rpc_server = RPCServer(instance_name='test-rpc-server', logger=self.logger,
+                    things=[])
+        self.inner_server = AsyncZMQServer(
+                            instance_name=f'test-rpc-server/inner', # hardcoded be very careful
+                            server_type=ServerTypes.THING,
+                            context=self.rpc_server.context,
+                            logger=self.logger,
+                            protocol=ZMQ_PROTOCOLS.INPROC, 
+                        ) 
+        self._server_thread = threading.Thread(target=run_server, args=(self.inner_server, self, self.done_queue), 
+                        daemon=True)
+        self._server_thread.start()
+        
+        threading.Thread(target=self.rpc_server.run, daemon=True).start()
 
 
-#     def start_rpc_server():
-#         server = RPCServer(instance_name='test-server', logger=self.logger,
-#                     things=[])
-    
-#         inner_server = AsyncZMQServer(
-#                             instance_name=f'test-server/inner', # hardcoded be very careful
-#                             server_type=ServerTypes.THING,
-#                             context=server.context,
-#                             logger=self.logger,
-#                             protocol=ZMQ_PROTOCOLS.INPROC, 
-#                         ) 
-#         threading.Thread(target=run_server, args=(inner_server, self), 
-#                         daemon=True).start()
-#         server.run()
+    # def test_7_exit(self):
+    #     """
+    #     Test if exit reaches to server
+    #     """
+    #     # EXIT = b'EXIT' # exit the server
+    #     client_message = self.client_message_broker.craft_request_from_arguments(b'test-device', 
+    #                                                                 b'readProperty', b'someProp')
+    #     client_message[CM_INDEX_ADDRESS] = b'test-rpc-server/inner'
+    #     client_message[CM_INDEX_MESSAGE_TYPE] = EXIT
+    #     self.client_message_broker.socket.send_multipart(client_message)
+    #     self.assertTrue(self.done_queue.get())
+    #     self._server_thread.join()    
 
-#     threading.Thread(target=start_rpc_server, daemon=True).start()
+    @classmethod  
+    def tearDownClass(self):
+        self.inner_server.exit()
+        self.rpc_server.exit()
+      
 
-#     client = SyncZMQClient(server_instance_name='test-server', identity='test-client', 
-#                 client_type=PROXY) 
-    
 #     resource_info = ZMQResource(what=ResourceTypes.ACTION, class_name='TestThing', instance_name='test-thing/inner',
 #                 obj_name='test_echo', qualname='TestThing.test_echo', doc="returns value as it is to the client",
 #                 request_as_argument=False)

@@ -9,6 +9,6 @@ from .property import *
 from .database import *
 from .thing import *
 from .HTTPServer import *
-from .zmq_server import *
+from .rpc_server import *
 
 
