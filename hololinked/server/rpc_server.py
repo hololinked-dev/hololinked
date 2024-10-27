@@ -1,5 +1,3 @@
-from collections import deque
-from pickle import EMPTY_DICT
 import zmq
 import zmq.asyncio
 import sys 
@@ -11,6 +9,7 @@ import typing
 import threading
 import logging
 import tracemalloc
+from collections import deque
 from uuid import uuid4
 
 
@@ -29,7 +28,8 @@ from .zmq_message_brokers import (CM_INDEX_ADDRESS, CM_INDEX_CLIENT_TYPE, CM_IND
 from .zmq_message_brokers import SM_INDEX_ADDRESS
 from .zmq_message_brokers import EXIT, HANDSHAKE, INVALID_MESSAGE, TIMEOUT
 from .zmq_message_brokers import HTTP_SERVER, PROXY, TUNNELER 
-from .zmq_message_brokers import (AsyncPollingZMQServer, AsyncZMQClient, AsyncZMQServer, BaseZMQServer, 
+from .zmq_message_brokers import EMPTY_DICT
+from .zmq_message_brokers import (AsyncZMQClient, AsyncZMQServer, BaseZMQServer, 
                                   EventPublisher, SyncZMQClient)
 
 
@@ -111,7 +111,7 @@ class RPCServer(BaseZMQServer):
             log level of the event loop logger
         """
         BaseZMQServer.__init__(self, instance_name=instance_name, server_type=ServerTypes.RPC.value, 
-                                        **kwargs)
+                                **kwargs)
         self.things = things
         kwargs["http_serializer"] = self.http_serializer
         kwargs["zmq_serializer"] = self.zmq_serializer
@@ -121,11 +121,9 @@ class RPCServer(BaseZMQServer):
         #     self.things.append(self)      
         self.uninstantiated_things = dict()
 
-        if isinstance(protocols, list): 
-            protocols = protocols 
-        elif isinstance(protocols, str): 
+        if isinstance(protocols, str): 
             protocols = [protocols]
-        else:
+        elif not isinstance(protocols, list): 
             raise TypeError(f"unsupported protocols type : {type(protocols)}")
         tcp_socket_address = kwargs.pop('tcp_socket_address', None)
         
@@ -133,30 +131,31 @@ class RPCServer(BaseZMQServer):
         event_publisher_protocol = None 
         if self.logger is None:
             self.logger =  get_default_logger('{}|{}|{}|{}'.format(self.__class__.__name__, 
-                                                'RPC', 'MIXED', instance_name), kwargs.get('log_level', logging.INFO))
+                                                'RPC', 'MIXED', self.instance_name), kwargs.get('log_level', logging.INFO))
         # contexts and poller
+        self._terminate_context = context is None
         self.context = context or zmq.asyncio.Context()
         self.poller = zmq.asyncio.Poller()
         self.poll_timeout = poll_timeout
         # initialise every externally visible protocol
         if ZMQ_PROTOCOLS.TCP in protocols or "TCP" in protocols:
-            self.tcp_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=ServerTypes.RPC, 
+            self.tcp_server = AsyncZMQServer(instance_name=self.instance_name, server_type=ServerTypes.RPC, 
                                     context=self.context, protocol=ZMQ_PROTOCOLS.TCP, poll_timeout=poll_timeout, 
                                     socket_address=tcp_socket_address, **kwargs)
             self.poller.register(self.tcp_server.socket, zmq.POLLIN)
             event_publisher_protocol = ZMQ_PROTOCOLS.TCP
         if ZMQ_PROTOCOLS.IPC in protocols or "IPC" in protocols: 
-            self.ipc_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=ServerTypes.RPC, 
+            self.ipc_server = AsyncZMQServer(instance_name=self.instance_name, server_type=ServerTypes.RPC, 
                                     context=self.context, protocol=ZMQ_PROTOCOLS.IPC, poll_timeout=poll_timeout, **kwargs)
             self.poller.register(self.ipc_server.socket, zmq.POLLIN)
             event_publisher_protocol = ZMQ_PROTOCOLS.IPC if not event_publisher_protocol else event_publisher_protocol              
         if ZMQ_PROTOCOLS.INPROC in protocols or "INPROC" in protocols: 
-            self.inproc_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=ServerTypes.RPC, 
+            self.inproc_server = AsyncZMQServer(instance_name=self.instance_name, server_type=ServerTypes.RPC, 
                                     context=self.context, protocol=ZMQ_PROTOCOLS.INPROC, poll_timeout=poll_timeout, **kwargs)
             self.poller.register(self.inproc_server.socket, zmq.POLLIN)
             event_publisher_protocol = ZMQ_PROTOCOLS.INPROC if not event_publisher_protocol else event_publisher_protocol    
         self.event_publisher = EventPublisher(
-                            instance_name=instance_name + '-event-pub',
+                            instance_name=self.instance_name + '-event-pub',
                             protocol=event_publisher_protocol,
                             zmq_serializer=self.zmq_serializer,
                             http_serializer=self.http_serializer,
@@ -165,7 +164,7 @@ class RPCServer(BaseZMQServer):
         # message serializing broker
         self.inner_inproc_client = AsyncZMQClient(
                                         server_instance_name=f'{self.instance_name}/inner', 
-                                        identity=f'{instance_name}/tunneler',
+                                        identity=f'{self.instance_name}/tunneler',
                                         client_type=TUNNELER, 
                                         context=self.context, 
                                         protocol=ZMQ_PROTOCOLS.INPROC, 
@@ -177,13 +176,15 @@ class RPCServer(BaseZMQServer):
                                         instance_name=f'{instance.instance_name}/inner', # hardcoded be very careful
                                         server_type=ServerTypes.THING,
                                         context=self.context,
-                                        protocol=ZMQ_PROTOCOLS.INPROC, 
+                                        protocol=ZMQ_PROTOCOLS.INPROC,
+                                        logger=self.logger,
+                                        poll_timeout=poll_timeout,
                                         **kwargs
                                     ) 
             instance.rpc_server = self
             instance.event_publisher = self.event_publisher 
             instance._prepare_resources()
-        # append to messages list - message, execution context, event, timeout task, origin socket
+        # # append to messages list - message, execution context, event, timeout task, origin socket
         self._messages = deque() # type: deque[typing.Tuple[typing.List[bytes], typing.Dict[str, typing.Any], asyncio.Event, asyncio.Future, zmq.Socket]]
         self._messages_event = asyncio.Event()
         
@@ -256,18 +257,18 @@ class RPCServer(BaseZMQServer):
    
     async def execute_once(cls, instance : Thing, operation : str,
                                 obj : str, arguments : typing.Dict[str, typing.Any]) -> typing.Any:
-        if operation == 'readProperty':
+        if operation == b'readProperty':
             prop = instance.properties[obj] # type: Property
             return prop.__get__(instance, type(instance))        
-        elif operation == 'writeProperty':
+        elif operation == b'writeProperty':
             prop = instance.properties[obj] # type: Property
             return prop.external_set(instance, arguments)
-        elif operation == 'deleteProperty':
+        elif operation == b'deleteProperty':
             prop = instance.properties[obj] # type: Property
             if prop.fdel is not None:
                 return prop.fdel() 
             raise NotImplementedError("This property does not support deletion") 
-        elif operation == 'invokeAction':
+        elif operation == b'invokeAction':
             action = instance.actions[obj] # type: Action
             args = arguments.pop('__args__', tuple())
             # arguments then become kwargs
@@ -276,11 +277,11 @@ class RPCServer(BaseZMQServer):
                 return await action(*args, **arguments) 
             else:
                 return action(*args, **arguments) 
-        elif operation == 'readMultipleProperties' or operation == 'readAllProperties':
+        elif operation == b'readMultipleProperties' or operation == b'readAllProperties':
             if obj is None:
                 return instance._get_properties()
             return instance._get_properties(names=obj)
-        elif operation == 'writeMultipleProperties' or operation == 'writeAllProperties':
+        elif operation == b'writeMultipleProperties' or operation == b'writeAllProperties':
             return instance._set_properties(arguments)
         raise NotImplementedError("Unimplemented execution path for Thing {} for message type {}".format(
                                                                         instance.instance_name, operation))
@@ -309,7 +310,7 @@ class RPCServer(BaseZMQServer):
                     self.eventloop.call_soon(lambda : handshake_task)
                     continue 
                 if message[CM_INDEX_MESSAGE_TYPE] == EXIT:
-                    continue
+                    break
 
                 # handle invokation timeout
                 execution_context = self._get_server_execution_context_client_message(message)
@@ -520,13 +521,20 @@ class RPCServer(BaseZMQServer):
             except Exception as ex:
                 self.logger.warning(f"could not unregister socket from polling - {str(ex)}") # does not give info about socket
         try:
-            self.inproc_server.exit()
-            self.ipc_server.exit()
-            self.tcp_server.exit()
-            self.inner_inproc_client.exit()
+            if self.inproc_server is not None:
+                self.inproc_server.exit()
+            if self.ipc_server is not None:
+                self.ipc_server.exit()
+            if self.tcp_server is not None:
+                self.tcp_server.exit()
+            if self.inner_inproc_client is not None:
+                self.inner_inproc_client.exit()
+            if self.event_publisher is not None:
+                self.event_publisher.exit()
         except:
             pass 
-        self.context.term()
+        # if self._terminate_context:
+        #     self.context.term()
         self.logger.info("terminated context of socket '{}' of type '{}'".format(self.instance_name, self.__class__))
 
 
