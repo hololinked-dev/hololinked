@@ -21,18 +21,18 @@ from .serializers import BaseSerializer, JSONSerializer, _get_serializer_from_us
 
 # message types
 # both directions
-HANDSHAKE = b'HANDSHAKE'
+HANDSHAKE = b'HANDSHAKE' # 1 - find out if the server is alive
 # client to server 
-OPERATION = b'OPERATION' # operation request from client to server
-EXIT = b'EXIT' # exit the server
+OPERATION = b'OPERATION' # 2 - operation request from client to server
+EXIT = b'EXIT' # 3 - exit the server
 # server to client
-REPLY = b'REPLY' # response for operation
-TIMEOUT = b'TIMEOUT' # timeout message, operation could not be completed
-EXCEPTION = b'EXCEPTION' # exception occurred while executing operation
-INVALID_MESSAGE = b'INVALID_MESSAGE' # invalid message
-SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' # socket died - zmq's builtin event
+REPLY = b'REPLY' # 4 - response for operation
+TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
+EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
+INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
+SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' # 8 - socket died - zmq's builtin event EVENT_DISCONNECTED
 # peer to peer
-INTERRUPT = b'INTERRUPT' # interrupt a socket while polling 
+INTERRUPT = b'INTERRUPT' # 9 - interrupt a socket while polling 
 
 # not used now
 EVENT       = b'EVENT'
@@ -57,7 +57,7 @@ client's message to server: |br|
 [   0   ,   1    ,     2      ,      3      ,      4     ,          5              ,    6   , 
     
 thing instance name,  object, operation, arguments, thing execution context] 
-      7            ,    8   ,      9   ,     10    ,       11               ] 
+      7            ,    8   ,      9   ,     10   ,       11               ] 
 
     
 [address, bytes(), server_type, message_type, message id, data, pre encoded data]|br|
@@ -104,6 +104,7 @@ class BaseZMQ:
     """
     # init of this class must always take empty arguments due to inheritance structure
     def __init__(self) -> None:
+        super().__init__()
         self.instance_name : str
         self.logger : logging.Logger
         
@@ -279,7 +280,7 @@ class BaseZMQServer(BaseZMQ):
                 logger : typing.Optional[logging.Logger] = None,
                 **kwargs
             ) -> None:
-        super().__init__()
+        super().__init__(**kwargs)
         self.zmq_serializer, self.http_serializer = _get_serializer_from_user_given_options(
                                                             zmq_serializer=zmq_serializer,
                                                             http_serializer=http_serializer
