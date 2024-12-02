@@ -255,7 +255,7 @@ class RPCServer(BaseZMQServer):
                         instance.logger.removeHandler(list_handler)
 
    
-    async def execute_once(cls, instance : Thing, objekt : str, operation : str,
+    async def execute_once(cls, instance : Thing, objekt : typing.Optional[str], operation : str,
                                arguments : typing.Dict[str, typing.Any]) -> typing.Any:
         if operation == b'readProperty':
             prop = instance.properties[objekt] # type: Property
@@ -281,6 +281,10 @@ class RPCServer(BaseZMQServer):
             return instance._get_properties(names=objekt)
         elif operation == b'writeMultipleProperties' or operation == b'writeAllProperties':
             return instance._set_properties(arguments)
+        # elif operation == b'dataResponse': # no operation defined yet for dataResponse to events in Thing Description
+        #     from .events import CriticalEvent
+        #     event = instance.events[objekt] # type: CriticalEvent, this name "CriticalEvent" needs to change, may be just plain Event
+        #     return event._set_acknowledgement(**arguments)
         raise NotImplementedError("Unimplemented execution path for Thing {} for message type {}".format(
                                                                         instance.instance_name, operation))
     
