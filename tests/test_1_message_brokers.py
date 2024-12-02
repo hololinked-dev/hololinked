@@ -1,5 +1,6 @@
 import threading, asyncio, typing
 import logging, multiprocessing, unittest
+import zmq.asyncio 
 from uuid import UUID
 from hololinked.server.zmq_message_brokers import (CM_INDEX_ADDRESS, CM_INDEX_CLIENT_TYPE, CM_INDEX_MESSAGE_TYPE,
                 CM_INDEX_MESSAGE_ID, CM_INDEX_SERVER_EXEC_CONTEXT, CM_INDEX_THING_ID, CM_INDEX_OPERATION,
@@ -72,7 +73,7 @@ class TestServerBroker(TestCase):
     """
     Base class: BaseZMQ, BaseAsyncZMQ, BaseSyncZMQ
     Servers: BaseZMQServer, AsyncZMQServer, ZMQServerPool
-    Clients: SyncZMQClient, BaseZMQClient, SyncZMQClient, MessageMappedZMQClientPool
+    Clients: BaseZMQClient, SyncZMQClient, AsyncZMQClient, MessageMappedZMQClientPool
     """
 
     @classmethod
@@ -137,16 +138,16 @@ class TestServerBroker(TestCase):
         self.client_message_broker.handshake()
         self.assertTrue(self.client_message_broker._monitor_socket is not None)
         # both directions
-        # HANDSHAKE = b'HANDSHAKE'
+        # HANDSHAKE = b'HANDSHAKE' # 1 - find out if the server is alive
 
 
     def test_2_message_contract_indices(self):
         """
-        Test message composition to freeze message format before production release, 
-        for every composition way possible.
+        Test message composition for every composition way possible.
+        Before production release, this is to freeze the message contract.
         """
         # client to server 
-        # OPERATION = b'OPERATION' # operation request from client to server
+        # OPERATION = b'OPERATION' # 2 - operation request from client to server
         client_message1 = self.client_message_broker.craft_request_from_arguments(b'test-device', 
                                                                     b'someProp', b'readProperty')
         # test message contract length
@@ -174,6 +175,16 @@ class TestServerBroker(TestCase):
         CM_INDEX_ARGUMENTS = 10, CM_INDEX_THING_EXEC_CONTEXT = 11
         """
 
+        # test specific way of crafting messages
+        # client side - only other second method that generates message
+        # 3 - exit the server
+        client_message2 = self.client_message_broker.craft_empty_request_with_message_type(b'EXIT')
+        self.assertEqual(len(client_message2), CM_MESSAGE_LENGTH)
+        for msg in client_message2:
+            self.assertTrue(isinstance(msg, bytes))
+            
+        # Server to client
+        # REPLY = b'REPLY' # 4 - response for operation
         server_message1 = self.server_message_broker.craft_response_from_arguments(b'test-device', 
                                                 PROXY, REPLY, client_message1[CM_INDEX_MESSAGE_ID])
         self.assertEqual(len(server_message1), SM_MESSAGE_LENGTH)
@@ -190,14 +201,6 @@ class TestServerBroker(TestCase):
         SM_INDEX_ADDRESS = 0, SM_INDEX_SERVER_TYPE = 2, SM_INDEX_MESSAGE_TYPE = 3, SM_INDEX_MESSAGE_ID = 4, 
         SM_INDEX_DATA = 5, SM_INDEX_PRE_ENCODED_DATA = 6, 
         """
-
-        # test specific way of crafting messages
-        # client side - only other second method that generates message
-        client_message2 = self.client_message_broker.craft_empty_request_with_message_type(b'EXIT')
-        self.assertEqual(len(client_message2), CM_MESSAGE_LENGTH)
-        for msg in client_message2:
-            self.assertTrue(isinstance(msg, bytes))
-
         # server side - only other second method that generates message
         server_message2 = self.server_message_broker.craft_response_from_client_message(client_message2)
         self.assertEqual(len(server_message2), SM_MESSAGE_LENGTH)
@@ -216,17 +219,17 @@ class TestServerBroker(TestCase):
         
         async def handle_message_types():
             # server to client
-            # REPLY = b'REPLY' # response for operation
-            # TIMEOUT = b'TIMEOUT' # timeout message, operation could not be completed
-            # EXCEPTION = b'EXCEPTION' # exception occurred while executing operation
-            # INVALID_MESSAGE = b'INVALID_MESSAGE' # invalid message
+            # REPLY = b'REPLY' # 4 - response for operation
+            # TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
+            # EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
+            # 7 INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
             client_message[CM_INDEX_ADDRESS] = b'test-client'
-            await self.server_message_broker._handle_timeout(client_message)
-            await self.server_message_broker._handle_invalid_message(client_message, Exception('test'))
-            await self.server_message_broker._handshake(client_message)
-            await self.server_message_broker.async_send_response(client_message)
+            await self.server_message_broker._handle_timeout(client_message) # 5
+            await self.server_message_broker._handle_invalid_message(client_message, Exception('test')) # 7
+            await self.server_message_broker._handshake(client_message) # 1
+            await self.server_message_broker.async_send_response(client_message) # 4
             await self.server_message_broker.async_send_response_with_message_type(client_message, EXCEPTION,
-                                                                                   Exception('test'))
+                                                                                   Exception('test')) # 6
             
         get_current_async_loop().run_until_complete(handle_message_types())
 
@@ -234,17 +237,17 @@ class TestServerBroker(TestCase):
         message types
 
         both directions
-        HANDSHAKE = b'HANDSHAKE' test_1...
+        HANDSHAKE = b'HANDSHAKE' # 1 - taken care by test_1...
         
         client to server 
-        OPERATION = b'OPERATION' test_2_... # operation request from client to server
-        EXIT = b'EXIT' test_7... # exit the server
+        OPERATION = b'OPERATION' 2 - taken care by test_2_... # operation request from client to server
+        EXIT = b'EXIT' # 3 - taken care by test_7... # exit the server
         
         server to client
-        REPLY = b'REPLY' # response for operation
-        TIMEOUT = b'TIMEOUT' # timeout message, operation could not be completed
-        EXCEPTION = b'EXCEPTION' # exception occurred while executing operation
-        INVALID_MESSAGE = b'INVALID_MESSAGE' # invalid message
+        REPLY = b'REPLY' # 4 - response for operation
+        TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
+        EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
+        INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
         SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' not yet tested # socket died - zmq's builtin event
         
         peer to peer
@@ -283,8 +286,8 @@ class TestServerBroker(TestCase):
 
     def test_4_abstractions(self):
         """
-        Once message types are checked, operations need to be checked. But operations are implemeneted by 
-        event loop so that we skip that here. We check abstractions of message type and operation to a 
+        Once message types are checked, operations need to be checked. But exeuction of operations on the server 
+        are implemeneted by event loop so that we skip that here. We check abstractions of message type and operation to a 
         higher level object, and said higher level object should send the message and message should have 
         been received by the server.
         """
@@ -322,7 +325,7 @@ class TestServerBroker(TestCase):
 
     def test_6_message_broker_async(self):
         """
-        Test if server can be started and stopped using builtin functions
+        Test if server can be started and stopped using builtin functions on the server side
         """
        
         async def verify_poll_stopped(self : "TestServerBroker"):
@@ -350,11 +353,9 @@ class TestServerBroker(TestCase):
         """
         Test if exit reaches to server
         """
-        # EXIT = b'EXIT' # exit the server
-        client_message = self.client_message_broker.craft_request_from_arguments(b'test-device', 
-                                                                    b'readProperty', b'someProp')
+        # EXIT = b'EXIT' # 7 - exit the server
+        client_message = self.client_message_broker.craft_empty_request_with_message_type(EXIT)
         client_message[CM_INDEX_ADDRESS] = b'test-message-broker'
-        client_message[CM_INDEX_MESSAGE_TYPE] = EXIT
         self.client_message_broker.socket.send_multipart(client_message)
 
         self.assertTrue(self.done_queue.get())
@@ -380,34 +381,36 @@ class TestRPCServer(TestCase):
 
     @classmethod
     def start_rpc_server(self):
+        context = zmq.asyncio.Context() 
         self.rpc_server = RPCServer(instance_name='test-rpc-server', logger=self.logger,
-                    things=[])
+                    things=[], context=context)
         self.inner_server = AsyncZMQServer(
                             instance_name=f'test-rpc-server/inner', # hardcoded be very careful
                             server_type=ServerTypes.THING,
                             context=self.rpc_server.context,
                             logger=self.logger,
                             protocol=ZMQ_PROTOCOLS.INPROC, 
+                            context=context
                         ) 
         self._server_thread = threading.Thread(target=run_server, args=(self.inner_server, self, self.done_queue), 
                         daemon=True)
         self._server_thread.start()
         
-        threading.Thread(target=self.rpc_server.run, daemon=True).start()
+        self.rpc_server.run()
 
 
-    # def test_7_exit(self):
-    #     """
-    #     Test if exit reaches to server
-    #     """
-    #     # EXIT = b'EXIT' # exit the server
-    #     client_message = self.client_message_broker.craft_request_from_arguments(b'test-device', 
-    #                                                                 b'readProperty', b'someProp')
-    #     client_message[CM_INDEX_ADDRESS] = b'test-rpc-server/inner'
-    #     client_message[CM_INDEX_MESSAGE_TYPE] = EXIT
-    #     self.client_message_broker.socket.send_multipart(client_message)
-    #     self.assertTrue(self.done_queue.get())
-    #     self._server_thread.join()    
+    def test_7_exit(self):
+        """
+        Test if exit reaches to server
+        """
+        # # EXIT = b'EXIT' # exit the server
+        # client_message = self.client_message_broker.craft_request_from_arguments(b'test-device', 
+        #                                                             b'readProperty', b'someProp')
+        # client_message[CM_INDEX_ADDRESS] = b'test-rpc-server/inner'
+        # client_message[CM_INDEX_MESSAGE_TYPE] = EXIT
+        # self.client_message_broker.socket.send_multipart(client_message)
+        # self.assertTrue(self.done_queue.get())
+        # self._server_thread.join()    
 
     @classmethod  
     def tearDownClass(self):
