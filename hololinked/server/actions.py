@@ -25,13 +25,13 @@ class Action:
 
     def __init__(self, obj) -> None:
         self.obj = obj
-        self._execution_info_validator : ActionInfoValidator
 
     def __post_init__(self):
         # never called, only type hinting
         from .thing import Thing, ThingMeta
         self.owner : ThingMeta  
         self.owner_inst : Thing
+        self._execution_info_validator : ActionInfoValidator
         
     @property
     def execution_info(self) -> ActionResource:

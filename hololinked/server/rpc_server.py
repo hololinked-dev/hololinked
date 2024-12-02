@@ -213,7 +213,7 @@ class RPCServer(BaseZMQServer):
         while True:
             messages = await instance.message_broker.async_recv_requests()
             for message in messages:
-                client, mty_byte, client_type, msg_type, msg_id, server_execution_context, thing_id, operation, obj, arguments, execution_context = message
+                client, mty_byte_1, client_type, msg_type, msg_id, server_execution_context, mty_byte_2, thing_id, objekt, operation, arguments, execution_context = message
                 fetch_execution_logs = execution_context.pop("fetch_execution_logs", False)
                 if fetch_execution_logs:
                     list_handler = ListHandler([])
@@ -223,7 +223,7 @@ class RPCServer(BaseZMQServer):
                 try:
                     instance.logger.debug(f"client {client} of client type {client_type} issued operation " +
                                 f"{operation} with message id {msg_id}. starting execution.")
-                    return_value = await self.execute_once(instance, operation, obj, arguments) 
+                    return_value = await self.execute_once(instance, objekt, operation,  arguments) 
                     if fetch_execution_logs:
                         return_value = {
                             "return_value" : return_value,
@@ -255,32 +255,30 @@ class RPCServer(BaseZMQServer):
                         instance.logger.removeHandler(list_handler)
 
    
-    async def execute_once(cls, instance : Thing, operation : str,
-                                obj : str, arguments : typing.Dict[str, typing.Any]) -> typing.Any:
+    async def execute_once(cls, instance : Thing, objekt : str, operation : str,
+                               arguments : typing.Dict[str, typing.Any]) -> typing.Any:
         if operation == b'readProperty':
-            prop = instance.properties[obj] # type: Property
+            prop = instance.properties[objekt] # type: Property
             return prop.__get__(instance, type(instance))        
         elif operation == b'writeProperty':
-            prop = instance.properties[obj] # type: Property
-            return prop.external_set(instance, arguments)
+            prop = instance.properties[objekt] # type: Property
+            return prop.external_set(instance, arguments) # external set has state machine logic inside
         elif operation == b'deleteProperty':
-            prop = instance.properties[obj] # type: Property
-            if prop.fdel is not None:
-                return prop.fdel() 
-            raise NotImplementedError("This property does not support deletion") 
+            prop = instance.properties[objekt] # type: Property
+            del prop # raises NotImplementedError when deletion is not implemented which is mostly the case
         elif operation == b'invokeAction':
-            action = instance.actions[obj] # type: Action
+            action = instance.actions[objekt] # type: Action
             args = arguments.pop('__args__', tuple())
             # arguments then become kwargs
-            assert action.validate_call(args, arguments)
+            assert action.validate_call(args, arguments) # state machine and schema validation, must return True
             if action.execution_info.iscoroutine:
                 return await action(*args, **arguments) 
             else:
                 return action(*args, **arguments) 
         elif operation == b'readMultipleProperties' or operation == b'readAllProperties':
-            if obj is None:
+            if objekt is None:
                 return instance._get_properties()
-            return instance._get_properties(names=obj)
+            return instance._get_properties(names=objekt)
         elif operation == b'writeMultipleProperties' or operation == b'writeAllProperties':
             return instance._set_properties(arguments)
         raise NotImplementedError("Unimplemented execution path for Thing {} for message type {}".format(
