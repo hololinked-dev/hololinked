@@ -16,7 +16,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from ..param import Parameterized
 from ..param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, String
 from .constants import HTTP_METHODS, ZMQ_PROTOCOLS, CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
-from .utils import get_IP_from_interface, issubklass, pep8_to_dashed_name
+from .utils import get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name
 from .dataklasses import ZMQResource, ZMQAction, ZMQEvent
 from .utils import get_default_logger
 from .serializers import JSONSerializer
@@ -199,8 +199,8 @@ class HTTPServer(Parameterized):
                                                     logger=self.logger
                                                 )
         # print("client pool context", self.zmq_client_pool.context)
-        event_loop = EventLoop.get_async_loop() # sets async loop for a non-possessing thread as well
-        self.update_router_with_things()
+        event_loop = get_current_async_loop() # sets async loop for a non-possessing thread as well
+        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         for client in self.zmq_client_pool:
