@@ -132,16 +132,14 @@ class EventDispatcher:
                                 http_clients=kwargs.get('http_clients', True), serialize=serialize)
 
 
+    # class CriticalEvent(Event):
+    #     """
+    #     Push events to client and get acknowledgement for that
+    #     """
 
-
-class CriticalEvent(Event):
-    """
-    Push events to client and get acknowledgement for that
-    """
-
-    def __init__(self, name : str) -> None:
-        super().__init__(name)
-        self._synchronize_event = threading.Event()
+    #     def __init__(self, name : str) -> None:
+    #         super().__init__(name)
+    #         self._synchronize_event = threading.Event()
 
     def receive_acknowledgement(self, timeout : typing.Union[float, int, None]) -> bool:
         """
@@ -150,12 +148,12 @@ class CriticalEvent(Event):
         """
         return self._synchronize_event.wait(timeout=timeout)
 
-    def _set_acknowledgement(self):
+    def _set_acknowledgement(self, *args, **kwargs) -> None:
         """
         Method to be called by RPC server when an acknowledgement is received. Not for user to be set.
         """
         self._synchronize_event.set()
-
+        
 
 
 

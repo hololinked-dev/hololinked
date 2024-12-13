@@ -140,6 +140,8 @@ class StateMachine:
             return True
         elif isinstance(self.states, tuple) and state in self.states:
             return True
+        elif self.has_object(state):
+            return True
         return False
         
     def _get_machine_compliant_state(self, state) -> typing.Union[StrEnum, str]:
@@ -197,7 +199,7 @@ class StateMachine:
     current_state = property(get_state, set_state, None, 
         doc = """read and write current state of the state machine""")
 
-    def has_object(self, object : typing.Union[Property, typing.Callable]) -> bool:
+    def contains_object(self, object : typing.Union[Property, typing.Callable]) -> bool:
         """
         returns True if specified object is found in any of the state machine states. 
         Supply unbound method for checking methods, as state machine is specified at class level

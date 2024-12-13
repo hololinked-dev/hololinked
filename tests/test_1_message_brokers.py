@@ -387,10 +387,10 @@ class TestRPCServer(TestCase):
         self.inner_server = AsyncZMQServer(
                             instance_name=f'test-rpc-server/inner', # hardcoded be very careful
                             server_type=ServerTypes.THING,
-                            context=self.rpc_server.context,
+                            context=context,
                             logger=self.logger,
                             protocol=ZMQ_PROTOCOLS.INPROC, 
-                            context=context
+                
                         ) 
         self._server_thread = threading.Thread(target=run_server, args=(self.inner_server, self, self.done_queue), 
                         daemon=True)

@@ -21,16 +21,20 @@ class Action:
     """
     Object that models an action.
     """
-    __slots__ = ['obj', 'owner', 'owner_inst', '_execution_info', '_execution_info_validator']
+    __slots__ = ['obj', 'owner', 'owner_inst', 
+                '_execution_info', '_execution_info_validator']
 
     def __init__(self, obj) -> None:
         self.obj = obj
 
     def __post_init__(self):
-        # never called, only type hinting
+        # never called, neither possible to call, only type hinting
         from .thing import Thing, ThingMeta
+        # owner class and instance
         self.owner : ThingMeta  
         self.owner_inst : Thing
+        # the validator that was used to accept user inputs to this action.
+        # stored only for reference, hardly used. 
         self._execution_info_validator : ActionInfoValidator
         
     @property
@@ -44,6 +48,10 @@ class Action:
         self._execution_info = value
     
     def validate_call(self, args, kwargs : typing.Dict[str, typing.Any]) -> None:
+        """
+        Validate the call to the action, like payload, state machine state etc. 
+        Errors are raised as exceptions.
+        """
         if self._execution_info.state is None or (hasattr(self.owner_inst, 'state_machine') and 
                             self.owner_inst.state_machine.current_state in self._execution_info.state):
                 # Note that because we actually find the resource within __prepare_self.owner_inst__, its already bound
@@ -52,31 +60,44 @@ class Action:
                     self._execution_info.schema_validator.validate(kwargs)
         else: 
             raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
-                    self.owner_inst.instance_name, self.owner_inst.state, self._execution_info.state))      
+                    self.owner_inst.id, self.owner_inst.state, self._execution_info.state))      
         if self._execution_info.isparameterized and len(args) > 0:
             raise RuntimeError("parameterized functions cannot have positional arguments")
             
 
 class SyncAction(Action):  
-    """Non async action call"""
-            
+    """
+    non async(io) action call. The call is passed to the method as-it-is to allow local 
+    invocation without state machine checks.
+    """
+    def external_call(self, *args, **kwargs):
+        """validated call to the action with state machine and payload checks"""
+        self.validate_call(args, kwargs)
+        return self(*args, **kwargs)
+        
     def __call__(self, *args, **kwargs):
         return self.obj(self.owner_inst, *args, **kwargs)
 
 
 class AsyncAction(Action):
-    """Async action call"""
+    """
+    async(io) action call. The call is passed to the method as-it-is to allow local 
+    invocation without state machine checks.
+    """
+    async def external_call(self, *args, **kwargs):
+        """validated call to the action with state machine and payload checks"""
+        self.validate_call(args, kwargs)
+        return await self(*args, **kwargs)
 
     async def __call__(self, *args, **kwargs):
         return await self.obj(self.owner_inst, *args, **kwargs)
 
 
    
-def action(input_schema : typing.Optional[JSON] = None, output_schema : typing.Optional[JSON] = None, 
-        state : typing.Optional[typing.Union[str, Enum]] = None, create_task : bool = False, **kwargs) -> Action:
+def action(input_schema : JSON | None = None, output_schema : JSON | None = None, 
+        state : str | Enum | None = None, create_task : bool = False, **kwargs) -> Action:
     """
-    Use this function as a decorate on your methods to make them accessible remotely. For WoT, an action affordance schema 
-    for the method is generated.
+    decorate on your methods with this function to make them accessible remotely or create 'actions' out of them. 
     
     Parameters
     ----------
@@ -88,11 +109,11 @@ def action(input_schema : typing.Optional[JSON] = None, output_schema : typing.O
         state machine state under which the object can executed. When not provided,
         the action can be executed under any state.
     **kwargs:
-        safe: bool 
+        - safe: bool, 
             indicate in thing description if action is safe to execute 
-        idempotent: bool 
+        - idempotent: bool, 
             indicate in thing description if action is idempotent (for example, allows HTTP client to cache return value)
-        synchronous: bool
+        - synchronous: bool,
             indicate in thing description if action is synchronous (not long running)
 
     Returns
@@ -162,11 +183,18 @@ def action(input_schema : typing.Optional[JSON] = None, output_schema : typing.O
 
 class RemoteInvokable:
     """
-    Container class for actions, this class is not meant to be subclassed directly.
+    Base class providing additional functionality related to actions, 
+    it is not meant to be subclassed directly by the end-user.
     """
 
     def __init__(self):
+        self.id : str
         super().__init__()
+        self._prepare()
+
+
+    def _prepare(self) -> None:
+        """update owner of actions"""
         for action in self.actions.values():
             action.owner = self.__class__
             action.owner_inst = self
@@ -175,10 +203,11 @@ class RemoteInvokable:
     @property
     def actions(self) -> typing.Dict[str, Action]:
         """
-        returns all actions of the object, methods that are decorated with ``@action``.
+        a dictionary with all the actions of the object as values (methods that are decorated with ``action``) and 
+        their names as keys.
         """
         try:
-            return getattr(self, f'_{self.instance_name}_actions')
+            return getattr(self, f'_{self.id}_actions')
         except AttributeError:
             actions = dict()
             for name, method in inspect._getmembers(
@@ -192,7 +221,7 @@ class RemoteInvokable:
                     actions[name] = method
                 elif isinstance(method, Action) or issubklass(method, ParameterizedFunction):
                     actions[name] = method
-            setattr(self, f'_{self.instance_name}_actions', actions)
+            setattr(self, f'_{self.id}_actions', actions)
             return actions
 
 

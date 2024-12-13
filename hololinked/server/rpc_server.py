@@ -285,7 +285,7 @@ class RPCServer(BaseZMQServer):
         #     from .events import CriticalEvent
         #     event = instance.events[objekt] # type: CriticalEvent, this name "CriticalEvent" needs to change, may be just plain Event
         #     return event._set_acknowledgement(**arguments)
-        raise NotImplementedError("Unimplemented execution path for Thing {} for message type {}".format(
+        raise NotImplementedError("Unimplemented execution path for Thing {} for operation {}".format(
                                                                         instance.instance_name, operation))
     
         
