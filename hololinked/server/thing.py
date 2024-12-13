@@ -40,7 +40,7 @@ class ThingMeta(ParameterizedMetaclass):
         return TypedKeyMappingsConstrainedDict({},
             type_mapping = dict(
                 state_machine = (StateMachine, type(None)),
-                instance_name = String,
+                id = String, 
                 log_level = Selector,
                 logger = ClassSelector,
                 logfile = String,
@@ -79,13 +79,13 @@ class ThingMeta(ParameterizedMetaclass):
 
 class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     """
-    Subclass from here to expose python objects on the network (with HTTP/TCP) or to other processes (ZeroMQ)
+    Subclass from here to expose hardware or python objects on the network
     """
 
-    __server_type__ = ServerTypes.THING # not a server, this needs to be removed.
-
+    state_machine : typing.Optional[StateMachine]
+   
     # local properties
-    instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
+    id = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
                         doc="""Unique string identifier of the instance. This value is used for many operations,
                         for example - creating zmq socket address, tables in databases, and to identify the instance 
                         in the HTTP Server - (http(s)://{domain and sub domain}/{instance name}). 
@@ -96,7 +96,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                             if none supplied.""") # type: logging.Logger
     zmq_serializer = ClassSelector(class_=(BaseSerializer, str),
                         allow_None=True, default='json', remote=False,
-                        doc="""Serializer used for exchanging messages with python RPC clients. Subclass the base serializer 
+                        doc="""Serializer used for exchanging messages with ZMQ clients. Subclass the base serializer 
                         or one of the available serializers to implement your own serialization requirements; or, register 
                         type replacements. Default is JSON. Some serializers like MessagePack improve performance many times 
                         compared to JSON and can be useful for data intensive applications within python.""") # type: BaseSerializer
@@ -115,8 +115,6 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     zmq_resources = Property(readonly=True, 
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
                         fget=lambda self: self._zmq_resources) # type: typing.Dict[str, ZMQResource]
-    GUI = Property(default=None, allow_None=True, fget = lambda self : self._gui,
-                        doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool")     
     object_info = Property(doc="contains information about this object like the class name, script location etc.") # type: ThingInformation
     
 
@@ -129,12 +127,12 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         return obj
 
 
-    def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
+    def __init__(self, *, id : str, logger : typing.Optional[logging.Logger] = None, 
                 serializer : typing.Optional[JSONSerializer] = None, **kwargs) -> None:
         """
         Parameters
         ----------
-        instance_name: str
+        id: str
             Unique string identifier of the instance. This value is used for many operations,
             for example - creating zmq socket address, tables in databases, and to identify the instance in the HTTP Server - 
             (http(s)://{domain and sub domain}/{instance name}). 
@@ -143,28 +141,28 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             logging.Logger instance to print log messages. Default logger with a IO-stream handler and network 
             accessible handler is created if none supplied.
         serializer: JSONSerializer, optional
-            custom JSON serializer. To use separate serializer for python RPC clients and cross-platform 
-            HTTP clients, use keyword arguments zmq_serializer and http_serializer and leave this argument at None.
-        **kwargs:
-            zmq_serializer: BaseSerializer | str, optional 
-                Serializer used for exchanging messages with python RPC clients. If string value is supplied, 
+            custom JSON serializer. To use separate serializer for different protocols, use keyword arguments 
+            like zmq_serializer and http_serializer and leave this argument at None.
+        **kwargs: typing.Dict[str, Any]
+            - zmq_serializer: BaseSerializer | str, optional 
+                Serializer used for exchanging messages with ZMQ clients. If string value is supplied, 
                 supported are 'msgpack', 'pickle', 'serpent', 'json'. Subclass the base serializer 
                 ``hololinked.server.serializer.BaseSerializer`` or one of the available serializers to implement your 
                 own serialization requirements; or, register type replacements. Default is JSON. Some serializers like 
                 MessagePack improve performance many times  compared to JSON and can be useful for data intensive 
                 applications within python. The serializer supplied here must also be supplied to object proxy from 
                 ``hololinked.client``. 
-            http_serializer: JSONSerializer, optional
+            - http_serializer: JSONSerializer, optional
                 serializer used for cross platform HTTP clients. 
-            use_default_db: bool, Default False
-                if True, default SQLite database is created where properties can be stored and loaded. There is no need to supply
-                any database credentials. This value can also be set as a class attribute, see docs.
-            logger_remote_access: bool, Default True
+            - logger_remote_access: bool, Default True
                 if False, network accessible handler is not attached to the logger. This value can also be set as a 
                 class attribute, see docs.
-            schema_validator: BaseSchemaValidator, optional
+            - use_default_db: bool, Default False
+                if True, default SQLite database is created where properties can be stored and loaded. There is no need to supply
+                any database credentials. This value can also be set as a class attribute, see docs.
+            - schema_validator: BaseSchemaValidator, optional
                 schema validator class for JSON schema validation, not supported by ZMQ clients. 
-            db_config_file: str, optional
+            - db_config_file: str, optional
                 if not using a default database, supply a JSON configuration file to create a connection. Check documentaion
                 of ``hololinked.server.database``.
             use_json_file: bool, Default False
@@ -175,29 +173,28 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 is generated based on the instance name.
 
         """
-        if instance_name.startswith('/'):
-            instance_name = instance_name[1:]
         # Type definitions
         self._owner : typing.Optional[Thing] = None
         self._internal_fixed_attributes : typing.List[str]
-        self._qualified_instance_name : str
+        self._qualified_id : str
         self.rpc_server  = None 
         self.message_broker = None # type: typing.Optional[AsyncZMQServer]
-        self._gui = None # filler for a future feature
         # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
             raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
-                            "for python clients and HTTP clients, use zmq_serializer and http_serializer keyword arguments.")
+                            "for protocol specific implementations, use zmq_serializer, http_serializer, {protocol}_serializer keyword arguments.")
         zmq_serializer = serializer or kwargs.pop('zmq_serializer', 'json')
         http_serializer = serializer if isinstance(serializer, JSONSerializer) else kwargs.pop('http_serializer', 'json')
-        zmq_serializer, http_serializer = _get_serializer_from_user_given_options(
-                                                                    zmq_serializer=zmq_serializer,
-                                                                    http_serializer=http_serializer
-                                                                )
-        Parameterized.__init__(self, instance_name=instance_name, logger=logger, 
+        zmq_serializer, http_serializer = _get_serializer_from_user_given_options(zmq_serializer=zmq_serializer,
+                                                                    http_serializer=http_serializer)
+         
+        Parameterized.__init__(self, id=id, logger=logger, 
                         zmq_serializer=zmq_serializer, http_serializer=http_serializer, **kwargs)
         RemoteInvokable.__init__(self)
         EventSource.__init__(self)
+
+        if self.id.startswith('/'):
+            self.id = self.id[1:]
 
         self._prepare_logger(
                     log_level=kwargs.get('log_level', None),
@@ -217,7 +214,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     def __post_init__(self):
         self.load_properties_from_DB()
-        self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
+        self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.id}")
 
 
     def _prepare_resources(self):
@@ -234,13 +231,13 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = False):
         from .logger import RemoteAccessHandler
         if self.logger is None:
-            self.logger = get_default_logger(self.instance_name,
-                                    logging.INFO if not log_level else log_level,
+            self.logger = get_default_logger(self.id, 
+                                    logging.INFO if not log_level else log_level, 
                                     None if not log_file else log_file)
         if remote_access:
             if not any(isinstance(handler, RemoteAccessHandler) for handler in self.logger.handlers):
-                self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger',
-                                                    maxlen=500, emit_interval=1, logger=self.logger)
+                self._remote_access_loghandler = RemoteAccessHandler(id='logger', 
+                                                    maxlen=500, emit_interval=1, logger=self.logger) 
                                                     # thing has its own logger so we dont recreate one for
                                                     # remote access handler
                 self.logger.addHandler(self._remote_access_loghandler)
@@ -286,13 +283,13 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def _get_object_info(self):
         if not hasattr(self, '_object_info'):
             self._object_info = ThingInformation(
-                    instance_name  = self.instance_name,
+                    id  = self.id, 
                     class_name     = self.__class__.__name__,
                     script         = os.path.dirname(os.path.abspath(inspect.getfile(self.__class__))),
-                    http_server    = "USER_MANAGED",
-                    kwargs         = "USER_MANAGED",
-                    eventloop_instance_name = "USER_MANAGED",
-                    level          = "USER_MANAGED",
+                    http_server    = "USER_MANAGED", 
+                    kwargs         = "USER_MANAGED",  
+                    eventloop_id = "USER_MANAGED", 
+                    level          = "USER_MANAGED", 
                     level_type     = "USER_MANAGED"
                 )
         return self._object_info
@@ -484,7 +481,22 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         #     In other words, schema validation will always pass.  
         from .td import ThingDescription
         return ThingDescription(instance=self, authority=authority or self._object_info.http_server,
-                                    allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)
+                                    allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)   
+    
+    @action( input_schema={
+            "type": "object", 
+            "properties": {
+                "authority": {"type": "string"}, 
+                "ignore_errors" : {"type" : "boolean"}
+            }
+        })
+    def get_thing_model(self) -> JSON:
+        """
+        get the model of the object. The model is a JSON object that describes the object's properties, actions, events, 
+        and their types. The model is used by the client to understand the object and its capabilities. 
+        """
+        raise NotImplementedError("this method will be implemented properly in a future release")
+        # return self._thing_model
 
 
     @action()
@@ -495,7 +507,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         in details.
         """
         return build_our_temp_TD(self, authority=authority, ignore_errors=ignore_errors)
-
+    
 
     @action()                                                                                                                                          
     def exit(self) -> None:
@@ -517,9 +529,9 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """ping the Thing to see if it is alive"""
         pass
 
-    def run(self,
-            zmq_protocols : typing.Union[typing.Sequence[ZMQ_PROTOCOLS],
-                                         ZMQ_PROTOCOLS] = ZMQ_PROTOCOLS.IPC,
+    def run_with_zmq_server(self, 
+            zmq_protocols : typing.Union[typing.Sequence[ZMQ_PROTOCOLS], 
+                                         ZMQ_PROTOCOLS] = ZMQ_PROTOCOLS.IPC, 
             # expose_eventloop : bool = False,
             **kwargs
         ) -> None:
@@ -558,7 +570,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         from .zmq_server import RPCServer
         RPCServer(
-            instance_name=self.instance_name, 
+            id=self.id, 
             things=[self],
             context=context, 
             protocols=zmq_protocols, 
@@ -622,7 +634,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         
         from .HTTPServer import HTTPServer        
         http_server = HTTPServer(
-            [self.instance_name], logger=self.logger, serializer=self.http_serializer,
+            [self.id], logger=self.logger, serializer=self.http_serializer, 
             port=port, address=address, ssl_context=ssl_context,
             allowed_clients=allowed_clients, schema_validator=self.schema_validator,
             # network_interface=network_interface, 
@@ -637,6 +649,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         http_server.tornado_instance.stop()
 
-
+       
+    
 
 
