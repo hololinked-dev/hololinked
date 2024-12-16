@@ -205,6 +205,16 @@ serializers = {
 }
     
 
+
+class Serializers:
+    
+    json = JSONSerializer()
+    pickle = PickleSerializer()
+    msgpack = MsgpackSerializer()
+
+    
+
+
 try:
     import serpent
 
@@ -240,6 +250,8 @@ try:
     serializers['serpent'] = SerpentSerializer
 except ImportError:
     pass
+
+
 
 
 
