@@ -2,14 +2,14 @@ import threading, asyncio, typing
 import logging, multiprocessing, unittest
 import zmq.asyncio 
 from uuid import UUID
-from hololinked.server.zmq_message_brokers import (CM_INDEX_ADDRESS, CM_INDEX_CLIENT_TYPE, CM_INDEX_MESSAGE_TYPE,
+from hololinked.server.protocols.zmq.brokers import (CM_INDEX_ADDRESS, CM_INDEX_CLIENT_TYPE, CM_INDEX_MESSAGE_TYPE,
                 CM_INDEX_MESSAGE_ID, CM_INDEX_SERVER_EXEC_CONTEXT, CM_INDEX_THING_ID, CM_INDEX_OPERATION,
                 CM_INDEX_OBJECT, CM_INDEX_ARGUMENTS, CM_INDEX_THING_EXEC_CONTEXT, CM_MESSAGE_LENGTH, EXCEPTION)  
-from hololinked.server.zmq_message_brokers import (SM_INDEX_ADDRESS, SM_INDEX_MESSAGE_TYPE, SM_INDEX_MESSAGE_ID,
+from hololinked.server.protocols.zmq.brokers import (SM_INDEX_ADDRESS, SM_INDEX_MESSAGE_TYPE, SM_INDEX_MESSAGE_ID,
                                     SM_INDEX_SERVER_TYPE, SM_INDEX_DATA, SM_INDEX_PRE_ENCODED_DATA, SM_MESSAGE_LENGTH)
-from hololinked.server.zmq_message_brokers import PROXY, REPLY, TIMEOUT, INVALID_MESSAGE, HANDSHAKE, EXIT, OPERATION
-from hololinked.server.zmq_message_brokers import AsyncZMQServer, SyncZMQClient
-from hololinked.server.zmq_message_brokers import default_server_execution_context
+from hololinked.server.protocols.zmq.brokers import PROXY, REPLY, TIMEOUT, INVALID_MESSAGE, HANDSHAKE, EXIT, OPERATION
+from hololinked.server.protocols.zmq.brokers import AsyncZMQServer, SyncZMQClient
+from hololinked.server.protocols.zmq.brokers import default_server_execution_context
 from hololinked.server.utils import get_current_async_loop, get_default_logger
 from hololinked.server.dataklasses import ZMQAction, ZMQResource
 from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes

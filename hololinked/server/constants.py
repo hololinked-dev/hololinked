@@ -7,6 +7,7 @@ from enum import StrEnum, IntEnum, Enum
 # types
 JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
 JSON = typing.Dict[str, JSONSerializable]
+byte_types = (bytes, bytearray, memoryview)
 
 # decorator constants 
 # naming
@@ -87,7 +88,7 @@ class LOGLEVEL(IntEnum):
 
 
 # ZMQ
-class ZMQ_PROTOCOLS(StrEnum):
+class ZMQ_TRANSPORT_LAYERS(StrEnum):
     """
     supported ZMQ transport protocols - TCP, IPC, INPROC
 
@@ -205,5 +206,5 @@ class bOperations:
 __all__ = [
     Serializers.__name__, 
     HTTP_METHODS.__name__,
-    ZMQ_PROTOCOLS.__name__
+    ZMQ_TRANSPORT_LAYERS.__name__
 ]

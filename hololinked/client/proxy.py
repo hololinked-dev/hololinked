@@ -9,7 +9,7 @@ from ..server.config import global_config
 from ..server.constants import JSON, CommonRPC, bOperations, ServerMessage, ResourceTypes, ZMQ_PROTOCOLS
 from ..server.serializers import BaseSerializer
 from ..server.dataklasses import ZMQAction, ZMQEvent, ZMQResource
-from ..server.zmq_message_brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY
+from ..server.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY
 from ..server.schema_validators import BaseSchemaValidator
 
 

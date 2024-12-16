@@ -63,6 +63,10 @@ class Action:
                     self.owner_inst.id, self.owner_inst.state, self._execution_info.state))      
         if self._execution_info.isparameterized and len(args) > 0:
             raise RuntimeError("parameterized functions cannot have positional arguments")
+        
+    def external_call(self, *args, **kwargs):
+        """validated call to the action with state machine and payload checks"""
+        raise NotImplementedError("external_call must be implemented by subclass")
             
 
 class SyncAction(Action):  
