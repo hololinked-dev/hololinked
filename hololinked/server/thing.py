@@ -1,4 +1,6 @@
-import logging
+import asyncio
+from collections import deque
+import logging 
 import inspect
 import os
 import re
@@ -9,11 +11,11 @@ import zmq
 import zmq.asyncio
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
-from .constants import JSON, ZMQ_PROTOCOLS, JSONSerializable
+from .constants import JSON, ZMQ_TRANSPORT_LAYERS, JSONSerializable
 from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .utils import get_default_logger, getattr_without_descriptor_read
 from .exceptions import BreakInnerLoop
-from .zmq_message_brokers import ServerTypes, AsyncZMQServer
+from .protocols.zmq.brokers import AsyncZMQClient, ServerTypes, AsyncZMQServer
 from .database import ThingDB, ThingInformation
 from .dataklasses import ZMQResource, build_our_temp_TD, get_organised_resources
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
@@ -177,8 +179,11 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self._owner : typing.Optional[Thing] = None
         self._internal_fixed_attributes : typing.List[str]
         self._qualified_id : str
+        self._inproc_client = None # type: typing.Optional[AsyncZMQClient]
+        self._inproc_server = None # type: typing.Optional[AsyncZMQServer]
+        self._zmq_messages = None # type: typing.Optional[typing.List[typing.Tuple[typing.List[bytes], typing.Dict[str, typing.Any], asyncio.Event, asyncio.Future, zmq.Socket]]]
+        self._zmq_messages_event = None # type: typing.Optional[asyncio.Event]
         self.rpc_server  = None 
-        self.message_broker = None # type: typing.Optional[AsyncZMQServer]
         # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
             raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
@@ -530,8 +535,8 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         pass
 
     def run_with_zmq_server(self, 
-            zmq_protocols : typing.Union[typing.Sequence[ZMQ_PROTOCOLS], 
-                                         ZMQ_PROTOCOLS] = ZMQ_PROTOCOLS.IPC, 
+            ZMQ_TRANSPORT_LAYERS : typing.Union[typing.Sequence[ZMQ_TRANSPORT_LAYERS], 
+                                         ZMQ_TRANSPORT_LAYERS] = ZMQ_TRANSPORT_LAYERS.IPC, 
             # expose_eventloop : bool = False,
             **kwargs
         ) -> None:
@@ -541,7 +546,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         Parameters
         ----------
-        zmq_protocols: Sequence[ZMQ_PROTOCOLS] | ZMQ_Protocools, Default ZMQ_PROTOCOLS.IPC or "IPC"
+        ZMQ_TRANSPORT_LAYERS: Sequence[ZMQ_TRANSPORT_LAYERS] | ZMQ_Protocools, Default ZMQ_TRANSPORT_LAYERS.IPC or "IPC"
             zmq transport layers at which the object is exposed. 
             TCP - provides network access apart from HTTP - please supply a socket address additionally.  
             IPC - inter process communication - connection can be made from other processes running 
@@ -573,7 +578,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             id=self.id, 
             things=[self],
             context=context, 
-            protocols=zmq_protocols, 
+            protocols=ZMQ_TRANSPORT_LAYERS, 
             zmq_serializer=self.zmq_serializer, 
             http_serializer=self.http_serializer, 
             tcp_socket_address=kwargs.get('tcp_socket_address', None),
@@ -587,7 +592,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             httpserver = kwargs.pop('http_server')
             assert isinstance(httpserver, HTTPServer)
             httpserver.add_things(self)
-            httpserver._zmq_protocol = ZMQ_PROTOCOLS.INPROC
+            httpserver._zmq_protocol = ZMQ_TRANSPORT_LAYERS.INPROC
             httpserver._zmq_inproc_socket_context = context
             httpserver._zmq_inproc_event_context = self.event_publisher.context
             assert httpserver.all_ok
@@ -642,7 +647,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         )
 
         self.run(
-            zmq_protocols=ZMQ_PROTOCOLS.INPROC,
+            ZMQ_TRANSPORT_LAYERS=ZMQ_TRANSPORT_LAYERS.INPROC,
             http_server=http_server,
             context=kwargs.get('context', None)
         ) # blocks until exit is called

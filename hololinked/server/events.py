@@ -7,7 +7,7 @@ from ..param.parameterized import Parameterized, ParameterizedMetaclass
 from .constants import JSON 
 from .utils import getattr_without_descriptor_read, pep8_to_dashed_name
 from .config import global_config
-from .zmq_message_brokers import EventPublisher
+from .protocols.zmq.brokers import EventPublisher
 from .security_definitions import BaseSecurityDefinition
 
 
