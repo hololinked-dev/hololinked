@@ -9,9 +9,9 @@ from ...serializers import Serializers
 
 # message types
 # both directions
-HANDSHAKE = b'HANDSHAKE' # 1 - find out if the server is alive
+HANDSHAKE = b'HANDSHAKE' # 1 - find out if the server is alive/connect to it
 # client to server 
-OPERATION = b'OPERATION' # 2 - operation request from client to server
+OPERATION = b'OPERATION' # 2 - i.e. message type is a request to perform an operation on the interaction affordance
 EXIT = b'EXIT' # 3 - exit the server
 # server to client
 REPLY = b'REPLY' # 4 - response for operation
@@ -32,9 +32,9 @@ EMPTY_BYTE  = b''
 EMPTY_DICT  = {}
 
 # client types
-HTTP_SERVER = b'HTTP_SERVER'
-PROXY = b'PROXY'
-TUNNELER = b'TUNNELER' # message passer from inproc client to inrproc server within RPC
+
+
+
 
 
 """
@@ -44,7 +44,7 @@ client's message to server: |br|
 [address, message type, messsage id, server execution context, 
 [   0   ,      1      ,      2     ,          3              ,  
     
-thing instance name,  object, operation, arguments, thing execution context] 
+thing instance name,  object, operation, payload, thing execution context] 
       4            ,    5   ,      6   ,     7    ,       8                ] 
 
     
@@ -59,7 +59,7 @@ CM_INDEX_SERVER_EXEC_CONTEXT = 3
 CM_INDEX_THING_ID = 4
 CM_INDEX_OBJECT = 5
 CM_INDEX_OPERATION = 6
-CM_INDEX_ARGUMENTS = 7
+CM_INDEX_PAYLOAD = 7
 CM_INDEX_THING_EXEC_CONTEXT = 8
 CM_MESSAGE_LENGTH = CM_INDEX_THING_EXEC_CONTEXT + 1
 
@@ -127,13 +127,13 @@ class RequestMessage:
 
     Body:   
 
-    | Index | 4         | 5       | 6         | 7        | 8                      |    
+    | Index | 4         | 5       | 6         | 7        | 8                       |    
     |-------|-----------|---------|-----------|----------|-------------------------|    
-    | Desc  | thing id  | object  | operation | arguments| thing execution context |
+    | Desc  | thing id  | object  | operation | payload  | thing execution context |
     
     """
 
-    def __init__(self, msg : typing.List[bytes]):
+    def __init__(self, msg : typing.List[bytes]) -> None:
         self._msg_bytes = msg  
         self._header = None # deserialized header
         self._body = None  # deserialized body
@@ -148,9 +148,9 @@ class RequestMessage:
         """
         returns the header of the message, namely:
 
-        | Index | 0       | 1       | 2           | 3            | 4          | 5                        |
-        |-------|---------|---------|-------------|--------------|------------|--------------------------|
-        | Desc  | address | bytes() | client type | message type | message id | server execution context |
+        | Index | 0       | 1            | 2          | 3                        |
+        |-------|---------|--------------|------------|--------------------------|
+        | Desc  | address | message type | message id | server execution context |
 
         where the server execution context is deserialized and is a dictionary with the following keys:
 
@@ -167,9 +167,9 @@ class RequestMessage:
         """
         returns the body of the message, namely:
 
-        | Index | 7         | 8       | 9         | 10        | 11                      |
-        |-------|-----------|---------|-----------|-----------|-------------------------|
-        | Desc  | thing id  | object  | operation | arguments | thing execution context |
+        | Index | 4         | 5       | 6         | 7        | 8                       |
+        |-------|-----------|---------|-----------|----------|-------------------------|
+        | Desc  | thing id  | object  | operation | payload  | thing execution context |
 
         where the thing execution context is deserialized and is a dictionary with the following keys:
 
@@ -205,14 +205,14 @@ class RequestMessage:
 
     def parse_body(self) -> None:
         """
-        extract the body and deserialize arguments and thing execution context
+        extract the body and deserialize payload and thing execution context
         """
         self._body = self._msg_bytes[7:]
         self._body[4] = Serializers.json.loads(self._body[4])
 
 
     def craft_from_arguments(self, server_id: bytes, thing_id: bytes, objekt: str, operation: str, 
-                            arguments: SerializableData = SerializableData({}, 'json'),
+                            payload: SerializableData = SerializableData({}, 'json'),
                             server_execution_context: typing.Dict[str, typing.Any] = default_server_execution_context, 
                             thing_execution_context: typing.Dict[str, typing.Any] = EMPTY_DICT
                         ) -> "RequestMessage": 
@@ -227,8 +227,8 @@ class RequestMessage:
             object of the thing on which the operation is to be performed, i.e. a property, action or event
         operation: str
             operation to be performed
-        arguments: SerializableData
-            arguments for the operation
+        payload: SerializableData
+            payload for the operation
         server_execution_context: Dict[str, Any]
             server-level execution context while performing the operation
         thing_execution_context: Dict[str, Any]
@@ -242,7 +242,7 @@ class RequestMessage:
             thing_id,
             objekt,
             operation,
-            arguments.serialize(),
+            payload.serialize(),
             Serializers.json.dumps(thing_execution_context) 
         ])
 
