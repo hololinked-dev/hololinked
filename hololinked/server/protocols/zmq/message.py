@@ -41,36 +41,34 @@ TUNNELER = b'TUNNELER' # message passer from inproc client to inrproc server wit
 Message indices 
 
 client's message to server: |br|
-[address, bytes(), client type, message type, messsage id, server execution context, bytes(),
-[   0   ,   1    ,     2      ,      3      ,      4     ,          5              ,    6   , 
+[address, message type, messsage id, server execution context, 
+[   0   ,      1      ,      2     ,          3              ,  
     
 thing instance name,  object, operation, arguments, thing execution context] 
-      7            ,    8   ,      9   ,     10   ,       11               ] 
+      4            ,    5   ,      6   ,     7    ,       8                ] 
 
     
-[address, bytes(), server_type, message_type, message id, data, pre encoded data]|br|
-[   0   ,   1    ,    2       ,      3      ,      4    ,  5  ,       6         ]|br|
+[address, message_type, message id, data, pre encoded data]|br|
+[   0   ,      1      ,      2    ,  3  ,       4         ]|br|
 """
 # CM = Client Message
 CM_INDEX_ADDRESS = 0
-CM_INDEX_CLIENT_TYPE = 2
-CM_INDEX_MESSAGE_TYPE = 3
-CM_INDEX_MESSAGE_ID = 4
-CM_INDEX_SERVER_EXEC_CONTEXT = 5
-CM_INDEX_THING_ID = 7
-CM_INDEX_OBJECT = 8
-CM_INDEX_OPERATION = 9
-CM_INDEX_ARGUMENTS = 10
-CM_INDEX_THING_EXEC_CONTEXT = 11
+CM_INDEX_MESSAGE_TYPE = 1
+CM_INDEX_MESSAGE_ID = 2
+CM_INDEX_SERVER_EXEC_CONTEXT = 3
+CM_INDEX_THING_ID = 4
+CM_INDEX_OBJECT = 5
+CM_INDEX_OPERATION = 6
+CM_INDEX_ARGUMENTS = 7
+CM_INDEX_THING_EXEC_CONTEXT = 8
 CM_MESSAGE_LENGTH = CM_INDEX_THING_EXEC_CONTEXT + 1
 
 # SM = Server Message
 SM_INDEX_ADDRESS = 0
-SM_INDEX_SERVER_TYPE = 2
-SM_INDEX_MESSAGE_TYPE = 3
-SM_INDEX_MESSAGE_ID = 4
-SM_INDEX_DATA = 5
-SM_INDEX_PRE_ENCODED_DATA = 6
+SM_INDEX_MESSAGE_TYPE = 1
+SM_INDEX_MESSAGE_ID = 2
+SM_INDEX_DATA = 3
+SM_INDEX_PRE_ENCODED_DATA = 4
 SM_MESSAGE_LENGTH = SM_INDEX_PRE_ENCODED_DATA + 1
 
 
@@ -123,15 +121,15 @@ class RequestMessage:
 
     Header:
 
-    | Index | 0       | 1       | 2           | 3            | 4          | 5                        |
-    |-------|---------|---------|-------------|--------------|------------|--------------------------|
-    | Desc  | address | bytes() | client type | message type | message id | server execution context |
+    | Index | 0       | 1            | 2          | 3                        |
+    |-------|---------|--------------|------------|--------------------------|
+    | Desc  | address | message type | message id | server execution context |
 
     Body:   
 
-    | Index | 6       | 7         | 8       | 9         | 10        | 11                      |    
-    |-------|---------|-----------|---------|-----------|-----------|-------------------------|    
-    | Desc  | bytes() | thing id  | object  | operation | arguments | thing execution context |
+    | Index | 4         | 5       | 6         | 7        | 8                      |    
+    |-------|-----------|---------|-----------|----------|-------------------------|    
+    | Desc  | thing id  | object  | operation | arguments| thing execution context |
     
     """
 
@@ -238,12 +236,9 @@ class RequestMessage:
         """
         return RequestMessage([
             server_id,
-            EMPTY_BYTE,
-            self.client_type,
             OPERATION, # i.e. the message type is b'OPERATION', not b'HANDSHAKE', b'REPLY', b'TIMEOUT' etc.
             bytes(str(uuid4()), encoding='utf-8'), # message id
             Serializers.json.dumps(server_execution_context), 
-            EMPTY_BYTE,
             thing_id,
             objekt,
             operation,
@@ -252,7 +247,7 @@ class RequestMessage:
         ])
 
 
-    def craft_with_message_type(self, server_id: bytes, message_type: bytes = HANDSHAKE):
+    def craft_with_message_type(self, server_id: bytes, message_type: bytes = HANDSHAKE) -> "RequestMessage":
         """
         create a plain message with a certain type, for example a handshake message.
 
@@ -266,11 +261,8 @@ class RequestMessage:
 
         return RequestMessage([
             server_id,
-            EMPTY_BYTE,
-            self.client_type,
             message_type,
             bytes(str(uuid4()), encoding='utf-8'), # message id
-            EMPTY_BYTE,
             EMPTY_BYTE,
             EMPTY_BYTE,
             EMPTY_BYTE,
@@ -282,28 +274,28 @@ class RequestMessage:
 
 
 class ResponseMessage:
+    """
+    A single unit of message from a ZMQ server to client. 
+    The message may be parsed and deserialized into header and body.
 
-    @classmethod
-    def craft_response_from_request_message(self, message) -> "ResponseMessage":
-        return Message() 
-    
+    Message indices:
+
+    | Index | 0       | 1            | 2          | 3   | 4                |
+    |-------|---------|--------------|------------|-----|------------------|
+    | Desc  | address | message type | message id | data| pre encoded data |
+    """
+
     # def craft_response_from_arguments(self, self.craft_response_from_arguments(address=original_client_message[CM_INDEX_ADDRESS], 
     #                 client_type=original_client_message[CM_INDEX_CLIENT_TYPE], message_type=message_type, 
     #                 message_id=original_client_message[CM_INDEX_MESSAGE_ID], data=data, pre_encoded_data=pre_encoded_data))
     
 
-    def craft_from_arguments(self, client_id: bytes, address: bytes, client_type: bytes, message_type: bytes, 
-                            message_id: bytes = b'', 
+    def craft_from_arguments(self, client_id: bytes, message_type: bytes, message_id: bytes = b'', 
                             data: SerializableData = SerializableData(None, 'application/json'), 
-                            pre_encoded_data : typing.Optional[bytes] = EMPTY_BYTE
+                            pre_encoded_data: typing.Optional[bytes] = EMPTY_BYTE
                         ) -> typing.List[bytes]:
         """
         Crafts an arbitrary response to the client using the method's arguments. 
-
-        server's message to client:
-        ::
-            [address, bytes(), server_type, message_type, message id, data, pre encoded data]
-            [   0   ,   1    ,    2       ,      3      ,  4        ,  5  ,      6          ]
 
         Parameters
         ----------
@@ -323,36 +315,23 @@ class ResponseMessage:
         message: List[bytes]
             the crafted response with information in the correct positions within the list
         """
-        if client_type == HTTP_SERVER:
-            data = self.http_serializer.dumps(data)
-        elif client_type == PROXY:
-            data = self.zmq_serializer.dumps(data)
-        elif client_type == TUNNELER:
-            if data is not None:
-                raise NotImplementedError(f"client type {client_type} not supported for serialization")
-            data = self.zmq_serializer.dumps(data)
-
-        return [
-            address,
-            EMPTY_BYTE,
-            self.server_type,
+        return ResponseMessage([
+            client_id,
             message_type,
             message_id,
             data,
             pre_encoded_data
-        ] 
+        ])
            
 
-    def craft_response_from_client_message(self, original_client_message : typing.List[bytes], data : typing.Any = None,
-                                            pre_encoded_data : bytes = EMPTY_BYTE) -> typing.List[bytes]:
+    def craft_from_request(self, 
+                        request_message: RequestMessage, 
+                        data: SerializableData = SerializableData(None, 'application/json'),
+                        pre_encoded_data: bytes = EMPTY_BYTE
+                    ) -> typing.List[bytes]:
         """
-        Craft a response with certain data automatically from an originating client message, like the client's address, 
-        type required for serialization requirements, message id etc. 
-
-        server's message to client:
-        ::
-            [address, bytes(), server_type, message_type, message id, data, pre encoded data]
-            [   0   ,   1    ,    2       ,      3      ,  4        ,  5  ,      6          ]
+        Craft a response with certain data extracted from an originating client message, 
+        like the client's address, message id etc. 
 
         Parameters
         ----------
@@ -368,20 +347,41 @@ class ResponseMessage:
         message: List[bytes]
             the crafted response with information in the correct positions within the list
         """
-        client_type = original_client_message[CM_INDEX_CLIENT_TYPE]
-        if client_type == HTTP_SERVER:
-            data = self.http_serializer.dumps(data)
-        elif client_type == PROXY:
-            data = self.zmq_serializer.dumps(data)
-        else:
-            raise ValueError(f"invalid client type given '{client_type}' for preparing message to send from " +
-                            f"'{self.identity}' of type {self.__class__}.")
         return [
-            original_client_message[CM_INDEX_ADDRESS],
+            request_message.sender_id,
             EMPTY_BYTE,
             self.server_type,
             REPLY,
-            original_client_message[CM_INDEX_MESSAGE_ID],
-            data,
+            request_message.id,
+            data.serialize(),
             pre_encoded_data
         ]
+
+    def __init__(self, msg: typing.List[bytes]):
+        self._msg_bytes = msg
+        self._header = None
+        self._body = None
+
+    @property
+    def id(self) -> bytes:
+        """ID of the message"""
+        return self._msg_bytes[2]
+
+    @property
+    def receiver_id(self) -> bytes:
+        """ID of the receiver"""
+        return self._msg_bytes[0]
+
+    @property
+    def header(self) -> typing.Tuple[bytes, bytes, bytes, bytes, bytes]:
+        """Returns the header of the message"""
+        if self._header is None:
+            self._header = tuple(self._msg_bytes[:2])
+        return self._header
+
+    @property
+    def body(self) -> typing.Tuple[bytes, bytes, bytes, bytes, bytes]:
+        """Returns the body of the message"""
+        if self._body is None:
+            self._body = tuple(self._msg_bytes[3:])
+        return self._body
