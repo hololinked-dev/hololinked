@@ -331,7 +331,7 @@ class RequestMessage:
         """
         message = RequestMessage([])
         message._header = RequestHeader(
-                                messageID=uuid4(),
+                                messageID=str(uuid4()),
                                 messageType=OPERATION, 
                                 senderID=sender_id,
                                 receiverID=receiver_id,
@@ -378,7 +378,7 @@ class RequestMessage:
 
         message = RequestMessage([])
         message._header = RequestHeader(
-            messageID=uuid4(),
+            messageID=str(uuid4()),
             messageType=message_type,
             senderID=sender_id,
             receiverID=receiver_id,

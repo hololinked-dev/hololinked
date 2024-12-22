@@ -12,27 +12,16 @@ from zmq.utils.monitor import parse_monitor_message
 
 from ...utils import *
 from ...config import global_config
-from ...constants import  ZMQ_TRANSPORTS, ZMQSocketType, ZMQ_EVENT_MAP, CommonRPC, ServerTypes
+from ...constants import  ZMQ_TRANSPORTS, ZMQSocketType, ZMQ_EVENT_MAP, CommonRPC, ServerTypes, get_socket_type_name
 from ...serializers import JSONSerializer
 from .message import (EMPTY_BYTE, HANDSHAKE, INVALID_MESSAGE, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
                     RequestMessage, ResponseMessage, SerializableData, PreserializedData, 
                     ServerExecutionContext, ThingExecutionContext, default_server_execution_context, default_thing_execution_context)
 
 
-byte_types = (bytes, bytearray, memoryview)
 
-# Function to get the socket type name from the enum
-def get_socket_type_name(socket_type):
-    try:
-        return ZMQSocketType(socket_type).name
-    except ValueError:
-        return "UNKNOWN"
     
 
-
-
-
- 
 
 class BaseZMQ: 
     """
@@ -179,7 +168,6 @@ class BaseAsyncZMQ(BaseZMQ):
                                                         self.socket_address, id, "bound" if node_type == 'server' else "connected"))
        
         
-
 class BaseSyncZMQ(BaseZMQ):
     """
     Base class for all sync ZMQ servers and clients.
@@ -824,7 +812,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         self.create_socket(id=id, 
                         node_type='client', 
                         socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('socket_address', None),
-                        context=context, transport=transport, 
+                        context=context, 
+                        transport=transport, 
                         **kwargs)
         self._terminate_context = context == None
         self.poller = zmq.Poller()
@@ -903,6 +892,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             if response_message: 
                 if message_id != response_message.id:
                     self._response_cache[message_id] = response_message
+                    self.logger.debug("cached response with msg-id {}".format(response_message.id))
                 else:
                     self.logger.debug("received response with msg-id {}".format(response_message.id))
                     return response_message
@@ -1023,7 +1013,12 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                 **kwargs
             ) -> None:
         super().__init__(id=id, server_id=server_id, **kwargs)
-        self.create_socket(id=server_id, context=context, transport=transport, **kwargs)
+        self.create_socket(id=id, 
+                        node_type='client', 
+                        socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('socket_address', None),
+                        context=context, 
+                        transport=transport, 
+                        **kwargs)
         self.poller = zmq.asyncio.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
         self._terminate_context = context == None
@@ -1169,6 +1164,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             if response_message: 
                 if message_id != response_message.id:
                     self._response_cache[response_message.id] = response_message
+                    self.logger.debug("cached response with msg-id {}".format(response_message.id))
                 else:
                     self.logger.debug(f"received response with msg-id {response_message.id}")
                     return response_message
