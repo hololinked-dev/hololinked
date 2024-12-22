@@ -156,7 +156,8 @@ class TestServerBroker(MessageValidatorMixin):
         """
         # message types
         request_message = RequestMessage.craft_from_arguments(
-                                                        server_id=self.server_id,
+                                                        receiver_id=self.server_id,
+                                                        sender_id=self.client_id,
                                                         thing_id=self.thing_id,
                                                         objekt='some_prop',
                                                         operation='readProperty'
@@ -169,7 +170,6 @@ class TestServerBroker(MessageValidatorMixin):
             # TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
             # EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
             # INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
-            request_message._sender_id = self.client_id
             await self.server_message_broker._handle_timeout(request_message) # 5
             await self.server_message_broker._handle_invalid_message(request_message, 
                                                                     SerializableData(Exception('test'))) # 7
@@ -210,7 +210,7 @@ class TestServerBroker(MessageValidatorMixin):
         self.validate_response_message(msg)
 
         msg = self.client_message_broker.socket.recv_multipart() # handshake dont come as response
-        response_message = ResponseMessage.craft_from_self(msg)
+        response_message = ResponseMessage(msg)
         self.assertEqual(response_message.type, HANDSHAKE)
         self.validate_response_message(response_message)
 
@@ -221,7 +221,7 @@ class TestServerBroker(MessageValidatorMixin):
         msg = self.client_message_broker.recv_response(request_message.id)
         self.assertEqual(msg.type, ERROR)
         self.validate_response_message(msg)
-        
+
         # exit checked separately at the end
 
     # def test_pending(self):

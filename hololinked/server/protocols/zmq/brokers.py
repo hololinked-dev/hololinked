@@ -152,8 +152,7 @@ class BaseZMQ:
             else:
                 socket.connect(socket_address)
         else:
-            raise NotImplementedError("transports other than IPC, TCP & INPROC are not implemented now for {}".format(
-                                                                                                    self.__class__) + 
+            raise NotImplementedError("transports other than IPC, TCP & INPROC are not implemented now for {}".format(self.__class__) + 
                                             f" Given transport {transport}.")
         
         return socket, socket_address
@@ -358,7 +357,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         """
         while True:
             raw_message = await self.socket.recv_multipart()
-            request_message = RequestMessage.craft_from_self(raw_message)
+            request_message = RequestMessage(raw_message)
             if not self.handled_default_message_types(request_message) and raw_message:
                 self.logger.debug(f"received message from client '{request_message.sender_id}' with msg-ID '{request_message.id}'")
                 return request_message
@@ -378,7 +377,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         while True:
             try:
                 raw_message = await self.socket.recv_multipart(zmq.NOBLOCK)
-                request_message = RequestMessage.craft_from_self(raw_message)
+                request_message = RequestMessage(raw_message)
                 if not self.handled_default_message_types(request_message) and raw_message:
                     self.logger.debug(f"received message from client '{request_message.sender_id}' with msg-ID '{request_message.id}'")
                     messages.append(request_message)
@@ -440,7 +439,8 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         """
         await self.socket.send_multipart(
             ResponseMessage.craft_from_arguments(
-                client_id=request_message.sender_id, 
+                receiver_id=request_message.sender_id,
+                sender_id=self.id, 
                 message_type=message_type,
                 message_id=request_message.id,
                 payload=payload,
@@ -471,7 +471,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                     except zmq.Again:
                         break
                     else:
-                        request_message = RequestMessage.craft_from_self(raw_message)
+                        request_message = RequestMessage(raw_message)
                         if not self.handled_default_message_types(request_message) and raw_message:
                             self.logger.debug(f"received message from client '{request_message.sender_id}' with msg-ID '{request_message.id}'")
                             messages.append(request_message)
@@ -494,7 +494,8 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         # is replaced by the address of the sender once received 
         await self.socket.send_multipart(
             ResponseMessage.craft_from_arguments(
-                client_id=request_message.sender_id, 
+                receiver_id=request_message.sender_id,
+                sender_id=self.id,
                 message_type=HANDSHAKE, 
                 message_id=request_message.id
             ).byte_array
@@ -508,7 +509,8 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         """
         await self.socket.send_multipart(
             ResponseMessage.craft_from_arguments(
-                client_id=request_message.sender_id,
+                receiver_id=request_message.sender_id,
+                sender_id=self.id,
                 message_type=TIMEOUT,
                 message_id=request_message.id
             ).byte_array   
@@ -523,7 +525,8 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         """
         await self.socket.send_multipart(
             ResponseMessage.craft_from_arguments(
-                client_id=request_message.sender_id,
+                receiver_id=request_message.sender_id,
+                sender_id=self.id,
                 message_type=INVALID_MESSAGE,
                 message_id=request_message.id,
             ).byte_array
@@ -665,7 +668,7 @@ class ZMQServerPool(BaseZMQServer):
                         break
                     else:
                         if raw_message:
-                            request_message = RequestMessage.craft_from_self(raw_message)
+                            request_message = RequestMessage(raw_message)
                             self.logger.debug(f"received message from client '{request_message.sender_id}' with msg-ID '{request_message.id}'")
                             messages.append(request_message)
         return messages
@@ -860,7 +863,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             a byte representation of message id
         """
         request_message = RequestMessage.craft_from_arguments(
-                                            server_id=self.server_id,
+                                            receiver_id=self.server_id,
+                                            sender_id=self.id,
                                             thing_id=thing_id,
                                             objekt=objekt,
                                             operation=operation,
@@ -873,7 +877,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         self.logger.debug(f"sent operation '{operation}' on thing '{thing_id}' to server '{self.server_id}' with msg-id '{request_message.id}'")
         return request_message.id
     
-    def recv_response(self, message_id: bytes) -> typing.List[ResponseMessage]:
+    def recv_response(self, message_id: bytes) -> ResponseMessage:
         """
         Receives response from server. Messages are identified by message id, so call this method immediately after 
         calling ``send_request()`` to avoid receiving messages out of order. Or, use other methods like
@@ -893,7 +897,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             for socket, _ in sockets:
                 try:    
                     raw_message = socket.recv_multipart(zmq.NOBLOCK)
-                    response_message = ResponseMessage.craft_from_self(raw_message)
+                    response_message = ResponseMessage(raw_message)
                 except zmq.Again:
                     pass 
             if response_message: 
@@ -904,7 +908,6 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                     return response_message
            
           
-
     def execute(self, 
             thing_id: bytes, 
             objekt: str,
@@ -959,12 +962,12 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         while True:
             if timeout is not None and (time.time_ns() - start_time)/1e6 > timeout:
                 raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
-            self.socket.send_multipart(RequestMessage.craft_with_message_type(self.server_id, HANDSHAKE).byte_array)
+            self.socket.send_multipart(RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE).byte_array)
             self.logger.info(f"sent Handshake to server '{self.server_id}'")
             if self.poller.poll(500):
                 try:
                     raw_message = self.socket.recv_multipart(zmq.NOBLOCK)
-                    response_message = ResponseMessage.craft_from_self(raw_message)
+                    response_message = ResponseMessage(raw_message)
                 except zmq.Again:
                     pass 
                 else:
@@ -1047,12 +1050,12 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         while True:
             if timeout is not None and (time.time_ns() - start_time)/1e6 > timeout:
                 raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
-            await self.socket.send_multipart(RequestMessage.craft_with_message_type(self.server_id, HANDSHAKE).byte_array)
+            await self.socket.send_multipart(RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE).byte_array)
             self.logger.info(f"sent Handshake to server '{self.server_id}'")
             if await self.poller.poll(500):
                 try:
                     raw_message = await self.socket.recv_multipart(zmq.NOBLOCK)
-                    response_message = ResponseMessage.craft_from_self(raw_message)
+                    response_message = ResponseMessage(raw_message)
                 except zmq.Again:
                     pass 
                 else:
@@ -1120,6 +1123,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             a byte representation of message id
         """
         request_message = RequestMessage.craft_from_arguments(
+                                                        receiver_id=self.server_id,
+                                                        sender_id=self.id,
                                                         thing_id=thing_id, 
                                                         objekt=objekt, 
                                                         operation=operation, 
@@ -1158,7 +1163,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             for socket, _ in sockets:
                 try:    
                     raw_message = await socket.recv_multipart(zmq.NOBLOCK)
-                    response_message = ResponseMessage.craft_from_self(raw_message)
+                    response_message = ResponseMessage(raw_message)
                 except zmq.Again:
                     pass 
             if response_message: 

@@ -40,7 +40,7 @@ client's message to server: |br|
 [address, message type, messsage id, server execution context, 
 [   0   ,      1      ,      2     ,          3              ,  
     
-thing instance name,  object, operation, payload, thing execution context] 
+thing instance name,  objekt, operation, payload, thing execution context] 
       4            ,    5   ,      6   ,     7    ,       8              ] 
 
     
@@ -130,10 +130,12 @@ class RequestHeader(msgspec.Struct):
     """
     messageType: str
     messageID: str
+    senderID: str
+    receiverID: str
     serverExecutionContext: ServerExecutionContext = msgspec.field(default_factory=lambda: default_server_execution_context)
     thingExecutionContext: ThingExecutionContext = msgspec.field(default_factory=lambda: default_thing_execution_context)
     thingID: typing.Optional[str] = ''
-    object: typing.Optional[str] = ''
+    objekt: typing.Optional[str] = ''
     operation: typing.Optional[str] = ''
     payloadContentType: typing.Optional[str] = 'application/json'
     preencodedPayloadContentType: typing.Optional[str] = 'text/plain'
@@ -155,6 +157,8 @@ class ResponseHeader(msgspec.Struct):
     """
     messageType: str
     messageID: str
+    receiverID: str
+    senderID: str
     payloadContentType: typing.Optional[str] = 'application/json'
     preencodedPayloadContentType: typing.Optional[str] = ''
 
@@ -193,7 +197,7 @@ class RequestMessage:
             "oneway": "boolean"
         },
         "thingID": "string",
-        "object": "string",
+        "objekt": "string",
         "operation": "string",
         "payloadContentType": "string",
         "preencodedPayloadContentType": "string",
@@ -251,16 +255,12 @@ class RequestMessage:
     @property
     def receiver_id(self) -> str:
         """ID of the sender"""
-        if self._sender_id is not None:
-            raise ValueError("receiver id unknown")
-        return self._bytes[INDEX_ADDRESS].decode('utf-8')
+        return self.header['receiverID']
     
     @property
     def sender_id(self) -> str:
         """ID of the receiver"""
-        if self._sender_id is None:
-            raise ValueError("sender id unknown")
-        return self._sender_id
+        return self.header['senderID']
     
     @property
     def thing_id(self) -> str:
@@ -296,7 +296,8 @@ class RequestMessage:
 
     @classmethod
     def craft_from_arguments(cls, 
-                            server_id: str, 
+                            receiver_id: str, 
+                            sender_id: str,
                             thing_id: str, 
                             objekt: str, 
                             operation: str, 
@@ -313,7 +314,7 @@ class RequestMessage:
         thing_id: bytes
             id of the thing to which the operation is to be performed
         objekt: str
-            object of the thing on which the operation is to be performed, i.e. a property, action or event
+            objekt of the thing on which the operation is to be performed, i.e. a property, action or event
         operation: str
             operation to be performed
         payload: SerializableData
@@ -332,10 +333,12 @@ class RequestMessage:
         message._header = RequestHeader(
                                 messageID=uuid4(),
                                 messageType=OPERATION, 
+                                senderID=sender_id,
+                                receiverID=receiver_id,
                                 # i.e. the message type is 'OPERATION', not 'HANDSHAKE', 'REPLY', 'TIMEOUT' etc.
                                 serverExecutionContext=server_execution_context,
                                 thingID=thing_id,
-                                object=objekt,
+                                objekt=objekt,
                                 operation=operation,
                                 payloadContentType=payload.content_type,
                                 preencodedPayloadContentType=preserialized_payload.content_type,
@@ -343,7 +346,7 @@ class RequestMessage:
                             )
         message._body = [payload, preserialized_payload]
         message._bytes = [
-            bytes(server_id, encoding='utf-8'),
+            bytes(receiver_id, encoding='utf-8'),
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value
@@ -352,13 +355,17 @@ class RequestMessage:
 
 
     @classmethod
-    def craft_with_message_type(cls, server_id: bytes, message_type: bytes = HANDSHAKE) -> "RequestMessage":
+    def craft_with_message_type(cls, 
+                                sender_id: str, 
+                                receiver_id: str, 
+                                message_type: bytes = HANDSHAKE
+                            ) -> "RequestMessage":
         """
         create a plain message with a certain type, for example a handshake message.
 
         Parameters
         ----------
-        server_id: bytes
+        receiver_id: str
             id of the server
         message_type: bytes
             message type to be sent
@@ -373,6 +380,8 @@ class RequestMessage:
         message._header = RequestHeader(
             messageID=uuid4(),
             messageType=message_type,
+            senderID=sender_id,
+            receiverID=receiver_id,
             serverExecutionContext=default_server_execution_context
         )
         payload = SerializableData(None, 'application/json')
@@ -382,33 +391,13 @@ class RequestMessage:
             preserialized_payload
         ]
         message._bytes = [
-            bytes(server_id, encoding='utf-8'),
+            bytes(receiver_id, encoding='utf-8'),
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value
         ]
         return message
     
-
-    @classmethod
-    def craft_from_self(self, value: typing.List[bytes]) -> "RequestMessage":
-        """
-        create a message from the message itself
-
-        Parameters
-        ----------
-        value: List[bytes]
-            the message
-
-        Returns
-        -------
-        message: RequestMessage
-            the crafted message
-        """
-        message = RequestMessage(value)
-        message._sender_id = value[INDEX_ADDRESS].decode('utf-8')
-        return message
-
 
 class ResponseMessage:
     """
@@ -463,16 +452,12 @@ class ResponseMessage:
     @property
     def receiver_id(self) -> str:
         """ID of the sender"""
-        if self._sender_id is not None:
-            raise ValueError("receiver id unknown")
-        return self._bytes[INDEX_ADDRESS].decode('utf-8')
+        return self.header['receiverID']
 
     @property
     def sender_id(self) -> str:
         """ID of the receiver"""
-        if self._sender_id is None:
-            raise ValueError("sender id unknown")
-        return self._sender_id
+        return self.header['senderID']
 
     @property
     def header(self) -> JSON:
@@ -500,7 +485,12 @@ class ResponseMessage:
     
     def parse_header(self) -> None:
         """parse the header"""
-        self._header = Serializers.json.loads(self._bytes[INDEX_HEADER])
+        if isinstance(self._bytes[INDEX_HEADER], ResponseHeader):
+            self._header = self._bytes[INDEX_HEADER]
+        elif isinstance(self._bytes[INDEX_HEADER], byte_types):
+            self._header = ResponseHeader(**Serializers.json.loads(self._bytes[INDEX_HEADER]))
+        else:
+            raise ValueError(f"header must be of type ResponseHeader or bytes, not {type(self._bytes[INDEX_HEADER])}")
 
     def parse_body(self) -> None:
         """parse the body"""
@@ -511,7 +501,8 @@ class ResponseMessage:
 
     @classmethod
     def craft_from_arguments(cls, 
-                            client_id: str, 
+                            receiver_id: str,
+                            sender_id: str,  
                             message_type: str, 
                             message_id: bytes = b'', 
                             payload: SerializableData = SerializableData(None, 'application/json'), 
@@ -542,12 +533,14 @@ class ResponseMessage:
         message._header = ResponseHeader(
             messageType=message_type,
             messageID=message_id,
+            receiverID=receiver_id,
+            senderID=sender_id,
             payloadContentType=payload.content_type,
             preencodedPayloadContentType=preserialized_payload.content_type
         )
         message._body = [payload, preserialized_payload]
         message._bytes = [
-            bytes(client_id, encoding='utf-8'),
+            bytes(receiver_id, encoding='utf-8'),
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value
@@ -583,6 +576,8 @@ class ResponseMessage:
         message._header = ResponseHeader(
             messageType=REPLY,
             messageID=request_message.id,
+            receiverID=request_message.sender_id,
+            senderID=request_message.receiver_id,
             payloadContentType=payload.content_type,
             preencodedPayloadContentType=preserialized_payload.content_type
         )
@@ -596,26 +591,7 @@ class ResponseMessage:
         return message
     
 
-    @classmethod
-    def craft_from_self(self, byte_array: typing.List[bytes]) -> "ResponseMessage":
-        """
-        create a message from the message itself
-
-        Parameters
-        ----------
-        value: List[bytes]
-            the message
-
-        Returns
-        -------
-        message: ResponseMessage
-            the crafted message
-        """
-        message = ResponseMessage(byte_array)
-        message._sender_id = byte_array[INDEX_ADDRESS].decode('utf-8')
-        return message
-
-    
+   
 class EventMessage(ResponseMessage):
     pass
 

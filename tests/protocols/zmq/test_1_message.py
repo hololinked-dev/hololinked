@@ -21,13 +21,13 @@ class MessageValidatorMixin(TestCase):
 
     def validate_request_message(self, request_message: RequestMessage) -> None:
         # check message ID is a UUID
-        self.assertIsInstance(request_message.id, UUID)
+        self.assertTrue(isinstance(request_message.id, UUID) or isinstance(UUID(request_message.id, version=4), UUID))
         # check message length
         self.assertEqual(len(request_message.byte_array), request_message.length)
         # check receiver which must be the server
         self.assertEqual(request_message.receiver_id, self.server_id)
         # sender_id is not set before sending message on the socket       
-        self.assertRaises(ValueError, lambda: request_message.sender_id) 
+        self.assertEqual(request_message.sender_id, self.client_id)
         # check that all indices are bytes 
         for obj in request_message.byte_array:
             self.assertIsInstance(obj, bytes)
@@ -49,7 +49,7 @@ class MessageValidatorMixin(TestCase):
         # check receiver which must be the client
         self.assertEqual(response_message.receiver_id, self.client_id)
         # sender_id is not set before sending message on the socket       
-        self.assertRaises(ValueError, lambda: response_message.sender_id) 
+        self.assertEqual(response_message.sender_id, self.server_id)
         # check that all indices are bytes 
         for obj in response_message.byte_array:
             self.assertIsInstance(obj, bytes)
@@ -84,7 +84,8 @@ class TestMessagingContract(MessageValidatorMixin):
     
         # request messages types are OPERATION, HANDSHAKE & EXIT
         request_message = RequestMessage.craft_from_arguments(
-                                                        server_id=self.server_id, 
+                                                        receiver_id=self.server_id,
+                                                        sender_id=self.client_id, 
                                                         thing_id=self.thing_id, 
                                                         objekt='some_prop', 
                                                         operation='readProperty',
@@ -94,7 +95,8 @@ class TestMessagingContract(MessageValidatorMixin):
         self.assertEqual(request_message.type, OPERATION)
 
         request_message = RequestMessage.craft_with_message_type(
-            server_id=self.server_id,
+            receiver_id=self.server_id,
+            sender_id=self.client_id,
             message_type=HANDSHAKE
         )
         self.validate_request_message(request_message)
@@ -102,7 +104,8 @@ class TestMessagingContract(MessageValidatorMixin):
         self.assertEqual(request_message.type, HANDSHAKE)
 
         request_message = RequestMessage.craft_with_message_type(
-            server_id=self.server_id,
+            receiver_id=self.server_id,
+            sender_id=self.client_id,
             message_type=EXIT
         )
         self.validate_request_message(request_message)
@@ -115,7 +118,8 @@ class TestMessagingContract(MessageValidatorMixin):
 
         # response messages types are HANDSHAKE, TIMEOUT, INVALID_MESSAGE, ERROR and REPLY
         response_message = ResponseMessage.craft_from_arguments(
-            client_id=self.client_id,
+            receiver_id=self.client_id,
+            sender_id=self.server_id,
             message_type=HANDSHAKE,
             message_id=uuid4(),
         )
@@ -124,7 +128,8 @@ class TestMessagingContract(MessageValidatorMixin):
         self.assertEqual(response_message.type, HANDSHAKE)
 
         response_message = ResponseMessage.craft_from_arguments(
-            client_id=self.client_id,
+            receiver_id=self.client_id,
+            sender_id=self.server_id,
             message_type=TIMEOUT,
             message_id=uuid4()
         )
@@ -133,7 +138,8 @@ class TestMessagingContract(MessageValidatorMixin):
         self.assertEqual(response_message.type, TIMEOUT)
 
         response_message = ResponseMessage.craft_from_arguments(
-            client_id=self.client_id,
+            receiver_id=self.client_id,
+            sender_id=self.server_id,
             message_type=INVALID_MESSAGE,
             message_id=uuid4()
         )
@@ -142,7 +148,8 @@ class TestMessagingContract(MessageValidatorMixin):
         self.assertEqual(response_message.type, INVALID_MESSAGE)
 
         response_message = ResponseMessage.craft_from_arguments(
-            client_id=self.client_id,
+            receiver_id=self.client_id,
+            sender_id=self.server_id,
             message_type=ERROR,
             message_id=uuid4(),
             payload=SerializableData(Exception('test'))
@@ -152,7 +159,8 @@ class TestMessagingContract(MessageValidatorMixin):
         self.assertIsInstance(Serializers.json.loads(response_message._bytes[2]), dict)
 
         request_message = RequestMessage.craft_from_arguments(
-                server_id=self.server_id, 
+                sender_id=self.client_id,
+                receiver_id=self.server_id,
                 thing_id=self.thing_id, 
                 objekt='some_prop', 
                 operation='readProperty',
