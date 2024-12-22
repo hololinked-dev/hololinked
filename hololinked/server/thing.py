@@ -11,7 +11,7 @@ import zmq
 import zmq.asyncio
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
-from .constants import JSON, ZMQ_TRANSPORT_LAYERS, JSONSerializable
+from .constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
 from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .utils import get_default_logger, getattr_without_descriptor_read
 from .exceptions import BreakInnerLoop
@@ -535,8 +535,8 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         pass
 
     def run_with_zmq_server(self, 
-            ZMQ_TRANSPORT_LAYERS : typing.Union[typing.Sequence[ZMQ_TRANSPORT_LAYERS], 
-                                         ZMQ_TRANSPORT_LAYERS] = ZMQ_TRANSPORT_LAYERS.IPC, 
+            ZMQ_TRANSPORTS : typing.Union[typing.Sequence[ZMQ_TRANSPORTS], 
+                                         ZMQ_TRANSPORTS] = ZMQ_TRANSPORTS.IPC, 
             # expose_eventloop : bool = False,
             **kwargs
         ) -> None:
@@ -546,7 +546,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         Parameters
         ----------
-        ZMQ_TRANSPORT_LAYERS: Sequence[ZMQ_TRANSPORT_LAYERS] | ZMQ_Protocools, Default ZMQ_TRANSPORT_LAYERS.IPC or "IPC"
+        ZMQ_TRANSPORTS: Sequence[ZMQ_TRANSPORTS] | ZMQ_Protocools, Default ZMQ_TRANSPORTS.IPC or "IPC"
             zmq transport layers at which the object is exposed. 
             TCP - provides network access apart from HTTP - please supply a socket address additionally.  
             IPC - inter process communication - connection can be made from other processes running 
@@ -578,7 +578,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             id=self.id, 
             things=[self],
             context=context, 
-            protocols=ZMQ_TRANSPORT_LAYERS, 
+            protocols=ZMQ_TRANSPORTS, 
             zmq_serializer=self.zmq_serializer, 
             http_serializer=self.http_serializer, 
             tcp_socket_address=kwargs.get('tcp_socket_address', None),
@@ -592,7 +592,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             httpserver = kwargs.pop('http_server')
             assert isinstance(httpserver, HTTPServer)
             httpserver.add_things(self)
-            httpserver._zmq_protocol = ZMQ_TRANSPORT_LAYERS.INPROC
+            httpserver._zmq_protocol = ZMQ_TRANSPORTS.INPROC
             httpserver._zmq_inproc_socket_context = context
             httpserver._zmq_inproc_event_context = self.event_publisher.context
             assert httpserver.all_ok
@@ -647,7 +647,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         )
 
         self.run(
-            ZMQ_TRANSPORT_LAYERS=ZMQ_TRANSPORT_LAYERS.INPROC,
+            ZMQ_TRANSPORTS=ZMQ_TRANSPORTS.INPROC,
             http_server=http_server,
             context=kwargs.get('context', None)
         ) # blocks until exit is called

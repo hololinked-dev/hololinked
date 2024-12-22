@@ -13,7 +13,7 @@ from collections import deque
 from uuid import uuid4
 
 
-from .constants import JSON, ZMQ_TRANSPORT_LAYERS, ServerTypes
+from .constants import JSON, ZMQ_TRANSPORTS, ServerTypes
 from .utils import format_exception_as_json, get_current_async_loop, get_default_logger
 from .config import global_config
 from .exceptions import *
@@ -23,12 +23,12 @@ from .properties import TypedList, Boolean, TypedDict
 from .actions import Action, action as remote_method
 from .logger import ListHandler
 
-from .protocols.zmq.brokers import (CM_INDEX_ADDRESS, CM_INDEX_CLIENT_TYPE, CM_INDEX_MESSAGE_TYPE, CM_INDEX_MESSAGE_ID, 
-                                CM_INDEX_SERVER_EXEC_CONTEXT, CM_INDEX_THING_ID)
-from .protocols.zmq.brokers import SM_INDEX_ADDRESS
-from .protocols.zmq.brokers import EXIT, HANDSHAKE, INVALID_MESSAGE, TIMEOUT
-from .protocols.zmq.brokers import HTTP_SERVER, PROXY, TUNNELER 
-from .protocols.zmq.brokers import EMPTY_DICT
+# from .protocols.zmq.brokers import (CM_INDEX_ADDRESS, CM_INDEX_CLIENT_TYPE, CM_INDEX_MESSAGE_TYPE, CM_INDEX_MESSAGE_ID, 
+#                                 CM_INDEX_SERVER_EXEC_CONTEXT, CM_INDEX_THING_ID)
+# from .protocols.zmq.brokers import SM_INDEX_ADDRESS
+# from .protocols.zmq.brokers import EXIT, HANDSHAKE, INVALID_MESSAGE, TIMEOUT
+# from .protocols.zmq.brokers import HTTP_SERVER, PROXY, TUNNELER 
+# from .protocols.zmq.brokers import EMPTY_DICT
 from .protocols.zmq.brokers import (AsyncZMQClient, AsyncZMQServer, BaseZMQServer, 
                                   EventPublisher, SyncZMQClient)
 from .protocols.zmq.brokers import RequestMessage
@@ -127,12 +127,12 @@ class RPCServer(BaseZMQServer):
                                 instance_name=self.instance_name, 
                                 server_type=ServerTypes.RPC, 
                                 context=self.context, 
-                                protocol=ZMQ_TRANSPORT_LAYERS.INPROC, 
+                                protocol=ZMQ_TRANSPORTS.INPROC, 
                                 **kwargs
                             )        
         self.event_publisher = EventPublisher(
                                 instance_name=self.instance_name + '-event-pub',
-                                protocol=ZMQ_TRANSPORT_LAYERS.INPROC,
+                                protocol=ZMQ_TRANSPORTS.INPROC,
                                 logger=self.logger,
                                 **kwargs
                             )        
@@ -143,7 +143,7 @@ class RPCServer(BaseZMQServer):
                                         identity=f'{self.instance_name}/tunneler',
                                         client_type=TUNNELER, 
                                         context=self.context, 
-                                        protocol=ZMQ_TRANSPORT_LAYERS.INPROC, 
+                                        protocol=ZMQ_TRANSPORTS.INPROC, 
                                         logger=self.logger,
                                         handshake=False # handshake manually done later when event loop is run
                                     )
@@ -151,7 +151,7 @@ class RPCServer(BaseZMQServer):
                                         instance_name=instance.id,
                                         server_type=ServerTypes.THING,
                                         context=self.context,
-                                        protocol=ZMQ_TRANSPORT_LAYERS.INPROC,
+                                        protocol=ZMQ_TRANSPORTS.INPROC,
                                         logger=self.logger,
                                         **kwargs
                                     ) 
@@ -343,7 +343,7 @@ class RPCServer(BaseZMQServer):
                     asyncio.set_event_loop(event_loop)
                 temp_inproc_client = AsyncZMQClient(server_instance_name=instance_name,
                                             identity=f'{self.instance_name}-inproc-killer',
-                                            context=context, client_type=PROXY, protocol=ZMQ_TRANSPORT_LAYERS.INPROC, 
+                                            context=context, client_type=PROXY, protocol=ZMQ_TRANSPORTS.INPROC, 
                                             logger=logger) 
                 event_loop.run_until_complete(temp_inproc_client.handshake_complete())
                 event_loop.run_until_complete(temp_inproc_client.socket.send_multipart(temp_inproc_client.craft_empty_message_with_type(EXIT)))
@@ -351,7 +351,7 @@ class RPCServer(BaseZMQServer):
             threading.Thread(target=kill_inproc_server, args=(self.instance_name, self.context, self.logger), daemon=True).start()
         if self.ipc_server is not None:
             temp_client = SyncZMQClient(server_instance_name=self.instance_name, identity=f'{self.instance_name}-ipc-killer',
-                                    client_type=PROXY, protocol=ZMQ_TRANSPORT_LAYERS.IPC, logger=self.logger) 
+                                    client_type=PROXY, protocol=ZMQ_TRANSPORTS.IPC, logger=self.logger) 
             temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
             temp_client.exit()
         if self.tcp_server is not None:
@@ -360,7 +360,7 @@ class RPCServer(BaseZMQServer):
                 socket_address = self.tcp_server.socket_address.replace('*', 'localhost')
             # print("TCP socket address", self.tcp_server.socket_address)
             temp_client = SyncZMQClient(server_instance_name=self.instance_name, identity=f'{self.instance_name}-tcp-killer',
-                                    client_type=PROXY, protocol=ZMQ_TRANSPORT_LAYERS.TCP, logger=self.logger,
+                                    client_type=PROXY, protocol=ZMQ_TRANSPORTS.TCP, logger=self.logger,
                                     socket_address=socket_address)
             temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
             temp_client.exit()   
@@ -795,7 +795,7 @@ class ZMQServer:
 
     def __init__(self, *, instance_name : str, 
                 things : typing.Union[Thing, typing.List[typing.Union[Thing]]], # type: ignore - requires covariant types
-                protocols : typing.Union[ZMQ_TRANSPORT_LAYERS, str, typing.List[ZMQ_TRANSPORT_LAYERS]] = ZMQ_TRANSPORT_LAYERS.IPC, 
+                protocols : typing.Union[ZMQ_TRANSPORTS, str, typing.List[ZMQ_TRANSPORTS]] = ZMQ_TRANSPORTS.IPC, 
                 poll_timeout = 25, context : typing.Union[zmq.asyncio.Context, None] = None, 
                 **kwargs
             ) -> None:
@@ -809,17 +809,17 @@ class ZMQServer:
         event_publisher_protocol = None 
         
         # initialise every externally visible protocol          
-        if ZMQ_TRANSPORT_LAYERS.TCP in protocols or "TCP" in protocols:
+        if ZMQ_TRANSPORTS.TCP in protocols or "TCP" in protocols:
             self.tcp_server = AsyncZMQServer(instance_name=self.instance_name, server_type=ServerTypes.RPC, 
-                                    context=self.context, protocol=ZMQ_TRANSPORT_LAYERS.TCP, poll_timeout=poll_timeout, 
+                                    context=self.context, protocol=ZMQ_TRANSPORTS.TCP, poll_timeout=poll_timeout, 
                                     socket_address=tcp_socket_address, **kwargs)
             self.poller.register(self.tcp_server.socket, zmq.POLLIN)
-            event_publisher_protocol = ZMQ_TRANSPORT_LAYERS.TCP
-        if ZMQ_TRANSPORT_LAYERS.IPC in protocols or "IPC" in protocols: 
+            event_publisher_protocol = ZMQ_TRANSPORTS.TCP
+        if ZMQ_TRANSPORTS.IPC in protocols or "IPC" in protocols: 
             self.ipc_server = AsyncZMQServer(instance_name=self.instance_name, server_type=ServerTypes.RPC, 
-                                    context=self.context, protocol=ZMQ_TRANSPORT_LAYERS.IPC, poll_timeout=poll_timeout, **kwargs)
+                                    context=self.context, protocol=ZMQ_TRANSPORTS.IPC, poll_timeout=poll_timeout, **kwargs)
             self.poller.register(self.ipc_server.socket, zmq.POLLIN)
-            event_publisher_protocol = ZMQ_TRANSPORT_LAYERS.IPC if not event_publisher_protocol else event_publisher_protocol           
+            event_publisher_protocol = ZMQ_TRANSPORTS.IPC if not event_publisher_protocol else event_publisher_protocol           
             event_publisher_protocol = "IPC" if not event_publisher_protocol else event_publisher_protocol    
 
         self.poller = zmq.asyncio.Poller()

@@ -6,10 +6,10 @@ import uuid
 
 
 from ..server.config import global_config
-from ..server.constants import JSON, CommonRPC, bOperations, ServerMessage, ResourceTypes, ZMQ_PROTOCOLS
+from ..server.constants import JSON, CommonRPC, bOperations, ServerMessage, ResourceTypes, ZMQ_TRANSPORTS
 from ..server.serializers import BaseSerializer
 from ..server.dataklasses import ZMQAction, ZMQEvent, ZMQResource
-from ..server.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY
+from ..server.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient, EventConsumer
 from ..server.schema_validators import BaseSchemaValidator
 
 
@@ -58,7 +58,7 @@ class ObjectProxy:
         '_schema_validator'
     ])
 
-    def __init__(self, instance_name : str, protocol : str = ZMQ_PROTOCOLS.IPC, invokation_timeout : float = 5, 
+    def __init__(self, instance_name : str, protocol : str = ZMQ_TRANSPORTS.IPC, invokation_timeout : float = 5, 
                     load_thing = True, **kwargs) -> None:
         self._allow_foreign_attributes = kwargs.get('allow_foreign_attributes', False)
         self._noblock_messages = dict()
@@ -714,6 +714,27 @@ class _Action:
                                                 deserialize_reply=True)
         return self.last_return_value # note the missing underscore
 
+    def raise_local_exception(self, exception : typing.Dict[str, typing.Any]) -> None:
+        """
+        raises an exception on client side using an exception from server by mapping it to the correct one based on type.
+
+        Parameters
+        ----------
+        exception: Dict[str, Any]
+            exception dictionary made by server with following keys - type, message, traceback, notes
+
+        """
+        if isinstance(exception, Exception):
+            raise exception from None
+        exc = getattr(builtins, exception["type"], None)
+        message = exception["message"]
+        if exc is None:
+            ex = Exception(message)
+        else: 
+            ex = exc(message)
+        exception["traceback"][0] = f"Server {exception['traceback'][0]}"
+        ex.__notes__ = exception["traceback"][0:-1]
+        raise ex from None 
 
     
 class _Property:

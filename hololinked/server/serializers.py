@@ -102,6 +102,8 @@ class JSONSerializer(BaseSerializer):
         if hasattr(obj, 'json'):
             # alternative to type replacement
             return obj.json()
+        if isinstance(obj, msgspec.Struct):
+            return obj
         if isinstance(obj, Enum):
             return obj.name
         if isinstance(obj, (set, dict_keys, deque, tuple)):
