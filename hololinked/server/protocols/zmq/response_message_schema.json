@@ -1,0 +1,29 @@
+{
+    "type": "object",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties" : {
+        "messageID" : { 
+            "type": "string",
+            "format": "uuid",
+            "description": "unique id of the message to correlate with the request"
+        },
+        "messageType" : {
+            "type": "string",
+            "description": "type of the message",
+            "enum": ["REPLY", "ERROR", "TIMEOUT",
+                    "INVALID_MESSAGE", "EVENT_DISCONNECTED"]
+        },
+        "payloadContentType" : {
+            "type": "string",
+            "description" : "content type of the payload",
+            "enum" : [
+                "application/json", "pickle", "x-msgpack", "text", "text/plain"
+            ]
+        },
+        "preencodedPayloadContentType" : {
+            "type": "string",
+            "description" : "content type of the pre-encoded payload"
+        }
+    },
+    "required": ["messageType", "messageID"]
+}
