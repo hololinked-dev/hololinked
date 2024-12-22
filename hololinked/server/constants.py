@@ -88,7 +88,7 @@ class LOGLEVEL(IntEnum):
 
 
 # ZMQ
-class ZMQ_TRANSPORT_LAYERS(StrEnum):
+class ZMQ_TRANSPORTS(StrEnum):
     """
     supported ZMQ transport protocols - TCP, IPC, INPROC
 
@@ -191,6 +191,13 @@ for name in dir(zmq):
         ZMQ_EVENT_MAP[value] = name
 
 
+# Function to get the socket type name from the enum
+def get_socket_type_name(socket_type):
+    try:
+        return ZMQSocketType(socket_type).name
+    except ValueError:
+        return "UNKNOWN"
+
 
 class Operations(StrEnum):
     readProperty = 'readProperty'
@@ -206,5 +213,5 @@ class bOperations:
 __all__ = [
     Serializers.__name__, 
     HTTP_METHODS.__name__,
-    ZMQ_TRANSPORT_LAYERS.__name__
+    ZMQ_TRANSPORTS.__name__
 ]

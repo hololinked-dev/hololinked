@@ -14,7 +14,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 from ..param import Parameterized
 from ..param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, String
-from .constants import HTTP_METHODS, ZMQ_TRANSPORT_LAYERS, CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
+from .constants import HTTP_METHODS, ZMQ_TRANSPORTS, CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
 from .utils import get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name
 from .dataklasses import ZMQResource, ZMQAction, ZMQEvent
 from .utils import get_default_logger
@@ -168,7 +168,7 @@ class HTTPServer(Parameterized):
         )
         self._type = HTTPServerTypes.THING_SERVER
         self._lost_things = dict() # see update_router_with_thing
-        self._zmq_protocol = ZMQ_TRANSPORT_LAYERS.IPC
+        self._zmq_protocol = ZMQ_TRANSPORTS.IPC
         self._zmq_inproc_socket_context = None 
         self._zmq_inproc_event_context = None
         self._local_rules = dict() # type: typing.Dict[str, typing.List[InteractionAffordance]]
