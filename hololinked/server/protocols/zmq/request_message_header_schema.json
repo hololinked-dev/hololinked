@@ -7,6 +7,10 @@
             "type": "string",
             "description": "id of the sender of the message"
         },
+        "receiverID" : { 
+            "type": "string",
+            "description": "id of the receiver of the message"
+        },
         "messageType" : {
             "type": "string",
             "description": "type of the message being sent",
