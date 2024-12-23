@@ -5,10 +5,13 @@ import inspect
 import os
 import re
 import ssl
+import threading
 import typing
 import warnings
 import zmq
 import zmq.asyncio
+
+from hololinked.server.protocols.zmq.message import RequestMessage
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
 from .constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
@@ -179,10 +182,11 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self._owner : typing.Optional[Thing] = None
         self._internal_fixed_attributes : typing.List[str]
         self._qualified_id : str
-        self._inproc_client = None # type: typing.Optional[AsyncZMQClient]
-        self._inproc_server = None # type: typing.Optional[AsyncZMQServer]
-        self._zmq_messages = None # type: typing.Optional[typing.List[typing.Tuple[typing.List[bytes], typing.Dict[str, typing.Any], asyncio.Event, asyncio.Future, zmq.Socket]]]
+        self._zmq_messages = None # type: typing.Optional[deque]
         self._zmq_messages_event = None # type: typing.Optional[asyncio.Event]
+        self._last_operation_request = None # type: typing.Tuple[str, str, str, typing.Any, bytes, typing.Dict[str, typing.Any]]
+        self._last_operation_reply = None 
+        self._message_execution_event = None # type: threading.Event
         self.rpc_server  = None 
         # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
