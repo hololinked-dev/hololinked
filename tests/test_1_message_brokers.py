@@ -13,7 +13,7 @@ from hololinked.server.protocols.zmq.brokers import default_server_execution_con
 from hololinked.server.utils import get_current_async_loop, get_default_logger
 from hololinked.server.dataklasses import ZMQAction, ZMQResource
 from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes
-from hololinked.server.rpc_server import RPCServer
+from hololinked.server.protocols.zmq.rpc_server import RPCServer
 from hololinked.client.proxy import _Action, _Property
 
 

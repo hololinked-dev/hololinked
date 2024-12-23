@@ -10,6 +10,9 @@ class BreakAllLoops(Exception):
     """
     pass
 
+class BreakLoop(Exception):
+    pass 
+
 class BreakFlow(Exception):
     """
     raised to break the flow of the program

@@ -9,12 +9,14 @@ import typing
 from uuid import uuid4
 from zmq.utils.monitor import parse_monitor_message
 
+from hololinked.server.exceptions import BreakLoop
+
 
 from ...utils import *
 from ...config import global_config
 from ...constants import  ZMQ_TRANSPORTS, ZMQSocketType, ZMQ_EVENT_MAP, CommonRPC, ServerTypes, get_socket_type_name
 from ...serializers import JSONSerializer
-from .message import (EMPTY_BYTE, HANDSHAKE, INVALID_MESSAGE, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
+from .message import (EMPTY_BYTE, EXIT, HANDSHAKE, INVALID_MESSAGE, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
                     RequestMessage, ResponseMessage, SerializableData, PreserializedData, 
                     ServerExecutionContext, ThingExecutionContext, default_server_execution_context, default_thing_execution_context)
 
@@ -280,6 +282,9 @@ class BaseZMQServer(BaseZMQ):
         if request_message.type == HANDSHAKE:
             self.handshake(request_message)
             return True
+        elif request_message.type == EXIT:
+            # self.send response with message type EXIT
+            raise BreakLoop(f"exit message received from {request_message.sender_id} with msg-ID {request_message.id}")
         return False 
        
         

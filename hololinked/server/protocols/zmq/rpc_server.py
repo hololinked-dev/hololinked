@@ -13,27 +13,21 @@ from collections import deque
 from uuid import uuid4
 
 
-from ..param.parameterized import Undefined
-from .constants import JSON, ZMQ_TRANSPORTS, ServerTypes
-from .utils import format_exception_as_json, get_current_async_loop, get_default_logger
-from .config import global_config
-from .exceptions import *
-from .protocols.zmq.message import ERROR, HANDSHAKE, INVALID_MESSAGE, TIMEOUT, ResponseMessage
-from .thing import Thing, ThingMeta
-from .property import Property
-from .properties import TypedList, Boolean, TypedDict
-from .actions import Action, action as remote_method
-from .logger import ListHandler
+from ....param.parameterized import Undefined
+from ...constants import ZMQ_TRANSPORTS, ServerTypes
+from ...exceptions import BreakLoop
+from ...utils import format_exception_as_json, get_current_async_loop, get_default_logger
+from ...config import global_config
+from ...exceptions import *
+from .message import (ERROR, HANDSHAKE, INVALID_MESSAGE, TIMEOUT,
+                                ResponseMessage, RequestMessage)
+from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
+from ...thing import Thing, ThingMeta
+from ...property import Property
+from ...properties import TypedList, Boolean, TypedDict
+from ...actions import Action, action as remote_method
+from ...logger import ListHandler
 
-# from .protocols.zmq.brokers import (CM_INDEX_ADDRESS, CM_INDEX_CLIENT_TYPE, CM_INDEX_MESSAGE_TYPE, CM_INDEX_MESSAGE_ID, 
-#                                 CM_INDEX_SERVER_EXEC_CONTEXT, CM_INDEX_THING_ID)
-# from .protocols.zmq.brokers import SM_INDEX_ADDRESS
-# from .protocols.zmq.brokers import EXIT, HANDSHAKE, INVALID_MESSAGE, TIMEOUT
-# from .protocols.zmq.brokers import HTTP_SERVER, PROXY, TUNNELER 
-# from .protocols.zmq.brokers import EMPTY_DICT
-from .protocols.zmq.brokers import (AsyncZMQClient, AsyncZMQServer, BaseZMQServer, 
-                                  EventPublisher, SyncZMQClient)
-from .protocols.zmq.brokers import RequestMessage
 
 
 if global_config.TRACE_MALLOC:
@@ -152,18 +146,8 @@ class RPCServer(BaseZMQServer):
         socket = server.socket
         while True:
             try:
-                raw_message = await socket.recv_multipart()
-                request_message = RequestMessage(raw_message)
+                request_message = await server.async_recv_request()
                 
-                # handle message types first
-                # if message_type == HANDSHAKE:
-                #     handshake_task = asyncio.create_task(self._handshake(message, socket))
-                #     self.eventloop.call_soon(lambda : handshake_task)
-                #     continue 
-                # if message_type == EXIT:
-                #     break
-                
-                self.logger.debug(f"received message from client '{request_message.sender_id}' with message id '{request_message.id}', queuing.")
                 # handle invokation timeout
                 invokation_timeout = request_message.server_execution_context.get("invokation_timeout", None)
 
@@ -182,6 +166,8 @@ class RPCServer(BaseZMQServer):
                                             )
                                         )
                     eventloop.call_soon(lambda : timeout_task)
+            except BreakLoop:
+                break
             except Exception as ex:
                 # handle invalid message
                 self.logger.error(f"exception occurred for message id '{request_message.id}' - {str(ex)}")
@@ -578,69 +564,6 @@ class RPCServer(BaseZMQServer):
     #     raise BreakAllLoops
     
 
-    uninstantiated_things = TypedDict(default=None, allow_None=True, key_type=str,
-                                            item_type=str)
-    
-    
-    @classmethod
-    def _import_thing(cls, file_name : str, object_name : str):
-        """
-        import a thing specified by ``object_name`` from its 
-        script or module. 
-
-        Parameters
-        ----------
-        file_name : str
-            file or module path 
-        object_name : str
-            name of ``Thing`` class to be imported
-        """
-        module_name = file_name.split(os.sep)[-1]
-        spec = importlib.util.spec_from_file_location(module_name, file_name)
-        if spec is not None:
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-        else:     
-            module = importlib.import_module(module_name, file_name.split(os.sep)[0])
-        consumer = getattr(module, object_name) 
-        if issubclass(consumer, Thing):
-            return consumer 
-        else:
-            raise ValueError(f"object name {object_name} in {file_name} not a subclass of Thing.", 
-                            f" Only subclasses are accepted (not even instances). Given object : {consumer}")
-        
-
-    @remote_method()
-    def import_thing(self, file_name : str, object_name : str):
-        """
-        import thing from the specified path and return the default 
-        properties to be supplied to instantiate the object. 
-        """
-        consumer = self._import_thing(file_name, object_name) # type: ThingMeta
-        id = uuid4()
-        self.uninstantiated_things[id] = consumer
-        return id
-           
-
-    @remote_method() # remember to pass schema with mandatory instance name
-    def instantiate(self, id : str, kwargs : typing.Dict = {}):      
-        """
-        Instantiate the thing that was imported with given arguments 
-        and add to the event loop
-        """
-        consumer = self.uninstantiated_things[id]
-        instance = consumer(**kwargs, eventloop_name=self.id) # type: Thing
-        self.things.append(instance)
-        rpc_server = instance.rpc_server
-        self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.poll()))
-        self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.tunnel_message_to_things()))
-        if not self.threaded:
-            self.thing_executor_loop.call_soon(asyncio.create_task(lambda : self.run_single_target(instance)))
-        else: 
-            _thing_executor = threading.Thread(target=self.run_things_executor, args=([instance],))
-            _thing_executor.start()
-
-
     def run(self):
         """
         start the eventloop
@@ -657,188 +580,6 @@ class RPCServer(BaseZMQServer):
             _thing_executor.join()
 
 
-
-    def run_external_message_listener(self):
-        """
-        Runs ZMQ's sockets which are visible to clients.
-        This method is automatically called by ``run()`` method. 
-        Please dont call this method when the async loop is already running. 
-        """
-        self.request_listener_loop = self.get_async_loop()
-        rpc_servers = [thing.rpc_server for thing in self.things]
-        futures = []
-        for rpc_server in rpc_servers:
-            futures.append(rpc_server.poll())
-            futures.append(rpc_server.tunnel_message_to_things())
-        self.logger.info("starting external message listener thread")
-        self.request_listener_loop.run_until_complete(asyncio.gather(*futures))
-        pending_tasks = asyncio.all_tasks(self.request_listener_loop)
-        self.request_listener_loop.run_until_complete(asyncio.gather(*pending_tasks))
-        self.logger.info("exiting external listener event loop {}".format(self.instance_name))
-        self.request_listener_loop.close()
-    
-
-    def run_things_executor(self, things):
-        """
-        Run ZMQ sockets which provide queued instructions to ``Thing``.
-        This method is automatically called by ``run()`` method. 
-        Please dont call this method when the async loop is already running. 
-        """
-        thing_executor_loop = self.get_async_loop()
-        self.thing_executor_loop = thing_executor_loop # atomic assignment for thread safety
-        self.logger.info(f"starting thing executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in things]}")
-        thing_executor_loop.run_until_complete(
-            asyncio.gather(*[self.run_single_target(instance) for instance in things])
-        )
-        self.logger.info(f"exiting event loop in thread {threading.get_ident()}")
-        thing_executor_loop.close()
-
-
-    @classmethod
-    async def run_single_target(cls, instance : Thing) -> None: 
-        instance_name = instance.instance_name
-        while True:
-            instructions = await instance.message_broker.async_recv_instructions()
-            for instruction in instructions:
-                client, _, client_type, _, msg_id, _, instruction_str, arguments, context = instruction
-                oneway = context.pop('oneway', False)
-                fetch_execution_logs = context.pop("fetch_execution_logs", False)
-                if fetch_execution_logs:
-                    list_handler = ListHandler([])
-                    list_handler.setLevel(logging.DEBUG)
-                    list_handler.setFormatter(instance.logger.handlers[0].formatter)
-                    instance.logger.addHandler(list_handler)
-                try:
-                    instance.logger.debug(f"client {client} of client type {client_type} issued instruction " +
-                                f"{instruction_str} with message id {msg_id}. starting execution.")
-                    return_value = await cls.execute_once(instance_name, instance, instruction_str, arguments) #type: ignore 
-                    if oneway:
-                        await instance.message_broker.async_send_reply_with_message_type(instruction, b'ONEWAY', None)
-                        continue
-                    if fetch_execution_logs:
-                        return_value = {
-                            "returnValue" : return_value,
-                            "execution_logs" : list_handler.log_list
-                        }
-                    await instance.message_broker.async_send_reply(instruction, return_value)
-                    # Also catches exception in sending messages like serialization error
-                except (BreakInnerLoop, BreakAllLoops):
-                    instance.logger.info("Thing {} with instance name {} exiting event loop.".format(
-                                                            instance.__class__.__name__, instance_name))
-                    if oneway:
-                        await instance.message_broker.async_send_reply_with_message_type(instruction, b'ONEWAY', None)
-                        continue
-                    return_value = None
-                    if fetch_execution_logs:
-                        return_value = { 
-                            "returnValue" : None,
-                            "execution_logs" : list_handler.log_list
-                        }
-                    await instance.message_broker.async_send_reply(instruction, return_value)
-                    return 
-                except Exception as ex:
-                    instance.logger.error("Thing {} with instance name {} produced error : {}.".format(
-                                                            instance.__class__.__name__, instance_name, ex))
-                    if oneway:
-                        await instance.message_broker.async_send_reply_with_message_type(instruction, b'ONEWAY', None)
-                        continue
-                    return_value = dict(exception= format_exception_as_json(ex))
-                    if fetch_execution_logs:
-                        return_value["execution_logs"] = list_handler.log_list
-                    await instance.message_broker.async_send_reply_with_message_type(instruction, 
-                                                                    b'EXCEPTION', return_value)
-                finally:
-                    if fetch_execution_logs:
-                        instance.logger.removeHandler(list_handler)
-
-    @classmethod
-    async def execute_once(cls, instance_name : str, instance : Thing, instruction_str : str, 
-                           arguments : typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
-        resource = instance.instance_resources.get(instruction_str, None) 
-        if resource is None:
-            raise AttributeError(f"unknown remote resource represented by instruction {instruction_str}")
-        if resource.isaction:      
-            if resource.state is None or (hasattr(instance, 'state_machine') and 
-                            instance.state_machine.current_state in resource.state):
-                # Note that because we actually find the resource within __prepare_instance__, its already bound
-                # and we dont have to separately bind it. 
-                if arguments is None:
-                    arguments = dict()
-                args = arguments.pop('__args__', tuple())
-                if len(args) == 0 and resource.schema_validator is not None:
-                    resource.schema_validator.validate(arguments)
-                
-                func = resource.obj
-                if resource.iscoroutine:
-                    if resource.isparameterized:
-                        if len(args) > 0:
-                            raise RuntimeError("parameterized functions cannot have positional arguments")
-                        return await func(resource.bound_obj, *args, **arguments)
-                    return await func(*args, **arguments) # arguments then become kwargs
-                else:
-                    if resource.isparameterized:
-                        if len(args) > 0:
-                            raise RuntimeError("parameterized functions cannot have positional arguments")
-                        return func(resource.bound_obj, *args, **arguments)
-                    return func(*args, **arguments) # arguments then become kwargs
-            else: 
-                raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
-                        instance_name, instance.state, resource.state))
-        
-        elif resource.isproperty:
-            action = instruction_str.split('/')[-1]
-            prop = resource.obj # type: Property
-            owner_inst = resource.bound_obj # type: Thing
-            if action == "write": 
-                if resource.state is None or (hasattr(instance, 'state_machine') and  
-                                        instance.state_machine.current_state in resource.state):
-                    if isinstance(arguments, dict) and len(arguments) == 1 and 'value' in arguments:
-                        return prop.__set__(owner_inst, arguments['value'])
-                    return prop.__set__(owner_inst, arguments)
-                else: 
-                    raise StateMachineError("Thing {} is in `{}` state, however attribute can be written only in `{}` state".format(
-                        instance_name, instance.state_machine.current_state, resource.state))
-            elif action == "read":
-                return prop.__get__(owner_inst, type(owner_inst))             
-            elif action == "delete":
-                if prop.fdel is not None:
-                    return prop.fdel() # this may not be correct yet
-                raise NotImplementedError("This property does not support deletion")
-        raise NotImplementedError("Unimplemented execution path for Thing {} for instruction {}".format(instance_name, instruction_str))
-
-
-def fork_empty_eventloop(instance_name : str, logfile : typing.Union[str, None] = None, python_command : str = 'python',
-                        condaenv : typing.Union[str, None] = None, prefix_command : typing.Union[str, None] = None):
-    command_str = '{}{}{}-c "from hololinked.server import EventLoop; E = EventLoop({}); E.run();"'.format(
-        f'{prefix_command} ' if prefix_command is not None else '',
-        f'call conda activate {condaenv} && ' if condaenv is not None else '',
-        f'{python_command} ',
-        f"instance_name = '{instance_name}', logfile = '{logfile}'"
-    )
-    print(f"command to invoke : {command_str}")
-    subprocess.Popen(
-        command_str, 
-        shell = True
-    )
-
-
-# class ForkedEventLoop:
-
-#     def __init__(self, instance_name : str, things : Union[Thing, Consumer, List[Union[Thing, Consumer]]], 
-#                 log_level : int = logging.INFO, **kwargs):
-#         self.subprocess = Process(target = forked_eventloop, kwargs = dict(
-#                         instance_name = instance_name, 
-#                         things = things, 
-#                         log_level = log_level,
-#                         **kwargs
-#                     ))
-    
-#     def start(self):
-#         self.Process.start()
-
-
-
-__all__ = ['EventLoop', 'Consumer', 'fork_empty_eventloop']
 __all__ = [
     RPCServer.__name__
 ]

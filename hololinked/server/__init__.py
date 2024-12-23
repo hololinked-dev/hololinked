@@ -10,6 +10,6 @@ from .property import *
 from .database import *
 from .thing import *
 from .HTTPServer import *
-from .rpc_server import *
+from .protocols.zmq.rpc_server import *
 
 
