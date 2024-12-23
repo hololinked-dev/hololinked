@@ -1251,7 +1251,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
     """
 
     def __init__(self, 
-                id: str, 
+                client_ids: typing.List[str], 
                 server_ids: typing.List[str], 
                 handshake: bool = True, 
                 poll_timeout: int = 25, 
@@ -1259,14 +1259,16 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                 context: zmq.asyncio.Context = None, 
                 **kwargs
             ) -> None:
-        super().__init__(id=id, server_id=None, **kwargs)
+        super().__init__(id='pool', server_id=None, **kwargs)
+        if len(client_ids) != len(server_ids):
+            raise ValueError("client_ids and server_ids must have same length")
         # this class does not call create_socket method
         self.context = context or zmq.asyncio.Context()
         self.pool = dict() # type: typing.Dict[str, AsyncZMQClient]
         self.poller = zmq.asyncio.Poller()
-        for server_id in server_ids:
+        for client_id, server_id in zip(client_ids, server_ids):
             client = AsyncZMQClient(
-                            id=id,
+                            id=client_id,
                             server_id=server_id,
                             handshake=handshake, 
                             transport=transport, 
@@ -1327,6 +1329,23 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self._poll_timeout = value 
 
 
+    async def handshake_complete(self) -> None:
+        """
+        wait for handshake to complete for all clients in the pool
+        """
+        for client in self.pool.values():
+            await client.handshake_complete() # sufficient to wait serially
+
+
+    def handshake(self, timeout: int | None = 60000) -> None:
+        """
+        automatically called when handshake argument at init is True. When not automatically called, it is necessary
+        to call this method before awaiting ``handshake_complete()``.
+        """
+        for client in self.pool.values():
+            run_callable_somehow(client._handshake(timeout))
+
+
     async def poll_responses(self) -> None:
         """
         Poll for replies from server. Since the client is message mapped, this method should be independently started
@@ -1361,12 +1380,13 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                             self.logger.debug(f"msg-ID '{message_id}' cancelled")
                             continue
                         event = self.events_map.get(message_id, None) 
-                        if len(response_message.pre_encoded_payload ) > 0 and response_message.payload:
-                            final_data = tuple(response_message.body)
-                        elif len(response_message.pre_encoded_payload) > 0:
-                            final_data = response_message.pre_encoded_payload
-                        else:
-                            final_data = response_message.payload
+                        final_data = response_message.body
+                        # if len(response_message.pre_encoded_payload ) > 0 and response_message.payload:
+                        #     final_data = tuple(response_message.body)
+                        # elif len(response_message.pre_encoded_payload) > 0:
+                        #     final_data = response_message.pre_encoded_payload
+                        # else:
+                        #     final_data = response_message.payload
                         if event:
                             event.set()
                         else:    
@@ -1415,7 +1435,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                                 "routing logic as the server has just now come alive, please try again soon.")
 
     async def async_send_request(self, 
-                            id: str, 
+                            client_id: str, 
                             thing_id: str, 
                             objekt: str, 
                             operation: str,
@@ -1447,22 +1467,22 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         message_id: bytes
             created message ID
         """
-        self.assert_client_ready(self.pool[id])
-        message_id = await self.pool[id].async_send_request(
+        self.assert_client_ready(self.pool[client_id])
+        message_id = await self.pool[client_id].async_send_request(
                                                 thing_id=thing_id, 
                                                 objekt=objekt,
                                                 operation=operation, 
                                                 payload=payload,
                                                 preserialized_payload=preserialized_payload,
                                                 server_execution_context=server_execution_context,
-                                                 thing_execution_context=thing_execution_context
+                                                thing_execution_context=thing_execution_context
                                             )
         event = self.event_pool.pop()
         self.events_map[message_id] = event 
         return message_id
 
     async def async_recv_response(self, 
-                                id: str, 
+                                client_id: str, 
                                 message_id: bytes, 
                                 timeout: float | int | None = None
                             ) -> typing.Dict[str, typing.Any]:
@@ -1500,14 +1520,12 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             raise ValueError(f"message id {message_id} unknown.") from None
         while True:
             try:
-                await asyncio.wait_for(event.wait(), timeout if (timeout and timeout > 0) else 5) 
+                await asyncio.wait_for(event.wait(), timeout) 
                 # default 5 seconds because we want to check if server is also dead
-                if event.is_set():
+                if event.is_set(): # i.e. if timeout is not None, check if event is set
                     break
-                self.assert_client_ready(self.pool[id])
+                self.assert_client_ready(self.pool[client_id])
             except TimeoutError:
-                if timeout is None:
-                    continue
                 self.cancelled_messages.append(message_id)
                 self.logger.debug(f'message_id {message_id} added to list of cancelled messages')
                 raise TimeoutError(f"Execution not completed within {timeout} seconds") from None
@@ -1517,7 +1535,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         return response
 
     async def async_execute(self, 
-                        id: str, 
+                        client_id: str, 
                         thing_id: str, 
                         objekt: str, 
                         operation: str, 
@@ -1551,7 +1569,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             the timeout, but do not gaurantee non-execution.  
         """
         message_id = await self.async_send_request(
-                                                id=id, 
+                                                client_id=client_id, 
                                                 thing_id=thing_id, 
                                                 objekt=objekt, 
                                                 operation=operation,
@@ -1561,9 +1579,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                                                 thing_execution_context=thing_execution_context
                                             )
         return await self.async_recv_response(
-                                            id=id, 
+                                            client_id=client_id, 
                                             message_id=message_id, 
-                                            timeout=server_execution_context.get("execution_timeout", None)
                                         )
 
     def start_polling(self) -> None:

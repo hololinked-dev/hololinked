@@ -272,6 +272,20 @@ class RequestMessage:
         """type of the message"""
         return self.header['messageType']
     
+    @property
+    def server_execution_context(self) -> typing.Dict[str, typing.Any]:
+        """server execution context"""
+        return self.header['serverExecutionContext']
+    
+    @property
+    def thing_execution_context(self) -> typing.Dict[str, typing.Any]:
+        """thing execution context"""
+        return self.header['thingExecutionContext']
+
+    @property
+    def thing_execution_info(self) -> typing.Tuple[str, str, str, typing.Any, bytes, typing.Dict[str, typing.Any]]:
+        """thing execution info"""
+        return self.header['thingID'], self.header['objekt'], self.header['operation'], self.body[0], self.body[1], self.header['thingExecutionContext']
     
     def parse_header(self) -> None:
         """
@@ -591,6 +605,41 @@ class ResponseMessage:
         return message
     
 
+    @classmethod
+    def craft_with_message_type(
+                        request_message: RequestMessage,
+                        message_type: str,
+                        payload: SerializableData = SerializableData(None, 'application/json'),
+                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
+                    ) -> "ResponseMessage": 
+        """
+        create a plain message with a certain type, for example a handshake message.
+
+        Parameters
+        ----------
+        receiver_id: str
+            id of the server
+        message_type: bytes
+            message type to be sent
+        """
+        message = ResponseMessage([])
+        message._header = ResponseHeader(
+            messageType=message_type,
+            messageID=request_message.id,
+            receiverID=request_message.sender_id,
+            senderID=request_message.receiver_id,
+            payloadContentType=payload.content_type,
+            preencodedPayloadContentType=preserialized_payload.content_type
+        )
+        message._body = [payload, preserialized_payload]
+        message._bytes = [
+            bytes(request_message.sender_id, encoding='utf-8'),
+            Serializers.json.dumps(message._header.json()),
+            payload.serialize(),
+            preserialized_payload.value
+        ]
+        return message
+        
    
 class EventMessage(ResponseMessage):
     pass

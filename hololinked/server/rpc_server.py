@@ -13,10 +13,12 @@ from collections import deque
 from uuid import uuid4
 
 
+from ..param.parameterized import Undefined
 from .constants import JSON, ZMQ_TRANSPORTS, ServerTypes
 from .utils import format_exception_as_json, get_current_async_loop, get_default_logger
 from .config import global_config
 from .exceptions import *
+from .protocols.zmq.message import ERROR, HANDSHAKE, INVALID_MESSAGE, TIMEOUT, ResponseMessage
 from .thing import Thing, ThingMeta
 from .property import Property
 from .properties import TypedList, Boolean, TypedDict
@@ -64,8 +66,8 @@ class RPCServer(BaseZMQServer):
 
     Parameters
     ----------
-    instance_name: str
-        ``instance_name`` of the server
+    id: str
+        ``id`` of the server
     server_type: str
         server type metadata
     context: Optional, zmq.asyncio.Context
@@ -87,74 +89,48 @@ class RPCServer(BaseZMQServer):
                         doc="set True to run each thing in its own thread")
   
 
-    def __init__(self, *, instance_name : str, things : typing.List[Thing],
+    def __init__(self, *, id : str, things : typing.List[Thing],
                context : typing.Union[zmq.asyncio.Context, None] = None, 
                 **kwargs
             ) -> None:
         """
         Parameters
         ----------
-        instance_name: str
+        id: str
             instance name of the event loop
         things: List[Thing]
             things to be run/served
         log_level: int
             log level of the event loop logger
         """
-        BaseZMQServer.__init__(self, instance_name=instance_name, server_type=ServerTypes.RPC.value, 
-                                **kwargs)
+        super().__init__(id=id, **kwargs)
         self.uninstantiated_things = dict()
         self.things = dict() # typing.Dict[bytes, Thing]
         for thing in things:
-            self.things[bytes(thing.id, encoding='utf-8')] = thing
-
-        kwargs["http_serializer"] = self.http_serializer
-        kwargs["zmq_serializer"] = self.zmq_serializer
-        # RemoteObject.__init__(self, instance_name=instance_name, logger=self.logger, things=things,
-        #                         logger_remote_access=False, **kwargs)
-        # if self.expose:
-        #     self.things.append(self)      
+            self.things[thing.id] = thing
 
         if self.logger is None:
             self.logger =  get_default_logger('{}|{}|{}|{}'.format(self.__class__.__name__, 
-                                                'RPC', 'MIXED', self.instance_name), kwargs.get('log_level', logging.INFO))
+                                                'RPC', 'MIXED', self.id), kwargs.get('log_level', logging.INFO))
         # contexts and poller
         self._terminate_context = context is None
         self.context = context or zmq.asyncio.Context()
 
        
         self.inproc_server = AsyncZMQServer(
-                                instance_name=self.instance_name, 
-                                server_type=ServerTypes.RPC, 
+                                id=self.id, 
                                 context=self.context, 
-                                protocol=ZMQ_TRANSPORTS.INPROC, 
+                                transport=ZMQ_TRANSPORTS.INPROC, 
                                 **kwargs
                             )        
         self.event_publisher = EventPublisher(
-                                instance_name=self.instance_name + '-event-pub',
-                                protocol=ZMQ_TRANSPORTS.INPROC,
+                                id=self.id + '-event-pub',
+                                transport=ZMQ_TRANSPORTS.INPROC,
                                 logger=self.logger,
                                 **kwargs
                             )        
-        # message serializing broker
+        # message serializing deque
         for instance in self.things.values():
-            instance._inproc_client = AsyncZMQClient(
-                                        server_instance_name=instance.id,
-                                        identity=f'{self.instance_name}/tunneler',
-                                        client_type=TUNNELER, 
-                                        context=self.context, 
-                                        protocol=ZMQ_TRANSPORTS.INPROC, 
-                                        logger=self.logger,
-                                        handshake=False # handshake manually done later when event loop is run
-                                    )
-            instance._inproc_server = AsyncZMQServer(
-                                        instance_name=instance.id,
-                                        server_type=ServerTypes.THING,
-                                        context=self.context,
-                                        protocol=ZMQ_TRANSPORTS.INPROC,
-                                        logger=self.logger,
-                                        **kwargs
-                                    ) 
             instance._zmq_messages = deque()
             instance._zmq_messages_event = asyncio.Event()
             instance.rpc_server = self
@@ -164,7 +140,7 @@ class RPCServer(BaseZMQServer):
         
     def __post_init__(self):
         super().__post_init__()
-        self.logger.info("Server with name '{}' can be started using run().".format(self.instance_name))   
+        self.logger.info("Server with name '{}' can be started using run().".format(self.id))   
 
 
     async def recv_requests(self, server : AsyncZMQServer):
@@ -177,43 +153,50 @@ class RPCServer(BaseZMQServer):
         while True:
             try:
                 raw_message = await socket.recv_multipart()
-                message = RequestMessage(raw_message)
-                client_addr, client_type, message_id, message_type, server_execution_context = message.header
-                # handle message types first
-                if message_type == HANDSHAKE:
-                    handshake_task = asyncio.create_task(self._handshake(message, socket))
-                    self.eventloop.call_soon(lambda : handshake_task)
-                    continue 
-                if message_type == EXIT:
-                    break
+                request_message = RequestMessage(raw_message)
                 
-                self.logger.debug(f"received message from client '{client_addr}' with message id '{message_id}', queuing.")
+                # handle message types first
+                # if message_type == HANDSHAKE:
+                #     handshake_task = asyncio.create_task(self._handshake(message, socket))
+                #     self.eventloop.call_soon(lambda : handshake_task)
+                #     continue 
+                # if message_type == EXIT:
+                #     break
+                
+                self.logger.debug(f"received message from client '{request_message.sender_id}' with message id '{request_message.id}', queuing.")
                 # handle invokation timeout
-                invokation_timeout = server_execution_context.get("invokation_timeout", None)
+                invokation_timeout = request_message.server_execution_context.get("invokation_timeout", None)
 
                 # schedule to tunnel it to thing
                 ready_to_process_event = None
                 timeout_task = None
                 if invokation_timeout is not None:
                     ready_to_process_event = asyncio.Event()
-                    timeout_task = asyncio.create_task(self.process_timeouts(message, 
-                                                ready_to_process_event, invokation_timeout, socket, 'invokation'))
+                    timeout_task = asyncio.create_task(
+                                            self.process_timeouts(
+                                                request_message=request_message, 
+                                                ready_to_process_event=ready_to_process_event, 
+                                                invokation_timeout=invokation_timeout, 
+                                                origin_socket=socket, 
+                                                timeout_type='invokation'
+                                            )
+                                        )
                     eventloop.call_soon(lambda : timeout_task)
             except Exception as ex:
                 # handle invalid message
-                self.logger.error(f"exception occurred for message id '{message[CM_INDEX_MESSAGE_ID]}' - {str(ex)}")
+                self.logger.error(f"exception occurred for message id '{request_message.id}' - {str(ex)}")
                 invalid_message_task = asyncio.create_task(
-                                                self._handle_invalid_message(
-                                                    originating_socket=socket,
-                                                    original_client_message=message,
-                                                    exception=ex
-                                                )
+                                            self._handle_invalid_message(
+                                                request_message=request_message,
+                                                origin_socket=socket,
+                                                exception=ex
                                             )
+                                        )
                 eventloop.call_soon(lambda: invalid_message_task)
             else:
-                instance = self.things[message.thing_id]
+                instance = self.things[request_message.thing_id]
                 # append to messages list - message, execution context, event, timeout task, origin socket
-                instance._zmq_messages.append((message, ready_to_process_event, timeout_task, socket))
+                instance._zmq_messages.append((request_message, ready_to_process_event, timeout_task, socket))
                 instance._zmq_messages_event.set() # this was previously outside the else block - reason unknown now
         self.logger.info(f"stopped polling for server '{server.identity}' {server.socket_address[0:3].upper() if server.socket_address[0:3] in ['ipc', 'tcp'] else 'INPROC'}")
            
@@ -222,31 +205,35 @@ class RPCServer(BaseZMQServer):
         """
         message tunneler between external sockets and interal inproc client
         """
+        eventloop = asyncio.get_event_loop()
         while not self.stop_poll:
+            # wait for message first
             if len(instance._zmq_messages) == 0:
                 await instance._zmq_messages_event.wait()
                 instance._zmq_messages_event.clear()
                 # this means in next loop it wont be in this block as a message arrived  
                 continue
+
             # retrieve from messages list - message, execution context, event, timeout task, origin socket
-            message, ready_to_process_event, timeout_task, origin_socket = instance._zmq_messages.popleft()
-        
+            request_message, ready_to_process_event, timeout_task, origin_socket = instance._zmq_messages.popleft() 
+            request_message : RequestMessage
+            ready_to_process_event : asyncio.Event
+            origin_socket : zmq.Socket | zmq.asyncio.Socket
+            server_execution_context = request_message.server_execution_context
+            
+            # handle invokation timeout
             invokation_timed_out = True 
             if ready_to_process_event is not None: 
                 ready_to_process_event.set() # releases timeout task 
                 invokation_timed_out = await timeout_task
             if ready_to_process_event is not None and invokation_timed_out:
-                # drop call to thing
+                # drop call to thing, timeout message was already sent in process_timeouts()
                 continue 
+            
             # handle execution through thing
-            original_address = message[CM_INDEX_ADDRESS]
-            message[CM_INDEX_ADDRESS] = message[CM_INDEX_THING_ID] 
-            # replace RPC server address with thing ID to route correctly
-            await instance._inproc_client.socket.send_multipart(message)
-
-            client_addr, client_type, message_id, message_type, server_execution_context = message.header
-            instance.logger.debug(f"client {client_addr} of client type {client_type} issued operation " +
-                                f"{operation} with message id {msg_id}. starting execution.")
+            instance._last_operation_request = request_message.thing_execution_info
+            instance._message_execution_event.set()
+                    
             # schedule an execution timeout
             execution_timeout = server_execution_context.get("execution_timeout", None)
             execution_completed_event = None 
@@ -254,14 +241,35 @@ class RPCServer(BaseZMQServer):
             execution_timed_out = True
             if execution_timeout is not None:
                 execution_completed_event = asyncio.Event()
-                execution_timeout_task = asyncio.create_task(self.process_timeouts(message, 
-                                        execution_completed_event, execution_timeout, origin_socket, 'execution'))
-                self.eventloop.call_soon(lambda : execution_timeout_task)
+                execution_timeout_task = asyncio.create_task(
+                                                        self.process_timeouts(
+                                                            request_message=request_message, 
+                                                            ready_to_process_event=execution_completed_event,
+                                                            timeout=execution_timeout,
+                                                            origin_socket=origin_socket,
+                                                            timeout_type='execution'
+                                                        )
+                                                    )
+                eventloop.call_soon(lambda : execution_timeout_task)
+
             # always wait for reply from thing, since this loop is asyncio task (& in its own thread in RPC server), 
             # timeouts always reach client without truly blocking by the GIL. If reply does not arrive, all other requests
-            # get invokation timeout.
-            reply = await instance._inproc_client.socket.recv_multipart()
-            reply[SM_INDEX_ADDRESS] = original_address
+            # get invokation timeout.            
+            await eventloop.run_in_executor(None, instance._message_execution_event.wait, tuple())
+            instance._message_execution_event.clear()
+            reply = instance._last_operation_reply
+
+            # check if reply is never undefined, Undefined is a sensible placeholder for NotImplemented singleton
+            if reply is Undefined:
+                # this is a logic error, as the reply should never be undefined
+                await self._handle_error_message(
+                            request_message=request_message, 
+                            origin_socket=origin_socket, 
+                            exception=RuntimeError("No reply from thing - logic error")
+                        )
+                continue
+            instance._last_operation_reply = Undefined
+
             # check if execution completed within time
             if execution_completed_event is not None:
                 execution_completed_event.set() # releases timeout task
@@ -272,12 +280,112 @@ class RPCServer(BaseZMQServer):
             if server_execution_context.get("oneway", False):
                 # drop reply if oneway
                 continue 
-            await origin_socket.send_multipart(reply)    
+
+            # send reply to client
+            response_message = ResponseMessage.craft_reply_from_request(
+                                            request_message=request_message,
+                                            payload=reply
+                                        )
+            await origin_socket.send_multipart(response_message.byte_array)    
         self.logger.info("stopped tunneling messages to things")
 
 
-    async def process_timeouts(self, original_client_message : typing.List, ready_to_process_event : asyncio.Event,
-                               timeout : typing.Optional[float], origin_socket : zmq.Socket, timeout_typ : str) -> bool:
+    async def run_single_thing(self, instance : Thing) -> None: 
+        while True:
+            await self.eventloop.run_in_executor(None, instance._message_execution_event.wait, tuple())
+            instance._message_execution_event.clear()
+            instance._last_operation_reply = Undefined
+            operation_request = instance._last_operation_request 
+            if operation_request is Undefined:
+                raise RuntimeError("No operation request found in thing '{}'".format(instance.id))
+
+            thing_id, objekt, operation, payload, preserialized_payload, execution_context = operation_request  
+            instance.logger.debug(f"thing {instance.id} with {thing_id} starting execution of operation {operation} on {objekt}")
+
+            fetch_execution_logs = execution_context.pop("fetch_execution_logs", False)
+            if fetch_execution_logs:
+                list_handler = ListHandler([])
+                list_handler.setLevel(logging.DEBUG)
+                list_handler.setFormatter(instance.logger.handlers[0].formatter)
+                instance.logger.addHandler(list_handler)
+            try:
+                return_value = await self.execute_once(instance, objekt, operation, payload, preserialized_payload) 
+                if fetch_execution_logs:
+                    return_value = {
+                        "return_value" : return_value,
+                        "execution_logs" : list_handler.log_list
+                    }
+                await instance._last_operation_request = return_value
+            except (BreakInnerLoop, BreakAllLoops):
+                instance.logger.info("Thing {} with instance name {} exiting event loop.".format(
+                                                        instance.__class__.__name__, instance.id))
+                return_value = None
+                if fetch_execution_logs:
+                    return_value = { 
+                        "return_value" : None,
+                        "execution_logs" : list_handler.log_list
+                    }
+                instance._last_operation_reply = return_value
+                return 
+            except Exception as ex:
+                instance.logger.error("Thing {} with ID {} produced error : {}.".format(
+                                                        instance.__class__.__name__, instance.id, ex))
+                return_value = dict(exception=format_exception_as_json(ex))
+                if fetch_execution_logs:
+                    return_value["execution_logs"] = list_handler.log_list
+                instance._last_operation_reply = return_value
+            finally:
+                instance._last_operation_request = Undefined
+                instance._message_execution_event.set()
+                if fetch_execution_logs:
+                    instance.logger.removeHandler(list_handler)
+
+   
+    async def execute_once(cls, 
+                        instance: Thing, 
+                        objekt: str, 
+                        operation: str,
+                        payload: typing.Any,
+                        preserialized_payload: bytes
+                    ) -> typing.Any:
+        if operation == 'readProperty':
+            prop = instance.properties[objekt] # type: Property
+            return getattr(instance, prop.name) 
+        elif operation == 'writeProperty':
+            prop = instance.properties[objekt] # type: Property
+            return prop.external_set(instance, payload) # external set has state machine logic inside
+        elif operation == 'deleteProperty':
+            prop = instance.properties[objekt] # type: Property
+            del prop # raises NotImplementedError when deletion is not implemented which is mostly the case
+        elif operation == 'invokeAction':
+            action = instance.actions[objekt] # type: Action
+            args = payload.pop('__args__', tuple())
+            # payload then become kwargs
+            if action.execution_info.iscoroutine:
+                return await action.external_call(*args, **payload) 
+            else:
+                return action.external_call(*args, **payload) 
+        elif operation == 'readMultipleProperties' or operation == 'readAllProperties':
+            if objekt is None:
+                return instance._get_properties()
+            return instance._get_properties(names=objekt)
+        elif operation == 'writeMultipleProperties' or operation == 'writeAllProperties':
+            return instance._set_properties(payload)
+        # elif operation == b'dataResponse': # no operation defined yet for dataResponse to events in Thing Description
+        #     from .events import CriticalEvent
+        #     event = instance.events[objekt] # type: CriticalEvent, this name "CriticalEvent" needs to change, may be just plain Event
+        #     return event._set_acknowledgement(**payload)
+        raise NotImplementedError("Unimplemented execution path for Thing {} for operation {}".format(
+                                                                        instance.id, operation))
+
+
+    async def process_timeouts(self, 
+                            request_message: RequestMessage, 
+                            ready_to_process_event: asyncio.Event,
+                            origin_socket: zmq.asyncio.Socket, 
+                            timeout: float | int | None, 
+                            timeout_type : str
+                        ) -> bool:
         """
         replies timeout to client if timeout occured and prevents the message from being executed. 
         """
@@ -285,163 +393,57 @@ class RPCServer(BaseZMQServer):
             await asyncio.wait_for(ready_to_process_event.wait(), timeout)
             return False 
         except TimeoutError:    
-            await origin_socket.send_multipart(self.craft_response_from_arguments(
-                address=original_client_message[CM_INDEX_ADDRESS], client_type=original_client_message[CM_INDEX_CLIENT_TYPE], 
-                message_type=TIMEOUT, message_id=original_client_message[CM_INDEX_MESSAGE_ID], data=timeout_typ
-            ))
+            response_message = ResponseMessage.craft_with_message_type(                 
+                                                request_message=request_message,
+                                                message_type=TIMEOUT, 
+                                                data=timeout_type
+                                            )
+            await origin_socket.send_multipart(response_message.byte_array)
+            self.logger.debug("sent timeout message to client '{}'".format(request_message.sender_id))   
             return True
 
 
-    async def _handle_invalid_message(self, originating_socket : zmq.Socket, original_client_message: typing.List[bytes], 
-                                exception: Exception) -> None:
-        await originating_socket.send_multipart(self.craft_response_from_arguments(
-                            original_client_message[CM_INDEX_ADDRESS], original_client_message[CM_INDEX_CLIENT_TYPE], 
-                            INVALID_MESSAGE, original_client_message[CM_INDEX_MESSAGE_ID], exception))
-        self.logger.info(f"sent exception message to client '{original_client_message[CM_INDEX_ADDRESS]}'." +
+    async def _handle_invalid_message(self, 
+                                request_message: RequestMessage, 
+                                origin_socket: zmq.Socket, 
+                                exception: Exception
+                            ) -> None:
+        response_message = ResponseMessage.craft_with_message_type(
+                                            request_message=request_message,
+                                            message_type=INVALID_MESSAGE,
+                                            data=exception
+                                        )
+        await origin_socket.send_multipart(response_message.byte_array)          
+        self.logger.info(f"sent exception message to client '{response_message.receiver_id}'." +
                             f" exception - {str(exception)}") 	
     
 
-    async def _handshake(self, original_client_message: typing.List[bytes],
-                                    originating_socket : zmq.Socket) -> None:
-        await originating_socket.send_multipart(self.craft_response_from_arguments(
-                original_client_message[CM_INDEX_ADDRESS], 
-                original_client_message[CM_INDEX_CLIENT_TYPE], HANDSHAKE, original_client_message[CM_INDEX_MESSAGE_ID],
-                EMPTY_DICT))
-        self.logger.info("sent handshake to client '{}'".format(original_client_message[CM_INDEX_ADDRESS]))
+    async def _handle_error_message(self, 
+                                request_message: RequestMessage,
+                                origin_socket : zmq.Socket, 
+                                exception: Exception
+                            ) -> None:
+        response_message = ResponseMessage.craft_with_message_type(
+                                                            request_message=request_message,
+                                                            message_type=ERROR,
+                                                            data=exception
+                                                        )
+        await origin_socket.send_multipart(response_message.byte_array)    
+        self.logger.info(f"sent exception message to client '{response_message.receiver_id}'." +
+                            f" exception - {str(exception)}")
+        
 
-
-    async def poll(self):
-        """
-        poll for messages and append them to messages list to pass them to ``Eventloop``/``Thing``'s inproc 
-        server using an inner inproc client. Registers the messages for timeout calculation.
-        """
-        self.stop_poll = False
-        self.eventloop = asyncio.get_event_loop()
-        self.inner_inproc_client.handshake()
-        await self.inner_inproc_client.handshake_complete()
-        if self.inproc_server:
-            self.eventloop.call_soon(lambda : asyncio.create_task(self.recv_request(self.inproc_server)))
-        if self.ipc_server:
-            self.eventloop.call_soon(lambda : asyncio.create_task(self.recv_request(self.ipc_server)))
-        if self.tcp_server:
-            self.eventloop.call_soon(lambda : asyncio.create_task(self.recv_request(self.tcp_server)))
-       
-
-    def stop_polling(self):
-        """
-        stop polling method ``poll()``
-        """
-        self.stop_poll = True
-        instance._messages_event.set()
-        if self.inproc_server is not None:
-            def kill_inproc_server(instance_name, context, logger):
-                # this function does not work when written fully async - reason is unknown
-                try: 
-                    event_loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    event_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(event_loop)
-                temp_inproc_client = AsyncZMQClient(server_instance_name=instance_name,
-                                            identity=f'{self.instance_name}-inproc-killer',
-                                            context=context, client_type=PROXY, protocol=ZMQ_TRANSPORTS.INPROC, 
-                                            logger=logger) 
-                event_loop.run_until_complete(temp_inproc_client.handshake_complete())
-                event_loop.run_until_complete(temp_inproc_client.socket.send_multipart(temp_inproc_client.craft_empty_message_with_type(EXIT)))
-                temp_inproc_client.exit()
-            threading.Thread(target=kill_inproc_server, args=(self.instance_name, self.context, self.logger), daemon=True).start()
-        if self.ipc_server is not None:
-            temp_client = SyncZMQClient(server_instance_name=self.instance_name, identity=f'{self.instance_name}-ipc-killer',
-                                    client_type=PROXY, protocol=ZMQ_TRANSPORTS.IPC, logger=self.logger) 
-            temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
-            temp_client.exit()
-        if self.tcp_server is not None:
-            socket_address = self.tcp_server.socket_address
-            if '/*:' in self.tcp_server.socket_address:
-                socket_address = self.tcp_server.socket_address.replace('*', 'localhost')
-            # print("TCP socket address", self.tcp_server.socket_address)
-            temp_client = SyncZMQClient(server_instance_name=self.instance_name, identity=f'{self.instance_name}-tcp-killer',
-                                    client_type=PROXY, protocol=ZMQ_TRANSPORTS.TCP, logger=self.logger,
-                                    socket_address=socket_address)
-            temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
-            temp_client.exit()   
-
-
-    async def run_single_target(self, instance : Thing) -> None: 
-        while True:
-            messages = await instance._inproc_server.async_recv_requests()
-            for message in messages:
-                # client, mty_byte_1, client_type, msg_type, msg_id, server_execution_context, mty_byte_2, 
-                thing_id, objekt, operation, arguments, execution_context = message.body
-                fetch_execution_logs = execution_context.pop("fetch_execution_logs", False)
-                if fetch_execution_logs:
-                    list_handler = ListHandler([])
-                    list_handler.setLevel(logging.DEBUG)
-                    list_handler.setFormatter(instance.logger.handlers[0].formatter)
-                    instance.logger.addHandler(list_handler)
-                try:
-                    return_value = await self.execute_once(instance, objekt, operation, arguments) 
-                    if fetch_execution_logs:
-                        return_value = {
-                            "return_value" : return_value,
-                            "execution_logs" : list_handler.log_list
-                        }
-                    await instance.message_broker.async_send_response(message, return_value)
-                    # Also catches exception in sending messages like serialization error
-                except (BreakInnerLoop, BreakAllLoops):
-                    instance.logger.info("Thing {} with instance name {} exiting event loop.".format(
-                                                            instance.__class__.__name__, instance.instance_name))
-                    return_value = None
-                    if fetch_execution_logs:
-                        return_value = { 
-                            "return_value" : None,
-                            "execution_logs" : list_handler.log_list
-                        }
-                    await instance.message_broker.async_send_response(message, return_value)
-                    return 
-                except Exception as ex:
-                    instance.logger.error("Thing {} with instance name {} produced error : {}.".format(
-                                                            instance.__class__.__name__, instance.instance_name, ex))
-                    return_value = dict(exception=format_exception_as_json(ex))
-                    if fetch_execution_logs:
-                        return_value["execution_logs"] = list_handler.log_list
-                    await instance.message_broker.async_send_response_with_message_type(message, 
-                                                                    b'EXCEPTION', return_value)
-                finally:
-                    if fetch_execution_logs:
-                        instance.logger.removeHandler(list_handler)
-
-   
-    async def execute_once(cls, instance : Thing, objekt : typing.Optional[str], operation : str,
-                               arguments : typing.Dict[str, typing.Any]) -> typing.Any:
-        if operation == b'readProperty':
-            prop = instance.properties[objekt] # type: Property
-            return getattr(instance, prop.name) 
-        elif operation == b'writeProperty':
-            prop = instance.properties[objekt] # type: Property
-            return prop.external_set(instance, arguments) # external set has state machine logic inside
-        elif operation == b'deleteProperty':
-            prop = instance.properties[objekt] # type: Property
-            del prop # raises NotImplementedError when deletion is not implemented which is mostly the case
-        elif operation == b'invokeAction':
-            action = instance.actions[objekt] # type: Action
-            args = arguments.pop('__args__', tuple())
-            # arguments then become kwargs
-            if action.execution_info.iscoroutine:
-                return await action.external_call(*args, **arguments) 
-            else:
-                return action.external_call(*args, **arguments) 
-        elif operation == b'readMultipleProperties' or operation == b'readAllProperties':
-            if objekt is None:
-                return instance._get_properties()
-            return instance._get_properties(names=objekt)
-        elif operation == b'writeMultipleProperties' or operation == b'writeAllProperties':
-            return instance._set_properties(arguments)
-        # elif operation == b'dataResponse': # no operation defined yet for dataResponse to events in Thing Description
-        #     from .events import CriticalEvent
-        #     event = instance.events[objekt] # type: CriticalEvent, this name "CriticalEvent" needs to change, may be just plain Event
-        #     return event._set_acknowledgement(**arguments)
-        raise NotImplementedError("Unimplemented execution path for Thing {} for operation {}".format(
-                                                                        instance.instance_name, operation))
+    async def _handshake(self, 
+                        request_message: RequestMessage,
+                        origin_socket: zmq.Socket
+                    ) -> None:
+        response_message = ResponseMessage.craft_with_message_type(
+                                            request_message=request_message,
+                                            message_type=HANDSHAKE
+                                        )
+        
+        await origin_socket.send_multipart(response_message.byte_array)
+        self.logger.info("sent handshake to client '{}'".format(request_message.sender_id))
 
 
     def run_external_message_listener(self):
@@ -456,9 +458,9 @@ class RPCServer(BaseZMQServer):
         futures.append(self.tunnel_message_to_things())
         self.logger.info("starting external message listener thread")
         self.request_listener_loop.run_until_complete(asyncio.gather(*futures))
-        pending_tasks = asyncio.all_tasks(self.request_listener_loop)
-        self.request_listener_loop.run_until_complete(asyncio.gather(*pending_tasks))
-        self.logger.info("exiting external listener event loop {}".format(self.instance_name))
+        # pending_tasks = asyncio.all_tasks(self.request_listener_loop)
+        # self.request_listener_loop.run_until_complete(asyncio.gather(*pending_tasks))
+        self.logger.info("exiting external listener event loop {}".format(self.id))
         self.request_listener_loop.close()
     
 
@@ -470,13 +472,67 @@ class RPCServer(BaseZMQServer):
         """
         thing_executor_loop = get_current_async_loop()
         self.thing_executor_loop = thing_executor_loop # atomic assignment for thread safety
-        self.logger.info(f"starting thing executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in things]}")
+        self.logger.info(f"starting thing executor loop in thread {threading.get_ident()} for {[obj.id for obj in things]}")
         thing_executor_loop.run_until_complete(
             asyncio.gather(*[self.run_single_target(instance) for instance in things])
         )
         self.logger.info(f"exiting event loop in thread {threading.get_ident()}")
         thing_executor_loop.close()
 
+
+    async def poll(self):
+        """
+        poll for messages and append them to messages list to pass them to ``Eventloop``/``Thing``'s inproc 
+        server using an inner inproc client. Registers the messages for timeout calculation.
+        """
+        self.stop_poll = False
+        self.eventloop = asyncio.get_event_loop()
+        if self.inproc_server:
+            self.eventloop.call_soon(lambda : asyncio.create_task(self.recv_requests(self.inproc_server)))
+        if self.ipc_server:
+            self.eventloop.call_soon(lambda : asyncio.create_task(self.recv_requests(self.ipc_server)))
+        if self.tcp_server:
+            self.eventloop.call_soon(lambda : asyncio.create_task(self.recv_requests(self.tcp_server)))
+       
+
+    def stop_polling(self):
+        """
+        stop polling method ``poll()``
+        """
+        # self.stop_poll = True
+        # instance._messages_event.set()
+        # if self.inproc_server is not None:
+        #     def kill_inproc_server(id, context, logger):
+        #         # this function does not work when written fully async - reason is unknown
+        #         try: 
+        #             event_loop = asyncio.get_event_loop()
+        #         except RuntimeError:
+        #             event_loop = asyncio.new_event_loop()
+        #             asyncio.set_event_loop(event_loop)
+        #         temp_inproc_client = AsyncZMQClient(server_id=id,
+        #                                     identity=f'{self.id}-inproc-killer',
+        #                                     context=context, client_type=PROXY, transport=ZMQ_TRANSPORTS.INPROC, 
+        #                                     logger=logger) 
+        #         event_loop.run_until_complete(temp_inproc_client.handshake_complete())
+        #         event_loop.run_until_complete(temp_inproc_client.socket.send_multipart(temp_inproc_client.craft_empty_message_with_type(EXIT)))
+        #         temp_inproc_client.exit()
+        #     threading.Thread(target=kill_inproc_server, args=(self.id, self.context, self.logger), daemon=True).start()
+        # if self.ipc_server is not None:
+        #     temp_client = SyncZMQClient(server_id=self.id, identity=f'{self.id}-ipc-killer',
+        #                             client_type=PROXY, transport=ZMQ_TRANSPORTS.IPC, logger=self.logger) 
+        #     temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
+        #     temp_client.exit()
+        # if self.tcp_server is not None:
+        #     socket_address = self.tcp_server.socket_address
+        #     if '/*:' in self.tcp_server.socket_address:
+        #         socket_address = self.tcp_server.socket_address.replace('*', 'localhost')
+        #     # print("TCP socket address", self.tcp_server.socket_address)
+        #     temp_client = SyncZMQClient(server_id=self.id, identity=f'{self.id}-tcp-killer',
+        #                             client_type=PROXY, transport=ZMQ_TRANSPORTS.TCP, logger=self.logger,
+        #                             socket_address=socket_address)
+        #     temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
+        #     temp_client.exit()   
+        raise NotImplementedError("stop_polling() not implemented yet")
 
     def exit(self):
         self.stop_poll = True
@@ -500,7 +556,7 @@ class RPCServer(BaseZMQServer):
             pass 
         # if self._terminate_context:
         #     self.context.term()
-        self.logger.info("terminated context of socket '{}' of type '{}'".format(self.instance_name, self.__class__))
+        self.logger.info("terminated context of socket '{}' of type '{}'".format(self.id, self.__class__))
 
 
     async def handshake_complete(self):
@@ -573,7 +629,7 @@ class RPCServer(BaseZMQServer):
         and add to the event loop
         """
         consumer = self.uninstantiated_things[id]
-        instance = consumer(**kwargs, eventloop_name=self.instance_name) # type: Thing
+        instance = consumer(**kwargs, eventloop_name=self.id) # type: Thing
         self.things.append(instance)
         rpc_server = instance.rpc_server
         self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.poll()))
@@ -793,7 +849,7 @@ __all__ = [
 class ZMQServer:
     
 
-    def __init__(self, *, instance_name : str, 
+    def __init__(self, *, id : str, 
                 things : typing.Union[Thing, typing.List[typing.Union[Thing]]], # type: ignore - requires covariant types
                 protocols : typing.Union[ZMQ_TRANSPORTS, str, typing.List[ZMQ_TRANSPORTS]] = ZMQ_TRANSPORTS.IPC, 
                 poll_timeout = 25, context : typing.Union[zmq.asyncio.Context, None] = None, 
@@ -810,14 +866,14 @@ class ZMQServer:
         
         # initialise every externally visible protocol          
         if ZMQ_TRANSPORTS.TCP in protocols or "TCP" in protocols:
-            self.tcp_server = AsyncZMQServer(instance_name=self.instance_name, server_type=ServerTypes.RPC, 
-                                    context=self.context, protocol=ZMQ_TRANSPORTS.TCP, poll_timeout=poll_timeout, 
+            self.tcp_server = AsyncZMQServer(id=self.id, server_type=ServerTypes.RPC, 
+                                    context=self.context, transport=ZMQ_TRANSPORTS.TCP, poll_timeout=poll_timeout, 
                                     socket_address=tcp_socket_address, **kwargs)
             self.poller.register(self.tcp_server.socket, zmq.POLLIN)
             event_publisher_protocol = ZMQ_TRANSPORTS.TCP
         if ZMQ_TRANSPORTS.IPC in protocols or "IPC" in protocols: 
-            self.ipc_server = AsyncZMQServer(instance_name=self.instance_name, server_type=ServerTypes.RPC, 
-                                    context=self.context, protocol=ZMQ_TRANSPORTS.IPC, poll_timeout=poll_timeout, **kwargs)
+            self.ipc_server = AsyncZMQServer(id=self.id, server_type=ServerTypes.RPC, 
+                                    context=self.context, transport=ZMQ_TRANSPORTS.IPC, poll_timeout=poll_timeout, **kwargs)
             self.poller.register(self.ipc_server.socket, zmq.POLLIN)
             event_publisher_protocol = ZMQ_TRANSPORTS.IPC if not event_publisher_protocol else event_publisher_protocol           
             event_publisher_protocol = "IPC" if not event_publisher_protocol else event_publisher_protocol    
