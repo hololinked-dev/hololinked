@@ -17,7 +17,7 @@ from hololinked.server.serializers import Serializers
 from hololinked.server.utils import get_current_async_loop, get_default_logger
 from hololinked.server.dataklasses import ZMQAction, ZMQResource
 # from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes
-from hololinked.server.rpc_server import RPCServer
+from hololinked.server.protocols.zmq.rpc_server import RPCServer
 from hololinked.client.proxy import _Action, _Property
 
 
@@ -75,7 +75,7 @@ class TestBroker(MessageValidatorMixin):
         
 
     @classmethod
-    def start_server(self):
+    def startServer(self):
         self._server_thread = threading.Thread(
                                             target=run_server, 
                                             args=(self.server, self, self.done_queue),
@@ -95,7 +95,7 @@ class TestBroker(MessageValidatorMixin):
         self.last_server_message = None
         self.setUpServer()
         self.setUpClient()
-        self.start_server()
+        self.startServer()
 
 
     @classmethod
