@@ -215,7 +215,7 @@ class RequestMessage:
     def __init__(self, msg : typing.List[bytes]) -> None:
         self._bytes = msg  
         self._header = None # deserialized header
-        self._body = None  # deserialized body
+        self._body = None  # type: typing.Optional[typing.Tuple[SerializableData, PreserializedData]]
         self._sender_id = None
 
     @property
@@ -283,7 +283,7 @@ class RequestMessage:
         return self.header['thingExecutionContext']
 
     @property
-    def thing_execution_info(self) -> typing.Tuple[str, str, str, typing.Any, bytes, typing.Dict[str, typing.Any]]:
+    def thing_execution_info(self) -> typing.Tuple[str, str, str, SerializableData, PreserializedData, typing.Dict[str, typing.Any]]:
         """thing execution info"""
         return self.header['thingID'], self.header['objekt'], self.header['operation'], self.body[0], self.body[1], self.header['thingExecutionContext']
     

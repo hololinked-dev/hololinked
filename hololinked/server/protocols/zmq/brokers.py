@@ -77,8 +77,6 @@ class BaseZMQ:
         **kwargs: dict
             - socket_address: str,
                 applicable only for TCP socket to find the correct socket to connect 
-            - log_level: int,
-                logging.Logger log level if no logger previously created
 
         Returns
         -------
@@ -99,7 +97,7 @@ class BaseZMQ:
         socket.setsockopt_string(zmq.IDENTITY, id)
         socket_address = kwargs.get('socket_address', None)
         bind = node_type == 'server'
-        if transport == ZMQ_TRANSPORTS.IPC or transport == "IPC":
+        if transport == ZMQ_TRANSPORTS.IPC or transport.lower() == "ipc":
             if socket_address is None or not socket_address.endswith('.ipc'):
                 if not socket_address:
                     split_id = id.split('/')
@@ -115,7 +113,7 @@ class BaseZMQ:
                 socket.bind(socket_address)
             else:
                 socket.connect(socket_address)
-        elif transport == ZMQ_TRANSPORTS.TCP or transport == "TCP":
+        elif transport == ZMQ_TRANSPORTS.TCP or transport.lower() == "tcp":
             if bind:
                 if not socket_address:
                     for i in range(global_config.TCP_SOCKET_SEARCH_START_PORT, global_config.TCP_SOCKET_SEARCH_END_PORT):
@@ -132,7 +130,7 @@ class BaseZMQ:
                 socket.connect(socket_address)
             else:
                 raise RuntimeError(f"Socket address not supplied for TCP connection to identity - {id}")
-        elif transport == ZMQ_TRANSPORTS.INPROC or transport == "INPROC":
+        elif transport == ZMQ_TRANSPORTS.INPROC or transport.lower() == "inproc":
             # inproc_id = id.replace('/', '_').replace('-', '_')
             if socket_address is None:
                 socket_address = f'inproc://{id}'
@@ -143,7 +141,7 @@ class BaseZMQ:
             else:
                 socket.connect(socket_address)
         else:
-            raise NotImplementedError("transports other than IPC, TCP & INPROC are not implemented now for {}".format(self.__class__) + 
+            raise NotImplementedError("transports other than IPC, TCP & INPROC are not implemented now for {}.".format(cls.__name__) + 
                                             f" Given transport {transport}.")
         
         return socket, socket_address

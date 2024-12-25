@@ -19,8 +19,8 @@ from ...exceptions import BreakLoop
 from ...utils import format_exception_as_json, get_current_async_loop, get_default_logger
 from ...config import global_config
 from ...exceptions import *
-from .message import (ERROR, HANDSHAKE, INVALID_MESSAGE, TIMEOUT,
-                                ResponseMessage, RequestMessage)
+from .message import (EMPTY_BYTE, ERROR, HANDSHAKE, INVALID_MESSAGE, TIMEOUT, PreserializedData,
+                                ResponseMessage, RequestMessage, SerializableData)
 from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
 from ...thing import Thing, ThingMeta
 from ...property import Property
@@ -268,9 +268,15 @@ class RPCServer(BaseZMQServer):
                 continue 
 
             # send reply to client
+            if isinstance(reply, tuple) and len(reply) == 2 and isinstance(reply[1], PreserializedData):
+                payload, preserialized_payload = reply
+            else:
+                payload = reply
+                preserialized_payload = PreserializedData(EMPTY_BYTE, 'text/plain')
             response_message = ResponseMessage.craft_reply_from_request(
                                             request_message=request_message,
-                                            payload=reply
+                                            payload=payload,
+                                            preserialized_payload=preserialized_payload
                                         )
             await origin_socket.send_multipart(response_message.byte_array)    
         self.logger.info("stopped tunneling messages to things")
@@ -282,27 +288,40 @@ class RPCServer(BaseZMQServer):
             instance._message_execution_event.clear()
             instance._last_operation_reply = Undefined
             operation_request = instance._last_operation_request 
-            if operation_request is Undefined:
-                raise RuntimeError("No operation request found in thing '{}'".format(instance.id))
-
-            thing_id, objekt, operation, payload, preserialized_payload, execution_context = operation_request  
-            instance.logger.debug(f"thing {instance.id} with {thing_id} starting execution of operation {operation} on {objekt}")
-
-            fetch_execution_logs = execution_context.pop("fetch_execution_logs", False)
-            if fetch_execution_logs:
-                list_handler = ListHandler([])
-                list_handler.setLevel(logging.DEBUG)
-                list_handler.setFormatter(instance.logger.handlers[0].formatter)
-                instance.logger.addHandler(list_handler)
             try:
+                # operation_request is a tuple of (thing_id, objekt, operation, payload, preserialized_payload, execution_context)
+                # fetch it
+                if operation_request is Undefined:
+                    raise RuntimeError("No operation request found in thing '{}'".format(instance.id))
+                thing_id, objekt, operation, payload, preserialized_payload, execution_context = operation_request 
+
+                # deserializing the payload required to execute the operation
+                payload: SerializableData 
+                preserialized_payload: PreserializedData
+                payload = payload.deserialize() # deserializing the payload
+                preserialized_payload = preserialized_payload.value
+                instance.logger.debug(f"thing {instance.id} with {thing_id} starting execution of operation {operation} on {objekt}")
+
+                # start activities related to thing execution context
+                fetch_execution_logs = execution_context.pop("fetch_execution_logs", False)
+                if fetch_execution_logs:
+                    list_handler = ListHandler([])
+                    list_handler.setLevel(logging.DEBUG)
+                    list_handler.setFormatter(instance.logger.handlers[0].formatter)
+                    instance.logger.addHandler(list_handler)
+
+                # execute the operation
                 return_value = await self.execute_once(instance, objekt, operation, payload, preserialized_payload) 
+
+                # complete thing execution context
                 if fetch_execution_logs:
                     return_value = {
                         "return_value" : return_value,
                         "execution_logs" : list_handler.log_list
                     }
-                await instance._last_operation_request = return_value
+                instance._last_operation_request = return_value
             except (BreakInnerLoop, BreakAllLoops):
+                # exit the loop and stop the thing
                 instance.logger.info("Thing {} with instance name {} exiting event loop.".format(
                                                         instance.__class__.__name__, instance.id))
                 return_value = None
@@ -314,6 +333,7 @@ class RPCServer(BaseZMQServer):
                 instance._last_operation_reply = return_value
                 return 
             except Exception as ex:
+                # error occurred while executing the operation
                 instance.logger.error("Thing {} with ID {} produced error : {}.".format(
                                                         instance.__class__.__name__, instance.id, ex))
                 return_value = dict(exception=format_exception_as_json(ex))
@@ -321,8 +341,10 @@ class RPCServer(BaseZMQServer):
                     return_value["execution_logs"] = list_handler.log_list
                 instance._last_operation_reply = return_value
             finally:
+                # send reply
                 instance._last_operation_request = Undefined
                 instance._message_execution_event.set()
+                # cleanup
                 if fetch_execution_logs:
                     instance.logger.removeHandler(list_handler)
 
@@ -339,7 +361,10 @@ class RPCServer(BaseZMQServer):
             return getattr(instance, prop.name) 
         elif operation == 'writeProperty':
             prop = instance.properties[objekt] # type: Property
-            return prop.external_set(instance, payload) # external set has state machine logic inside
+            final_payload = payload
+            if preserialized_payload != EMPTY_BYTE:
+                final_payload = preserialized_payload
+            return prop.external_set(instance, final_payload)
         elif operation == 'deleteProperty':
             prop = instance.properties[objekt] # type: Property
             del prop # raises NotImplementedError when deletion is not implemented which is mostly the case
@@ -347,8 +372,10 @@ class RPCServer(BaseZMQServer):
             action = instance.actions[objekt] # type: Action
             args = payload.pop('__args__', tuple())
             # payload then become kwargs
+            if preserialized_payload != EMPTY_BYTE:
+                args = (preserialized_payload,) + args
             if action.execution_info.iscoroutine:
-                return await action.external_call(*args, **payload) 
+                return await action.external_call(*args, **payload)
             else:
                 return action.external_call(*args, **payload) 
         elif operation == 'readMultipleProperties' or operation == 'readAllProperties':
@@ -357,12 +384,8 @@ class RPCServer(BaseZMQServer):
             return instance._get_properties(names=objekt)
         elif operation == 'writeMultipleProperties' or operation == 'writeAllProperties':
             return instance._set_properties(payload)
-        # elif operation == b'dataResponse': # no operation defined yet for dataResponse to events in Thing Description
-        #     from .events import CriticalEvent
-        #     event = instance.events[objekt] # type: CriticalEvent, this name "CriticalEvent" needs to change, may be just plain Event
-        #     return event._set_acknowledgement(**payload)
         raise NotImplementedError("Unimplemented execution path for Thing {} for operation {}".format(
-                                                                        instance.id, operation))
+                                                                            instance.id, operation))
 
 
     async def process_timeouts(self, 
