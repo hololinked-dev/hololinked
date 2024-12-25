@@ -7,6 +7,7 @@ from uuid import UUID
 
 
 
+from hololinked.server.constants import ResourceTypes
 from hololinked.server.exceptions import BreakLoop
 from hololinked.server.protocols.zmq.message import (ERROR, EXIT, OPERATION, HANDSHAKE, REPLY, 
                                             PreserializedData, RequestHeader, RequestMessage, SerializableData) # client to server
@@ -219,7 +220,59 @@ class TestAsyncZMQServer(TestBroker):
         self.assertEqual(self.server.poll_timeout, 1000)        
 
 
-    def test_4_exit(self):
+    def test_4_abstractions(self):
+        """
+        Once message types are checked, operations need to be checked. But exeuction of operations on the server 
+        are implemeneted by event loop so that we skip that here. We check abstractions of message type and operation to a 
+        higher level object, and said higher level object should send the message and message should have 
+        been received by the server.
+        """
+        self._test_action_call_abstraction()
+        # self._test_property_abstraction()
+
+
+    def _test_action_call_abstraction(self):
+        """
+        Higher level action object should be able to send messages to server
+        """
+        resource_info = ZMQResource(
+                            what=ResourceTypes.ACTION, 
+                            class_name='TestThing', 
+                            id='test-thing',
+                            obj_name='test_echo', 
+                            qualname='TestThing.test_echo', 
+                            doc="returns value as it is to the client",
+                            request_as_argument=False
+                        )
+        action_abstractor = _Action(
+                                sync_client=self.client,
+                                resource_info=resource_info,
+                                invokation_timeout=5, 
+                                execution_timeout=5, 
+                                async_client=None, 
+                                schema_validator=None
+                            )
+        action_abstractor.oneway() # because we dont have a thing running
+        self.client.handshake() # force a response from server so that last_server_message is set
+        # self.check_client_message(self.last_server_message) # last message received by server which is the client message
+
+
+    def _test_property_abstraction(self):
+        """
+        Higher level property object should be able to send messages to server
+        """
+        resource_info = ZMQResource(what=ResourceTypes.PROPERTY, class_name='TestThing', instance_name='test-thing',
+                    obj_name='test_prop', qualname='TestThing.test_prop', doc="a random property",
+                    request_as_argument=False)
+        property_abstractor = _Property(sync_client=self.client_message_broker, resource_info=resource_info,
+                    invokation_timeout=5, execution_timeout=5, async_client=None)
+        property_abstractor.oneway_set(5) # because we dont have a thing running
+        self.client_message_broker.handshake() # force a response from server so that last_server_message is set
+        self.check_client_message(self.last_server_message) # last message received by server which is the client message
+
+
+
+    def test_5_exit(self):
         """
         Test if exit reaches to server
         """

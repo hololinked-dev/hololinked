@@ -233,8 +233,8 @@ class ZMQResource(SerializableDataclass):
 
     what : str
         is it a property, method/action or event?
-    instance_name : str
-        The ``instance_name`` of the thing which owns the resource. Used by ZMQ client to inform 
+    id : str
+        The ``id`` of the thing which owns the resource. Used by ZMQ client to inform 
         message brokers to send the message to the correct recipient.
     name : str
         the name of the resource (__name__)
@@ -247,17 +247,17 @@ class ZMQResource(SerializableDataclass):
     """
     what : str 
     class_name : str # just metadata
-    instance_name : str 
+    id : str 
     obj_name : str # what looks on the client & the ID of the resource on the server
     qualname : str # qualified name to use by the client 
     doc : typing.Optional[str] 
     request_as_argument : bool = field(default=False)
 
-    def __init__(self, *, what : str, class_name : str, instance_name : str, obj_name : str,
+    def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
                 qualname : str, doc : str, request_as_argument : bool = False) -> None:
         self.what = what 
         self.class_name = class_name
-        self.instance_name = instance_name
+        self.id = id
         self.obj_name = obj_name 
         self.qualname = qualname
         self.doc = doc
@@ -275,8 +275,8 @@ class ZMQResource(SerializableDataclass):
     @is_client_representation.setter
     def is_client_representation(self, value):
         if value:
-            self.obj_name = bytes(self.obj_name, encoding='utf-8')
-            self.instance_name = bytes(self.instance_name, encoding='utf-8')
+            self.obj_name = self.obj_name
+            self.id = self.id
             self._is_client_representation = True
 
 
@@ -285,10 +285,10 @@ class ZMQAction(ZMQResource):
     argument_schema : typing.Optional[JSON] = field(default=None)
     return_value_schema : typing.Optional[JSON] = field(default=None)
 
-    def __init__(self, *, what : str, class_name : str, instance_name : str, obj_name : str,
+    def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
                 qualname : str, doc : str, argument_schema : typing.Optional[JSON] = None,
                 return_value_schema : typing.Optional[JSON] = None, request_as_argument : bool = False) -> None:
-        super(ZMQAction, self).__init__(what=what, class_name=class_name, instance_name=instance_name, obj_name=obj_name,
+        super(ZMQAction, self).__init__(what=what, class_name=class_name, id=id, obj_name=obj_name,
                         qualname=qualname, doc=doc, request_as_argument=request_as_argument)
         self.argument_schema = argument_schema
         self.return_value_schema = return_value_schema
@@ -317,10 +317,10 @@ class ZMQEvent(ZMQResource):
     serialization_specific : bool = field(default=False)
     socket_address : str = field(default=UNSPECIFIED)
 
-    def __init__(self, *, what : str, class_name : str, instance_name : str, obj_name : str,
+    def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
                 friendly_name : str, qualname : str, unique_identifier : str, 
                 serialization_specific : bool = False, socket_address : str, doc : str) -> None:
-        super(ZMQEvent, self).__init__(what=what, class_name=class_name, instance_name=instance_name, obj_name=obj_name,
+        super(ZMQEvent, self).__init__(what=what, class_name=class_name, id=id, obj_name=obj_name,
                         qualname=qualname, doc=doc, request_as_argument=False)  
         self.friendly_name = friendly_name
         self.unique_identifier = unique_identifier
@@ -368,9 +368,9 @@ def get_organised_resources(instance):
     # The following dict will be used by the event loop
     # create unique identifier for the instance
     if instance._owner is not None: 
-        instance._qualified_instance_name = f'{instance._owner._qualified_instance_name}.{instance.instance_name}' 
+        instance._qualified_id = f'{instance._owner._qualified_id}.{instance.id}' 
     else:
-        instance._qualified_instance_name = instance.instance_name
+        instance._qualified_id = instance.id
 
     # First add methods and callables
     # properties
@@ -387,7 +387,7 @@ def get_organised_resources(instance):
         zmq_resources[execution_info.obj_name] = ZMQResource(
                                     what=ResourceTypes.PROPERTY, 
                                     class_name=instance.__class__.__name__,
-                                    instance_name=instance.instance_name, 
+                                    id=instance.id, 
                                     obj_name=execution_info.obj_name,
                                     qualname=instance.__class__.__name__ + '.' + execution_info.obj_name,
                                     doc=prop.__doc__
@@ -398,14 +398,14 @@ def get_organised_resources(instance):
             continue
         # observable properties
         assert isinstance(prop._observable_event_descriptor, Event), f"observable event not yet set for {prop.name}. logic error."
-        unique_identifier = f"{instance._qualified_instance_name}/{pep8_to_dashed_name(prop._observable_event_descriptor.friendly_name)}"
+        unique_identifier = f"{instance._qualified_id}/{pep8_to_dashed_name(prop._observable_event_descriptor.friendly_name)}"
         dispatcher = EventDispatcher(unique_identifier=unique_identifier, publisher=prop._observable_event_descriptor._publisher)
         prop._observable_event_descriptor.__set__(instance, dispatcher)
         prop._observable_event_descriptor.publisher.register(dispatcher)     
         remote_info = ZMQEvent(
                                 what=ResourceTypes.EVENT,
                                 class_name=instance.__class__.__name__,
-                                instance_name=instance.instance_name,
+                                id=instance.id,
                                 obj_name=prop._observable_event_descriptor.name,
                                 friendly_name=prop._observable_event_descriptor.friendly_name,
                                 qualname=f'{instance.__class__.__name__}.{prop._observable_event_descriptor.name}',
@@ -434,7 +434,7 @@ def get_organised_resources(instance):
         zmq_resources[execution_info.obj_name] = ZMQAction(
                                         what=ResourceTypes.ACTION,
                                         class_name=instance.__class__.__name__,
-                                        instance_name=instance.instance_name,
+                                        id=instance.id,
                                         obj_name=getattr(action, '__name__'),
                                         qualname=getattr(action, '__qualname__'), 
                                         doc=getattr(action, '__doc__'),
@@ -450,7 +450,7 @@ def get_organised_resources(instance):
         if getattr(instance, name, None):
             continue
         # above assertion is only a typing convenience
-        unique_identifier = f"{instance._qualified_instance_name}{pep8_to_dashed_name(evt.friendly_name)}"
+        unique_identifier = f"{instance._qualified_id}{pep8_to_dashed_name(evt.friendly_name)}"
         if unique_identifier in zmq_resources:
             raise ValueError(f"Duplicate resource name {unique_identifier} found in {instance.__class__.__name__}")
         dispatcher = EventDispatcher(unique_identifier=unique_identifier, publisher=evt._publisher)
@@ -459,7 +459,7 @@ def get_organised_resources(instance):
         remote_info = ZMQEvent(
                             what=ResourceTypes.EVENT,
                             class_name=instance.__class__.__name__,
-                            instance_name=instance.instance_name,
+                            id=instance.id,
                             obj_name=name,
                             friendly_name=evt.friendly_name,
                             qualname=f'{instance.__class__.__name__}.{name}',
@@ -480,12 +480,12 @@ def get_organised_resources(instance):
             continue
         resource._owner = instance      
         resource._prepare_resources() # trigger again after the owner has been set to make it work correctly
-        if resource._qualified_instance_name in zmq_resources:
-            raise ValueError(f"Duplicate resource name {resource.instance_name} found in {instance.__class__.__name__}")
-        zmq_resources[resource._qualified_instance_name] = ZMQResource(
+        if resource._qualified_id in zmq_resources:
+            raise ValueError(f"Duplicate resource name {resource.id} found in {instance.__class__.__name__}")
+        zmq_resources[resource._qualified_id] = ZMQResource(
                                                             what=ResourceTypes.THING,
                                                             class_name=resource.__class__.__name__,
-                                                            instance_name=resource.instance_name,
+                                                            id=resource.id,
                                                             obj_name=name,
                                                             qualname=f'{instance.__class__.__name__}.{resource.__class__.__name__}',
                                                             doc=resource.__doc__,

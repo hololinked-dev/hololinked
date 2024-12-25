@@ -26,6 +26,7 @@ class Action:
 
     def __init__(self, obj) -> None:
         self.obj = obj
+        
 
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
@@ -36,11 +37,12 @@ class Action:
         # the validator that was used to accept user inputs to this action.
         # stored only for reference, hardly used. 
         self._execution_info_validator : ActionInfoValidator
-        
+        self._execution_info : ActionResource
+      
     @property
     def execution_info(self) -> ActionResource:
         return self._execution_info
-    
+        
     @execution_info.setter
     def execution_info(self, value : ActionResource) -> None:
         if not isinstance(value, ActionResource):

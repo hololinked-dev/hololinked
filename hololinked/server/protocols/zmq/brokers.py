@@ -909,7 +909,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
             server_execution_context: ServerExecutionContext = default_server_execution_context,
             thing_execution_context: ThingExecutionContext = default_thing_execution_context,
-        ) -> typing.List[ResponseMessage]:
+        ) -> ResponseMessage:
         """
         send an operation and receive the response for it. 
 
@@ -1182,7 +1182,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                         preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
                         server_execution_context: ServerExecutionContext = default_server_execution_context, 
                         thing_execution_context: ThingExecutionContext = default_thing_execution_context
-                    ) -> typing.List[typing.Union[bytes, typing.Dict[str, typing.Any]]]: 
+                    ) -> ResponseMessage: 
         """
         send an operation and receive the response for it. 
 
@@ -1208,7 +1208,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             a byte representation of message id
         """
        
-        message_id = self.async_send_request(
+        message_id = await self.async_send_request(
                                         thing_id=thing_id, 
                                         objekt=objekt, 
                                         operation=operation, 
@@ -1728,7 +1728,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                 **kwargs
             ) -> None:
         super().__init__(id=id, **kwargs)
-        self.create_socket(identity=f'{id}/event-publisher', node_type='server', context=context,
+        self.create_socket(id=id, node_type='server', context=context,
                            transport=transport, socket_type=zmq.PUB, **kwargs)
         self.logger.info(f"created event publishing socket at {self.socket_address}")
         self.events = set() # type: typing.Set[EventDispatcher] 

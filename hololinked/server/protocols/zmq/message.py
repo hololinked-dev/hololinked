@@ -66,6 +66,8 @@ class SerializableData:
 
     def serialize(self):
         """serialize the value"""
+        if isinstance(self.value, byte_types):
+            return self.value
         if self.content_type == 'json' or self.content_type == 'application/json':
             return Serializers.json.dumps(self.value)
         elif self.content_type == 'pickle':
@@ -82,6 +84,8 @@ class SerializableData:
     
     def deserialize(self):
         """deserialize the value"""
+        if not isinstance(self.value, byte_types):
+            return self.value
         if self.content_type == 'json' or self.content_type == 'application/json':
             return Serializers.json.loads(self.value)
         elif self.content_type == 'pickle':
@@ -303,7 +307,7 @@ class RequestMessage:
         extract the body and deserialize payload and thing execution context
         """
         self._body = [
-            SerializableData(self._bytes[INDEX_BODY], self.header['payloadContentType']).deserialize(),
+            SerializableData(self._bytes[INDEX_BODY], self.header['payloadContentType']),
             PreserializedData(self._bytes[INDEX_PRESERIALIZED_BODY], self.header['preencodedPayloadContentType'])
         ]
 
@@ -488,12 +492,12 @@ class ResponseMessage:
         return self._body
     
     @property
-    def payload(self) -> typing.Any:
+    def payload(self) -> SerializableData:
         """Returns the payload of the message"""
         return self.body[0]
     
     @property
-    def preserialized_payload(self) -> bytes:
+    def preserialized_payload(self) -> PreserializedData:
         """Returns the pre-encoded payload of the message"""
         return self.body[1]
     
@@ -509,7 +513,7 @@ class ResponseMessage:
     def parse_body(self) -> None:
         """parse the body"""
         self._body = [
-            SerializableData(self._bytes[INDEX_BODY], self.header['payloadContentType']).deserialize(),
+            SerializableData(self._bytes[INDEX_BODY], self.header['payloadContentType']),
             PreserializedData(self._bytes[INDEX_PRESERIALIZED_BODY], self.header['preencodedPayloadContentType'])
         ]
 
@@ -563,7 +567,7 @@ class ResponseMessage:
            
 
     @classmethod
-    def craft_reply_from_request(self, 
+    def craft_reply_from_request(cls, 
                         request_message: RequestMessage, 
                         payload: SerializableData = SerializableData(None, 'application/json'),
                         preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
@@ -606,7 +610,7 @@ class ResponseMessage:
     
 
     @classmethod
-    def craft_with_message_type(
+    def craft_with_message_type(cls,
                         request_message: RequestMessage,
                         message_type: str,
                         payload: SerializableData = SerializableData(None, 'application/json'),
