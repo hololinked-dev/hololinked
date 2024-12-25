@@ -268,5 +268,3 @@ __all__ = [
     get_current_async_loop.__name__
 ]
 
-
-

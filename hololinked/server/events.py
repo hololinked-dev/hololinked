@@ -132,15 +132,6 @@ class EventDispatcher:
                                 http_clients=kwargs.get('http_clients', True), serialize=serialize)
 
 
-    # class CriticalEvent(Event):
-    #     """
-    #     Push events to client and get acknowledgement for that
-    #     """
-
-    #     def __init__(self, name : str) -> None:
-    #         super().__init__(name)
-    #         self._synchronize_event = threading.Event()
-
     def receive_acknowledgement(self, timeout : typing.Union[float, int, None]) -> bool:
         """
         Receive acknowlegement for event receive. When the timeout argument is present and not None, 
@@ -193,7 +184,11 @@ class EventSource:
                 change_events[name] = evt
             setattr(self, f'_{self.instance_name}_change_events', change_events)
             return change_events
-        
+    
+    @property   
+    def observables(self):
+        raise NotImplementedError("observables property not implemented yet")
+    
     @property
     def event_publisher(self) -> EventPublisher:
         """
