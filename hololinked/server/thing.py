@@ -15,7 +15,7 @@ from hololinked.server.protocols.zmq.message import RequestMessage
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
 from .constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
-from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
+from .serializers import set_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .utils import get_default_logger, getattr_without_descriptor_read
 from .exceptions import BreakInnerLoop
 from .protocols.zmq.brokers import AsyncZMQClient, ServerTypes, AsyncZMQServer
@@ -99,17 +99,17 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                         doc="""logging.Logger instance to print log messages. Default 
                             logger with a IO-stream handler and network accessible handler is created 
                             if none supplied.""") # type: logging.Logger
-    zmq_serializer = ClassSelector(class_=(BaseSerializer, str),
-                        allow_None=True, default='json', remote=False,
-                        doc="""Serializer used for exchanging messages with ZMQ clients. Subclass the base serializer 
-                        or one of the available serializers to implement your own serialization requirements; or, register 
-                        type replacements. Default is JSON. Some serializers like MessagePack improve performance many times 
-                        compared to JSON and can be useful for data intensive applications within python.""") # type: BaseSerializer
-    http_serializer = ClassSelector(class_=(JSONSerializer, str), default=None, allow_None=True, remote=False,
-                        doc="""Serializer used for exchanging messages with a HTTP clients,
-                            subclass JSONSerializer to implement your own JSON serialization requirements; or, 
-                            register type replacements. Other types of serializers are currently not allowed for HTTP clients.""") # type: JSONSerializer
-    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True,
+    # zmq_serializer = ClassSelector(class_=(BaseSerializer, str), 
+    #                     allow_None=True, default='json', remote=False,
+    #                     doc="""Serializer used for exchanging messages with ZMQ clients. Subclass the base serializer 
+    #                     or one of the available serializers to implement your own serialization requirements; or, register 
+    #                     type replacements. Default is JSON. Some serializers like MessagePack improve performance many times 
+    #                     compared to JSON and can be useful for data intensive applications within python.""") # type: BaseSerializer
+    # http_serializer = ClassSelector(class_=(JSONSerializer, str), default=None, allow_None=True, remote=False,
+    #                     doc="""Serializer used for exchanging messages with a HTTP clients,
+    #                         subclass JSONSerializer to implement your own JSON serialization requirements; or, 
+    #                         register type replacements. Other types of serializers are currently not allowed for HTTP clients.""") # type: JSONSerializer
+    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True, 
                         remote=False, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
     
@@ -186,7 +186,8 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self._zmq_messages_event = None # type: typing.Optional[asyncio.Event]
         self._last_operation_request = None # type: typing.Tuple[str, str, str, typing.Any, bytes, typing.Dict[str, typing.Any]]
         self._last_operation_reply = None 
-        self._message_execution_event = None # type: threading.Event
+        self._request_execution_ready_event = None # type: threading.Event
+        self._request_execution_complete_event = None # type: threading.Event
         self.rpc_server  = None 
         # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
@@ -194,8 +195,8 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                             "for protocol specific implementations, use zmq_serializer, http_serializer, {protocol}_serializer keyword arguments.")
         zmq_serializer = serializer or kwargs.pop('zmq_serializer', 'json')
         http_serializer = serializer if isinstance(serializer, JSONSerializer) else kwargs.pop('http_serializer', 'json')
-        zmq_serializer, http_serializer = _get_serializer_from_user_given_options(zmq_serializer=zmq_serializer,
-                                                                    http_serializer=http_serializer)
+        # zmq_serializer, http_serializer = _get_serializer_from_user_given_options(zmq_serializer=zmq_serializer,
+        #                                                             http_serializer=http_serializer)
          
         Parameterized.__init__(self, id=id, logger=logger, 
                         zmq_serializer=zmq_serializer, http_serializer=http_serializer, **kwargs)

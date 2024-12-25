@@ -8,7 +8,7 @@ from .properties import *
 from .property import Property
 from .thing import Thing
 from .state_machine import StateMachine
-from .zmq_server import EventLoop
+# from .protocols.zmq.rpc_server import EventLoop
 
 
 @dataclass
@@ -746,7 +746,7 @@ class ThingDescription(Schema):
 
     def produce(self) -> JSON: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
-        self.id = f"{self.authority}/{self.instance.instance_name}"
+        self.id = f"{self.authority}/{self.instance.id}"
         self.title = self.instance.__class__.__name__ 
         self.description = Schema.format_doc(self.instance.__doc__) if self.instance.__doc__ else "no class doc provided" 
         self.properties = dict()
@@ -821,7 +821,7 @@ class ThingDescription(Schema):
     
     def add_links(self):
         for name, resource in self.instance.sub_things.items():
-            if resource is self.instance or isinstance(resource, EventLoop):
+            if resource is self.instance: # or isinstance(resource, EventLoop):
                 continue
             if self.links is None:
                 self.links = []
