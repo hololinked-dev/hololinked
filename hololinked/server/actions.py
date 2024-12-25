@@ -27,7 +27,6 @@ class Action:
     def __init__(self, obj) -> None:
         self.obj = obj
         
-
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
         from .thing import Thing, ThingMeta
@@ -100,8 +99,13 @@ class AsyncAction(Action):
 
 
    
-def action(input_schema : JSON | None = None, output_schema : JSON | None = None, 
-        state : str | Enum | None = None, create_task : bool = False, **kwargs) -> Action:
+def action(
+        input_schema : JSON | None = None, 
+        output_schema : JSON | None = None, 
+        state : str | Enum | None = None, 
+        create_task : bool = False, 
+        **kwargs
+    ) -> Action:
     """
     decorate on your methods with this function to make them accessible remotely or create 'actions' out of them. 
     

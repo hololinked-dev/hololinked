@@ -202,12 +202,10 @@ def get_socket_type_name(socket_type):
 class Operations(StrEnum):
     readProperty = 'readProperty'
     writeProperty = 'writeProperty'
+    deleteProperty = 'deleteProperty'
     invokeAction = 'invokeAction'
-
-class bOperations:
-    readProperty = bytes('readProperty', encoding='utf-8')
-    writeProperty = bytes('writeProperty', encoding='utf-8')
-    invokeAction = bytes('invokeAction', encoding='utf-8')
+    subscribeEvent = 'subscribeEvent'
+    unsubscribeEvent = 'unsubscribeEvent'
 
 
 __all__ = [

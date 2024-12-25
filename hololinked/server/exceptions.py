@@ -32,4 +32,11 @@ class DatabaseError(Exception):
 
 
 
-__all__ = ['BreakInnerLoop', 'BreakAllLoops', 'StateMachineError']
+__all__ = [
+    'BreakInnerLoop', 
+    'BreakAllLoops', 
+    'BreakLoop', 
+    'BreakFlow',
+    'StateMachineError', 
+    'DatabaseError' 
+]

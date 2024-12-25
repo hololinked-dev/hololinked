@@ -11,14 +11,13 @@ import warnings
 import zmq
 import zmq.asyncio
 
-from hololinked.server.protocols.zmq.message import RequestMessage
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
 from .constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
-from .serializers import set_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .utils import get_default_logger, getattr_without_descriptor_read
-from .exceptions import BreakInnerLoop
-from .protocols.zmq.brokers import AsyncZMQClient, ServerTypes, AsyncZMQServer
+from .exceptions import *
+from .serializers import set_serializer_from_user_given_options, BaseSerializer, JSONSerializer
+from .protocols.zmq import EventPublisher, RPCServer
 from .database import ThingDB, ThingInformation
 from .dataklasses import ZMQResource, build_our_temp_TD, get_organised_resources
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
@@ -183,12 +182,13 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self._internal_fixed_attributes : typing.List[str]
         self._qualified_id : str
         self._zmq_messages = None # type: typing.Optional[deque]
-        self._zmq_messages_event = None # type: typing.Optional[asyncio.Event]
+        self._zmq_message_arrived_event = None # type: typing.Optional[asyncio.Event]
         self._last_operation_request = None # type: typing.Tuple[str, str, str, typing.Any, bytes, typing.Dict[str, typing.Any]]
         self._last_operation_reply = None 
         self._request_execution_ready_event = None # type: threading.Event
         self._request_execution_complete_event = None # type: threading.Event
-        self.rpc_server  = None 
+        self.rpc_server = None # type: typing.Optional[RPCServer]
+        self.event_publisher = None # type: typing.Optional[EventPublisher] 
         # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
             raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
@@ -449,6 +449,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         organised postman collection for this object
         """
+        raise NotImplementedError("this method will be implemented properly in a future release")
         from .api_platforms import postman_collection
         return postman_collection.build(instance=self,
                     domain_prefix=domain_prefix if domain_prefix is not None else self._object_info.http_server)
@@ -593,7 +594,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         
 
         if kwargs.get('http_server', None):
-            from .HTTPServer import HTTPServer
+            from .protocols.http.HTTPServer import HTTPServer
             httpserver = kwargs.pop('http_server')
             assert isinstance(httpserver, HTTPServer)
             httpserver.add_things(self)
@@ -642,7 +643,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # host: str
         #     Host Server to subscribe to coordinate starting sequence of things & web GUI
         
-        from .HTTPServer import HTTPServer        
+        from .protocols.http.HTTPServer import HTTPServer        
         http_server = HTTPServer(
             [self.id], logger=self.logger, serializer=self.http_serializer, 
             port=port, address=address, ssl_context=ssl_context,
@@ -660,6 +661,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         http_server.tornado_instance.stop()
 
        
-    
+    def run(self):
+        raise NotImplementedError("this method will be implemented properly in a future release")
 
 

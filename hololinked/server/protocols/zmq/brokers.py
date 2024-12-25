@@ -260,6 +260,28 @@ class BaseZMQServer(BaseZMQ):
                 f"- implement _handle_timeout in {self.__class__} to handle timeout.")
     
 
+    def handle_error_message(self, request_message: RequestMessage, exception: Exception) -> None:
+        """
+        Pass an exception message to the client when an exception occurred while executing the operation
+
+        Parameters
+        ----------
+        request_message: List[bytes]
+            the client message for which the exception occurred
+        exception: Exception
+            exception object raised
+
+        Returns
+        -------
+        None
+        """
+        run_callable_somehow(self._handle_error_message(request_message, exception))
+
+    def _handle_error_message(self, request_message: RequestMessage, exception: Exception) -> None:
+        raise NotImplementedError("exceptions cannot be handled ",
+                f"- implement _handle_error_message in {self.__class__} to handle exceptions.")
+    
+
     def handled_default_message_types(self, request_message: RequestMessage) -> bool:
         """
         Handle default cases for the server. This method is called when the message type is not recognized 
@@ -284,9 +306,9 @@ class BaseZMQServer(BaseZMQ):
             # self.send response with message type EXIT
             raise BreakLoop(f"exit message received from {request_message.sender_id} with msg-ID {request_message.id}")
         return False 
-       
-        
-       
+    
+
+    
 class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
     """
     Implements both blocking (non-polled) and non-blocking/polling form of receive messages and send replies
@@ -494,7 +516,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         self.logger.info(f"sent handshake to client '{request_message.sender_id}'")
 
 
-    async def _handle_timeout(self, request_message: RequestMessage) -> None:
+    async def _handle_timeout(self, request_message: RequestMessage, timeout_type : str) -> None:
         """
         Inner method that handles timeout. Scheduled by ``handle_timeout()``, signature same as ``handle_timeout``.
         """
@@ -503,7 +525,8 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                 receiver_id=request_message.sender_id,
                 sender_id=self.id,
                 message_type=TIMEOUT,
-                message_id=request_message.id
+                message_id=request_message.id,
+                payload=SerializableData(timeout_type, 'text')
             ).byte_array   
         )
         self.logger.info(f"sent timeout to client '{request_message.sender_id}'")
@@ -524,6 +547,20 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         )         
         self.logger.info(f"sent invalid message to client '{request_message.sender_id}'." +
                             f" exception - {str(exception)}") 	
+        
+    
+    async def _handle_error_message(self, 
+                                request_message: RequestMessage,
+                                exception: Exception
+                            ) -> None:
+        response_message = ResponseMessage.craft_with_message_type(
+                                                            request_message=request_message,
+                                                            message_type=logging.ERROR,
+                                                            payload=exception
+                                                        )
+        await self.socket.send_multipart(response_message.byte_array)    
+        self.logger.info(f"sent exception message to client '{response_message.receiver_id}'." +
+                            f" exception - {str(exception)}")
 
 
     def exit(self) -> None:

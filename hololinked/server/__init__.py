@@ -9,7 +9,7 @@ from .actions import *
 from .property import *
 from .database import *
 from .thing import *
-from .HTTPServer import *
+from .protocols.http.HTTPServer import *
 from .protocols.zmq.rpc_server import *
 
 

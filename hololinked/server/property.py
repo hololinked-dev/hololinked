@@ -38,9 +38,6 @@ class Property(Parameter):
         if True, None is accepted as a valid value for this Property, in addition to any other values that are
         allowed. 
 
-    http_method: tuple, default ("GET", "PUT", "DELETE")
-        http methods for read, write and delete respectively 
-
     observable: bool, default False
         set to True to receive change events. Supply a function if interested to evaluate on what conditions the change 
         event must be emitted. Default condition is a plain not-equal-to operator.

@@ -6,10 +6,10 @@ from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
 
-from .dataklasses import ZMQResource, ZMQEvent
-from .utils import *
-from .protocols.zmq.brokers import AsyncEventConsumer, EventConsumer
-from .schema_validators import BaseSchemaValidator
+from ...dataklasses import ZMQResource, ZMQEvent
+from ...utils import *
+from ..zmq.brokers import AsyncEventConsumer, EventConsumer
+from ...schema_validators import BaseSchemaValidator
 
 
 class BaseHandler(RequestHandler):
