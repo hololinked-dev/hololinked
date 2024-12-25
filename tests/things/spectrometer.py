@@ -73,25 +73,25 @@ class OceanOpticsSpectrometer(Thing):
 
     states = States
 
-    status = String(URL_path='/status', readonly=True, fget=lambda self: self._status,
+    status = String(readonly=True, fget=lambda self: self._status,
                     doc="descriptive status of current operation") # type: str
 
-    serial_number = String(default=None, allow_None=True, URL_path='/serial-number', 
-                            doc="serial number of the spectrometer to connect/or connected")# type: str
+    serial_number = String(default=None, allow_None=True,  
+                    doc="serial number of the spectrometer to connect/or connected")# type: str
 
     last_intensity = ClassSelector(default=None, allow_None=True, class_=Intensity, 
-            URL_path='/intensity', doc="last measurement intensity (in arbitrary units)") # type: Intensity
+                    doc="last measurement intensity (in arbitrary units)") # type: Intensity
     
-    intensity_measurement_event = Event(friendly_name='intensity-measurement-event', URL_path='/intensity/measurement-event',
+    intensity_measurement_event = Event(friendly_name='intensity-measurement-event', 
             doc="event generated on measurement of intensity, max 30 per second even if measurement is faster.",
             schema=Intensity.schema)
     
     reference_intensity = ClassSelector(default=None, allow_None=True, class_=Intensity,
-            URL_path="/intensity/reference", doc="reference intensity to overlap in background") # type: Intensity
+            doc="reference intensity to overlap in background") # type: Intensity
     
     
-    def __init__(self, instance_name : str, serial_number : typing.Optional[str] = None, **kwargs) -> None:
-        super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
+    def __init__(self, id : str, serial_number : typing.Optional[str] = None, **kwargs) -> None:
+        super().__init__(id=id, serial_number=serial_number, **kwargs)
         if serial_number is not None:
             self.connect()
         self._acquisition_thread = None 
@@ -103,7 +103,7 @@ class OceanOpticsSpectrometer(Thing):
         else:
             self._status = ' '.join(args)
             
-    @action(URL_path='/connect', http_method=HTTP_METHODS.POST, input_schema=connect_args)
+    @action(input_schema=connect_args)
     def connect(self, serial_number : str = None, trigger_mode : int = None, integration_time : float = None) -> None:
         if serial_number is not None:
             self.serial_number = serial_number
@@ -125,32 +125,32 @@ class OceanOpticsSpectrometer(Thing):
         self.logger.debug(f"opened device with serial number {self.serial_number} with model {self.model}")
         self.set_status("ready to start acquisition")
 
-    model = String(default=None, URL_path='/model', allow_None=True, readonly=True,
+    model = String(default=None, allow_None=True, readonly=True,
                 doc="model of the connected spectrometer",
                 fget=lambda self: self._model if self.state_machine.current_state != self.states.DISCONNECTED else None
                 ) # type: str
     
     wavelengths = List(default=None, allow_None=True, item_type=(float, int), readonly=True,
-                    URL_path='/supported-wavelengths', doc="wavelength bins of measurement",
+                    doc="wavelength bins of measurement",
                     fget=lambda self: self._wavelengths if self.state_machine.current_state != self.states.DISCONNECTED else None,
                 ) # type: typing.List[typing.Union[float, int]]
 
-    pixel_count = Integer(default=None, allow_None=True, URL_path='/pixel-count', readonly=True,
+    pixel_count = Integer(default=None, allow_None=True, readonly=True,
                 doc="number of points in wavelength",
                 fget=lambda self: self._pixel_count if self.state_machine.current_state != self.states.DISCONNECTED else None
                 ) # type: int
     
-    max_intensity = Number(readonly=True, URL_path="/intensity/max-allowed", 
+    max_intensity = Number(readonly=True,
                     doc="""the maximum intensity that can be returned by the spectrometer in (a.u.). 
                         It's possible that the spectrometer saturates already at lower values.""",
                     fget=lambda self: self._max_intensity if self.state_machine.current_state != self.states.DISCONNECTED else None
                     ) # type: float
       
-    @action(URL_path='/disconnect', http_method=HTTP_METHODS.POST)
+    @action()
     def disconnect(self):
         self.state_machine.current_state = self.states.DISCONNECTED
 
-    trigger_mode = Selector(objects=[0, 1, 2, 3, 4], default=0, URL_path='/trigger-mode', observable=True,
+    trigger_mode = Selector(objects=[0, 1, 2, 3, 4], default=0, observable=True,
                         doc="""0 = normal/free running, 1 = Software trigger, 2 = Ext. Trigger Level,
                          3 = Ext. Trigger Synchro/ Shutter mode, 4 = Ext. Trigger Edge""") # type: int
     
@@ -167,7 +167,7 @@ class OceanOpticsSpectrometer(Thing):
         
 
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
-                            URL_path='/integration-time', observable=True,
+                            observable=True,
                             doc="integration time of measurement in milliseconds") # type: float
     
     @integration_time.setter 
@@ -182,22 +182,20 @@ class OceanOpticsSpectrometer(Thing):
             return self.properties["integration_time"].default   
     
     background_correction = Selector(objects=['AUTO', 'CUSTOM', None], default=None, allow_None=True, 
-                        URL_path='/background-correction',
                         doc="set True for Seabreeze internal black level correction") # type: typing.Optional[str]
     
-    custom_background_intensity = TypedList(item_type=(float, int), 
-                        URL_path='/background-correction/user-defined-intensity') # type: typing.List[typing.Union[float, int]]
+    custom_background_intensity = TypedList(item_type=(float, int)) # type: typing.List[typing.Union[float, int]]
     
-    nonlinearity_correction = Boolean(default=False, URL_path='/nonlinearity-correction',
+    nonlinearity_correction = Boolean(default=False, 
                         doc="automatic correction of non linearity in detector CCD") # type: bool
 
-    @action(URL_path='/acquisition/start', http_method=HTTP_METHODS.POST)
+    @action()
     def start_acquisition(self) -> None:
         self.stop_acquisition() # Just a shield 
         self._acquisition_thread = threading.Thread(target=self.measure) 
         self._acquisition_thread.start()
 
-    @action(URL_path='/acquisition/stop', http_method=HTTP_METHODS.POST)
+    @action()
     def stop_acquisition(self) -> None:
         if self._acquisition_thread is not None:
             self.logger.debug(f"stopping acquisition thread with thread-ID {self._acquisition_thread.ident}")
@@ -260,14 +258,14 @@ class OceanOpticsSpectrometer(Thing):
             self.set_status(f'error during acquisition - {str(ex)}, {type(ex)}')
             self.state_machine.current_state = self.states.FAULT
 
-    @action(URL_path='/acquisition/single', http_method=HTTP_METHODS.POST)
+    @action()
     def start_acquisition_single(self):
         self.stop_acquisition() # Just a shield 
         self._acquisition_thread = threading.Thread(target=self.measure, args=(1,)) 
         self._acquisition_thread.start()
         self.logger.info("data event will be pushed once acquisition is complete.")
 
-    @action(URL_path='/reset-fault', http_method=HTTP_METHODS.POST)
+    @action()
     def reset_fault(self):
         self.state_machine.set_state(self.states.ON)
 

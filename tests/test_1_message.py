@@ -37,7 +37,7 @@ class MessageValidatorMixin(TestCase):
         self.assertIsInstance(request_message.body, list)
         self.assertEqual(len(request_message.body), 2)
         # check that body is having both serialized and deserialized data
-        self.assertFalse(isinstance(request_message.body[0], bytes))
+        self.assertIsInstance(request_message.body[0], SerializableData)
         self.assertIsInstance(request_message.body[1], PreserializedData)
 
 
@@ -59,7 +59,7 @@ class MessageValidatorMixin(TestCase):
         self.assertIsInstance(response_message.body, list)
         self.assertEqual(len(response_message.body), 2)
         # check that body is having both serialized and deserialized data
-        self.assertFalse(isinstance(response_message.body[0], bytes))
+        self.assertIsInstance(response_message.body[0], SerializableData)
         self.assertIsInstance(response_message.body[1], PreserializedData)
 
 
