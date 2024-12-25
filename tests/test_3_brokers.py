@@ -7,6 +7,7 @@ from uuid import UUID
 
 
 
+from hololinked.server.exceptions import BreakLoop
 from hololinked.server.protocols.zmq.message import (ERROR, EXIT, OPERATION, HANDSHAKE, REPLY, 
                                             PreserializedData, RequestHeader, RequestMessage, SerializableData) # client to server
 from hololinked.server.protocols.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, 
@@ -37,12 +38,15 @@ def run_server(server: AsyncZMQServer, owner: "TestBroker", done_queue: multipro
     event_loop = get_current_async_loop()
     async def run():
         while True:
-            messages = await server.async_recv_requests()           
-            owner.last_server_message = messages[0]
-            for message in messages:
-                if message.type == EXIT:
-                    return
-            await asyncio.sleep(0.01)
+            try:
+                messages = await server.async_recv_requests()           
+                owner.last_server_message = messages[0]
+                for message in messages:
+                    if message.type == EXIT:
+                        return
+                await asyncio.sleep(0.01)
+            except BreakLoop:
+                break
     event_loop.run_until_complete(run())
     if done_queue:
         done_queue.put(True)
