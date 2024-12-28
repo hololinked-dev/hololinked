@@ -13,19 +13,18 @@ from collections import deque
 from uuid import uuid4
 
 
-from ....param.parameterized import Undefined
-from ...exceptions import *
-from ...constants import ZMQ_TRANSPORTS
-from ...utils import format_exception_as_json, get_current_async_loop, get_default_logger
-from ...config import global_config
-from .message import (EMPTY_BYTE, TIMEOUT, PreserializedData,
-                                ResponseMessage, RequestMessage, SerializableData)
-from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
-from ...thing import Thing, ThingMeta
-from ...property import Property
-from ...properties import Boolean, TypedDict
-from ...actions import Action, action as remote_method
-from ...logger import ListHandler
+from ..param.parameterized import Undefined
+from ..exceptions import *
+from ..constants import ZMQ_TRANSPORTS
+from ..utils import format_exception_as_json, get_current_async_loop, get_default_logger
+from ..config import global_config
+from ..protocols.zmq.message import EMPTY_BYTE, PreserializedData, RequestMessage, SerializableData
+from ..protocols.zmq.brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
+from .thing import Thing, ThingMeta
+from .property import Property
+from .properties import Boolean, TypedDict
+from .actions import Action, action as remote_method
+from .logger import ListHandler
 
 
 
@@ -319,7 +318,10 @@ class RPCServer(BaseZMQServer):
                 return_value = await self.execute_once(instance, objekt, operation, payload, preserialized_payload) 
 
                 # handle return value
-                if isinstance(return_value, tuple) and len(return_value) == 2 and isinstance(return_value[1], PreserializedData):
+                if isinstance(return_value, tuple) and len(return_value) == 2 and (
+                    isinstance(return_value[1], bytes) or 
+                    isinstance(return_value[1], PreserializedData) 
+                ):  
                     payload = SerializableData(return_value[0], 'application/json')
                     preserialized_payload = PreserializedData(return_value[1], 'text/plain')
                 elif isinstance(return_value, bytes):
@@ -419,7 +421,7 @@ class RPCServer(BaseZMQServer):
             await asyncio.wait_for(ready_to_process_event.wait(), timeout)
             return False 
         except TimeoutError:    
-            origin_server._handle_timeout(request_message, timeout_type)
+            await origin_server._handle_timeout(request_message, timeout_type)
             return True
 
 

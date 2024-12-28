@@ -9,22 +9,18 @@ import typing
 from uuid import uuid4
 from zmq.utils.monitor import parse_monitor_message
 
-from hololinked.server.exceptions import BreakLoop
-
 
 from ...utils import *
 from ...config import global_config
-from ...constants import  ZMQ_TRANSPORTS, ZMQSocketType, ZMQ_EVENT_MAP, CommonRPC, ServerTypes, get_socket_type_name
+from ...constants import ZMQ_TRANSPORTS, ZMQSocketType, ZMQ_EVENT_MAP, CommonRPC, ServerTypes, get_socket_type_name
 from ...serializers import JSONSerializer
+from ...exceptions import BreakLoop
 from .message import (EMPTY_BYTE, EXIT, HANDSHAKE, INVALID_MESSAGE, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
                     RequestMessage, ResponseMessage, SerializableData, PreserializedData, 
                     ServerExecutionContext, ThingExecutionContext, default_server_execution_context, default_thing_execution_context)
 
 
-
-    
-
-
+   
 class BaseZMQ: 
     """
     Base class for all ZMQ message brokers. Implements socket creation & logger
@@ -402,7 +398,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
     async def async_send_response(self, 
                     request_message: RequestMessage, 
                     payload: SerializableData = SerializableData(None, 'application/json'), 
-                    preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text')
+                    preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
                 ) -> None:
         """
         Send response message for a request message. 
@@ -434,7 +430,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                                         request_message: RequestMessage, 
                                         message_type: str,
                                         payload: SerializableData = SerializableData(None, 'application/json'),
-                                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text')
+                                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
                                     ) -> None:
         """
         Send response message for a request message. 
@@ -516,7 +512,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         self.logger.info(f"sent handshake to client '{request_message.sender_id}'")
 
 
-    async def _handle_timeout(self, request_message: RequestMessage, timeout_type : str) -> None:
+    async def _handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> None:
         """
         Inner method that handles timeout. Scheduled by ``handle_timeout()``, signature same as ``handle_timeout``.
         """
@@ -526,7 +522,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                 sender_id=self.id,
                 message_type=TIMEOUT,
                 message_id=request_message.id,
-                payload=SerializableData(timeout_type, 'text')
+                payload=SerializableData(timeout_type, 'text/plain')
             ).byte_array   
         )
         self.logger.info(f"sent timeout to client '{request_message.sender_id}'")
@@ -659,7 +655,7 @@ class ZMQServerPool(BaseZMQServer):
                                 id: str, 
                                 request_message: RequestMessage,  
                                 payload: SerializableData = SerializableData(None, 'application/json'),
-                                preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text')
+                                preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
                             ) -> None:
         """
         send response for instance name
@@ -867,7 +863,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                     objekt: str, 
                     operation: str, 
                     payload: SerializableData = SerializableData(None, 'application/json'),
-                    preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
+                    preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
                     server_execution_context: ServerExecutionContext = default_server_execution_context,
                     thing_execution_context: ThingExecutionContext = default_thing_execution_context
                 ) -> bytes:
@@ -943,7 +939,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             objekt: str,
             operation: str, 
             payload: SerializableData = SerializableData(None, 'application/json'),
-            preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
+            preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
             server_execution_context: ServerExecutionContext = default_server_execution_context,
             thing_execution_context: ThingExecutionContext = default_thing_execution_context,
         ) -> ResponseMessage:
@@ -1117,7 +1113,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                                 objekt: str, 
                                 operation: str, 
                                 payload: SerializableData = SerializableData(None, 'application/json'),
-                                preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
+                                preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
                                 server_execution_context: ServerExecutionContext = default_server_execution_context,
                                 thing_execution_context: typing.Dict[str, typing.Any] = default_thing_execution_context
                             ) -> str:
@@ -1216,7 +1212,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                         objekt: str, 
                         operation: str, 
                         payload: SerializableData = SerializableData(None, 'application/json'),
-                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
+                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
                         server_execution_context: ServerExecutionContext = default_server_execution_context, 
                         thing_execution_context: ThingExecutionContext = default_thing_execution_context
                     ) -> ResponseMessage: 
@@ -1480,7 +1476,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                             objekt: str, 
                             operation: str,
                             payload: SerializableData = SerializableData(None, 'application/json'), 
-                            preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
+                            preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
                             server_execution_context: ServerExecutionContext = default_server_execution_context,
                             thing_execution_context: ThingExecutionContext  = default_thing_execution_context
                         ) -> bytes:
@@ -1580,7 +1576,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         objekt: str, 
                         operation: str, 
                         payload: SerializableData = SerializableData(None, 'application/json'), 
-                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
+                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
                         server_execution_context: ServerExecutionContext = default_server_execution_context,
                         thing_execution_context: ThingExecutionContext  = default_thing_execution_context, raise_client_side_exception = False, 
                     ) -> typing.Dict[str, typing.Any]:
@@ -1640,7 +1636,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                                 objekt: str, 
                                 operation: str, 
                                 payload: SerializableData = SerializableData(None, 'application/json'), 
-                                preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
+                                preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
                                 ids: typing.Optional[typing.List[str]] = None,
                                 server_execution_context: ServerExecutionContext = default_server_execution_context,
                                 thing_execution_context: ThingExecutionContext = default_thing_execution_context,
@@ -1666,7 +1662,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                                         objekt: str, 
                                         operation: str, 
                                         payload: SerializableData = SerializableData(None, 'application/json'), 
-                                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text'),
+                                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
                                         server_execution_context: ServerExecutionContext = default_server_execution_context,
                                         thing_execution_context: ThingExecutionContext = default_thing_execution_context,        
                                     ) -> typing.Dict[str, typing.Any]:
@@ -2059,7 +2055,7 @@ class EventConsumer(BaseEventConsumer):
     
         
 
-from ...events import EventDispatcher
+from ...server.events import EventDispatcher
 
 
 __all__ = [

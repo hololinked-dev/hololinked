@@ -1,7 +1,7 @@
 import typing
 from dataclasses import dataclass, field
 
-from .constants import JSON
+from ..constants import JSON
 from .dataklasses import ActionInfoValidator
 from .events import Event
 from .properties import *

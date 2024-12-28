@@ -12,9 +12,9 @@ import warnings
 
 from ..param.parameters import String, Boolean, Tuple, ClassSelector, Parameter
 from ..param.parameterized import ParameterizedMetaclass
-from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, REGEX, JSONSerializable, ResourceTypes
-from .utils import get_signature, pep8_to_dashed_name
-from .config import global_config
+from ..constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, REGEX, JSONSerializable, ResourceTypes
+from ..utils import get_signature, pep8_to_dashed_name
+from ..config import global_config
 from .schema_validators import BaseSchemaValidator
 
 

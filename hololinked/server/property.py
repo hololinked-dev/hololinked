@@ -2,8 +2,8 @@ import typing
 from enum import Enum
 
 from ..param.parameterized import Parameter, ClassParameters, Parameterized, ParameterizedMetaclass
-from .utils import issubklass
-from .exceptions import StateMachineError
+from ..utils import issubklass
+from ..exceptions import StateMachineError
 from .dataklasses import RemoteResource, RemoteResourceInfoValidator
 from .events import Event, EventDispatcher
 from .schema_validators import JsonSchemaValidator

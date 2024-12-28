@@ -4,10 +4,9 @@ import threading
 import jsonschema
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass
-from .constants import JSON 
-from .utils import getattr_without_descriptor_read, pep8_to_dashed_name
-from .config import global_config
-from .protocols.zmq.brokers import EventPublisher
+from ..constants import JSON 
+from ..utils import getattr_without_descriptor_read, pep8_to_dashed_name
+from ..config import global_config
 from .security_definitions import BaseSecurityDefinition
 
 
@@ -45,7 +44,7 @@ class Event:
         self.schema = schema
         # self.security = security
         self.label = label
-        self._publisher = None # type: typing.Optional[EventPublisher]
+        self._publisher = None # type: typing.Optional["EventPublisher"]
         self._observable = False
        
     def __set_name__(self, owner : ParameterizedMetaclass, name : str) -> None:
@@ -155,7 +154,7 @@ class EventSource:
     instance_name : str
 
     def __init__(self) -> None:
-          self._event_publisher = None # type : typing.Optional[EventPublisher]
+          self._event_publisher = None # type : typing.Optional["EventPublisher"]
       
     @property
     def events(self) -> typing.Dict[str, Event]:
@@ -190,7 +189,7 @@ class EventSource:
         raise NotImplementedError("observables property not implemented yet")
     
     @property
-    def event_publisher(self) -> EventPublisher:
+    def event_publisher(self) -> "EventPublisher":
         """
         event publishing PUB socket owning object, valid only after 
         ``run()`` is called, otherwise raises AttributeError.
@@ -198,13 +197,13 @@ class EventSource:
         return self._event_publisher 
                    
     @event_publisher.setter
-    def event_publisher(self, value : EventPublisher) -> None:
+    def event_publisher(self, value : "EventPublisher") -> None:
         from .thing import Thing
 
         if self._event_publisher is not None:
             raise AttributeError("Can set event publisher only once")
         
-        def recusively_set_event_publisher(obj : Thing, publisher : EventPublisher) -> None:
+        def recusively_set_event_publisher(obj : Thing, publisher : "EventPublisher") -> None:
             for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
                 assert isinstance(evt, Event), "object is not an event"
                 # above is type definition
@@ -218,6 +217,7 @@ class EventSource:
         recusively_set_event_publisher(self, value)
 
 
+from ..protocols.zmq.brokers import EventPublisher
 
 __all__ = [
     Event.__name__,

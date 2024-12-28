@@ -7,10 +7,10 @@ from types import FunctionType, MethodType
 from inspect import iscoroutinefunction, getfullargspec
 
 from ..param.parameterized import ParameterizedFunction
-from .constants import JSON
-from .config import global_config
-from .utils import getattr_without_descriptor_read, issubklass, isclassmethod
-from .exceptions import StateMachineError
+from ..constants import JSON
+from ..config import global_config
+from ..utils import getattr_without_descriptor_read, issubklass, isclassmethod
+from ..exceptions import StateMachineError
 from .dataklasses import ActionInfoValidator, ActionResource
 
 

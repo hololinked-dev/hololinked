@@ -13,11 +13,10 @@ import zmq.asyncio
 
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
-from .constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
-from .utils import get_default_logger, getattr_without_descriptor_read
-from .exceptions import *
-from .serializers import set_serializer_from_user_given_options, BaseSerializer, JSONSerializer
-from .protocols.zmq import EventPublisher, RPCServer
+from ..constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
+from ..utils import get_default_logger, getattr_without_descriptor_read
+from ..exceptions import *
+from ..serializers import set_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .database import ThingDB, ThingInformation
 from .dataklasses import ZMQResource, build_our_temp_TD, get_organised_resources
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
@@ -131,8 +130,12 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         return obj
 
 
-    def __init__(self, *, id : str, logger : typing.Optional[logging.Logger] = None, 
-                serializer : typing.Optional[JSONSerializer] = None, **kwargs) -> None:
+    def __init__(self, *, 
+                id : str, 
+                logger : typing.Optional[logging.Logger] = None, 
+                serializer : typing.Optional[JSONSerializer] = None, 
+                **kwargs
+            ) -> None:
         """
         Parameters
         ----------
@@ -187,8 +190,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self._last_operation_reply = None 
         self._request_execution_ready_event = None # type: threading.Event
         self._request_execution_complete_event = None # type: threading.Event
-        self.rpc_server = None # type: typing.Optional[RPCServer]
-        self.event_publisher = None # type: typing.Optional[EventPublisher] 
+        
         # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
             raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
@@ -225,6 +227,10 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def __post_init__(self):
         self.load_properties_from_DB()
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.id}")
+        from .rpc_server import RPCServer
+        from .events import EventPublisher
+        self.rpc_server = None # type: typing.Optional[RPCServer]
+        self.event_publisher = None # type: typing.Optional[EventPublisher] 
 
 
     def _prepare_resources(self):
@@ -569,6 +575,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 zmq context to be used. If not supplied, a new context is created.
                 For INPROC clients, you need to provide a context.
         """
+        from .protocols.zmq import RPCServer
         # expose_eventloop: bool, False
         #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
         #     adding more objects to the same event loop.
