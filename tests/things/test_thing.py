@@ -24,8 +24,8 @@ class TestThing(Thing):
         return b'foobar'
     
     @action()
-    def get_mixed_content_type(self):
-        return 'foobar', b'foorbar'
+    def get_mixed_content(self):
+        return 'foobar', b'foobar'
     
     @action()
     def sleep(self):
