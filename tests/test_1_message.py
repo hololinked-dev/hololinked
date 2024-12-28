@@ -1,23 +1,28 @@
 import unittest
 from uuid import UUID, uuid4
 
-from hololinked.server.protocols.zmq.message import (ERROR, EXIT, OPERATION, HANDSHAKE, REPLY, 
+from hololinked.protocols.zmq.message import (EXIT, OPERATION, HANDSHAKE, 
                                             PreserializedData, RequestHeader, RequestMessage, SerializableData) # client to server
-from hololinked.server.protocols.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, 
+from hololinked.protocols.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, REPLY, ERROR,
                                             ResponseMessage, ResponseHeader) # server to client
-from hololinked.server.serializers import Serializers
+from hololinked.serializers import Serializers
 
 
 try:
     from .utils import TestCase, TestRunner
-    # from .things import TestThing, start_thing_forked
 except ImportError:
     from utils import TestCase, TestRunner
-    # from things import TestThing, start_thing_forked 
+  
 
 
 
 class MessageValidatorMixin(TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        self.server_id = 'test-server'
+        self.client_id = 'test-client'
+        self.thing_id = 'test-thing'
 
     def validate_request_message(self, request_message: RequestMessage) -> None:
         # check message ID is a UUID
@@ -67,18 +72,11 @@ class MessageValidatorMixin(TestCase):
 class TestMessagingContract(MessageValidatorMixin):
     """Tests request and response messages"""
 
-    @classmethod
+    @classmethod    
     def setUpClass(self):
         print(f"test message contract with {self.__name__}")
-        self.server_id = 'test-server'
-        self.client_id = 'test-client'
-        self.thing_id = 'test-thing'
-     
-    @classmethod
-    def tearDownClass(self):
-        print("\ntear down test message broker")
-
-
+        return super().setUpClass()
+    
     def test_1_request_message(self):
         """test the request message"""
     

@@ -4,8 +4,8 @@ import warnings
 
 from hololinked.server import Thing
 from hololinked.server.schema_validators import JsonSchemaValidator, BaseSchemaValidator
-from hololinked.server.serializers import JSONSerializer, PickleSerializer, MsgpackSerializer
-from hololinked.server.utils import get_default_logger 
+from hololinked.serializers import JSONSerializer, PickleSerializer, MsgpackSerializer
+from hololinked.utils import get_default_logger 
 from hololinked.server.logger import RemoteAccessHandler
 from hololinked.client import ObjectProxy
 try:

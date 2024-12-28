@@ -5,7 +5,7 @@ import logging
 import multiprocessing
 from hololinked.server.dataklasses import ActionInfoValidator
 from hololinked.server.thing import Thing, action
-from hololinked.server.utils import isclassmethod
+from hololinked.utils import isclassmethod
 from hololinked.param import ParameterizedFunction
 from hololinked.client import ObjectProxy
 from hololinked.server.properties import Number, String, ClassSelector
