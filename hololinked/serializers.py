@@ -23,6 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import pickle
+import msgspec
 from msgspec import json as msgspecjson, msgpack 
 import json as pythonjson
 import inspect
@@ -34,13 +35,12 @@ import typing
 import warnings
 from enum import Enum
 from collections import deque
-
 try:
     import numpy 
 except ImportError:
     pass 
 
-from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
+from .param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
 from .constants import JSONSerializable, Serializers
 from .utils import format_exception_as_json
 

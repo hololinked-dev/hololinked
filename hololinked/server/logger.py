@@ -6,7 +6,7 @@ import asyncio
 import time 
 from collections import deque
 
-from .constants import HTTP_METHODS
+from ..constants import HTTP_METHODS
 from .events import Event
 from .properties import List
 from .properties import Integer, Number

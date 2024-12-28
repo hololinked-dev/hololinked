@@ -1,17 +1,17 @@
+import builtins
 import threading 
 import warnings
 import typing 
 import logging
 import uuid
 
-from hololinked.server.protocols.zmq.message import EMPTY_BYTE, ResponseMessage, SerializableData
 
-
-from ..server.config import global_config
-from ..server.constants import JSON, CommonRPC, Operations, Operations, ServerMessage, ResourceTypes, ZMQ_TRANSPORTS
-from ..server.serializers import BaseSerializer
+from ..config import global_config
+from ..constants import JSON, CommonRPC, Operations, Operations, ServerMessage, ResourceTypes, ZMQ_TRANSPORTS
+from ..serializers import BaseSerializer
 from ..server.dataklasses import ZMQAction, ZMQEvent, ZMQResource
-from ..server.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient, EventConsumer
+from ..protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, ResponseMessage, SerializableData, EMPTY_BYTE 
+from ..protocols.zmq.message import ERROR, TIMEOUT, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED
 from ..server.schema_validators import BaseSchemaValidator
 
 
@@ -578,7 +578,32 @@ class ObjectProxy:
                 self.__dict__[data.name] = event 
 
 
-    
+
+def raise_local_exception(error_message : typing.Dict[str, typing.Any]) -> None:
+    """
+    raises an exception on client side using an exception from server by mapping it to the correct one based on type.
+
+    Parameters
+    ----------
+    exception: Dict[str, Any]
+        exception dictionary made by server with following keys - type, message, traceback, notes
+
+    """
+    if isinstance(error_message, Exception):
+        raise error_message from None
+    elif isinstance(error_message, dict) and 'exception' in error_message.keys():
+        exc = getattr(builtins, error_message["type"], None)
+        message = error_message["message"]
+        if exc is None:
+            ex = error_message(message)
+        else: 
+            ex = exc(message)
+        error_message["traceback"][0] = f"Server {error_message['traceback'][0]}"
+        ex.__notes__ = error_message["traceback"][0:-1]
+        raise ex from None 
+    elif isinstance(error_message, str) and error_message in ['invokation', 'execution']:
+        raise TimeoutError(f"Server did not respond within specified timeout") from None
+    raise RuntimeError("unknown error occurred on server side") from None
 
 
 # SM = Server Message
@@ -621,15 +646,23 @@ class _Action:
                                                                     resource_info.argument_schema and 
                                                                     global_config.validate_schema_on_client) else None
     
-    @property # i.e. cannot have setter
-    def last_return_value(self) -> typing.Any:
+   
+    def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
         """
         cached return value of the last call to the method
         """
-        if self._last_return_value.preserialized_payload.value != EMPTY_BYTE:
-            return self._last_return_value.preserialized_payload.value 
-        
-        return self._last_return_value.payload.deserialize()
+        payload = self._last_return_value.payload.deserialize() 
+        preserialized_payload = self._last_return_value.preserialized_payload.value
+        if preserialized_payload != EMPTY_BYTE:
+            if payload is None:
+                return preserialized_payload
+            return payload, preserialized_payload
+        elif self._last_return_value.type != REPLY and raise_exception:
+            raise_local_exception(payload)
+        return payload
+    
+    last_return_value = property(fget=get_last_return_value,
+                                doc="cached return value of the last call to the method")
     
     @property
     def last_zmq_message(self) -> ResponseMessage:
@@ -653,7 +686,7 @@ class _Action:
                                                 execution_timeout=self._execution_timeout
                                             ),
                                         )
-        return self.last_return_value # note the missing underscore
+        return self.get_last_return_value(True) # note the missing underscore
     
     def oneway(self, *args, **kwargs) -> None:
         """
@@ -710,29 +743,8 @@ class _Action:
                                                     execution_timeout=self._execution_timeout,
                                                 ),
                                             )
-        return self.last_return_value # note the missing underscore
+        return self.get_last_return_value(True) # note the missing underscore
 
-    def raise_local_exception(self, exception : typing.Dict[str, typing.Any]) -> None:
-        """
-        raises an exception on client side using an exception from server by mapping it to the correct one based on type.
-
-        Parameters
-        ----------
-        exception: Dict[str, Any]
-            exception dictionary made by server with following keys - type, message, traceback, notes
-
-        """
-        if isinstance(exception, Exception):
-            raise exception from None
-        exc = getattr(builtins, exception["type"], None)
-        message = exception["message"]
-        if exc is None:
-            ex = Exception(message)
-        else: 
-            ex = exc(message)
-        exception["traceback"][0] = f"Server {exception['traceback'][0]}"
-        ex.__notes__ = exception["traceback"][0:-1]
-        raise ex from None 
 
     
 class _Property:
