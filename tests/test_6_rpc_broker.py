@@ -8,12 +8,13 @@ import zmq.asyncio
 from hololinked.client.proxy import _Action
 from hololinked.server import Thing
 from hololinked.client import ObjectProxy
-from hololinked.server.constants import ResourceTypes
+from hololinked.constants import ResourceTypes
 from hololinked.server.dataklasses import ZMQResource
-from hololinked.server.protocols.zmq import RPCServer
-from hololinked.server.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient
-from hololinked.server.protocols.zmq.message import SerializableData
-from hololinked.server.utils import get_current_async_loop, get_default_logger
+from hololinked.server.rpc_server import RPCServer
+from hololinked.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient
+from hololinked.protocols.zmq.message import SerializableData
+from hololinked.utils import get_current_async_loop, get_default_logger
+from tests.test_3_brokers import ActionMixin, TestBrokerMixin
 try:
     from .things import TestThing, OceanOpticsSpectrometer
     from .utils import TestCase
@@ -24,7 +25,7 @@ except ImportError:
 
 
 
-class TestRPCBroker(TestCase):
+class TestRPCBroker(ActionMixin):
 
 
     @classmethod
@@ -71,22 +72,14 @@ class TestRPCBroker(TestCase):
     @classmethod
     def setUpClass(self):
         print(f"test ZMQ Message Broker {self.__name__}")
-        self.server_id = 'test-server'
-        self.client_id = 'test-client'
-        self.thing_id = 'test-thing'
-        self.logger = get_default_logger('test-message-broker', logging.DEBUG)        
-        self.done_queue = multiprocessing.Queue()
-        self.last_server_message = None
         self.context = zmq.asyncio.Context()
-        self.setUpThing()
-        self.setUpServer()
-        self.setUpClient()
-        self.startServer()
+        super().setUpClass()
+        self.setUpActions()
 
-        
+    
 
     def test_1_creation_defaults(self):
-        self.assertTrue(self.server.inproc_server.socket_address.startswith('inproc://'))
+        self.assertTrue(self.server.req_rep_server.socket_address.startswith('inproc://'))
         self.assertTrue(self.server.event_publisher.socket_address.startswith('inproc://'))
 
 
@@ -95,24 +88,6 @@ class TestRPCBroker(TestCase):
 
 
     def test_3_invoke_action(self):
-        resource_info = ZMQResource(
-                            what=ResourceTypes.ACTION, 
-                            class_name='TestThing', 
-                            id='test-thing',
-                            obj_name='test_echo', 
-                            qualname='TestThing.test_echo', 
-                            doc="returns value as it is to the client",
-                            request_as_argument=False
-                        )
-        self.echo_action = _Action(
-                                sync_client=None,
-                                resource_info=resource_info,
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                async_client=self.client, 
-                                schema_validator=None
-                            )
-        
         async def async_call():
             await self.echo_action.async_call('value')
             return self.echo_action.last_return_value
@@ -121,87 +96,54 @@ class TestRPCBroker(TestCase):
         self.client.handshake() 
 
 
-    # def test_4_server_execution_context(self):
-    #     resource_info = ZMQResource(
-    #                         what=ResourceTypes.ACTION, 
-    #                         class_name='TestThing', 
-    #                         id='test-thing',
-    #                         obj_name='sleep', 
-    #                         qualname='TestThing.sleep', 
-    #                         doc="returns value as it is to the client",
-    #                         request_as_argument=False
-    #                     )
-    #     self.sleep_action = _Action(
-    #                             sync_client=None,
-    #                             resource_info=resource_info,
-    #                             invokation_timeout=5, 
-    #                             execution_timeout=5, 
-    #                             async_client=self.client, 
-    #                             schema_validator=None
-    #                         )
-    #     async def async_call():
-    #         await self.sleep_action.async_call()
-    #         return self.echo_action.last_return_value
-    #     result = get_current_async_loop().run_until_complete(async_call())
-    #     self.assertEqual(result, 6)
+    def test_4_return_binary_value(self):
 
-    
-    def test_5_return_value(self):
-        resource_info = ZMQResource(
-                            what=ResourceTypes.ACTION, 
-                            class_name='TestThing', 
-                            id='test-thing',
-                            obj_name='get_serialized_data', 
-                            qualname='TestThing.get_serialized_data', 
-                            doc="returns value as it is to the client",
-                            request_as_argument=False
-                        )
-        self.echo_action = _Action(
-                                sync_client=None,
-                                resource_info=resource_info,
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                async_client=self.client, 
-                                schema_validator=None
-                            )
         async def async_call():
-            await self.echo_action.async_call('value')
-            return self.echo_action.last_return_value
+            await self.get_mixed_content_action.async_call()
+            return self.get_mixed_content_action.last_return_value
         result = get_current_async_loop().run_until_complete(async_call())
-        self.assertEqual(result, 'value')
-        self.client.handshake()
+        self.assertEqual(result, ('foobar', b'foobar'))
 
-        resource_info = ZMQResource(
-                                what=ResourceTypes.ACTION, 
-                                class_name='TestThing', 
-                                id='test-thing',
-                                obj_name='get_mixed_content_type', 
-                                qualname='TestThing.get_mixed_content_type', 
-                                doc="returns mixed content type to the client",
-                                request_as_argument=False
-                            )
-        self.echo_action = _Action(
-                                sync_client=None,
-                                resource_info=resource_info,
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                async_client=self.client, 
-                                schema_validator=None
-                            )
         async def async_call():
-            await self.echo_action.async_call()
-            return self.echo_action.last_return_value
+            await self.get_serialized_data_action.async_call()
+            return self.get_serialized_data_action.last_return_value
         result = get_current_async_loop().run_until_complete(async_call())
-        self.assertEqual(result, ('foobar', b'foorbar'))
-        self.client.handshake()
+        self.assertEqual(result, b'foobar')
 
 
-    def test_6_thing_execution_context(self):
-        pass 
+    def test_5_server_execution_context(self):
+       
+        async def test_execution_timeout():
+            try:
+                await self.sleep_action.async_call()
+            except Exception as ex:
+                self.assertIsInstance(ex, TimeoutError)
+            else:
+                self.assertTrue(False)        
+        get_current_async_loop().run_until_complete(test_execution_timeout())
+       
+        async def test_invokation_timeout():
+            try:
+                self.sleep_action._invokation_timeout = 1
+                await self.sleep_action.async_call()
+            except Exception as ex:
+                self.assertIsInstance(ex, TimeoutError)
+            else:
+                self.assertTrue(False)
+        get_current_async_loop().run_until_complete(test_invokation_timeout())
+
+        # async def test_oneway():
+        #     self.echo_action.oneway('value')
+        #     return_value = await self.echo_action.async_call('value2')
+        #     self.assertEqual(return_value, 'value2')
+        # get_current_async_loop().run_until_complete(test_oneway())
+
+    # def test_6_thing_execution_context(self):
+    #     pass 
 
 
-    def test_7_stop_polling(self):
-        self.server.stop_polling()
+    # def test_7_stop_polling(self):
+    #     self.server.stop_polling()
 
         
             

@@ -28,6 +28,11 @@ class TestCase(unittest.TestCase):
     def setUp(self):
         print() # dont concatenate with results printed by unit test
 
+    @classmethod
+    def tearDownClass(self):
+        print(f"\ntear down {self.__name__}")
+
+
 
 def print_lingering_threads(exclude_daemon=True):
     alive_threads = threading.enumerate()
