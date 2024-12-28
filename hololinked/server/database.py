@@ -10,10 +10,10 @@ from sqlite3 import DatabaseError
 from dataclasses import dataclass
 
 from ..param import Parameterized
-from .constants import JSONSerializable
-from .config import global_config
-from .utils import pep8_to_dashed_name
-from .serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
+from ..constants import JSONSerializable
+from ..config import global_config
+from ..utils import pep8_to_dashed_name
+from ..serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
 from .property import Property
 
 

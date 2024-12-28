@@ -1,5 +1,5 @@
 import typing
-from .constants import JSON
+from ..constants import JSON
 
 class JSONSchemaError(Exception):
     """

@@ -27,7 +27,7 @@ import os
 import typing 
 import warnings
 
-from .. import __version__
+from . import __version__
 from .serializers import PythonBuiltinJSONSerializer
 
 

@@ -2,13 +2,11 @@ import typing
 import msgspec
 from uuid import uuid4
 from dataclasses import dataclass
+from zmq.utils.monitor import parse_monitor_message
 
-import zmq
-import zmq.asyncio
-
-from ...constants import JSON, byte_types
+from ...constants import JSON, ZMQ_EVENT_MAP, byte_types
 from ...serializers import Serializers
-from ....param.parameters import Integer
+from ...param.parameters import Integer
 
 # message types
 # both directions
@@ -651,8 +649,11 @@ class EventMessage(ResponseMessage):
 
 
 
-def parse_server_message(self, message : ResponseMessage, raise_client_side_exception : bool = False, 
-                            deserialize_response : bool = True) -> typing.Any:
+def parse_response( 
+                message : ResponseMessage, 
+                raise_client_side_exception : bool = False, 
+                deserialize_response : bool = True
+            ) -> typing.Any:
     """
     server's message to client: 
 
@@ -677,27 +678,14 @@ def parse_server_message(self, message : ResponseMessage, raise_client_side_exce
     if len(message) == 2: # socket monitor message, not our message
         try: 
             if ZMQ_EVENT_MAP[parse_monitor_message(message)['event']] == SERVER_DISCONNECTED:
-                raise ConnectionAbortedError(f"server disconnected for {self.id}")
+                raise ConnectionAbortedError(f"server disconnected for {message.sender_id}")
             return None # None should simply continue the message receive logic
         except RuntimeError as ex:
             raise RuntimeError(f'message received from monitor socket cannot be deserialized for {self.id}') from None
-    message_type = message[SM_INDEX_MESSAGE_TYPE]
+    message_type = message.type
     if message_type == REPLY:
-        if deserialize_response:
-            if self.client_type == HTTP_SERVER:
-                message[SM_INDEX_DATA] = self.http_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
-            elif self.client_type == PROXY:
-                message[SM_INDEX_DATA] = self.zmq_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
-        return message 
-    elif message_type == HANDSHAKE:
-        self.logger.debug("""handshake messages arriving out of order are silently dropped as receiving this message 
-            means handshake was successful before. Received hanshake from {}""".format(message[0]))
-        return message
-    elif message_type == logging.ERROR or message_type == INVALID_MESSAGE:
-        if self.client_type == HTTP_SERVER:
-            message[SM_INDEX_DATA] = self.http_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
-        elif self.client_type == PROXY:
-            message[SM_INDEX_DATA] = self.zmq_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
+        pass 
+    elif message_type == ERROR or message_type == INVALID_MESSAGE:
         if not raise_client_side_exception:
             return message
         if message[SM_INDEX_DATA].get('exception', None) is not None:

@@ -10,12 +10,11 @@ from collections import OrderedDict
 
 from ..param.utils import *
 from ..param.exceptions import *
-from ..param.parameterized import  Parameterized, dt_types, Parameter
-
+from ..param.parameterized import Parameterized, dt_types, Parameter
 from ..param.parameters import (TypeConstrainedList, TypeConstrainedDict, abbreviate_paths,
                        TypedKeyMappingsConstrainedDict, resolve_path, concrete_descendents, named_objs)
 from .property import Property
-from .constants import USE_OBJECT_NAME, HTTP_METHODS
+from ..constants import USE_OBJECT_NAME, HTTP_METHODS
 
 GET = HTTP_METHODS.GET 
 PUT = HTTP_METHODS.PUT
