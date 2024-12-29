@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from hololinked.server import Thing, Property, action, Event
 from hololinked.server.properties import (String, Integer, Number, List, Boolean,
                                     Selector, ClassSelector, TypedList)
-from hololinked.server import HTTP_METHODS, StateMachine
+from hololinked.constants import HTTP_METHODS
+from hololinked.server.state_machine import StateMachine
 from hololinked.server import JSONSerializer
 from hololinked.server.td import JSONSchema
 
