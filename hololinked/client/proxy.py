@@ -618,7 +618,9 @@ SM_INDEX_ENCODED_DATA = ServerMessage.ENCODED_DATA.value
 class _Action:
     
     __slots__ = ['_zmq_client', '_async_zmq_client', '_resource_info', '_invokation_timeout', '_execution_timeout',
-                 '_schema', '_schema_validator', '_last_return_value', '__name__', '__qualname__', '__doc__']
+                '_schema', '_schema_validator', '_last_return_value', '__name__', '__qualname__', '__doc__',
+                '_thing_execution_context' 
+                ]
     # method call abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
@@ -646,7 +648,7 @@ class _Action:
         self._schema_validator = schema_validator(resource_info.argument_schema) if (schema_validator and 
                                                                     resource_info.argument_schema and 
                                                                     global_config.validate_schema_on_client) else None
-    
+        self._thing_execution_context = dict(fetch_execution_logs=False) 
    
     def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
         """
@@ -686,6 +688,7 @@ class _Action:
                                                 invokation_timeout=self._invokation_timeout, 
                                                 execution_timeout=self._execution_timeout
                                             ),
+                                            thing_execution_context=self._thing_execution_context
                                         )
         return self.get_last_return_value(True) # note the missing underscore
     
@@ -707,7 +710,9 @@ class _Action:
                                             invokation_timeout=self._invokation_timeout, 
                                             execution_timeout=self._execution_timeout,
                                             oneway=True
-                                    ))
+                                        ),
+                                    thing_execution_context=self._thing_execution_context
+                                )
 
     def noblock(self, *args, **kwargs) -> None:
         if len(args) > 0: 
@@ -722,7 +727,9 @@ class _Action:
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
                                         execution_timeout=self._execution_timeout,
-                                    ))
+                                        ),
+                                    thing_execution_context=self._thing_execution_context    
+                                )
      
     async def async_call(self, *args, **kwargs):
         """
@@ -743,6 +750,7 @@ class _Action:
                                                     invokation_timeout=self._invokation_timeout, 
                                                     execution_timeout=self._execution_timeout,
                                                 ),
+                                                thing_execution_context=self._thing_execution_context
                                             )
         return self.get_last_return_value(True) # note the missing underscore
 

@@ -327,22 +327,27 @@ class RPCServer(BaseZMQServer):
                     isinstance(return_value[1], bytes) or 
                     isinstance(return_value[1], PreserializedData) 
                 ):  
+                    if fetch_execution_logs:
+                        return_value[0] = {
+                            "return_value" : return_value[0],
+                            "execution_logs" : list_handler.log_list
+                        }
                     payload = SerializableData(return_value[0], 'application/json')
                     preserialized_payload = PreserializedData(return_value[1], 'text/plain')
                 elif isinstance(return_value, bytes):
                     payload = SerializableData(None, 'application/json')
                     preserialized_payload = PreserializedData(return_value, 'text/plain')
                 else:
+                     # complete thing execution context
+                    if fetch_execution_logs:
+                        return_value = {
+                            "return_value" : return_value,
+                            "execution_logs" : list_handler.log_list
+                        }
                     payload = SerializableData(return_value, 'application/json')
                     preserialized_payload = PreserializedData(EMPTY_BYTE, 'text/plain')
 
-                # complete thing execution context
-                if fetch_execution_logs:
-                    return_value = {
-                        "return_value" : return_value,
-                        "execution_logs" : list_handler.log_list
-                    }
-
+                # set reply
                 instance._last_operation_reply = (payload, preserialized_payload)
             except (BreakInnerLoop, BreakAllLoops):
                 # exit the loop and stop the thing
