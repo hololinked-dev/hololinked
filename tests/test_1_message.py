@@ -173,5 +173,6 @@ class TestMessagingContract(MessageValidatorMixin):
         self.assertEqual(request_message.id, response_message.id)
 
 
+
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())

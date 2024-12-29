@@ -28,6 +28,7 @@ class TestThing(TestCase):
     def tearDownClass(self) -> None:
         print("tear down test Thing init")
 
+
     def test_1_id(self):
         # instance name must be a string and cannot be changed after set
         thing = self.thing_cls(id="test_id", log_level=logging.WARN)
