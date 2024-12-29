@@ -845,10 +845,11 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         super().__init__(id=id, server_id=server_id, **kwargs)
         self.create_socket(id=id, 
                         node_type='client', 
-                        socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('socket_address', None),
+                        socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('tcp_socket_address', None),
                         context=context, 
                         transport=transport, 
-                        **kwargs)
+                        **kwargs
+                    )
         self._terminate_context = context == None
         self.poller = zmq.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
