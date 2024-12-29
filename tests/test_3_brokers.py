@@ -67,8 +67,8 @@ class TestBrokerMixin(MessageValidatorMixin):
    
     @classmethod
     def setUpClass(self):
-        print(f"test ZMQ message brokers {self.__name__}")
         super().setUpClass()
+        print(f"test ZMQ message brokers {self.__name__}")
         self.logger = get_default_logger('test-message-broker', logging.ERROR)        
         self.done_queue = multiprocessing.Queue()
         self.last_server_message = None
@@ -158,7 +158,7 @@ class ActionMixin(TestBrokerMixin):
                         schema_validator=None
                     )
    
-   
+
 
 class TestAsyncZMQServer(TestBrokerMixin):
     

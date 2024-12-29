@@ -16,8 +16,8 @@ class TestSocket(TestCase):
 
     @classmethod
     def setUpClass(self):
-        print(f"test ZMQ socket creation with {self.__name__}")
         super().setUpClass()
+        print(f"test ZMQ socket creation with {self.__name__}")
 
 
     def test_1_socket_creation_defaults(self):

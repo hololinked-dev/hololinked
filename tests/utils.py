@@ -24,13 +24,17 @@ class TestRunner(unittest.TextTestRunner):
 
 
 class TestCase(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        print(f"----------------------------------------------------------------------")
     
     def setUp(self):
         print() # dont concatenate with results printed by unit test
 
     @classmethod
     def tearDownClass(self):
-        print(f"\ntear down {self.__name__}")
+        print(f"\n\ntear down {self.__name__}")
 
 
 

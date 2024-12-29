@@ -59,10 +59,10 @@ class TestInprocRPCServer(ActionMixin):
    
     @classmethod
     def setUpClass(self):
-        print(f"test ZMQ RPC Server {self.__name__}")
         self.context = zmq.asyncio.Context()
         super().setUpClass()
         self.setUpActions()
+        print(f"test ZMQ RPC Server {self.__name__}")
 
     
     def test_1_creation_defaults(self):
@@ -142,99 +142,99 @@ class TestInprocRPCServer(ActionMixin):
        
         
 
-# from hololinked.protocols.zmq.server import ZMQServer
+from hololinked.protocols.zmq.server import ZMQServer
 
-# class TestRPCServer(TestInprocRPCServer):
+class TestRPCServer(TestInprocRPCServer):
 
-#     @classmethod
-#     def setUpServer(self):
-#         self.server = ZMQServer(
-#                             id=self.server_id,
-#                             things=[self.thing],
-#                             logger=self.logger,
-#                             context=self.context,
-#                             transports=['INPROC', 'IPC', 'TCP'],
-#                             tcp_socket_address='tcp://*:59000'
-#                         )
+    @classmethod
+    def setUpServer(self):
+        self.server = ZMQServer(
+                            id=self.server_id,
+                            things=[self.thing],
+                            logger=self.logger,
+                            context=self.context,
+                            transports=['INPROC', 'IPC', 'TCP'],
+                            tcp_socket_address='tcp://*:59000'
+                        )
         
 
-#     @classmethod
-#     def setUpClient(self):
-#         super().setUpClient()
-#         self.inproc_client = self.client 
-#         self.ipc_client = SyncZMQClient(
-#                                 id=self.client_id,
-#                                 server_id=self.server_id, 
-#                                 logger=self.logger,
-#                                 handshake=False,
-#                                 transport='IPC'
-#                             )
-#         self.tcp_client = SyncZMQClient(
-#                                 id=self.client_id,
-#                                 server_id=self.server_id, 
-#                                 logger=self.logger,
-#                                 handshake=False,
-#                                 transport='TCP',
-#                                 tcp_socket_address='tcp://localhost:59000'
-#                             )
+    @classmethod
+    def setUpClient(self):
+        super().setUpClient()
+        self.inproc_client = self.client 
+        self.ipc_client = SyncZMQClient(
+                                id=self.client_id,
+                                server_id=self.server_id, 
+                                logger=self.logger,
+                                handshake=False,
+                                transport='IPC'
+                            )
+        self.tcp_client = SyncZMQClient(
+                                id=self.client_id,
+                                server_id=self.server_id, 
+                                logger=self.logger,
+                                handshake=False,
+                                transport='TCP',
+                                tcp_socket_address='tcp://localhost:59000'
+                            )
 
 
-#     @classmethod
-#     def setUpActions(self):
-#         super().setUpActions()
-#         self.echo_action._zmq_client = self.ipc_client
-#         self.get_serialized_data_action._zmq_client = self.ipc_client
-#         self.get_mixed_content_action._zmq_client = self.ipc_client
-#         self.sleep_action._zmq_client = self.ipc_client
+    @classmethod
+    def setUpActions(self):
+        super().setUpActions()
+        self.echo_action._zmq_client = self.ipc_client
+        self.get_serialized_data_action._zmq_client = self.ipc_client
+        self.get_mixed_content_action._zmq_client = self.ipc_client
+        self.sleep_action._zmq_client = self.ipc_client
 
 
-#     def test_1_creation_defaults(self):
-#         super().test_1_creation_defaults()
-#         self.assertTrue(self.server.ipc_server.socket_address.startswith('ipc://'))
-#         self.assertTrue(self.server.tcp_server.socket_address.startswith('tcp://'))
-#         self.assertTrue(self.server.tcp_server.socket_address.endswith(':59000'))
+    def test_1_creation_defaults(self):
+        super().test_1_creation_defaults()
+        self.assertTrue(self.server.ipc_server.socket_address.startswith('ipc://'))
+        self.assertTrue(self.server.tcp_server.socket_address.startswith('tcp://'))
+        self.assertTrue(self.server.tcp_server.socket_address.endswith(':59000'))
 
 
-#     def test_2_handshake(self):
-#         super().test_2_handshake()
-#         self.ipc_client.handshake()    
-#         self.tcp_client.handshake()
+    def test_2_handshake(self):
+        super().test_2_handshake()
+        self.ipc_client.handshake()    
+        self.tcp_client.handshake()
 
 
-#     def test_3_invoke_action(self):
-#         super().test_3_invoke_action()
-#         old_client = self.echo_action._zmq_client
-#         for client in [self.tcp_client, self.ipc_client]:
-#             self.echo_action._zmq_client = client
-#             return_value = self.echo_action('ipc_value')
-#             self.assertEqual(return_value, 'ipc_value')
-#         self.echo_action._zmq_client = old_client
+    def test_3_invoke_action(self):
+        super().test_3_invoke_action()
+        old_client = self.echo_action._zmq_client
+        for client in [self.tcp_client, self.ipc_client]:
+            self.echo_action._zmq_client = client
+            return_value = self.echo_action('ipc_value')
+            self.assertEqual(return_value, 'ipc_value')
+        self.echo_action._zmq_client = old_client
 
-#     def test_4_return_binary_value(self):
-#         super().test_4_return_binary_value()
-#         old_client = self.sleep_action._zmq_client
-#         for client in [self.tcp_client, self.ipc_client]:
-#             self.sleep_action._zmq_client = client
-#             return_value = self.get_mixed_content_action()
-#             self.assertEqual(return_value, ('foobar', b'foobar'))
-#             return_value = self.get_serialized_data_action()
-#             self.assertEqual(return_value, b'foobar')
-#         self.sleep_action._zmq_client = old_client
+    def test_4_return_binary_value(self):
+        super().test_4_return_binary_value()
+        old_client = self.sleep_action._zmq_client
+        for client in [self.tcp_client, self.ipc_client]:
+            self.sleep_action._zmq_client = client
+            return_value = self.get_mixed_content_action()
+            self.assertEqual(return_value, ('foobar', b'foobar'))
+            return_value = self.get_serialized_data_action()
+            self.assertEqual(return_value, b'foobar')
+        self.sleep_action._zmq_client = old_client
 
 
-#     def test_6_server_execution_context(self):
-#         super().test_6_server_execution_context()
-#         # test oneway action
-#         old_client = self.sleep_action._zmq_client
-#         for client in [self.tcp_client, self.ipc_client]:
-#             self.echo_action._zmq_client = client
-#             self.echo_action('ipc_value_2')
-#             self.assertEqual(self.echo_action.last_return_value, 'ipc_value_2')
-#             self.echo_action.oneway('ipc_value_3')
-#             self.assertEqual(self.echo_action.last_return_value, 'ipc_value_2')
-#             return_value = self.echo_action('ipc_value_4')
-#             self.assertEqual(return_value, 'ipc_value_4')        
-#         self.sleep_action._zmq_client = old_client
+    def test_6_server_execution_context(self):
+        super().test_6_server_execution_context()
+        # test oneway action
+        old_client = self.sleep_action._zmq_client
+        for client in [self.tcp_client, self.ipc_client]:
+            self.echo_action._zmq_client = client
+            self.echo_action('ipc_value_2')
+            self.assertEqual(self.echo_action.last_return_value, 'ipc_value_2')
+            self.echo_action.oneway('ipc_value_3')
+            self.assertEqual(self.echo_action.last_return_value, 'ipc_value_2')
+            return_value = self.echo_action('ipc_value_4')
+            self.assertEqual(return_value, 'ipc_value_4')        
+        self.sleep_action._zmq_client = old_client
 
 
 
