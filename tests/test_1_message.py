@@ -20,6 +20,7 @@ class MessageValidatorMixin(TestCase):
 
     @classmethod
     def setUpClass(self):
+        super().setUpClass()
         self.server_id = 'test-server'
         self.client_id = 'test-client'
         self.thing_id = 'test-thing'
@@ -74,8 +75,9 @@ class TestMessagingContract(MessageValidatorMixin):
 
     @classmethod    
     def setUpClass(self):
+        super().setUpClass()
         print(f"test message contract with {self.__name__}")
-        return super().setUpClass()
+    
     
     def test_1_request_message(self):
         """test the request message"""
