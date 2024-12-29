@@ -4,7 +4,7 @@ import warnings
 import typing 
 import logging
 import uuid
-
+from zmq.utils.monitor import parse_monitor_message
 
 from ..config import global_config
 from ..constants import JSON, CommonRPC, Operations, Operations, ServerMessage, ResourceTypes, ZMQ_TRANSPORTS
@@ -13,6 +13,7 @@ from ..server.dataklasses import ZMQAction, ZMQEvent, ZMQResource
 from ..protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, ResponseMessage, SerializableData, EMPTY_BYTE 
 from ..protocols.zmq.message import ERROR, TIMEOUT, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED
 from ..server.schema_validators import BaseSchemaValidator
+
 
 
 class ObjectProxy:
@@ -602,7 +603,7 @@ def raise_local_exception(error_message : typing.Dict[str, typing.Any]) -> None:
         ex.__notes__ = error_message["traceback"][0:-1]
         raise ex from None 
     elif isinstance(error_message, str) and error_message in ['invokation', 'execution']:
-        raise TimeoutError(f"Server did not respond within specified timeout") from None
+        raise TimeoutError(f"{error_message[0].upper()}{error_message[1:]} timeout occured. Server did not respond within specified timeout") from None
     raise RuntimeError("unknown error occurred on server side") from None
 
 

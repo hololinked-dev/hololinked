@@ -1,31 +1,21 @@
 import threading
-import typing
 import unittest
-import multiprocessing 
-import logging
 import zmq.asyncio
 
 from hololinked.client.proxy import _Action
-from hololinked.server import Thing
-from hololinked.client import ObjectProxy
-from hololinked.constants import ResourceTypes
-from hololinked.server.dataklasses import ZMQResource
 from hololinked.server.rpc_server import RPCServer
 from hololinked.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient
-from hololinked.protocols.zmq.message import SerializableData
-from hololinked.utils import get_current_async_loop, get_default_logger
-from tests.test_3_brokers import ActionMixin, TestBrokerMixin
+from hololinked.utils import get_current_async_loop
+from tests.test_3_brokers import ActionMixin
+
 try:
-    from .things import TestThing, OceanOpticsSpectrometer
-    from .utils import TestCase
+    from .things import TestThing
 except ImportError:
-    from things import TestThing, OceanOpticsSpectrometer
-    from utils import TestCase
+    from things import TestThing
 
 
 
-
-class TestRPCBroker(ActionMixin):
+class TestInprocRPCServer(ActionMixin):
 
 
     @classmethod
@@ -36,11 +26,7 @@ class TestRPCBroker(ActionMixin):
                             logger=self.logger,
                             context=self.context
                         )
-    """
-    Base class: BaseZMQ, BaseAsyncZMQ, BaseSyncZMQ
-    Servers: BaseZMQServer, AsyncZMQServer, ZMQServerPool
-    Clients: BaseZMQClient, SyncZMQClient, AsyncZMQClient, MessageMappedZMQClientPool
-    """
+
 
     @classmethod
     def setUpClient(self):
@@ -64,20 +50,19 @@ class TestRPCBroker(ActionMixin):
     def startServer(self):
         self._server_thread = threading.Thread(
                                             target=self.server.run, 
-                                            daemon=True
+                                            daemon=False # to test exit daemon must be False
                                         )
         self._server_thread.start()
 
    
     @classmethod
     def setUpClass(self):
-        print(f"test ZMQ Message Broker {self.__name__}")
+        print(f"test ZMQ RPC Server {self.__name__}")
         self.context = zmq.asyncio.Context()
         super().setUpClass()
         self.setUpActions()
 
     
-
     def test_1_creation_defaults(self):
         self.assertTrue(self.server.req_rep_server.socket_address.startswith('inproc://'))
         self.assertTrue(self.server.event_publisher.socket_address.startswith('inproc://'))
@@ -118,40 +103,140 @@ class TestRPCBroker(ActionMixin):
                 await self.sleep_action.async_call()
             except Exception as ex:
                 self.assertIsInstance(ex, TimeoutError)
+                self.assertIn('Execution timeout occured', str(ex))
             else:
-                self.assertTrue(False)        
+                self.assertTrue(False) # fail the test if reached here
         get_current_async_loop().run_until_complete(test_execution_timeout())
        
         async def test_invokation_timeout():
             try:
+                old_timeout = self.sleep_action._invokation_timeout
                 self.sleep_action._invokation_timeout = 1
                 await self.sleep_action.async_call()
             except Exception as ex:
                 self.assertIsInstance(ex, TimeoutError)
+                self.assertIn('Invokation timeout occured', str(ex))
+                self.sleep_action._invokation_timeout = old_timeout
             else:
-                self.assertTrue(False)
+                self.assertTrue(False) # fail the test if reached here
         get_current_async_loop().run_until_complete(test_invokation_timeout())
 
-        # async def test_oneway():
-        #     self.echo_action.oneway('value')
-        #     return_value = await self.echo_action.async_call('value2')
-        #     self.assertEqual(return_value, 'value2')
-        # get_current_async_loop().run_until_complete(test_oneway())
 
     # def test_6_thing_execution_context(self):
-    #     pass 
-
-
-    # def test_7_stop_polling(self):
-    #     self.server.stop_polling()
-
         
-            
+    #     async def test_thing_execution_timeout():
+    #         try:
+    #             await self.echo_action.async_call('value')
+    #         except Exception as ex:
+    #             self.assertIsInstance(ex, TimeoutError)
+    #             self.assertIn('Execution timeout occured', str(ex))
+    #         else:
+    #             self.assertTrue(False)
+
+
+    def test_7_stop(self):
+        self.server.stop()
+       
+        
+
+from hololinked.protocols.zmq.server import ZMQServer
+
+class TestRPCServer(TestInprocRPCServer):
+
+    @classmethod
+    def setUpServer(self):
+        self.server = ZMQServer(
+                            id=self.server_id,
+                            things=[self.thing],
+                            logger=self.logger,
+                            context=self.context,
+                            transports=['INPROC', 'IPC', 'TCP'],
+                            tcp_socket_address='tcp://*:59000'
+                        )
+        
+
+    @classmethod
+    def setUpClient(self):
+        super().setUpClient()
+        self.inproc_client = self.client 
+        self.ipc_client = SyncZMQClient(
+                                id=self.client_id,
+                                server_id=self.server_id, 
+                                logger=self.logger,
+                                handshake=False,
+                                transport='IPC'
+                            )
+        # self.tcp_client = SyncZMQClient(
+        #                         id=self.client_id,
+        #                         server_id=self.server_id, 
+        #                         logger=self.logger,
+        #                         handshake=False,
+        #                         transport='TCP',
+        #                         tcp_socket_address='tcp://localhost:59000'
+        #                     )
+
+
+    @classmethod
+    def startServer(self):
+        self._server_thread = threading.Thread(
+                                            target=self.server.run, 
+                                            daemon=False # to test exit daemon must be False
+                                        )
+        self._server_thread.start()
+
+
+    @classmethod
+    def setUpActions(self):
+        super().setUpActions()
+        self.echo_action._zmq_client = self.ipc_client
+        self.get_serialized_data_action._zmq_client = self.ipc_client
+        self.get_mixed_content_action._zmq_client = self.ipc_client
+        self.sleep_action._zmq_client = self.ipc_client
+
+
+    def test_1_creation_defaults(self):
+        super().test_1_creation_defaults()
+        self.assertTrue(self.server.ipc_server.socket_address.startswith('ipc://'))
+        self.assertTrue(self.server.tcp_server.socket_address.startswith('tcp://'))
+        self.assertTrue(self.server.tcp_server.socket_address.endswith(':59000'))
+
+
+    def test_2_handshake(self):
+        super().test_2_handshake()
+        self.ipc_client.handshake()    
+
+
+    def test_3_invoke_action(self):
+        super().test_3_invoke_action()
+        return_value = self.echo_action('ipc_value')
+        self.assertEqual(return_value, 'ipc_value')
+        
+
+    def test_4_return_binary_value(self):
+        super().test_4_return_binary_value()
+        return_value = self.get_mixed_content_action()
+        self.assertEqual(return_value, ('foobar', b'foobar'))
+        return_value = self.get_serialized_data_action()
+        self.assertEqual(return_value, b'foobar')
+
+
+    def test_5_server_execution_context(self):
+        super().test_5_server_execution_context()
+        # test oneway action
+        self.echo_action('ipc_value_2')
+        self.echo_action.oneway('ipc_value_3')
+        self.assertEqual(self.echo_action.last_return_value, 'ipc_value_2')
+        return_value = self.echo_action('ipc_value_4')
+        self.assertEqual(return_value, 'ipc_value_4')
+
+
+
+
+
 
 if __name__ == '__main__':
     try:
         from utils import TestRunner
     except ImportError:
         from .utils import TestRunner
-
     unittest.main(testRunner=TestRunner())
