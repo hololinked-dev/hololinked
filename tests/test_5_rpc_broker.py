@@ -2,17 +2,16 @@ import threading
 import unittest
 import zmq.asyncio
 
-from hololinked.client.proxy import _Action
 from hololinked.server.rpc_server import RPCServer
 from hololinked.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient
 from hololinked.utils import get_current_async_loop
 
 try:
-    from .things import TestThing
     from .test_3_brokers import ActionMixin
+    from .utils import TestRunner
 except ImportError:
-    from things import TestThing
     from test_3_brokers import ActionMixin
+    from utils import TestRunner
 
 
 
@@ -40,13 +39,6 @@ class TestInprocRPCServer(ActionMixin):
                                 transport='INPROC'
                             )
         
-    @classmethod
-    def setUpThing(self):
-        self.thing = TestThing(
-                            id=self.thing_id,
-                            logger=self.logger
-                        )
-
 
     @classmethod
     def startServer(self):
@@ -86,8 +78,8 @@ class TestInprocRPCServer(ActionMixin):
     def test_4_return_binary_value(self):
 
         async def async_call():
-            await self.get_mixed_content_action.async_call()
-            return self.get_mixed_content_action.last_return_value
+            await self.get_mixed_content_data_action.async_call()
+            return self.get_mixed_content_data_action.last_return_value
         result = get_current_async_loop().run_until_complete(async_call())
         self.assertEqual(result, ('foobar', b'foobar'))
 
@@ -184,7 +176,7 @@ class TestRPCServer(TestInprocRPCServer):
         super().setUpActions()
         self.echo_action._zmq_client = self.ipc_client
         self.get_serialized_data_action._zmq_client = self.ipc_client
-        self.get_mixed_content_action._zmq_client = self.ipc_client
+        self.get_mixed_content_data_action._zmq_client = self.ipc_client
         self.sleep_action._zmq_client = self.ipc_client
 
 
@@ -215,7 +207,7 @@ class TestRPCServer(TestInprocRPCServer):
         old_client = self.sleep_action._zmq_client
         for client in [self.tcp_client, self.ipc_client]:
             self.sleep_action._zmq_client = client
-            return_value = self.get_mixed_content_action()
+            return_value = self.get_mixed_content_data_action()
             self.assertEqual(return_value, ('foobar', b'foobar'))
             return_value = self.get_serialized_data_action()
             self.assertEqual(return_value, b'foobar')
@@ -240,8 +232,4 @@ class TestRPCServer(TestInprocRPCServer):
 
     
 if __name__ == '__main__':
-    try:
-        from utils import TestRunner
-    except ImportError:
-        from .utils import TestRunner
     unittest.main(testRunner=TestRunner())
