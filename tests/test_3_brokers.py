@@ -8,19 +8,21 @@ from hololinked.protocols.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR,
                                             ResponseMessage, ResponseHeader) # server to client
 from hololinked.protocols.zmq.brokers import AsyncZMQServer, MessageMappedZMQClientPool, SyncZMQClient, AsyncZMQClient
 from hololinked.utils import get_current_async_loop, get_default_logger
-from hololinked.server.dataklasses import ZMQAction, ZMQResource
+from hololinked.server.dataklasses import ZMQResource
 # from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes
 from hololinked.client.proxy import _Action, _Property
 
 
 try:
-    from .utils import TestCase, TestRunner
+    from .utils import TestRunner
     from .test_1_message import MessageValidatorMixin
     from .things.starter import run_zmq_server
+    from .things import TestThing
 except ImportError:
-    from utils import TestCase, TestRunner
+    from utils import TestRunner
     from test_1_message import MessageValidatorMixin
     from things.starter import run_zmq_server
+    from things import TestThing
 
 
 
@@ -52,7 +54,11 @@ class TestBrokerMixin(MessageValidatorMixin):
     
     @classmethod
     def setUpThing(self):
-        pass 
+        self.thing = TestThing(
+                            id=self.thing_id,
+                            logger=self.logger
+                        )
+
         
 
     @classmethod
@@ -140,18 +146,18 @@ class ActionMixin(TestBrokerMixin):
                     )
 
 
-        get_mixed_content_action_info = ZMQResource(
+        get_mixed_content_data_action_info = ZMQResource(
                         what=ResourceTypes.ACTION, 
                         class_name='TestThing', 
                         id='test-thing',
-                        obj_name='get_mixed_content', 
-                        qualname='TestThing.get_mixed_content', 
+                        obj_name='get_mixed_content_data', 
+                        qualname='TestThing.get_mixed_content_data', 
                         doc="returns mixed content to the client",
                         request_as_argument=False
                     )
-        self.get_mixed_content_action = _Action(
+        self.get_mixed_content_data_action = _Action(
                         sync_client=None,
-                        resource_info=get_mixed_content_action_info,
+                        resource_info=get_mixed_content_data_action_info,
                         invokation_timeout=5, 
                         execution_timeout=5, 
                         async_client=self.client, 
