@@ -7,13 +7,14 @@ import zmq.asyncio
 
 from hololinked.server import Thing
 from hololinked.client import ObjectProxy
-from hololinked.server.eventloop import EventLoop
+from tests.things.starter import run_thing_with_zmq_server
 try:
     from .things import TestThing, OceanOpticsSpectrometer
     from .utils import TestCase
 except ImportError:
     from things import TestThing, OceanOpticsSpectrometer
     from utils import TestCase
+
 
 
 class TestThingRun(TestCase):
@@ -31,8 +32,12 @@ class TestThingRun(TestCase):
     def test_thing_run_and_exit(self):
         # should be able to start and end with exactly the specified transports
         done_queue = multiprocessing.Queue()
-        multiprocessing.Process(target=start_thing, args=('test-run', ), kwargs=dict(done_queue=done_queue), 
-                            daemon=True).start()
+        multiprocessing.Process(
+                            target=run_thing_with_zmq_server, 
+                            args=('test-run', ), 
+                            kwargs=dict(done_queue=done_queue), 
+                            daemon=True
+                        ).start()
         thing_client = ObjectProxy('test-run', log_level=logging.WARN) # type: Thing
         self.assertEqual(thing_client.get_transports(), ['IPC']) 
         thing_client.exit()
@@ -75,20 +80,6 @@ class TestOceanOpticsSpectrometer(TestThing):
 
         
         
-
-def start_thing(id : str, transports : typing.List[str] = ['IPC'], tcp_socket_address : str = None,
-                done_queue : typing.Optional[multiprocessing.Queue] = None) -> None:
-    thing = TestThing(id=id) #, log_level=logging.WARN)
-    thing.run_with_zmq_server(zmq_transports=transports, tcp_socket_address=tcp_socket_address)
-    if done_queue is not None:
-        done_queue.put(id)
-
-
-def start_thing_with_http_server(id : str, context : zmq.asyncio.Context) -> None:
-    EventLoop.get_async_loop() # creates the event loop if absent
-    thing = TestThing(id=id)# , log_level=logging.WARN)
-    thing.run_with_http_server(context=context)
-
 
 if __name__ == '__main__':
     try:

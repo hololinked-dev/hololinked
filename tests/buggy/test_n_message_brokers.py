@@ -18,7 +18,7 @@ from hololinked.client.proxy import _Action, _Property
 
 
 try:
-    from .utils import TestCase, TestRunner
+    from ..utils import TestCase, TestRunner
     # from .things import TestThing, start_thing_forked
 except ImportError:
     from utils import TestCase, TestRunner

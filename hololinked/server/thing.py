@@ -200,8 +200,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # zmq_serializer, http_serializer = _get_serializer_from_user_given_options(zmq_serializer=zmq_serializer,
         #                                                             http_serializer=http_serializer)
          
-        Parameterized.__init__(self, id=id, logger=logger, 
-                        zmq_serializer=zmq_serializer, http_serializer=http_serializer, **kwargs)
+        Parameterized.__init__(self, id=id, logger=logger, **kwargs)
         RemoteInvokable.__init__(self)
         EventSource.__init__(self)
 
@@ -500,7 +499,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         return ThingDescription(instance=self, authority=authority or self._object_info.http_server,
                                     allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)   
     
-    @action( input_schema={
+    @action(input_schema={
             "type": "object", 
             "properties": {
                 "authority": {"type": "string"}, 
@@ -536,7 +535,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         if self.rpc_server is None:
             return
         if self._owner is None:
-            self.rpc_server.stop_polling()
+            self.rpc_server.stop()
             raise BreakInnerLoop # stops the inner loop of the object
         else:
             warnings.warn("call exit on the top object, composed objects cannot exit the loop.", RuntimeWarning)
@@ -546,8 +545,42 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """ping the Thing to see if it is alive"""
         pass
 
+    def _prepare_rpc_server(self, 
+                        transports : ZMQ_TRANSPORTS, 
+                        context : zmq.asyncio.Context | None = None,
+                        **kwargs
+                    ) -> None:
+        # expose_eventloop: bool, False
+        #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
+        #     adding more objects to the same event loop.
+        # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
+        if context is not None and not isinstance(context, zmq.asyncio.Context):
+            raise TypeError("context must be an instance of zmq.asyncio.Context")
+        context = context or zmq.asyncio.Context()
+
+        if transports == 'INPROC' or transports == ZMQ_TRANSPORTS.INPROC:
+            from .rpc_server import RPCServer
+            RPCServer(
+                id=self.id, 
+                things=[self],
+                context=context, 
+                protocols=ZMQ_TRANSPORTS.INPROC, 
+                logger=self.logger
+            )   
+        else: 
+            from ..protocols.zmq import ZMQServer
+            ZMQServer(
+                id=self.id, 
+                things=[self],
+                context=context, 
+                protocols=transports, 
+                tcp_socket_address=kwargs.get('tcp_socket_address', None),
+                logger=self.logger
+            )
+
+
     def run_with_zmq_server(self, 
-            ZMQ_TRANSPORTS : typing.Union[typing.Sequence[ZMQ_TRANSPORTS], 
+            transports : typing.Union[typing.Sequence[ZMQ_TRANSPORTS], 
                                          ZMQ_TRANSPORTS] = ZMQ_TRANSPORTS.IPC, 
             # expose_eventloop : bool = False,
             **kwargs
@@ -575,43 +608,9 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 zmq context to be used. If not supplied, a new context is created.
                 For INPROC clients, you need to provide a context.
         """
-        from .protocols.zmq import RPCServer
-        # expose_eventloop: bool, False
-        #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
-        #     adding more objects to the same event loop.
-        # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
-        self._prepare_resources()
-        context = kwargs.get('context', None)
-        if context is not None and not isinstance(context, zmq.asyncio.Context):
-            raise TypeError("context must be an instance of zmq.asyncio.Context")
-        context = context or zmq.asyncio.Context()
-
-        from .zmq_server import RPCServer
-        RPCServer(
-            id=self.id, 
-            things=[self],
-            context=context, 
-            protocols=ZMQ_TRANSPORTS, 
-            zmq_serializer=self.zmq_serializer, 
-            http_serializer=self.http_serializer, 
-            tcp_socket_address=kwargs.get('tcp_socket_address', None),
-            logger=self.logger
-        ) 
-        
-        
-
-        if kwargs.get('http_server', None):
-            from .protocols.http.HTTPServer import HTTPServer
-            httpserver = kwargs.pop('http_server')
-            assert isinstance(httpserver, HTTPServer)
-            httpserver.add_things(self)
-            httpserver._zmq_protocol = ZMQ_TRANSPORTS.INPROC
-            httpserver._zmq_inproc_socket_context = context
-            httpserver._zmq_inproc_event_context = self.event_publisher.context
-            assert httpserver.all_ok
-            httpserver.tornado_instance.listen(port=httpserver.port, address=httpserver.address)
-        self.event_loop.run()
-
+        self._prepare_rpc_server(transports=transports, **kwargs)
+        self.rpc_server.run()
+     
 
     def run_with_http_server(self, port : int = 8080, address : str = '0.0.0.0',
                 # host : str = None,
@@ -650,7 +649,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # host: str
         #     Host Server to subscribe to coordinate starting sequence of things & web GUI
         
-        from .protocols.http.HTTPServer import HTTPServer        
+        from ..protocols.http.HTTPServer import HTTPServer        
         http_server = HTTPServer(
             [self.id], logger=self.logger, serializer=self.http_serializer, 
             port=port, address=address, ssl_context=ssl_context,
@@ -658,12 +657,15 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             # network_interface=network_interface, 
             **kwargs,
         )
-
-        self.run(
-            ZMQ_TRANSPORTS=ZMQ_TRANSPORTS.INPROC,
-            http_server=http_server,
-            context=kwargs.get('context', None)
-        ) # blocks until exit is called
+        
+        http_server.add_things(self)
+        http_server._zmq_protocol = ZMQ_TRANSPORTS.INPROC
+        http_server._zmq_inproc_socket_context = context
+        http_server._zmq_inproc_event_context = self.event_publisher.context
+        assert http_server.all_ok
+        http_server.tornado_instance.listen(port=httpserver.port, address=httpserver.address)
+     
+      
 
         http_server.tornado_instance.stop()
 

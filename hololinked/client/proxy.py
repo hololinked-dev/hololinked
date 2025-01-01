@@ -759,7 +759,7 @@ class _Action:
 class _Property:
 
     __slots__ = ['_zmq_client', '_async_zmq_client', '_resource_info', 
-                '_invokation_timeout', '_execution_timeout', '_last_value', '__name__', '__doc__']   
+                '_invokation_timeout', '_execution_timeout', '_last_return_value', '__name__', '__doc__']   
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
@@ -773,107 +773,124 @@ class _Property:
         self._resource_info = resource_info
         self._resource_info.is_client_representation = True
 
-    @property # i.e. cannot have setter
-    def last_read_value(self) -> typing.Any:
-        """
-        cache of last read value
-        """
-        if len(self._last_value[SM_INDEX_ENCODED_DATA]) > 0:
-            return self._last_value[SM_INDEX_ENCODED_DATA]
-            # property should either be encoded or not encoded
-        return self._last_value[SM_INDEX_DATA]
+    # @property # i.e. cannot have setter
+    # def last_read_value(self) -> typing.Any:
+    #     """
+    #     cache of last read value
+    #     """
+    #     if len(self._last_value[SM_INDEX_ENCODED_DATA]) > 0:
+    #         return self._last_value[SM_INDEX_ENCODED_DATA]
+    #         # property should either be encoded or not encoded
+    #     return self._last_value[SM_INDEX_DATA]
     
+
+    def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
+        """
+        cached return value of the last call to the method
+        """
+        payload = self._last_return_value.payload.deserialize() 
+        preserialized_payload = self._last_return_value.preserialized_payload.value
+        if preserialized_payload != EMPTY_BYTE:
+            if payload is None:
+                return preserialized_payload
+            return payload, preserialized_payload
+        elif self._last_return_value.type != REPLY and raise_exception:
+            raise_local_exception(payload)
+        return payload
+    
+    last_return_value = property(fget=get_last_return_value,
+                                doc="cached return value of the last call to the method")
+
+
     @property
     def last_zmq_message(self) -> typing.List:
         """
         cache of last message received for this property
         """
-        return self._last_value
+        return self._last_return_value
     
     def set(self, value : typing.Any) -> None:
-        self._last_value = self._zmq_client.execute(
+        self._last_return_value = self._zmq_client.execute(
                                                 thing_id=self._resource_info.id, 
                                                 objekt=self._resource_info.obj_name,
                                                 operation=Operations.writeProperty,
-                                                arguments=value,
+                                                payload=SerializableData(value, 'application/json'),
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout,
                                                     execution_timeout=self._execution_timeout
                                                 ),
-                                                raise_client_side_exception=True,
-                                                deserialize_reply=True)
+                                            )
+        self.get_last_return_value(True)
      
     def get(self) -> typing.Any:
-        self._last_value = self._zmq_client.execute(
+        self._last_return_value = self._zmq_client.execute(
                                                 thing_id=self._resource_info.id,
                                                 objekt=self._resource_info.obj_name,
                                                 operation=Operations.readProperty,
-                                                arguments=None,
                                                 server_execution_context=dict(
                                                     invocation_timeout=self._invokation_timeout,
                                                     execution_timeout=self._execution_timeout
                                                 ), 
-                                                raise_client_side_exception=True,
-                                                deserialize_reply=True)
-        return self.last_read_value 
+                                            )
+        return self.get_last_return_value(True) 
     
     async def async_set(self, value : typing.Any) -> None:
         if not self._async_zmq_client:
             raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
-        self._last_value = await self._async_zmq_client.async_execute(
+        self._last_return_value = await self._async_zmq_client.async_execute(
                                                         thing_id=self._resource_info.id,
                                                         objekt=self._resource_info.obj_name,
                                                         operation=Operations.writeProperty,
-                                                        arguments=value,
+                                                        payload=SerializableData(value, 'application/json'),
                                                         server_execution_context=dict(
                                                             invokation_timeout=self._invokation_timeout, 
                                                             execution_timeout=self._execution_timeout
                                                         ),
-                                                        raise_client_side_exception=True)
+                                                    )
     
     async def async_get(self) -> typing.Any:
         if not self._async_zmq_client:
             raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
-        self._last_value = await self._async_zmq_client.async_execute(
+        self._last_return_value = await self._async_zmq_client.async_execute(
                                                 thing_id=self._resource_info.id,
                                                 objekt=self._resource_info.obj_name,
                                                 operation=Operations.readProperty,
-                                                arguments=None,
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout, 
                                                     execution_timeout=self._execution_timeout
                                                 ),
-                                                raise_client_side_exception=True)
-        return self.last_read_value 
+                                            )
+        return self.get_last_return_value(True) 
     
     def noblock_get(self) -> None:
         return self._zmq_client.send_request(
                                             thing_id=self._resource_info.id,
                                             objekt=self._resource_info.obj_name,
                                             operation=Operations.readProperty,
-                                            arguments=None,
                                             server_execution_context=dict(
                                                 invokation_timeout=self._invokation_timeout, 
                                                 execution_timeout=self._execution_timeout
-                                            ))
+                                            )
+                                        )
     
     def noblock_set(self, value : typing.Any) -> None:
         return self._zmq_client.send_request(   
                                         thing_id=self._resource_info.id,
                                         objekt=self._resource_info.obj_name,
                                         operation=Operations.writeProperty,
-                                        arguments=value,
+                                        payload=SerializableData(value, 'application/json'),
                                         server_execution_context=dict(
                                             invokation_timeout=self._invokation_timeout, 
                                             execution_timeout=self._execution_timeout
-                                        ))
+                                        )
+                                    )
     
     def oneway_set(self, value : typing.Any) -> None:
         self._zmq_client.send_request(
                                     thing_id=self._resource_info.obj_name,
                                     objekt=self._resource_info.obj_name,
                                     operation=Operations.writeProperty,
-                                    arguments=value, 
+                                    payload=SerializableData(value, 'application/json'),
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
                                         execution_timeout=self._execution_timeout

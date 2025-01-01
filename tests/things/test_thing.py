@@ -1,5 +1,5 @@
 import time
-from hololinked.server import Thing, action
+from hololinked.server import Thing, action, Property
 
 
 class TestThing(Thing):
@@ -24,12 +24,14 @@ class TestThing(Thing):
         return b'foobar'
     
     @action()
-    def get_mixed_content(self):
+    def get_mixed_content_data(self):
         return 'foobar', b'foobar'
     
     @action()
     def sleep(self):
         time.sleep(10)
 
+
+    test_property = Property(default=None, doc='test property')
     
    
