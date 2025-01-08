@@ -68,7 +68,14 @@ class Action:
     def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
         raise NotImplementedError("external_call must be implemented by subclass")
-            
+
+    @property
+    def name(self) -> str:
+        """name of the action"""
+        return self.obj.__name__           
+
+
+    
 
 class SyncAction(Action):  
     """
@@ -98,7 +105,115 @@ class AsyncAction(Action):
         return await self.obj(self.owner_inst, *args, **kwargs)
 
 
+try:
+    from pydantic import BaseModel, ConfigDict, Field, RootModel
+    from pydantic.main import create_model
+    from inspect import Parameter, signature
+    from collections import OrderedDict
+
+    class EmptyObject(BaseModel):
+        model_config = ConfigDict(extra="allow")
+
+    class StrictEmptyObject(EmptyObject):
+        model_config = ConfigDict(extra="forbid")
+
+    class EmptyInput(RootModel):
+        root: EmptyObject | None = None
+
+    class StrictEmptyInput(EmptyInput):
+        root: StrictEmptyObject | None = None
+
+    def input_model_from_signature(
+        func: typing.Callable,
+        remove_first_positional_arg: bool = False,
+        ignore: typing.Sequence[str] | None = None,
+    ) -> type[BaseModel]:
+        """Create a pydantic model for a function's signature.
+
+        This is deliberately quite a lot more basic than
+        `pydantic.decorator.ValidatedFunction` because it is designed
+        to handle JSON input. That means that we don't want positional
+        arguments, unless there's exactly one (in which case we have a
+        single value, not an object, and this may or may not be supported).
+
+        This will fail for position-only arguments, though that may change
+        in the future.
+
+        :param remove_first_positional_arg: Remove the first argument from the
+            model (this is appropriate for methods, as the first argument,
+            self, is baked in when it's called, but is present in the
+            signature).
+        :param ignore: Ignore arguments that have the specified name.
+            This is useful for e.g. dependencies that are injected by LabThings.
+        :returns: A pydantic model class describing the input parameters
+
+        TODO: deal with (or exclude) functions with a single positional parameter
+        """
+        parameters = OrderedDict(signature(func).parameters) # type: OrderedDict[str, Parameter]
+        if remove_first_positional_arg:
+            name, parameter = next(iter((parameters.items())))  # get the first parameter
+            if parameter.kind in (Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD):
+                raise ValueError("Can't remove first positional argument: there is none.")
+            del parameters[name]
+
+        # Raise errors if positional-only or variable positional args are present
+        if any(p.kind == Parameter.VAR_POSITIONAL for p in parameters.values()):
+            raise TypeError(
+                f"{func.__name__} accepts extra positional arguments, "
+                "which is not supported."
+            )
+        if any(p.kind == Parameter.POSITIONAL_ONLY for p in parameters.values()):
+            raise TypeError(
+                f"{func.__name__} has positional-only arguments which are not supported."
+            )
+
+        # The line below determines if we accept arbitrary extra parameters (**kwargs)
+        takes_v_kwargs = False  # will be updated later
+        # fields is a dictionary of tuples of (type, default) that defines the input model
+        type_hints = typing.get_type_hints(func, include_extras=True)
+        fields = {} # type: typing.Dict[str, typing.Tuple[type, typing.Any]]
+        for name, p in parameters.items():
+            if ignore and name in ignore:
+                continue
+            if p.kind == Parameter.VAR_KEYWORD:
+                takes_v_kwargs = True  # we accept arbitrary extra arguments
+                continue  # **kwargs should not appear in the schema
+            # `type_hints` does more processing than p.annotation - but will
+            # not have entries for missing annotations.
+            p_type = typing.Any if p.annotation is Parameter.empty else type_hints[name]
+            # pydantic uses `...` to represent missing defaults (i.e. required params)
+            default = Field(...) if p.default is Parameter.empty else p.default
+            fields[name] = (p_type, default)
+        model = create_model(  # type: ignore[call-overload]
+            f"{func.__name__}_input",
+            model_config=ConfigDict(extra="allow" if takes_v_kwargs else "forbid"),
+            **fields,
+        )
+        # If there are no fields, we use a RootModel to allow none as well as {}
+        if len(fields) == 0:
+            return EmptyInput if takes_v_kwargs else StrictEmptyInput
+        return model
+    
+    def return_type(func: typing.Callable) -> typing.Type:
+        """Determine the return type of a function."""
+        sig = inspect.signature(func)
+        if sig.return_annotation == inspect.Signature.empty:
+            return Any  # type: ignore[return-value]
+        else:
+            # We use `get_type_hints` rather than just `sig.return_annotation`
+            # because it resolves forward references, etc.
+            type_hints = typing.get_type_hints(func, include_extras=True)
+            return type_hints["return"]
+
+except ImportError:
+    def input_model_from_signature(
+        func: typing.Callable,
+        remove_first_positional_arg: bool = False,
+        ignore: typing.Sequence[str] | None = None,
+    ) -> type[BaseModel]:
+        raise ImportError("pydantic is required for this feature")
    
+
 def action(
         input_schema : JSON | None = None, 
         output_schema : JSON | None = None, 
@@ -188,6 +303,7 @@ def action(
         raise ValueError("Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, " + 
                         f"unknown arguments found {kwargs.keys()}")
     return inner 
+
 
 
 
