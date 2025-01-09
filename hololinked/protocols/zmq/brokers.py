@@ -1054,8 +1054,10 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                         context=context, 
                         transport=transport, 
                         **kwargs)
+        self._monitor_socket = self.socket.get_monitor_socket()
         self.poller = zmq.asyncio.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
+        self.poller.register(self._monitor_socket, zmq.POLLIN) 
         self._terminate_context = context == None
         self._handshake_event = asyncio.Event()
         self._handshake_event.clear()
@@ -1097,8 +1099,6 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                                                     " Another message arrived before handshake complete.")
             else:
                 self.logger.info('got no response for handshake')
-        self._monitor_socket = self.socket.get_monitor_socket()
-        self.poller.register(self._monitor_socket, zmq.POLLIN) 
         self._handshake_event.set()
 
     async def handshake_complete(self):
@@ -1286,6 +1286,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
     """
 
     def __init__(self, 
+                id: str,
                 client_ids: typing.List[str], 
                 server_ids: typing.List[str], 
                 handshake: bool = True, 
@@ -1294,7 +1295,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                 context: zmq.asyncio.Context = None, 
                 **kwargs
             ) -> None:
-        super().__init__(id='pool', server_id=None, **kwargs)
+        super().__init__(id=id, server_id=None, **kwargs)
         if len(client_ids) != len(server_ids):
             raise ValueError("client_ids and server_ids must have same length")
         # this class does not call create_socket method
@@ -1310,9 +1311,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                             context=self.context, 
                             logger=self.logger
                         )
-            client._monitor_socket = client.socket.get_monitor_socket()
-            self.poller.register(client._monitor_socket, zmq.POLLIN)
-            self.pool[id] = client
+            self.register(client)
         # Both the client pool as well as the individual client get their serializers and client_types
         # This is required to implement pool level sending and receiving messages like polling of pool of sockets
         self.event_pool = AsyncioEventPool(len(server_ids))
@@ -1348,7 +1347,30 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             self.pool[server_id] = client
         else: 
             raise ValueError(f"client for instance name '{server_id}' already present in pool")
+        
 
+    def register(self, client: AsyncZMQClient) -> None:
+        """
+        Register a client with the pool. 
+
+        Parameters
+        ----------
+        client: AsyncZMQClient
+            client to be registered
+        """
+        if not isinstance(client, AsyncZMQClient):
+            raise TypeError("registration possible for clients only subclass of AsyncZMQClient." +
+                           f" Given type {type(client)}")
+        self.pool[client.id] = client 
+        self.poller.register(client.socket, zmq.POLLIN)
+        self.poller.register(client._monitor_socket, zmq.POLLIN)
+
+   
+    def get_client_id_from_thing_id(self, thing_id: str) -> typing.Dict[str, AsyncZMQClient]:
+        """
+        map of thing_id to client
+        """
+        raise NotImplementedError("get_client_id_from_thing_id not implemented for MessageMappedZMQClientPool")
 
     @property
     def poll_timeout(self) -> int:
@@ -1577,7 +1599,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         payload: SerializableData = SerializableData(None, 'application/json'), 
                         preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
                         server_execution_context: ServerExecutionContext = default_server_execution_context,
-                        thing_execution_context: ThingExecutionContext  = default_thing_execution_context, raise_client_side_exception = False, 
+                        thing_execution_context: ThingExecutionContext  = default_thing_execution_context, 
                     ) -> typing.Dict[str, typing.Any]:
         """
         sends message and receives response.
@@ -1623,7 +1645,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         register the server message polling loop in the asyncio event loop. 
         """
         event_loop = asyncio.get_event_loop()
-        event_loop.call_soon(lambda: asyncio.create_task(self.poll()))
+        event_loop.call_soon(lambda: asyncio.create_task(self.poll_responses()))
 
     def stop_polling(self):
         """

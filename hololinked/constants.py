@@ -27,7 +27,6 @@ class ResourceTypes(StrEnum):
     PROPERTY = "PROPERTY"
     ACTION = "ACTION"
     EVENT = "EVENT"
-    FILE = "FILE"
     THING = "THING"
     
 
