@@ -14,7 +14,7 @@ from ....param import Parameterized
 from ....param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, String
 from ....constants import HTTP_METHODS, ZMQ_TRANSPORTS, HTTPServerTypes, Operations
 from ....utils import get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, run_callable_somehow
-from ....serializers import JSONSerializer
+from ....serializers.serializers import JSONSerializer
 from ....server.schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from ....server.property import Property
 from ....server.actions import Action
@@ -466,18 +466,15 @@ class HTTPServer(Parameterized):
         if not isinstance(other, HTTPServer):
             return False
         return self._IP == other._IP
-        
-    def __repr__(self):
-        return f"{self.__class__.__name__}(address={self.address}, port={self.port})"
-    
+            
     def __str__(self):
         return f"{self.__class__.__name__}(address={self.address}, port={self.port})"
     
     def __del__(self):
         self.stop()
+
         
    
-
 def _comply_http_method(http_methods : typing.Any):
     """comply the supplied HTTP method to the router to a tuple and check if the method is supported"""
     if isinstance(http_methods, str):
@@ -596,9 +593,6 @@ async def add_zmq_served_thing(server: HTTPServer, thing: dict | str) -> None:
 
             
 
-   
-        
-   
 __all__ = [
     HTTPServer.__name__
 ]

@@ -40,9 +40,9 @@ try:
 except ImportError:
     pass 
 
-from .param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
-from .constants import JSONSerializable, Serializers
-from .utils import format_exception_as_json
+from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
+from ..constants import JSONSerializable, Serializers
+from ..utils import format_exception_as_json
 
 
 
@@ -139,7 +139,11 @@ class JSONSerializer(BaseSerializer):
             raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
         cls._type_replacements[object_type] = replacement_function
 
-
+    @property
+    def content_type(self) -> str:
+        return 'application/json'
+    
+    
 class PythonBuiltinJSONSerializer(JSONSerializer):
     "(de)serializer that wraps the python builtin JSON serialization protocol."
 
@@ -180,6 +184,10 @@ class PickleSerializer(BaseSerializer):
         "method called by ZMQ message brokers to deserialize data"
         return pickle.loads(self.convert_to_bytes(data))
     
+    @property
+    def content_type(self) -> str:
+        return 'application/octet-stream'
+    
 
 
 class MsgpackSerializer(BaseSerializer):
@@ -199,6 +207,11 @@ class MsgpackSerializer(BaseSerializer):
     def loads(self, value) -> typing.Any:
         return msgpack.decode(self.convert_to_bytes(value))
     
+    @property
+    def content_type(self) -> str:
+        return 'x-msgpack'
+    
+
 serializers = {
     None      : JSONSerializer,
     'json'    : JSONSerializer, 
@@ -207,11 +220,20 @@ serializers = {
 }
     
 
-
 class Serializers:
     json = JSONSerializer()
     pickle = PickleSerializer()
     msgpack = MsgpackSerializer()
+
+
+    def register_content_type(self, objekt: str) -> None:
+        "register content type for a serializer"
+        raise NotImplementedError("implement in subclass")
+    
+    def get_serializer_for_objekt(self, objekt: str) -> BaseSerializer:
+        "get serializer for a content type"
+        raise NotImplementedError("implement in subclass")
+
 
     
 

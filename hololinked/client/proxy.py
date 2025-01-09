@@ -8,7 +8,7 @@ from zmq.utils.monitor import parse_monitor_message
 
 from ..config import global_config
 from ..constants import JSON, CommonRPC, Operations, Operations, ServerMessage, ResourceTypes, ZMQ_TRANSPORTS
-from ..serializers import BaseSerializer
+from ..serializers.serializers import BaseSerializer
 from ..server.dataklasses import ZMQAction, ZMQEvent, ZMQResource
 from ..protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, ResponseMessage, SerializableData, EMPTY_BYTE 
 from ..protocols.zmq.message import ERROR, TIMEOUT, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED
