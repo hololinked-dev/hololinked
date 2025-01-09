@@ -28,7 +28,7 @@ import typing
 import warnings
 
 from . import __version__
-from .serializers import PythonBuiltinJSONSerializer
+from .serializers.serializers import PythonBuiltinJSONSerializer
 
 
 class Configuration:

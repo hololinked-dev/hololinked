@@ -25,7 +25,7 @@ from .property import Property
 from .properties import Boolean, TypedDict
 from .actions import Action, action as remote_method
 from .logger import ListHandler
-
+from ..serializers import Serializers
 
 
 if global_config.TRACE_MALLOC:
@@ -304,13 +304,6 @@ class RPCServer(BaseZMQServer):
                     continue
                 thing_id, objekt, operation, payload, preserialized_payload, execution_context = operation_request 
 
-                # deserializing the payload required to execute the operation
-                payload: SerializableData 
-                preserialized_payload: PreserializedData
-                payload = payload.deserialize() # deserializing the payload
-                preserialized_payload = preserialized_payload.value
-                instance.logger.debug(f"thing {instance.id} with {thing_id} starting execution of operation {operation} on {objekt}")
-
                 # start activities related to thing execution context
                 fetch_execution_logs = execution_context.pop("fetch_execution_logs", False)
                 if fetch_execution_logs:
@@ -320,35 +313,11 @@ class RPCServer(BaseZMQServer):
                     instance.logger.addHandler(list_handler)
 
                 # execute the operation
-                return_value = await self.execute_once(instance, objekt, operation, payload, preserialized_payload) 
-
-                # handle return value
-                if isinstance(return_value, tuple) and len(return_value) == 2 and (
-                    isinstance(return_value[1], bytes) or 
-                    isinstance(return_value[1], PreserializedData) 
-                ):  
-                    if fetch_execution_logs:
-                        return_value[0] = {
-                            "return_value" : return_value[0],
-                            "execution_logs" : list_handler.log_list
-                        }
-                    payload = SerializableData(return_value[0], 'application/json')
-                    preserialized_payload = PreserializedData(return_value[1], 'text/plain')
-                elif isinstance(return_value, bytes):
-                    payload = SerializableData(None, 'application/json')
-                    preserialized_payload = PreserializedData(return_value, 'text/plain')
-                else:
-                     # complete thing execution context
-                    if fetch_execution_logs:
-                        return_value = {
-                            "return_value" : return_value,
-                            "execution_logs" : list_handler.log_list
-                        }
-                    payload = SerializableData(return_value, 'application/json')
-                    preserialized_payload = PreserializedData(EMPTY_BYTE, 'text/plain')
-
+                reply_payload = await self.execute_once(instance, objekt, operation, payload, preserialized_payload) 
+                # reply = (payload, preserialized_payload)
                 # set reply
-                instance._last_operation_reply = (payload, preserialized_payload)
+                instance._last_operation_reply = reply_payload
+
             except (BreakInnerLoop, BreakAllLoops):
                 # exit the loop and stop the thing
                 instance.logger.info("Thing {} with instance name {} exiting event loop.".format(
@@ -359,7 +328,10 @@ class RPCServer(BaseZMQServer):
                         "return_value" : None,
                         "execution_logs" : list_handler.log_list
                     }
-                instance._last_operation_reply = (SerializableData(return_value, 'application/json'), PreserializedData(EMPTY_BYTE, 'text/plain'))
+                instance._last_operation_reply = (
+                    SerializableData(return_value, 'application/json'),
+                    PreserializedData(EMPTY_BYTE, 'text/plain')
+                )
                 return 
             except Exception as ex:
                 # error occurred while executing the operation
@@ -385,18 +357,25 @@ class RPCServer(BaseZMQServer):
                         instance: Thing, 
                         objekt: str, 
                         operation: str,
-                        payload: typing.Any,
-                        preserialized_payload: bytes
+                        payload: SerializableData,
+                        preserialized_payload: PreserializedData
                     ) -> typing.Any:
+        # deserializing the payload required to execute the operation
+        payload: SerializableData 
+        preserialized_payload: PreserializedData
+        payload = payload.deserialize() # deserializing the payload
+        preserialized_payload = preserialized_payload.value
+        instance.logger.debug(f"thing {instance.id} starting execution of operation {operation} on {objekt}")
+
         if operation == 'readProperty':
             prop = instance.properties[objekt] # type: Property
-            return getattr(instance, prop.name) 
+            return_value = getattr(instance, prop.name) 
         elif operation == 'writeProperty':
             prop = instance.properties[objekt] # type: Property
             final_payload = payload
             if preserialized_payload != EMPTY_BYTE:
                 final_payload = preserialized_payload
-            return prop.external_set(instance, final_payload)
+            return_value = prop.external_set(instance, final_payload)
         elif operation == 'deleteProperty':
             prop = instance.properties[objekt] # type: Property
             del prop # raises NotImplementedError when deletion is not implemented which is mostly the case
@@ -407,18 +386,33 @@ class RPCServer(BaseZMQServer):
             if preserialized_payload != EMPTY_BYTE:
                 args = (preserialized_payload,) + args
             # if action.execution_info.iscoroutine:
-            #     return await action.external_call(*args, **payload)
+            #     return_value = await action.external_call(*args, **payload)
             # else:
-            return action(*args, **payload) 
+            return_value = action(*args, **payload) 
         elif operation == 'readMultipleProperties' or operation == 'readAllProperties':
             if objekt is None:
-                return instance._get_properties()
-            return instance._get_properties(names=objekt)
+                return_value = instance._get_properties()
+            return_value = instance._get_properties(names=objekt)
         elif operation == 'writeMultipleProperties' or operation == 'writeAllProperties':
-            return instance._set_properties(payload)
-        raise NotImplementedError("Unimplemented execution path for Thing {} for operation {}".format(
-                                                                            instance.id, operation))
+            return_value = instance._set_properties(payload)
+        else:
+            raise NotImplementedError(f"Unimplemented execution path for Thing {instance.id} for operation {operation}")
 
+        # handle return value
+        if isinstance(return_value, tuple) and len(return_value) == 2 and (
+            isinstance(return_value[1], bytes) or 
+            isinstance(return_value[1], PreserializedData) 
+        ):  
+            payload = SerializableData(return_value[0], Serializers.get_serializer_for_objekt(objekt))
+            if isinstance(return_value[1], bytes):
+                preserialized_payload = PreserializedData(return_value[1], '')
+        elif isinstance(return_value, bytes):
+            payload = SerializableData(None, content_type='application/json')
+            preserialized_payload = PreserializedData(return_value, '')
+        else:
+            payload = SerializableData(return_value, 'application/json')
+            preserialized_payload = PreserializedData(EMPTY_BYTE, 'text/plain')
+        return payload, preserialized_payload
 
     async def process_timeouts(self, 
                             request_message: RequestMessage, 

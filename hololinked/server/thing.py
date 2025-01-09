@@ -16,7 +16,7 @@ from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_co
 from ..constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
 from ..utils import get_default_logger, getattr_without_descriptor_read
 from ..exceptions import *
-from ..serializers import set_serializer_from_user_given_options, BaseSerializer, JSONSerializer
+from ..serializers.serializers import set_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .database import ThingDB, ThingInformation
 from .dataklasses import ZMQResource, build_our_temp_TD, get_organised_resources
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
@@ -518,7 +518,8 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         return ThingDescription(instance=self, authority=authority or self._object_info.http_server,
                                     allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)   
     
-    @action(input_schema={
+    @action(
+        input_schema={
             "type": "object", 
             "properties": {
                 "authority": {"type": "string"}, 
@@ -601,6 +602,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def run_with_zmq_server(self, 
             transports : typing.Union[typing.Sequence[ZMQ_TRANSPORTS], 
                                          ZMQ_TRANSPORTS] = ZMQ_TRANSPORTS.IPC, 
+            forked: bool = False,
             # expose_eventloop : bool = False,
             **kwargs
         ) -> None:
@@ -670,24 +672,15 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         
         from ..protocols.http.server import HTTPServer        
         http_server = HTTPServer(
-            [self.id], logger=self.logger, serializer=self.http_serializer, 
+            [self.id], logger=self.logger,
             port=port, address=address, ssl_context=ssl_context,
             allowed_clients=allowed_clients, schema_validator=self.schema_validator,
             # network_interface=network_interface, 
             **kwargs,
         )
-        
-        http_server.add_things(self)
-        http_server._zmq_protocol = ZMQ_TRANSPORTS.INPROC
-        http_server._zmq_inproc_socket_context = context
-        http_server._zmq_inproc_event_context = self.event_publisher.context
         assert http_server.all_ok
-        http_server.tornado_instance.listen(port=httpserver.port, address=httpserver.address)
+        http_server.listen()
      
-      
-
-        http_server.tornado_instance.stop()
-
        
     def run(self):
         raise NotImplementedError("this method will be implemented properly in a future release")

@@ -11,7 +11,7 @@ from uuid import uuid4
 from ...utils import *
 from ...config import global_config
 from ...constants import ZMQ_TRANSPORTS, ZMQSocketType, ZMQ_EVENT_MAP, CommonRPC, ServerTypes, get_socket_type_name
-from ...serializers import JSONSerializer
+from ...serializers.serializers import JSONSerializer
 from ...exceptions import BreakLoop
 from .message import (EMPTY_BYTE, EXIT, HANDSHAKE, INVALID_MESSAGE, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
                     RequestMessage, ResponseMessage, SerializableData, PreserializedData, 

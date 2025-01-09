@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from zmq.utils.monitor import parse_monitor_message
 
 from ...constants import JSON, ZMQ_EVENT_MAP, byte_types
-from ...serializers import Serializers
+from ...serializers.serializers import BaseSerializer, Serializers
 from ...param.parameters import Integer
 
 # message types
@@ -60,12 +60,15 @@ class SerializableData:
     The content type decides the serializer to be used. 
     """
     value: typing.Any
+    serializer: BaseSerializer | None = None 
     content_type: str = 'application/json'
 
     def serialize(self):
         """serialize the value"""
         if isinstance(self.value, byte_types):
             return self.value
+        if self.serializer is not None:
+            return self.serializer.dumps(self.value)
         if self.content_type == 'json' or self.content_type == 'application/json':
             return Serializers.json.dumps(self.value)
         elif self.content_type == 'pickle':
@@ -84,6 +87,8 @@ class SerializableData:
         """deserialize the value"""
         if not isinstance(self.value, byte_types):
             return self.value
+        if self.serializer is not None:
+            return self.serializer.loads(self.value)
         if self.content_type == 'json' or self.content_type == 'application/json':
             return Serializers.json.loads(self.value)
         elif self.content_type == 'pickle':

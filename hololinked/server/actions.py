@@ -39,7 +39,7 @@ class Action:
     def __call__(self, *args, **kwargs):
         raise NotImplementedError("call must be implemented by subclass")
     
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return f"Action({self.obj.__name__})"
     
     def __eq__(self, other) -> bool:

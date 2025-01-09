@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, ValidationError
 from pydantic.json_schema import GenerateJsonSchema
 from pydantic._internal._core_utils import is_core_schema, CoreSchemaOrField
 from typing import Optional, Sequence, Union, Any, Mapping, List, Dict
-from ..serializers import JSONSerializer
+from ..serializers.serializers import JSONSerializer
 
 JSONSchema = dict[str, Any]  # A type to represent JSONSchema
 

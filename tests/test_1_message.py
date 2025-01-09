@@ -5,7 +5,7 @@ from hololinked.protocols.zmq.message import (EXIT, OPERATION, HANDSHAKE,
                                             PreserializedData, RequestHeader, RequestMessage, SerializableData) # client to server
 from hololinked.protocols.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, REPLY, ERROR,
                                             ResponseMessage, ResponseHeader) # server to client
-from hololinked.serializers import Serializers
+from hololinked.serializers.serializers import Serializers
 
 
 try:

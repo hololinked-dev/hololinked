@@ -13,7 +13,7 @@ from ..param import Parameterized
 from ..constants import JSONSerializable
 from ..config import global_config
 from ..utils import pep8_to_dashed_name
-from ..serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
+from ..serializers.serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
 from .property import Property
 
 
