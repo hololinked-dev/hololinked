@@ -253,13 +253,12 @@ class ZMQResource(SerializableDataclass):
     doc : typing.Optional[str] 
     request_as_argument : bool = field(default=False)
 
-    def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
-                qualname : str, doc : str, request_as_argument : bool = False) -> None:
+    def __init__(self, *, what: str, thing_id: str, class_name: str, objekt: str,
+                doc : str, request_as_argument : bool = False, ) -> None:
         self.what = what 
         self.class_name = class_name
-        self.id = id
-        self.obj_name = obj_name 
-        self.qualname = qualname
+        self.thing_id = thing_id
+        self.objekt = objekt 
         self.doc = doc
         self.request_as_argument = request_as_argument
 
@@ -267,17 +266,36 @@ class ZMQResource(SerializableDataclass):
         name = __dunder_name.strip('_')
         name = 'obj_name' if name == 'name' else name
         return getattr(self, name)
+
+    def from_TD(self, name: str, TD: JSON) -> "ZMQResource":
+        """
+        Populate the resource from a Thing Description. 
+        """
+        raise NotImplementedError("This method is not implemented yet.")
     
-    @property
-    def is_client_representation(self):
-        return self._is_client_representation
+    def supported_operations(self) -> typing.List[str]:
+        """
+        Return the supported operations on the resource. 
+        """
+        raise NotImplementedError("This method is not implemented yet.")
+
     
-    @is_client_representation.setter
-    def is_client_representation(self, value):
-        if value:
-            self.obj_name = self.obj_name
-            self.id = self.id
-            self._is_client_representation = True
+@dataclass(**__dataclass_kwargs)
+class ZMQProperty(ZMQResource):
+
+    @classmethod
+    def from_TD(cls, name: str, TD: JSON) -> "ZMQResource":
+        """
+        Populate the resource from a Thing Description. 
+        """
+        self.what = TD['what']
+        self.class_name = TD['class_name']
+        self.id = TD['id']
+        self.obj_name = TD['obj_name']
+        self.qualname = TD['qualname']
+        self.doc = TD['doc']
+        self.request_as_argument = TD['request_as_argument']
+        return self
 
 
 @dataclass(**__dataclass_kwargs)

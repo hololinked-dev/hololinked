@@ -9,10 +9,10 @@ from dataclasses import dataclass
 from hololinked.server import Thing, Property, action, Event
 from hololinked.server.properties import (String, Integer, Number, List, Boolean,
                                     Selector, ClassSelector, TypedList)
-from hololinked.constants import HTTP_METHODS
 from hololinked.server.state_machine import StateMachine
 from hololinked.server import JSONSerializer
 from hololinked.server.td import JSONSchema
+from hololinked.server import HTTPServer
 
 
 @dataclass 
@@ -286,3 +286,19 @@ class OceanOpticsSpectrometer(Thing):
     )
 
     logger_remote_access = True
+
+def run_zmq_server():
+    thing = OceanOpticsSpectrometer(id='test_spectrometer')
+    thing.run_with_zmq_server()
+
+
+def run_http_server():
+    thing = OceanOpticsSpectrometer(id='test_spectrometer')
+    server = HTTPServer()
+    server.add_things(thing)
+    server.listen()
+
+
+if __name__ == '__main__':
+    run_zmq_server()
+    # run_http_server()

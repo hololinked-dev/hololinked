@@ -1,7 +1,8 @@
+from abc import abstractmethod
 import typing
 from dataclasses import dataclass, field
 
-from ..constants import JSON
+from ..constants import JSON, ResourceTypes
 from .dataklasses import ActionInfoValidator
 from .events import Event
 from .properties import *
@@ -147,8 +148,30 @@ class InteractionAffordance(Schema):
 
     def __init__(self):
         super().__init__()
+        self._name = None 
+        self._thing_id = None
 
+    @property
+    def what(self):
+        raise NotImplementedError("what property must be implemented in subclass of InteractionAffordance")
 
+    @property
+    def name(self):
+        return self._name
+    
+    @property
+    def thing_id(self):
+        return self._thing_id
+    
+    @classmethod 
+    def generate_schema(cls, resource : typing.Any, owner : Thing, authority : str) -> JSON:
+        raise NotImplementedError("generate_schema must be implemented in subclass of InteractionAffordance")
+
+    @classmethod 
+    def from_TD(cls, name: str, TD: JSON) -> "InteractionAffordance":
+        raise NotImplementedError("from_TD must be implemented in subclass of InteractionAffordance")
+    
+   
 
 @dataclass
 class DataSchema(Schema):
@@ -595,6 +618,7 @@ class ActionAffordance(InteractionAffordance):
     creates action affordance schema from actions (or methods).
     schema - https://www.w3.org/TR/wot-thing-description11/#actionaffordance
     """
+    
     input : JSON
     output : JSON
     safe : bool
@@ -602,9 +626,13 @@ class ActionAffordance(InteractionAffordance):
     synchronous : bool 
 
     def __init__(self):
-        super(InteractionAffordance, self).__init__()
-    
-    def build(self, action : typing.Callable, owner : Thing, authority : str) -> None:
+        super().__init__()
+
+    @property 
+    def what(self):
+        return ResourceTypes.ACTION
+        
+    def _build(self, action: typing.Callable, owner: Thing, authority: str | None = None) -> None:
         assert isinstance(action._remote_info, ActionInfoValidator)
         if action._remote_info.argument_schema: 
             self.input = action._remote_info.argument_schema 
@@ -620,6 +648,10 @@ class ActionAffordance(InteractionAffordance):
             self.synchronous = action._remote_info.synchronous
         if action._remote_info.safe:
             self.safe = action._remote_info.safe 
+        if authority is not None:
+            self._build_forms(action, owner, authority)
+
+    def _build_forms(self, protocol: str, authority : str, **protocol_metadata) -> None:
         self.forms = []
         for method in action._remote_info.http_method:
             form = Form()
@@ -629,14 +661,31 @@ class ActionAffordance(InteractionAffordance):
             form.contentType = 'application/json'
             # form.additionalResponses = [AdditionalExpectedResponse().asdict()]
             self.forms.append(form.asdict())
-
-    @classmethod
-    def generate_schema(cls, action : typing.Callable, owner : Thing, authority : str) -> JSON:
-        schema = ActionAffordance()
-        schema.build(action=action, owner=owner, authority=authority) 
-        return schema.asdict()
     
 
+    @classmethod
+    def build(cls, action : typing.Callable, owner : Thing, authority : str) -> JSON:
+        schema = ActionAffordance()
+        schema._build(action=action, owner=owner, authority=authority) 
+        return schema.asdict()
+
+    @classmethod
+    def from_TD(self, name: str, TD: JSON) -> "ActionAffordance":
+        action = TD["actions"][name]
+        action_affordance = ActionAffordance()
+        action_affordance.title = action.get("title", None)
+        action_affordance.description = action.get("description", None)
+        action_affordance.input = action.get("input", None)
+        action_affordance.output = action.get("output", None)
+        action_affordance.safe = action.get("safe", None)
+        action_affordance.idempotent = action.get("idempotent", None)
+        action_affordance.synchronous = action.get("synchronous", None)
+        action_affordance.forms = action.get("forms", {})
+        action_affordance._name = name 
+        action_affordance._thing_id = TD["id"]
+        return action_affordance
+    
+    
 @dataclass
 class EventAffordance(InteractionAffordance):
     """

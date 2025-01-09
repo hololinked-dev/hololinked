@@ -151,7 +151,7 @@ class EventDispatcher:
 class EventSource:
     """Class to add event functionality to the object"""
 
-    instance_name : str
+    id : str
 
     def __init__(self) -> None:
           self._event_publisher = None # type : typing.Optional["EventPublisher"]
@@ -159,7 +159,7 @@ class EventSource:
     @property
     def events(self) -> typing.Dict[str, Event]:
         try:
-            return getattr(self, f'_{self.instance_name}_events')
+            return getattr(self, f'_{self.id}_events')
         except AttributeError:
             events = dict()
             for name, evt in inspect._getmembers(self, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
@@ -167,13 +167,13 @@ class EventSource:
                 if evt._observable:
                     continue
                 events[name] = evt
-            setattr(self, f'_{self.instance_name}_events', events)
+            setattr(self, f'_{self.id}_events', events)
             return events
         
     @property
     def change_events(self) -> typing.Dict[str, Event]:
         try:
-            return getattr(self, f'_{self.instance_name}_change_events')
+            return getattr(self, f'_{self.id}_change_events')
         except AttributeError:
             change_events = dict()
             for name, evt in inspect._getmembers(self, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
@@ -181,7 +181,7 @@ class EventSource:
                 if not evt._observable:
                     continue
                 change_events[name] = evt
-            setattr(self, f'_{self.instance_name}_change_events', change_events)
+            setattr(self, f'_{self.id}_change_events', change_events)
             return change_events
     
     @property   
@@ -202,6 +202,8 @@ class EventSource:
 
         if self._event_publisher is not None:
             raise AttributeError("Can set event publisher only once")
+        if value is None:
+            return 
         
         def recusively_set_event_publisher(obj : Thing, publisher : "EventPublisher") -> None:
             for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
