@@ -169,7 +169,7 @@ class Property(Parameter):
             old_value = obj.__dict__.get(self._old_value_internal_name, NotImplemented)
             obj.__dict__[self._old_value_internal_name] = value 
             if self.fcomparator:
-                if issubklass(self.fcomparator):
+                if issubklass(self.fcomparator, classmethod):
                     if not self.fcomparator(self.owner, old_value, value):
                         return 
                 elif not self.fcomparator(obj, old_value, value):
