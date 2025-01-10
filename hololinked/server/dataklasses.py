@@ -4,16 +4,16 @@ resources on the network. These classese are generally not for consumption by th
 """
 import typing
 import platform
+import warnings
 import inspect
 from enum import Enum
-from dataclasses import dataclass, asdict, field, fields
+from dataclasses import dataclass, fields
 from types import FunctionType, MethodType
-import warnings
 
 from ..param.parameters import String, Boolean, Tuple, ClassSelector, Parameter
 from ..param.parameterized import ParameterizedMetaclass
 from ..constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, REGEX, JSONSerializable, ResourceTypes
-from ..utils import get_signature, pep8_to_dashed_name
+from ..utils import SerializableDataclass, get_signature, pep8_to_dashed_name
 from ..config import global_config
 from .schema_validators import BaseSchemaValidator
 
@@ -124,7 +124,6 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
     isparameterized = Boolean(default=False,
                     doc="True for a parameterized function") # type: bool
 
-
     def to_dataclass(self, obj : typing.Any = None, bound_obj : typing.Any = None) -> "RemoteResource":
         return ActionResource(
                     state=tuple(self.state) if self.state is not None else None, 
@@ -134,22 +133,6 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
                     create_task=self.create_task, isparameterized=self.isparameterized
                 ) 
     
-
-
-class SerializableDataclass:
-    """
-    Presents uniform serialization for serializers using getstate and setstate and json 
-    serialization.
-    """
-    def json(self):
-        return asdict(self)
-
-    def __getstate__(self):
-        return self.json()
-    
-    def __setstate__(self, values : typing.Dict):
-        for key, value in values.items():
-            setattr(self, key, value)
 
 
 __dataclass_kwargs = dict()
@@ -222,128 +205,7 @@ class ActionResource(RemoteResource):
 
 
 
-@dataclass(**__dataclass_kwargs)
-class ZMQResource(SerializableDataclass): 
-    """
-    Representation of resource used by ZMQ clients for mapping client method/action calls, property read/writes & events
-    to a server resource. Used to dynamically populate the ``ObjectProxy``
 
-    Attributes
-    ----------
-
-    what : str
-        is it a property, method/action or event?
-    id : str
-        The ``id`` of the thing which owns the resource. Used by ZMQ client to inform 
-        message brokers to send the message to the correct recipient.
-    name : str
-        the name of the resource (__name__)
-    qualname : str
-        the qualified name of the resource (__qualname__) 
-    doc : str
-        the docstring of the resource
-    argument_schema : JSON
-        argument schema of the method/action for validation before passing over the instruction to the ZMQ server. 
-    """
-    what : str 
-    class_name : str # just metadata
-    id : str 
-    obj_name : str # what looks on the client & the ID of the resource on the server
-    qualname : str # qualified name to use by the client 
-    doc : typing.Optional[str] 
-    request_as_argument : bool = field(default=False)
-
-    def __init__(self, *, what: str, thing_id: str, class_name: str, objekt: str,
-                doc : str, request_as_argument : bool = False, ) -> None:
-        self.what = what 
-        self.class_name = class_name
-        self.thing_id = thing_id
-        self.objekt = objekt 
-        self.doc = doc
-        self.request_as_argument = request_as_argument
-
-    def get_dunder_attr(self, __dunder_name : str):
-        name = __dunder_name.strip('_')
-        name = 'obj_name' if name == 'name' else name
-        return getattr(self, name)
-
-    def from_TD(self, name: str, TD: JSON) -> "ZMQResource":
-        """
-        Populate the resource from a Thing Description. 
-        """
-        raise NotImplementedError("This method is not implemented yet.")
-    
-    def supported_operations(self) -> typing.List[str]:
-        """
-        Return the supported operations on the resource. 
-        """
-        raise NotImplementedError("This method is not implemented yet.")
-
-    
-@dataclass(**__dataclass_kwargs)
-class ZMQProperty(ZMQResource):
-
-    @classmethod
-    def from_TD(cls, name: str, TD: JSON) -> "ZMQResource":
-        """
-        Populate the resource from a Thing Description. 
-        """
-        self.what = TD['what']
-        self.class_name = TD['class_name']
-        self.id = TD['id']
-        self.obj_name = TD['obj_name']
-        self.qualname = TD['qualname']
-        self.doc = TD['doc']
-        self.request_as_argument = TD['request_as_argument']
-        return self
-
-
-@dataclass(**__dataclass_kwargs)
-class ZMQAction(ZMQResource):
-    argument_schema : typing.Optional[JSON] = field(default=None)
-    return_value_schema : typing.Optional[JSON] = field(default=None)
-
-    def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
-                qualname : str, doc : str, argument_schema : typing.Optional[JSON] = None,
-                return_value_schema : typing.Optional[JSON] = None, request_as_argument : bool = False) -> None:
-        super(ZMQAction, self).__init__(what=what, class_name=class_name, id=id, obj_name=obj_name,
-                        qualname=qualname, doc=doc, request_as_argument=request_as_argument)
-        self.argument_schema = argument_schema
-        self.return_value_schema = return_value_schema
-
-
-@dataclass(**__dataclass_kwargs)
-class ZMQEvent(ZMQResource):
-    """
-    event name and socket address of events to be consumed by clients. 
-  
-    Attributes
-    ----------
-    name : str
-        name of the event, must be unique
-    obj_name: str
-        name of the event variable used to populate the ZMQ client
-    socket_address : str
-        address of the socket
-    unique_identifier: str
-        unique ZMQ identifier used in PUB-SUB model
-    what: str, default EVENT
-        is it a property, method/action or event?
-    """
-    friendly_name : str = field(default=UNSPECIFIED)
-    unique_identifier : str = field(default=UNSPECIFIED)
-    serialization_specific : bool = field(default=False)
-    socket_address : str = field(default=UNSPECIFIED)
-
-    def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
-                friendly_name : str, qualname : str, unique_identifier : str, 
-                serialization_specific : bool = False, socket_address : str, doc : str) -> None:
-        super(ZMQEvent, self).__init__(what=what, class_name=class_name, id=id, obj_name=obj_name,
-                        qualname=qualname, doc=doc, request_as_argument=False)  
-        self.friendly_name = friendly_name
-        self.unique_identifier = unique_identifier
-        self.serialization_specific = serialization_specific
-        self.socket_address = socket_address
 
 
 
