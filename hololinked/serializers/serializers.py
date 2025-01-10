@@ -41,7 +41,7 @@ except ImportError:
     pass 
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
-from ..constants import JSONSerializable, Serializers
+from ..constants import JSONSerializable
 from ..utils import format_exception_as_json
 
 
@@ -76,6 +76,7 @@ class BaseSerializer(object):
             return data.tobytes()
         raise TypeError("serializer convert_to_bytes accepts only bytes, bytearray or memoryview")
     
+
 
 dict_keys = type(dict().keys())
 
@@ -169,6 +170,7 @@ class PythonBuiltinJSONSerializer(JSONSerializer):
         return pythonjson.load(file_desc)
 
 
+
 class PickleSerializer(BaseSerializer):
     "(de)serializer that wraps the pickle serialization protocol, use with encryption for safety."
 
@@ -212,30 +214,12 @@ class MsgpackSerializer(BaseSerializer):
         return 'x-msgpack'
     
 
-serializers = {
-    None      : JSONSerializer,
-    'json'    : JSONSerializer, 
-    'pickle'  : PickleSerializer,
-    'msgpack' : MsgpackSerializer
-}
-    
-
-class Serializers:
-    json = JSONSerializer()
-    pickle = PickleSerializer()
-    msgpack = MsgpackSerializer()
-
-
-    def register_content_type(self, objekt: str) -> None:
-        "register content type for a serializer"
-        raise NotImplementedError("implement in subclass")
-    
-    def get_serializer_for_objekt(self, objekt: str) -> BaseSerializer:
-        "get serializer for a content type"
-        raise NotImplementedError("implement in subclass")
-
-
-    
+__all__ = [
+    JSONSerializer.__name__, 
+    PickleSerializer.__name__, 
+    MsgpackSerializer.__name__, 
+    BaseSerializer.__name__
+]
 
 
 try:
@@ -270,40 +254,8 @@ try:
                 raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
             serpent.register_class(object_type, custom_serializer)
 
-    serializers['serpent'] = SerpentSerializer
-    Serializers.serpent = SerpentSerializer()
+    __all__.append(SerpentSerializer.__name__)
 except ImportError:
     pass
 
 
-
-
-
-def set_serializer_from_user_given_options(
-        zmq_serializer : typing.Union[str, BaseSerializer], 
-        http_serializer : typing.Union[str, JSONSerializer]
-    ) -> typing.Tuple[BaseSerializer, JSONSerializer]:
-    """
-    We give options to specify serializer as a string or an object,  
-    """ 
-    if http_serializer in [None, 'json'] or isinstance(http_serializer, JSONSerializer):
-        http_serializer = http_serializer if isinstance(http_serializer, JSONSerializer) else JSONSerializer()
-    else:
-        raise ValueError("invalid JSON serializer option : {}".format(http_serializer))
-        # could also technically be TypeError 
-    if isinstance(zmq_serializer, BaseSerializer):
-        zmq_serializer = zmq_serializer 
-        if isinstance(zmq_serializer, PickleSerializer) or zmq_serializer.type == pickle:
-            warnings.warn("using pickle serializer which is unsafe, consider another like msgpack.", UserWarning)
-    elif zmq_serializer == 'json' or zmq_serializer is None:
-        zmq_serializer = http_serializer
-    elif isinstance(zmq_serializer, str): 
-        zmq_serializer = serializers.get(zmq_serializer, JSONSerializer)()
-    else:
-        raise ValueError("invalid rpc serializer option : {}".format(zmq_serializer))    
-    return zmq_serializer, http_serializer
-
-
-
-__all__ = ['JSONSerializer', 'PickleSerializer', 'MsgpackSerializer', 
-        'serializers', 'BaseSerializer']

@@ -70,8 +70,8 @@ class OceanOpticsSpectrometer(Thing):
 
 #### Instantiating properties
 
-Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc.
-or one may define one's own. To create properties:
+Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc. 
+or one may define one's own using [pydantic or JSON schema](). To create properties:
 
 ```python
 
