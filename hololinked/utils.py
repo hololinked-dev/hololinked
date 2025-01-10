@@ -9,7 +9,7 @@ import types
 import traceback
 import typing
 import ifaddr
-
+from dataclasses import asdict
 
 
 def get_IP_from_interface(interface_name : str = 'Ethernet', adapter_name = None) -> str:
@@ -253,6 +253,21 @@ def get_current_async_loop():
         asyncio.set_event_loop(loop)
     return loop
 
+
+class SerializableDataclass:
+    """
+    Presents uniform serialization for serializers using getstate and setstate and json 
+    serialization.
+    """
+    def json(self):
+        return asdict(self)
+
+    def __getstate__(self):
+        return self.json()
+    
+    def __setstate__(self, values : typing.Dict):
+        for key, value in values.items():
+            setattr(self, key, value)
 
 
 __all__ = [
