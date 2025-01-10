@@ -337,7 +337,7 @@ class RPCServer(BaseZMQServer):
                     if isinstance(return_value[1], bytes):
                         preserialized_payload = PreserializedData(return_value[1])
                 elif isinstance(return_value, bytes):
-                    payload = SerializableData(None, 'application/json')
+                    payload = SerializableData(None, content_type='application/json')
                     preserialized_payload = PreserializedData(return_value)
                 else:
                      # complete thing execution context
@@ -347,7 +347,7 @@ class RPCServer(BaseZMQServer):
                             "execution_logs" : list_handler.log_list
                         }
                     payload = SerializableData(return_value, Serializers.get_serializer_for_objekt(thing_id, objekt))
-                    preserialized_payload = PreserializedData(EMPTY_BYTE, 'text/plain')
+                    preserialized_payload = PreserializedData(EMPTY_BYTE, content_type='text/plain')
                 # set reply
                 instance._last_operation_reply = (payload, preserialized_payload)
             except (BreakInnerLoop, BreakAllLoops):
