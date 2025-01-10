@@ -1,5 +1,6 @@
-# adopted from pyro - https://github.com/irmen/Pyro5 - see following license
 """
+adopted from pyro - https://github.com/irmen/Pyro5 - see following license
+
 MIT License
 
 Copyright (c) Irmen de Jong
@@ -23,8 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import pickle
-import msgspec
-from msgspec import json as msgspecjson, msgpack 
+from msgspec import json as msgspecjson, msgpack, Struct
 import json as pythonjson
 import inspect
 import array
@@ -42,7 +42,7 @@ except ImportError:
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
 from ..constants import JSONSerializable
-from ..utils import format_exception_as_json
+from ..utils import Singleton, format_exception_as_json
 
 
 
@@ -61,11 +61,11 @@ class BaseSerializer(object):
     
     def loads(self, data) -> typing.Any:
         "method called by ZMQ message brokers to deserialize data"
-        raise NotImplementedError("implement in subclass")
+        raise NotImplementedError("implement loads()/deserialization in subclass")
 
     def dumps(self, data) -> bytes:
         "method called by ZMQ message brokers to serialize data"
-        raise NotImplementedError("implement in subclass")
+        raise NotImplementedError("implement dumps()/serialization in subclass")
     
     def convert_to_bytes(self, data) -> bytes:
         if isinstance(data, bytes):
@@ -75,6 +75,10 @@ class BaseSerializer(object):
         if isinstance(data, memoryview):
             return data.tobytes()
         raise TypeError("serializer convert_to_bytes accepts only bytes, bytearray or memoryview")
+    
+    @property
+    def content_type(self) -> str:
+        raise NotImplementedError("serializer must implement a content type")
     
 
 
@@ -103,7 +107,7 @@ class JSONSerializer(BaseSerializer):
         if hasattr(obj, 'json'):
             # alternative to type replacement
             return obj.json()
-        if isinstance(obj, msgspec.Struct):
+        if isinstance(obj, Struct):
             return obj
         if isinstance(obj, Enum):
             return obj.name
@@ -256,6 +260,71 @@ try:
 
     __all__.append(SerpentSerializer.__name__)
 except ImportError:
-    pass
+    SerpentSerializer = None
 
 
+
+
+class Serializers(metaclass=Singleton):
+    json = JSONSerializer()
+    pickle = PickleSerializer()
+    msgpack = MsgpackSerializer()
+
+    content_types = {
+        'application/json': json,
+        'application/octet-stream': pickle,
+        'x-msgpack': msgpack,
+        'text/plain': lambda value: str(value).encode('utf-8')
+    } # type: typing.Dict[str, BaseSerializer]
+
+    object_content_type_map = dict()
+    object_serializer_map = dict()
+    protocol_serializer_map = dict()
+
+    def register_content_type_for_object(self, objekt: typing.Any, content_type: str) -> None:
+        "register content type for a property, action or event to use a specific serializer"
+        if objekt.owner_inst and objekt.owner_inst.__name__ not in self.object_content_type_map:
+            self.object_content_type_map[objekt.owner_inst.__name__] = dict()
+        elif objekt.owner and objekt.owner.__name__ not in self.object_content_type_map:
+            self.object_content_type_map[objekt.owner.__name__] = dict()
+        else:
+            raise ValueError("object owner cannot be determined : {}".format(objekt))
+        self.object_content_type_map[objekt.owner_inst.__name__][objekt.name] = content_type    
+
+    def register_serializer_for_object(self, objekt: typing.Any, serializer: BaseSerializer) -> None:
+        "register serializer for a property, action or event"
+        if objekt.owner_inst and objekt.owner_inst.__name__ not in self.object_serializer_map:
+            self.object_serializer_map[objekt.owner_inst.__name__] = dict()
+            owner = objekt.owner_inst.__name__
+        elif objekt.owner and objekt.owner.__name__ not in self.object_serializer_map:
+            self.object_serializer_map[objekt.owner.__name__] = dict()
+            owner = objekt.owner.__name__
+        else:
+            raise ValueError("object owner cannot be determined : {}".format(objekt))
+        self.object_serializer_map[owner][objekt.name] = serializer
+
+    def register(self, serializer: BaseSerializer, override: bool = False) -> None:
+        "register content type for a serializer"
+        try:
+            if serializer.content_type in self.content_types and not override:
+                raise ValueError("content type already registered : {}".format(serializer.content_type))
+            self.content_types[serializer.content_type] = serializer
+        except NotImplementedError:
+            warnings.warn("serializer does not implement a content type", category=UserWarning)
+        self[serializer.__name__] = serializer
+
+    def get_serializer_for_objekt(self, thing: typing.Any, objekt: str) -> BaseSerializer:
+        "get serializer for a content type"
+        if len(self.object_serializer_map) == 0 and len(self.object_content_type_map) == 0:
+            return self.json
+        if not isinstance(thing, str):
+            thing = thing.id 
+        if thing in self.object_serializer_map:
+            if objekt in self.object_serializer_map[thing]:
+                return self.object_serializer_map[thing][objekt]
+        if thing in self.object_content_type_map:
+            if objekt in self.object_content_type_map[thing]:
+                return self.object_content_type_map[thing][objekt]
+        return self.json # JSON is default serializer
+    
+    

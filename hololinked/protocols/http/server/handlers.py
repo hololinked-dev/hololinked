@@ -11,7 +11,7 @@ from ...zmq.brokers import AsyncEventConsumer, EventConsumer
 from ....constants import Operations
 from ....server.dataklasses import ZMQEvent
 from ....server.schema_validators import BaseSchemaValidator
-from ....server.td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
+from ....td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
 
 
 

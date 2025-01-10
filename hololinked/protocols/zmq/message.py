@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from zmq.utils.monitor import parse_monitor_message
 
 from ...constants import JSON, ZMQ_EVENT_MAP, byte_types
-from ...serializers.serializers import BaseSerializer, Serializers
+from ...serializers.serializers import Serializers, BaseSerializer
 from ...param.parameters import Integer
 
 # message types
@@ -69,18 +69,9 @@ class SerializableData:
             return self.value
         if self.serializer is not None:
             return self.serializer.dumps(self.value)
-        if self.content_type == 'json' or self.content_type == 'application/json':
-            return Serializers.json.dumps(self.value)
-        elif self.content_type == 'pickle':
-            return Serializers.pickle.dumps(self.value)
-        elif self.content_type == 'x-msgpack':
-            return Serializers.msgpack.dumps(self.value)
-        elif self.content_type == 'text/plain':
-            if not isinstance(self.value, str):
-                value = str(self.value)
-            else:
-                value = self.value
-            return value.encode('utf-8')
+        serializer = Serializers.content_types.get(self.content_type, None)
+        if serializer is not None:
+            return serializer.dumps(self.value)
         raise ValueError(f"content type {self.content_type} not supported for serialization")
     
     def deserialize(self):
@@ -89,14 +80,9 @@ class SerializableData:
             return self.value
         if self.serializer is not None:
             return self.serializer.loads(self.value)
-        if self.content_type == 'json' or self.content_type == 'application/json':
-            return Serializers.json.loads(self.value)
-        elif self.content_type == 'pickle':
-            return Serializers.pickle.loads(self.value)
-        elif self.content_type == 'x-msgpack':
-            return Serializers.msgpack.loads(self.value)
-        elif self.content_type == 'text/plain':
-            return self.value.decode('utf-8')
+        serializer = Serializers.content_types.get(self.content_type, None)
+        if serializer is not None:
+            return serializer.loads(self.value)
         raise ValueError(f"content type {self.content_type} not supported for deserialization")
     
   
