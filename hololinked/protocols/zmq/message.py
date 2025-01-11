@@ -85,8 +85,6 @@ class SerializableData:
             return serializer.loads(self.value)
         raise ValueError(f"content type {self.content_type} not supported for deserialization")
     
-  
-
 @dataclass
 class PreserializedData:
     """
@@ -95,6 +93,9 @@ class PreserializedData:
     """
     value: bytes
     content_type: str
+
+SerializableNone = SerializableData(None, content_type='application/json')
+PreserializedEmptyByte = PreserializedData(EMPTY_BYTE, content_type='text/plain')
 
 
 class ServerExecutionContext(msgspec.Struct):
@@ -308,8 +309,8 @@ class RequestMessage:
                             thing_id: str, 
                             objekt: str, 
                             operation: str, 
-                            payload: SerializableData = SerializableData(None, 'application/json'),
-                            preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
+                            payload: SerializableData = SerializableNone,
+                            preserialized_payload: PreserializedData = PreserializedEmptyByte,
                             server_execution_context: typing.Dict[str, typing.Any] = default_server_execution_context, 
                             thing_execution_context: typing.Dict[str, typing.Any] = default_thing_execution_context
                         ) -> "RequestMessage": 
@@ -391,8 +392,8 @@ class RequestMessage:
             receiverID=receiver_id,
             serverExecutionContext=default_server_execution_context
         )
-        payload = SerializableData(None, 'application/json')
-        preserialized_payload = PreserializedData(EMPTY_BYTE, 'text/plain')
+        payload = SerializableNone
+        preserialized_payload = PreserializedEmptyByte
         message._body = [
             payload,
             preserialized_payload
@@ -512,8 +513,8 @@ class ResponseMessage:
                             sender_id: str,  
                             message_type: str, 
                             message_id: bytes = b'', 
-                            payload: SerializableData = SerializableData(None, 'application/json'), 
-                            preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
+                            payload: SerializableData = SerializableNone, 
+                            preserialized_payload: PreserializedData = PreserializedEmptyByte
                         ) -> "ResponseMessage":
         """
         Crafts an arbitrary response to the client using the method's arguments. 
@@ -558,8 +559,8 @@ class ResponseMessage:
     @classmethod
     def craft_reply_from_request(cls, 
                         request_message: RequestMessage, 
-                        payload: SerializableData = SerializableData(None, 'application/json'),
-                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
+                        payload: SerializableData = SerializableNone,
+                        preserialized_payload: PreserializedData = PreserializedEmptyByte
                     ) -> "ResponseMessage":
         """
         Craft a response with certain data extracted from an originating client message, 
@@ -602,8 +603,8 @@ class ResponseMessage:
     def craft_with_message_type(cls,
                         request_message: RequestMessage,
                         message_type: str,
-                        payload: SerializableData = SerializableData(None, 'application/json'),
-                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
+                        payload: SerializableData = SerializableNone,
+                        preserialized_payload: PreserializedData = PreserializedEmptyByte
                     ) -> "ResponseMessage": 
         """
         create a plain message with a certain type, for example a handshake message.
