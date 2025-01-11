@@ -6,4 +6,4 @@ from .database import *
 from .thing import *
 
 from ..protocols.http import HTTPServer
-from ..protocols.zmq import ZMQServer
+from ..protocols.zmq.server import ZMQServer

@@ -14,7 +14,7 @@ class ZMQServer(RPCServer):
 
     def __init__(self, *, 
                 id: str, 
-                things: typing.List[Thing],
+                things: typing.List["Thing"],
                 context: zmq.asyncio.Context | None = None, 
                 transports: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC,
                 **kwargs
@@ -87,3 +87,4 @@ class ZMQServer(RPCServer):
             self.context.term()
         self.logger.info("terminated context of socket '{}' of type '{}'".format(self.id, self.__class__))
     
+

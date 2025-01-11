@@ -9,7 +9,7 @@ from ....utils import *
 from ....config import global_config
 from ...zmq.brokers import AsyncEventConsumer, EventConsumer
 from ....constants import Operations
-from ....server.dataklasses import ZMQEvent
+# from ....server.dataklasses import ZMQEvent
 from ....server.schema_validators import BaseSchemaValidator
 from ....td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
 
@@ -350,7 +350,7 @@ class EventHandler(BaseHandler):
     """
     handles events emitted by ``Thing`` and tunnels them as HTTP SSE. 
     """
-    def initialize(self, resource: ZMQEvent, validator: BaseSchemaValidator, owner_inst=None) -> None:
+    def initialize(self, resource, validator: BaseSchemaValidator, owner_inst=None) -> None:
         super().initialize(resource, validator, owner_inst)
         self.data_header = b'data: %s\n\n'
 
@@ -449,7 +449,7 @@ class JPEGImageEventHandler(EventHandler):
     """
     handles events with images with image data header
     """
-    def initialize(self, resource: ZMQEvent, validator: BaseSchemaValidator, owner_inst = None) -> None:
+    def initialize(self, resource, validator: BaseSchemaValidator, owner_inst = None) -> None:
         super().initialize(resource, validator, owner_inst)
         self.data_header = b'data:image/jpeg;base64,%s\n\n'
 
@@ -458,7 +458,7 @@ class PNGImageEventHandler(EventHandler):
     """
     handles events with images with image data header
     """
-    def initialize(self, resource: ZMQEvent, validator: BaseSchemaValidator, owner_inst = None) -> None:
+    def initialize(self, resource, validator: BaseSchemaValidator, owner_inst = None) -> None:
         super().initialize(resource, validator, owner_inst)
         self.data_header = b'data:image/png;base64,%s\n\n'
     

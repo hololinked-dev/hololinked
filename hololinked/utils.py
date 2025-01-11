@@ -270,19 +270,29 @@ class SerializableDataclass:
             setattr(self, key, value)
 
 
-class Singleton:
-    """
-    A metaclass for creating singleton classes.
-    """
+class Singleton(type):
+    """enforces a Singleton"""
+
     _instances = {}
 
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
-            # If an instance does not exist, create one and store it.
-            instance = super().__call__(*args, **kwargs)
-            cls._instances[cls] = instance
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instances[cls]
+    
 
+class MappableSingleton(Singleton):
+    
+    def __setitem__(self, key, value) -> None:
+        setattr(self, key, value)
+
+    def __getitem__(self, key) -> typing.Any:
+        return getattr(self, key)
+
+    def __contains__(self, key) -> bool:
+        return hasattr(self, key)
+
+    
 
 
 

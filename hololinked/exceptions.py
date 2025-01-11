@@ -11,6 +11,9 @@ class BreakAllLoops(Exception):
     pass
 
 class BreakLoop(Exception):
+    """
+    raise and catch to exit a loop from within another function or method
+    """
     pass 
 
 class BreakFlow(Exception):

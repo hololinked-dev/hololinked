@@ -20,7 +20,7 @@ from ....server.property import Property
 from ....server.actions import Action
 from ....server.events import Event
 from ....server.thing import Thing, ThingMeta
-from ....server.td import ActionAffordance, EventAffordance, PropertyAffordance
+from ....td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...zmq.brokers import  AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import ActionHandler, PropertyHandler, BaseHandler, EventHandler, ThingsHandler, StopHandler
 

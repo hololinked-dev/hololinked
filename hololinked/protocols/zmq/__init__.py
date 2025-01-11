@@ -1,2 +1,3 @@
-from .brokers import EventPublisher
-from .server import ZMQServer
+from .brokers import *
+# dont import this here to avoid circular imports
+# from .server import ZMQServer 

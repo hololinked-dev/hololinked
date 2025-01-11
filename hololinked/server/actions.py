@@ -87,7 +87,7 @@ class Action:
         raise NotImplementedError("external_call must be implemented by subclass")
 
     def to_affordance(self) -> dict:
-        from hololinked.server.td import ActionAffordance
+        from hololinked.td import ActionAffordance
         affordance = ActionAffordance()
         affordance._build(self, self.owner_inst, None)
         return affordance

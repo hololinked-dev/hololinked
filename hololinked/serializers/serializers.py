@@ -23,9 +23,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import pickle
-from msgspec import json as msgspecjson, msgpack, Struct
-import json as pythonjson
 import inspect
 import array
 import datetime
@@ -35,14 +32,21 @@ import typing
 import warnings
 from enum import Enum
 from collections import deque
+from pydantic import validate_call
+# serializers:
+import pickle
+import json as pythonjson
+from msgspec import json as msgspecjson, msgpack, Struct
+# default dytypes:
 try:
     import numpy 
 except ImportError:
     pass 
 
-from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
+from ..param.parameters import (TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict, 
+                                ClassSelector, String, Parameter)
 from ..constants import JSONSerializable
-from ..utils import Singleton, format_exception_as_json
+from ..utils import MappableSingleton, format_exception_as_json
 
 
 
@@ -218,12 +222,7 @@ class MsgpackSerializer(BaseSerializer):
         return 'x-msgpack'
     
 
-__all__ = [
-    JSONSerializer.__name__, 
-    PickleSerializer.__name__, 
-    MsgpackSerializer.__name__, 
-    BaseSerializer.__name__
-]
+
 
 
 try:
@@ -258,73 +257,199 @@ try:
                 raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
             serpent.register_class(object_type, custom_serializer)
 
-    __all__.append(SerpentSerializer.__name__)
+    # __all__.append(SerpentSerializer.__name__)
 except ImportError:
     SerpentSerializer = None
 
 
 
 
-class Serializers(metaclass=Singleton):
-    json = JSONSerializer()
-    pickle = PickleSerializer()
-    msgpack = MsgpackSerializer()
+class Serializers(metaclass=MappableSingleton):
+    """
+    A singleton class that holds all serializers and provides a registry for content types. 
+    All members are class attributes. 
 
-    content_types = {
-        'application/json': json,
-        'application/octet-stream': pickle,
-        'x-msgpack': msgpack,
-        'text/plain': lambda value: str(value).encode('utf-8')
-    } # type: typing.Dict[str, BaseSerializer]
+    - For property, the value is serialized using the serializer registered for the property.
+    - For action, the return value is serialized using the serializer registered for the action.
+    - For event, the payload is serialized using the serializer registered for the event.
 
-    object_content_type_map = dict()
-    object_serializer_map = dict()
-    protocol_serializer_map = dict()
+    Registration of serializer is not mandatory for any property, action or event. 
+    The default serializer is `JSONSerializer`, which will be provided to any unregistered object.
+    """
+    json = ClassSelector(default=JSONSerializer(), class_=BaseSerializer, class_member=True, 
+                        doc="The default serializer for all properties, actions and events")
+    pickle = ClassSelector(default=PickleSerializer(), class_=BaseSerializer, class_member=True, 
+                        doc="pickle serializer, unsafe without encryption but useful for faster & flexible serialization of python specific types")
+    msgpack = ClassSelector(default=MsgpackSerializer(), class_=BaseSerializer, class_member=True, 
+                        doc="MessagePack serializer, efficient binary format that is both fast & interoperable between languages ")
+    default = ClassSelector(default=json.default, class_=BaseSerializer, class_member=True, 
+                        doc="The default serialization to be used") # type: BaseSerializer
+    default_content_type = String(default=default.default.content_type, class_member=True,
+                        doc="The default content type for the default serializer") # type: str
 
-    def register_content_type_for_object(self, objekt: typing.Any, content_type: str) -> None:
-        "register content type for a property, action or event to use a specific serializer"
-        if objekt.owner_inst and objekt.owner_inst.__name__ not in self.object_content_type_map:
-            self.object_content_type_map[objekt.owner_inst.__name__] = dict()
-        elif objekt.owner and objekt.owner.__name__ not in self.object_content_type_map:
-            self.object_content_type_map[objekt.owner.__name__] = dict()
+    content_types = Parameter(default={
+                                'application/json': json.default,
+                                'application/octet-stream': pickle.default,
+                                'x-msgpack': msgpack.default,
+                                # 'text/plain': lambda value: str(value).encode('utf-8')
+                            }, doc="A dictionary of content types and their serializers",
+                            readonly=True, class_member=True) # type: typing.Dict[str, BaseSerializer]
+    object_content_type_map = Parameter(default=dict(), class_member=True,
+                                doc="A dictionary of content types for specific properties, actions and events",
+                                readonly=True) # type: typing.Dict[str, typing.Dict[str, str]]
+    object_serializer_map = Parameter(default=dict(), class_member=True, 
+                                doc="A dictionary of serializer for specific properties, actions and events",
+                                readonly=True) # type: typing.Dict[str, typing.Dict[str, BaseSerializer]]
+    protocol_serializer_map = Parameter(default=dict(), class_member=True, 
+                                doc="A dictionary of serializer for a specific protocol",
+                                readonly=True) # type: typing.Dict[str, BaseSerializer]
+
+    # @validate_call
+    @classmethod
+    def register_content_type_for_object(cls, objekt: typing.Any, content_type: str) -> None:
+        """
+        Register content type for a property, action or event to use a specific serializer.
+
+        Parameters
+        ----------
+        objekt: Property | Action | Event
+            the property, action or event. string is not accepted - use `register_content_type_for_object_by_name()` instead.
+        content_type: str
+            the content type for the value of the objekt or the serializer to be used 
+        
+        Raises
+        ------
+        ValueError
+            if the object is not a Property, Action or Event
+        """
+        from ..server import Property, Action, Event
+        if not isinstance(objekt, (Property, Action, Event)):
+            raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
+        if objekt.owner_inst and objekt.owner_inst.id not in cls.object_content_type_map:
+            cls.object_content_type_map[objekt.owner_inst.id] = dict()
+        elif objekt.owner and objekt.owner.__name__ not in cls.object_content_type_map:
+            cls.object_content_type_map[objekt.owner.__name__] = dict()
         else:
             raise ValueError("object owner cannot be determined : {}".format(objekt))
-        self.object_content_type_map[objekt.owner_inst.__name__][objekt.name] = content_type    
+        cls.object_content_type_map[objekt.owner_inst.id][objekt.name] = content_type    
 
-    def register_serializer_for_object(self, objekt: typing.Any, serializer: BaseSerializer) -> None:
-        "register serializer for a property, action or event"
-        if objekt.owner_inst and objekt.owner_inst.__name__ not in self.object_serializer_map:
-            self.object_serializer_map[objekt.owner_inst.__name__] = dict()
-            owner = objekt.owner_inst.__name__
-        elif objekt.owner and objekt.owner.__name__ not in self.object_serializer_map:
-            self.object_serializer_map[objekt.owner.__name__] = dict()
+    # @validate_call
+    @classmethod
+    def register_content_type_for_object_by_name(cls, thing_id: str, objekt: str, content_type: str) -> None:
+        """
+        Register an existing content type for a property, action or event to use a specific serializer. Other option is
+        to register a serializer directly, the effects are similar.
+
+        Parameters
+        ----------
+        thing_id: str
+            the id of the Thing that owns the property, action or event
+        objekt: str
+            the name of the property, action or event
+        content_type: str
+            the content type to be used
+        """
+        if not content_type in cls.content_types:
+            raise ValueError("content type {} unsupported".format(content_type))
+        if thing_id not in cls.object_content_type_map:
+            cls.object_content_type_map[thing_id] = dict()
+        cls.object_content_type_map[thing_id][objekt] = content_type
+
+    # @validate_call
+    @classmethod
+    def register_for_object(cls, objekt: typing.Any, serializer: BaseSerializer) -> None:
+        """
+        Register (an existing) serializer for a property, action or event. Other option is to register a content type,
+        the effects are similar. 
+
+        Parameters
+        ----------
+        objekt: str | Property | Action | Event
+            the property, action or event 
+        serializer: BaseSerializer 
+            the serializer to be used
+        """
+        from ..server import Property, Action, Event
+        if not isinstance(objekt, (Property, Action, Event)):
+            raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
+        if objekt.owner_inst:
+            owner = objekt.owner_inst.id
+        elif objekt.owner:
             owner = objekt.owner.__name__
         else:
             raise ValueError("object owner cannot be determined : {}".format(objekt))
-        self.object_serializer_map[owner][objekt.name] = serializer
+        if owner not in cls.object_serializer_map:
+            cls.object_serializer_map[owner] = dict()
+        cls.object_serializer_map[owner][objekt.name] = serializer
 
-    def register(self, serializer: BaseSerializer, override: bool = False) -> None:
-        "register content type for a serializer"
-        try:
-            if serializer.content_type in self.content_types and not override:
-                raise ValueError("content type already registered : {}".format(serializer.content_type))
-            self.content_types[serializer.content_type] = serializer
-        except NotImplementedError:
-            warnings.warn("serializer does not implement a content type", category=UserWarning)
-        self[serializer.__name__] = serializer
 
-    def get_serializer_for_objekt(self, thing: typing.Any, objekt: str) -> BaseSerializer:
-        "get serializer for a content type"
-        if len(self.object_serializer_map) == 0 and len(self.object_content_type_map) == 0:
-            return self.json
+    @classmethod
+    def for_object(cls, thing: str | typing.Any, objekt: str) -> BaseSerializer:
+        """
+        Retrieve a serializer for a given property, action or event
+
+        Parameters
+        ----------
+        thing: str | typing.Any
+            the id of the Thing or the Thing that owns the property, action or event
+        objekt: str | Property | Action | Event
+            the name of the property, action or event
+        
+        Returns
+        -------
+        BaseSerializer | JSONSerializer
+            the serializer for the property, action or event. If no serializer is found, the default JSONSerializer is
+            returned.
+        """
+        if len(cls.object_serializer_map) == 0 and len(cls.object_content_type_map) == 0:
+            return cls.default
         if not isinstance(thing, str):
             thing = thing.id 
-        if thing in self.object_serializer_map:
-            if objekt in self.object_serializer_map[thing]:
-                return self.object_serializer_map[thing][objekt]
-        if thing in self.object_content_type_map:
-            if objekt in self.object_content_type_map[thing]:
-                return self.object_content_type_map[thing][objekt]
-        return self.json # JSON is default serializer
+        if thing in cls.object_serializer_map:
+            if objekt in cls.object_serializer_map[thing]:
+                return cls.object_serializer_map[thing][objekt]
+        if thing in cls.object_content_type_map:
+            if objekt in cls.object_content_type_map[thing]:
+                return cls.content_types[cls.object_content_type_map[thing][objekt]]
+        return cls.default # JSON is default serializer
+    
+
+    @classmethod
+    def register(cls, serializer: BaseSerializer, name: str | None = None, override: bool = False) -> None:
+        """
+        Register a new serializer. It is recommended to implement a content type property/attribute for the serializer 
+        to facilitate automatic deserialization on client side, otherwise deserialization is not gauranteed by this package.
+
+        Parameters
+        ----------
+        serializer: BaseSerializer
+            the serializer to register
+        name: str, optional
+            the name of the serializer to be accessible under the object namespace. If not provided, the name of the
+            serializer class is used. 
+        override: bool, optional
+            whether to override the serializer if the content type is already registered, by default False & raises ValueError 
+            for duplicate content type. 
+
+        Raises
+        ------
+        ValueError
+            if the serializer content type is already registered
+        """
+        try:
+            if serializer.content_type in cls.content_types and not override:
+                raise ValueError("content type already registered : {}".format(serializer.content_type))
+            cls.content_types[serializer.content_type] = serializer
+        except NotImplementedError:
+            warnings.warn("serializer does not implement a content type", category=UserWarning)
+        cls[name or serializer.__name__] = serializer
+
     
     
+__all__ = [
+    JSONSerializer.__name__, 
+    PickleSerializer.__name__, 
+    MsgpackSerializer.__name__, 
+    BaseSerializer.__name__,
+    Serializers.__name__
+]
