@@ -16,9 +16,9 @@ from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_co
 from ..constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
 from ..utils import get_default_logger, getattr_without_descriptor_read
 from ..exceptions import *
-from ..serializers.serializers import set_serializer_from_user_given_options, BaseSerializer, JSONSerializer
+from ..serializers.serializers import JSONSerializer
 from .database import ThingDB, ThingInformation
-from .dataklasses import ZMQResource, build_our_temp_TD, get_organised_resources
+from .dataklasses import build_our_temp_TD, get_organised_resources
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .state_machine import StateMachine
 from .actions import RemoteInvokable, action
@@ -58,7 +58,6 @@ class ThingMeta(ParameterizedMetaclass):
 
     def __call__(mcls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
-
         instance.__post_init__()
         return instance
 
@@ -514,7 +513,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable 
         #     value for node-wot to ignore validation or claim the accessed value for complaint with the schema.
         #     In other words, schema validation will always pass.  
-        from .td import ThingDescription
+        from ..td import ThingDescription
         return ThingDescription(instance=self, authority=authority or self._object_info.http_server,
                                     allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)   
     
