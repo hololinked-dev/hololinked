@@ -11,7 +11,7 @@ from hololinked.server.properties import (String, Integer, Number, List, Boolean
                                     Selector, ClassSelector, TypedList)
 from hololinked.server.state_machine import StateMachine
 from hololinked.server import JSONSerializer
-from hololinked.server.td import JSONSchema
+from hololinked.td import JSONSchema
 from hololinked.server import HTTPServer
 
 

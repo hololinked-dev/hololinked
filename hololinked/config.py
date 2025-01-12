@@ -1,5 +1,6 @@
-# adapted from pyro - https://github.com/irmen/Pyro5 - see following license
 """
+adapted from pyro - https://github.com/irmen/Pyro5 - see following license
+
 MIT License
 
 Copyright (c) Irmen de Jong
