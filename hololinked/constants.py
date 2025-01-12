@@ -152,21 +152,6 @@ class HTTPServerTypes(StrEnum):
     THING_SERVER = 'THING_SERVER'
 
 
-class Serializers(StrEnum):
-    """
-    allowed serializers
-
-    - PICKLE : pickle
-    - JSON : msgspec.json
-    - SERPENT : serpent
-    - MSGPACK : msgspec.msgpack
-    """
-    PICKLE = 'pickle'
-    JSON = 'json'
-    SERPENT = 'serpent'
-    MSGPACK = 'msgpack'
-
-
 class ZMQSocketType(IntEnum):
     PAIR = zmq.PAIR
     PUB = zmq.PUB
@@ -208,7 +193,6 @@ class Operations(StrEnum):
 
 
 __all__ = [
-    Serializers.__name__, 
     HTTP_METHODS.__name__,
     ZMQ_TRANSPORTS.__name__
 ]

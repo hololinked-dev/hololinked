@@ -7,7 +7,7 @@ from ..param.parameterized import Parameterized, ParameterizedMetaclass
 from ..constants import JSON 
 from ..utils import getattr_without_descriptor_read, pep8_to_dashed_name
 from ..config import global_config
-from .security_definitions import BaseSecurityDefinition
+
 
 
 

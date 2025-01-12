@@ -1,8 +1,6 @@
 import typing
 from dataclasses import dataclass
-
-from ..constants import JSON, ResourceTypes
-from ..server.dataklasses import ActionInfoValidator
+from ..constants import JSON
 
 
 @dataclass
@@ -101,8 +99,8 @@ class JSONSchema:
         return JSONSchema._replacements[typ]
     
     @classmethod
-    def register_type_replacement(self, type : typing.Any, json_schema_type : str, 
-                                schema : typing.Optional[JSON] = None) -> None:
+    def register_type_replacement(self, type: typing.Any, json_schema_type: str, 
+                                schema: typing.Optional[JSON] = None) -> None:
         """
         specify a python type as a JSON type.
         schema only supported for array and objects. 

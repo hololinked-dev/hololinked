@@ -35,3 +35,37 @@ class TestThing(Thing):
     test_property = Property(default=None, doc='test property')
     
    
+
+test_thing_TD = {
+    'title' : 'TestThing',
+    'id': 'test-thing',
+    'actions' : {
+        'get_transports': {
+            'title' : 'get_transports',
+            'description' : 'returns available transports'
+        },
+        'echo_action': {
+            'title' : 'echo_action',
+            'description' : 'returns value as it is to the client'
+        },
+        'get_serialized_data': {
+            'title' : 'get_serialized_data',
+            'description' : 'returns serialized data',
+        },
+        'get_mixed_content_data': {
+            'title' : 'get_mixed_content_data',
+            'description' : 'returns mixed content data',
+        },
+        'sleep': {
+            'title' : 'sleep',
+            'description' : 'sleeps for 10 seconds',
+        }
+    },
+    'properties' : {
+        'test_property': {
+            'title' : 'test_property',
+            'description' : 'test property',
+            'default' : None
+        }
+    }
+}

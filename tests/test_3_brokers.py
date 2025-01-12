@@ -8,21 +8,22 @@ from hololinked.protocols.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR,
                                             ResponseMessage, ResponseHeader) # server to client
 from hololinked.protocols.zmq.brokers import AsyncZMQServer, MessageMappedZMQClientPool, SyncZMQClient, AsyncZMQClient
 from hololinked.utils import get_current_async_loop, get_default_logger
-from hololinked.server.dataklasses import ZMQResource
+from hololinked.td import ActionAffordance
 # from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes
-from hololinked.client.proxy import _Action, _Property
+from hololinked.protocols.zmq.client import Action, Property
+from tests.things import test_thing
 
 
 try:
     from .utils import TestRunner
     from .test_1_message import MessageValidatorMixin
     from .things.starter import run_zmq_server
-    from .things import TestThing
+    from .things import TestThing, test_thing_TD
 except ImportError:
     from utils import TestRunner
     from test_1_message import MessageValidatorMixin
     from things.starter import run_zmq_server
-    from things import TestThing
+    from things import TestThing, test_thing_TD
 
 
 
@@ -89,18 +90,10 @@ class ActionMixin(TestBrokerMixin):
 
     @classmethod
     def setUpActions(self):
-        echo_action_info = ZMQResource(
-                            what=ResourceTypes.ACTION, 
-                            class_name='TestThing', 
-                            id='test-thing',
-                            obj_name='test_echo', 
-                            qualname='TestThing.test_echo', 
-                            doc="returns value as it is to the client",
-                            request_as_argument=False
-                        )
-        self.echo_action = _Action(
+        echo_action_info = ActionAffordance.from_TD('echo_action', test_thing_TD)
+        self.echo_action = Action(
                                 sync_client=None,
-                                resource_info=echo_action_info,
+                                resource=echo_action_info,
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 async_client=self.client, 
@@ -108,18 +101,11 @@ class ActionMixin(TestBrokerMixin):
                             )
         
 
-        get_serialized_data_action_info = ZMQResource(
-                    what=ResourceTypes.ACTION, 
-                    class_name='TestThing', 
-                    id='test-thing',
-                    obj_name='get_serialized_data', 
-                    qualname='TestThing.get_serialized_data', 
-                    doc="returns value as it is to the client",
-                    request_as_argument=False
-                )
-        self.get_serialized_data_action = _Action(
+        get_serialized_data_action_info = ActionAffordance.from_TD(
+                                            'get_serialized_data', test_thing_TD)
+        self.get_serialized_data_action = Action(
                                 sync_client=None,
-                                resource_info=get_serialized_data_action_info,
+                                resource=get_serialized_data_action_info,
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 async_client=self.client, 
@@ -127,37 +113,22 @@ class ActionMixin(TestBrokerMixin):
                             )
         
 
-        sleep_action_info = ZMQResource(
-                        what=ResourceTypes.ACTION, 
-                        class_name='TestThing', 
-                        id='test-thing',
-                        obj_name='sleep', 
-                        qualname='TestThing.sleep', 
-                        doc="sleeps for a given amount of time",
-                        request_as_argument=False
-                    )
-        self.sleep_action = _Action(
-                        sync_client=None,
-                        resource_info=sleep_action_info,
-                        invokation_timeout=5, 
-                        execution_timeout=5, 
-                        async_client=self.client, 
-                        schema_validator=None
-                    )
+        sleep_action_info = ActionAffordance.from_TD('sleep', test_thing_TD)
+        self.sleep_action = Action(
+                                sync_client=None,
+                                resource=sleep_action_info,
+                                invokation_timeout=5, 
+                                execution_timeout=5, 
+                                async_client=self.client, 
+                                schema_validator=None
+                            )
 
 
-        get_mixed_content_data_action_info = ZMQResource(
-                        what=ResourceTypes.ACTION, 
-                        class_name='TestThing', 
-                        id='test-thing',
-                        obj_name='get_mixed_content_data', 
-                        qualname='TestThing.get_mixed_content_data', 
-                        doc="returns mixed content to the client",
-                        request_as_argument=False
-                    )
-        self.get_mixed_content_data_action = _Action(
+        get_mixed_content_data_action_info = ActionAffordance.from_TD(
+                                        'get_mixed_content_data', test_thing_TD)
+        self.get_mixed_content_data_action = Action(
                         sync_client=None,
-                        resource_info=get_mixed_content_data_action_info,
+                        resource=get_mixed_content_data_action_info,
                         invokation_timeout=5, 
                         execution_timeout=5, 
                         async_client=self.client, 
@@ -166,7 +137,14 @@ class ActionMixin(TestBrokerMixin):
    
 
 
-class TestAsyncZMQServer(TestBrokerMixin):
+class TestAsyncZMQServer(ActionMixin):
+
+    @classmethod
+    def setUpClass(self):
+        super().setUpClass()
+        self.setUpActions()
+        print(f"test ZMQ RPC Server {self.__name__}")
+
     
     def test_1_handshake_complete(self):
         """
@@ -292,24 +270,8 @@ class TestAsyncZMQServer(TestBrokerMixin):
         """
         Higher level action object should be able to send messages to server
         """
-        resource_info = ZMQResource(
-                            what=ResourceTypes.ACTION, 
-                            class_name='TestThing', 
-                            id='test-thing',
-                            obj_name='test_echo', 
-                            qualname='TestThing.test_echo', 
-                            doc="returns value as it is to the client",
-                            request_as_argument=False
-                        )
-        action_abstractor = _Action(
-                                sync_client=self.client,
-                                resource_info=resource_info,
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                async_client=None, 
-                                schema_validator=None
-                            )
-        action_abstractor.oneway() # because we dont have a thing running
+        self.echo_action._zmq_client = self.client
+        self.echo_action.oneway() # because we dont have a thing running
         self.client.handshake() # force a response from server so that last_server_message is set
         # self.check_client_message(self.last_server_message) # last message received by server which is the client message
 
@@ -501,6 +463,7 @@ class TestMessageMappedClientPool(TestBrokerMixin):
     @classmethod
     def setUpClient(self):
         self.client = MessageMappedZMQClientPool(
+                                    id='client-pool',
                                     client_ids=[self.client_id],
                                     server_ids=[self.server_id], 
                                     logger=self.logger,

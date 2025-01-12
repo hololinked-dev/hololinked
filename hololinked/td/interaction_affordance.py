@@ -2,9 +2,11 @@ import typing
 from dataclasses import dataclass, field
 
 from .base import Schema
-from .data_schema import DataSchema, StringSchema, NumberSchema, BooleanSchema, ArraySchema, EnumSchema, ObjectSchema, OneOfSchema
+from .data_schema import (DataSchema, StringSchema, NumberSchema, 
+                        BooleanSchema, ArraySchema, EnumSchema, ObjectSchema, 
+                        OneOfSchema)
+from .forms import Form
 from ..constants import JSON, ResourceTypes
-
 
 
 
@@ -18,7 +20,7 @@ class InteractionAffordance(Schema):
     titles : typing.Optional[typing.Dict[str, str]]
     description : str
     descriptions : typing.Optional[typing.Dict[str, str]] 
-    # forms : typing.List["Form"]
+    forms : typing.List[Form]
     # uri variables 
 
     def __init__(self):
@@ -28,148 +30,32 @@ class InteractionAffordance(Schema):
 
     @property
     def what(self):
-        raise NotImplementedError("what property must be implemented in subclass of InteractionAffordance")
-
+        raise NotImplementedError("Unknown interaction affordance - implement in subclass of InteractionAffordance")
+    
     @property
     def name(self):
+        if self._name is None:
+            raise ValueError("name is not set for this interaction affordance")
         return self._name
     
     @property
     def thing_id(self):
+        if self._thing_id is None:
+            raise ValueError("thing_id is not set for this interaction affordance")
         return self._thing_id
     
+    def _build(self, interaction: typing.Any, owner) -> None:
+        raise NotImplementedError("_build must be implemented in subclass of InteractionAffordance")
+    
     @classmethod 
-    def generate_schema(cls, resource : typing.Any, owner : "Thing", authority : str) -> JSON:
+    def generate(cls, interaction: typing.Any, owner, authority: str) -> JSON:
         raise NotImplementedError("generate_schema must be implemented in subclass of InteractionAffordance")
 
     @classmethod 
     def from_TD(cls, name: str, TD: JSON) -> "InteractionAffordance":
         raise NotImplementedError("from_TD must be implemented in subclass of InteractionAffordance")
     
-
-
-# @dataclass(**__dataclass_kwargs)
-# class ZMQResource(SerializableDataclass): 
-#     """
-#     Representation of resource used by ZMQ clients for mapping client method/action calls, property read/writes & events
-#     to a server resource. Used to dynamically populate the ``ObjectProxy``
-
-#     Attributes
-#     ----------
-
-#     what : str
-#         is it a property, method/action or event?
-#     id : str
-#         The ``id`` of the thing which owns the resource. Used by ZMQ client to inform 
-#         message brokers to send the message to the correct recipient.
-#     name : str
-#         the name of the resource (__name__)
-#     qualname : str
-#         the qualified name of the resource (__qualname__) 
-#     doc : str
-#         the docstring of the resource
-#     argument_schema : JSON
-#         argument schema of the method/action for validation before passing over the instruction to the ZMQ server. 
-#     """
-#     what : str 
-#     class_name : str # just metadata
-#     id : str 
-#     obj_name : str # what looks on the client & the ID of the resource on the server
-#     qualname : str # qualified name to use by the client 
-#     doc : typing.Optional[str] 
-#     request_as_argument : bool = field(default=False)
-
-#     def __init__(self, *, what: str, thing_id: str, class_name: str, objekt: str,
-#                 doc : str, request_as_argument : bool = False, ) -> None:
-#         self.what = what 
-#         self.class_name = class_name
-#         self.thing_id = thing_id
-#         self.objekt = objekt 
-#         self.doc = doc
-#         self.request_as_argument = request_as_argument
-
-#     def get_dunder_attr(self, __dunder_name : str):
-#         name = __dunder_name.strip('_')
-#         name = 'obj_name' if name == 'name' else name
-#         return getattr(self, name)
-
-#     def from_TD(self, name: str, TD: JSON) -> "ZMQResource":
-#         """
-#         Populate the resource from a Thing Description. 
-#         """
-#         raise NotImplementedError("This method is not implemented yet.")
-    
-#     def supported_operations(self) -> typing.List[str]:
-#         """
-#         Return the supported operations on the resource. 
-#         """
-#         raise NotImplementedError("This method is not implemented yet.")
-
-    
-# @dataclass(**__dataclass_kwargs)
-# class ZMQProperty(ZMQResource):
-
-#     @classmethod
-#     def from_TD(cls, name: str, TD: JSON) -> "ZMQResource":
-#         """
-#         Populate the resource from a Thing Description. 
-#         """
-#         self.what = TD['what']
-#         self.class_name = TD['class_name']
-#         self.id = TD['id']
-#         self.obj_name = TD['obj_name']
-#         self.qualname = TD['qualname']
-#         self.doc = TD['doc']
-#         self.request_as_argument = TD['request_as_argument']
-#         return self
-
-
-# @dataclass(**__dataclass_kwargs)
-# class ZMQAction(ZMQResource):
-#     argument_schema : typing.Optional[JSON] = field(default=None)
-#     return_value_schema : typing.Optional[JSON] = field(default=None)
-
-#     def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
-#                 qualname : str, doc : str, argument_schema : typing.Optional[JSON] = None,
-#                 return_value_schema : typing.Optional[JSON] = None, request_as_argument : bool = False) -> None:
-#         super(ZMQAction, self).__init__(what=what, class_name=class_name, id=id, obj_name=obj_name,
-#                         qualname=qualname, doc=doc, request_as_argument=request_as_argument)
-#         self.argument_schema = argument_schema
-#         self.return_value_schema = return_value_schema
-
-
-# @dataclass(**__dataclass_kwargs)
-# class ZMQEvent(ZMQResource):
-#     """
-#     event name and socket address of events to be consumed by clients. 
-  
-#     Attributes
-#     ----------
-#     name : str
-#         name of the event, must be unique
-#     obj_name: str
-#         name of the event variable used to populate the ZMQ client
-#     socket_address : str
-#         address of the socket
-#     unique_identifier: str
-#         unique ZMQ identifier used in PUB-SUB model
-#     what: str, default EVENT
-#         is it a property, method/action or event?
-#     """
-#     friendly_name : str = field(default=UNSPECIFIED)
-#     unique_identifier : str = field(default=UNSPECIFIED)
-#     serialization_specific : bool = field(default=False)
-#     socket_address : str = field(default=UNSPECIFIED)
-
-#     def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
-#                 friendly_name : str, qualname : str, unique_identifier : str, 
-#                 serialization_specific : bool = False, socket_address : str, doc : str) -> None:
-#         super(ZMQEvent, self).__init__(what=what, class_name=class_name, id=id, obj_name=obj_name,
-#                         qualname=qualname, doc=doc, request_as_argument=False)  
-#         self.friendly_name = friendly_name
-#         self.unique_identifier = unique_identifier
-#         self.serialization_specific = serialization_specific
-#         self.socket_address = socket_address
+   
 
 @dataclass
 class PropertyAffordance(InteractionAffordance, DataSchema):
@@ -184,10 +70,18 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
     def __init__(self):
         super().__init__()
 
-    def build(self, property : "Property", owner : "Thing", authority : str) -> None:
-        """generates the schema"""
-        DataSchema.build(self, property, owner, authority)
+    @property
+    def what(self):
+        return ResourceTypes.PROPERTY
 
+    def _build(self, property, owner) -> None:
+        """generates the schema"""
+        from ..server import Property
+        assert isinstance(property, Property)
+        DataSchema._build_from_property(self, property, owner)
+    
+    def _build_forms(self, property, owner, authority: str) -> None:
+        from ..server import Property
         self.forms = []
         for index, method in enumerate(property._remote_info.http_method):
             form = Form()
@@ -215,7 +109,15 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
 
 
     @classmethod
-    def generate_schema(self, property : "Property", owner : "Thing", authority : str) -> JSON:
+    def generate(self, property, owner, authority : str) -> JSON:
+        from ..server.properties import (String, Number, Integer, Boolean, 
+                                    List, TypedList, Tuple, TupleSelector,
+                                    Selector, TypedDict, TypedKeyMappingsDict,
+                                    ClassSelector, Filename, Foldername, Path)
+
+        from ..server import Property
+        assert isinstance(property, Property)
+
         if not isinstance(property, Property):
             raise TypeError(f"Property affordance schema can only be generated for Property. "
                             f"Given type {type(property)}")
@@ -252,7 +154,8 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         return schema.asdict()
     
     @classmethod
-    def register_descriptor(cls, descriptor : "Property", schema_generator : "PropertyAffordance") -> None:
+    def register_descriptor(cls, descriptor, schema_generator) -> None:
+        from ..server import Property
         if not isinstance(descriptor, Property):
             raise TypeError("custom schema generator can also be registered for Property." +
                             f" Given type {type(descriptor)}")
@@ -270,7 +173,6 @@ class ActionAffordance(InteractionAffordance):
     creates action affordance schema from actions (or methods).
     schema - https://www.w3.org/TR/wot-thing-description11/#actionaffordance
     """
-    
     input : JSON
     output : JSON
     safe : bool
@@ -284,7 +186,7 @@ class ActionAffordance(InteractionAffordance):
     def what(self):
         return ResourceTypes.ACTION
         
-    def _build(self, action: typing.Callable, owner: "Thing", authority: str | None = None) -> None:
+    def _build(self, action: typing.Callable, owner, authority: str | None = None) -> None:
         assert isinstance(action._remote_info, ActionInfoValidator)
         if action._remote_info.argument_schema: 
             self.input = action._remote_info.argument_schema 
@@ -314,30 +216,38 @@ class ActionAffordance(InteractionAffordance):
             # form.additionalResponses = [AdditionalExpectedResponse().asdict()]
             self.forms.append(form.asdict())
     
-
     @classmethod
-    def build(cls, action : typing.Callable, owner : "Thing", authority : str) -> JSON:
+    def generate(cls, action : typing.Callable, owner : "Thing", authority : str) -> JSON:
         schema = ActionAffordance()
         schema._build(action=action, owner=owner, authority=authority) 
         return schema.asdict()
 
     @classmethod
     def from_TD(self, name: str, TD: JSON) -> "ActionAffordance":
-        action = TD["actions"][name]
+        action = TD["actions"][name] # type: typing.Dict[str, JSON]
         action_affordance = ActionAffordance()
-        action_affordance.title = action.get("title", None)
-        action_affordance.description = action.get("description", None)
-        action_affordance.input = action.get("input", None)
-        action_affordance.output = action.get("output", None)
-        action_affordance.safe = action.get("safe", None)
-        action_affordance.idempotent = action.get("idempotent", None)
-        action_affordance.synchronous = action.get("synchronous", None)
-        action_affordance.forms = action.get("forms", {})
-        action_affordance._name = name 
+        if action.get("title", None):
+            action_affordance.title = action.get("title", None)
+        if action.get("description", None):
+            action_affordance.description = action.get("description", None)
+        if action.get("input", None):
+            action_affordance.input = action.get("input", None)
+        if action.get("output", None):
+            action_affordance.output = action.get("output", None)
+        if action.get("safe", None) is not None:
+            action_affordance.safe = action.get("safe", None)
+        if action.get("idempotent", None) is not None:
+            action_affordance.idempotent = action.get("idempotent", None)
+        if action.get("synchronous", None) is not None:
+            action_affordance.synchronous = action.get("synchronous", None)
+        if action.get("forms", None):
+            action_affordance.forms = action.get("forms", {})
+        action_affordance._name = name
         action_affordance._thing_id = TD["id"]
         return action_affordance
     
     
+
 @dataclass
 class EventAffordance(InteractionAffordance):
     """
@@ -350,7 +260,7 @@ class EventAffordance(InteractionAffordance):
     def __init__(self):
         super().__init__()
     
-    def build(self, event : "Event", owner : "Thing", authority : str) -> None:
+    def build(self, event, owner, authority : str) -> None:
         self.title = event.label or event._obj_name 
         if event.doc:
             self.description = self.format_doc(event.doc)
@@ -366,15 +276,41 @@ class EventAffordance(InteractionAffordance):
         self.forms = [form.asdict()]
 
     @classmethod
-    def generate_schema(cls, event : "Event", owner : "Thing", authority : str) -> JSON:
+    def generate_schema(cls, event, owner, authority : str) -> JSON:
         schema = EventAffordance()
         schema.build(event=event, owner=owner, authority=authority)
         return schema.asdict()
+    
 
+# @dataclass(**__dataclass_kwargs)
+# class ZMQEvent(ZMQResource):
+#     """
+#     event name and socket address of events to be consumed by clients. 
+  
+#     Attributes
+#     ----------
+#     name : str
+#         name of the event, must be unique
+#     obj_name: str
+#         name of the event variable used to populate the ZMQ client
+#     socket_address : str
+#         address of the socket
+#     unique_identifier: str
+#         unique ZMQ identifier used in PUB-SUB model
+#     what: str, default EVENT
+#         is it a property, method/action or event?
+#     """
+#     friendly_name : str = field(default=UNSPECIFIED)
+#     unique_identifier : str = field(default=UNSPECIFIED)
+#     serialization_specific : bool = field(default=False)
+#     socket_address : str = field(default=UNSPECIFIED)
 
-from ..server.dataklasses import ActionInfoValidator
-from ..server.events import Event
-from ..server.properties import *
-from ..server.property import Property
-from ..server.thing import Thing
-from ..server.state_machine import StateMachine
+#     def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
+#                 friendly_name : str, qualname : str, unique_identifier : str, 
+#                 serialization_specific : bool = False, socket_address : str, doc : str) -> None:
+#         super(ZMQEvent, self).__init__(what=what, class_name=class_name, id=id, obj_name=obj_name,
+#                         qualname=qualname, doc=doc, request_as_argument=False)  
+#         self.friendly_name = friendly_name
+#         self.unique_identifier = unique_identifier
+#         self.serialization_specific = serialization_specific
+#         self.socket_address = socket_address
