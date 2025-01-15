@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from ...utils import *
 from ...config import global_config
-from ...constants import ZMQ_TRANSPORTS, ZMQSocketType, ZMQ_EVENT_MAP, CommonRPC, ServerTypes, get_socket_type_name
+from ...constants import ZMQ_TRANSPORTS, get_socket_type_name
 from ...serializers.serializers import JSONSerializer
 from ...exceptions import BreakLoop
 from .message import (EMPTY_BYTE, EXIT, HANDSHAKE, INVALID_MESSAGE, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
@@ -1703,7 +1703,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         """
         ping all servers connected to the client pool, calls ping() on Thing
         """
-        return await self.async_execute_in_all(operation='invokeAction', objekt=CommonRPC.PING)
+        return await self.async_execute_in_all() #operation='invokeAction', objekt=CommonRPC.PING)
         
     def __contains__(self, name: str) -> bool:
         return name in self.pool
