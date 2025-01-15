@@ -205,10 +205,6 @@ class ActionResource(RemoteResource):
 
 
 
-
-
-
-
 def build_our_temp_TD(instance, authority : typing.Optional[str] = None , 
                     ignore_errors : bool = False) -> typing.Dict[str, JSONSerializable]:
     """

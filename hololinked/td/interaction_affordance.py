@@ -6,7 +6,7 @@ from .data_schema import (DataSchema, StringSchema, NumberSchema,
                         BooleanSchema, ArraySchema, EnumSchema, ObjectSchema, 
                         OneOfSchema)
 from .forms import Form
-from ..constants import JSON, ResourceTypes
+from ..constants import JSON, Operations, ResourceTypes
 
 
 
@@ -27,7 +27,9 @@ class InteractionAffordance(Schema):
         super().__init__()
         self._name = None 
         self._thing_id = None
-
+        self._thing_cls = None
+        self._owner = None
+        
     @property
     def what(self):
         raise NotImplementedError("Unknown interaction affordance - implement in subclass of InteractionAffordance")
@@ -44,8 +46,17 @@ class InteractionAffordance(Schema):
             raise ValueError("thing_id is not set for this interaction affordance")
         return self._thing_id
     
+    @property
+    def thing_cls(self):
+        if self._thing_cls is None:
+            raise ValueError("thing_cls is not set for this interaction affordance")
+        return self._thing_cls
+    
     def _build(self, interaction: typing.Any, owner) -> None:
         raise NotImplementedError("_build must be implemented in subclass of InteractionAffordance")
+    
+    def _build_forms(self, interaction: typing.Any, owner, authority: str) -> None:
+        raise NotImplementedError("_build_forms must be implemented in subclass of InteractionAffordance")
     
     @classmethod 
     def generate(cls, interaction: typing.Any, owner, authority: str) -> JSON:
@@ -164,6 +175,40 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
                             f"Given type {type(schema_generator)}" )
         PropertyAffordance._custom_schema_generators[descriptor] = schema_generator
 
+    @property 
+    def read_property_form(self) -> JSON:
+        try: 
+            self._read_property_form
+        except AttributeError:
+            for form in self._resource.forms:
+                if form.op == Operations.readProperty:
+                    self._read_property_form = form
+                    return self._read_property_form
+            raise NotImplementedError("This property cannot be read")
+        
+    @property
+    def write_property_form(self) -> JSON:
+        try: 
+            if not self._resource.readOnly:
+                self._write_property_form
+        except AttributeError:
+            for form in self._resource.forms:
+                if form.op == Operations.writeProperty:
+                    self._write_property_form = form
+                    return self._write_property_form
+        raise NotImplementedError("This property cannot be written")
+        
+    @property
+    def observe_property_form(self) -> JSON:
+        try: 
+            self._observe_property_form
+        except AttributeError:
+            for form in self._resource.forms:
+                if form.op == Operations.observeProperty:
+                    self._observe_property_form = form
+                    return self._observe_property_form
+            raise NotImplementedError("This property cannot be observed")
+
 
 
 
@@ -179,48 +224,53 @@ class ActionAffordance(InteractionAffordance):
     idempotent : bool 
     synchronous : bool 
 
-    def __init__(self):
+    def __init__(self, action: typing.Callable | None = None):
         super().__init__()
+        from ..server import Action
+        assert action is None or isinstance(action, Action), f"Action affordance can only be generated for Action, " + \
+                                                                           f"given type - {type(action)}"
+        self.action = action # type: Action
 
     @property 
     def what(self):
         return ResourceTypes.ACTION
-        
-    def _build(self, action: typing.Callable, owner, authority: str | None = None) -> None:
-        assert isinstance(action._remote_info, ActionInfoValidator)
-        if action._remote_info.argument_schema: 
-            self.input = action._remote_info.argument_schema 
-        if action._remote_info.return_value_schema: 
-            self.output = action._remote_info.return_value_schema 
-        self.title = action.__name__
-        if action.__doc__:
+            
+    def _build(self, action: typing.Callable, owner) -> None:
+        if self.action._execution_info_validator.argument_schema: 
+            self.input = self.action._execution_info_validator.argument_schema 
+        if self.action._execution_info_validator.return_value_schema: 
+            self.output = self.action._execution_info_validator.return_value_schema 
+        self.title = self.action.__name__
+        if self.action.__doc__:
             self.description = self.format_doc(action.__doc__)
-        if not (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
-                owner.state_machine.has_object(action._remote_info.obj)) and action._remote_info.idempotent:
-            self.idempotent = action._remote_info.idempotent
-        if action._remote_info.synchronous:
-            self.synchronous = action._remote_info.synchronous
-        if action._remote_info.safe:
-            self.safe = action._remote_info.safe 
-        if authority is not None:
-            self._build_forms(action, owner, authority)
+        if (not (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
+                owner.state_machine.has_object(action._execution_info_validator.obj)) and 
+                self.action._execution_info_validator.idempotent):
+            self.idempotent = self.action._execution_info_validator.idempotent
+        if self.action._execution_info_validator.synchronous:
+            self.synchronous = self.action._execution_info_validator.synchronous
+        if self.action._execution_info_validator.safe:
+            self.safe = self.action._execution_info_validator.safe 
 
     def _build_forms(self, protocol: str, authority : str, **protocol_metadata) -> None:
         self.forms = []
-        for method in action._remote_info.http_method:
+        for method in self.action.execution_info_validator.http_method:
             form = Form()
             form.op = 'invokeaction'
-            form.href = f'{authority}{owner._full_URL_path_prefix}{action._remote_info.URL_path}'
+            form.href = f'{authority}/{owner.id}/{action._remote_info.URL_path}'
             form.htv_methodName = method.upper()
             form.contentType = 'application/json'
             # form.additionalResponses = [AdditionalExpectedResponse().asdict()]
             self.forms.append(form.asdict())
     
     @classmethod
-    def generate(cls, action : typing.Callable, owner : "Thing", authority : str) -> JSON:
-        schema = ActionAffordance()
-        schema._build(action=action, owner=owner, authority=authority) 
-        return schema.asdict()
+    def generate(cls, action : typing.Callable, owner, **kwargs) -> JSON:
+        affordance = ActionAffordance(action=action)
+        affordance.owner = owner
+        affordance._build(owner=owner) 
+        if kwargs.get('protocol', None) and kwargs.get('authority', None):
+            affordance._build_forms(protocol=kwargs['protocol'], authority=kwargs['authority'])
+        return affordance.asdict()
 
     @classmethod
     def from_TD(self, name: str, TD: JSON) -> "ActionAffordance":
@@ -241,10 +291,34 @@ class ActionAffordance(InteractionAffordance):
         if action.get("synchronous", None) is not None:
             action_affordance.synchronous = action.get("synchronous", None)
         if action.get("forms", None):
-            action_affordance.forms = action.get("forms", {})
+            action_affordance.forms = action.get("forms", [])
         action_affordance._name = name
         action_affordance._thing_id = TD["id"]
         return action_affordance
+    
+    @property
+    def invokation_form(self) -> JSON:
+        try: 
+            self._invokation_form
+        except AttributeError:
+            for form in self.forms:
+                if form.op == Operations.invokeAction:
+                    self._invokation_form = form
+                    break
+            return self._invokation_form
+        
+    def __hash__(self):
+        return hash(self.thing_id + "" if not self.thing_cls else self.thing_cls + self.name)
+
+    def __str__(self):
+        if self.thing_cls:
+            return f"ActionAffordance({self.thing_cls}({self.thing_id}).{self.name})"
+        return f"ActionAffordance({self.name} of {self.thing_id})"
+    
+    def __eq__(self, value):
+        if not isinstance(value, ActionAffordance):
+            return False
+        return self.thing_id == value.thing_id and self.name == value.name
     
     
 

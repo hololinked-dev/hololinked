@@ -8,7 +8,7 @@ from ...constants import Operations
 from ...serializers import BaseSerializer, Serializers
 from ...serializers.payloads import SerializableData, PreserializedData
 from ...td import PropertyAffordance, ActionAffordance, EventAffordance
-from ..client_abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
+from ...client.abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
 from .message import ResponseMessage
 from .message import EMPTY_BYTE, REPLY, TIMEOUT, ERROR, INVALID_MESSAGE
 from .brokers import SyncZMQClient, AsyncZMQClient, EventConsumer

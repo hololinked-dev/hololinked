@@ -157,20 +157,6 @@ class EventSource:
           self._event_publisher = None # type : typing.Optional["EventPublisher"]
       
     @property
-    def events(self) -> typing.Dict[str, Event]:
-        try:
-            return getattr(self, f'_{self.id}_events')
-        except AttributeError:
-            events = dict()
-            for name, evt in inspect._getmembers(self, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
-                assert isinstance(evt, Event), "object is not an event"
-                if evt._observable:
-                    continue
-                events[name] = evt
-            setattr(self, f'_{self.id}_events', events)
-            return events
-        
-    @property
     def change_events(self) -> typing.Dict[str, Event]:
         try:
             return getattr(self, f'_{self.id}_change_events')
