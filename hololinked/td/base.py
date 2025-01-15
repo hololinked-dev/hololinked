@@ -1,4 +1,4 @@
-import typing
+import typing, inspect
 from dataclasses import dataclass
 from ..constants import JSON
 
@@ -32,19 +32,19 @@ class Schema:
     @classmethod
     def format_doc(cls, doc : str):
         """strip tabs, newlines, whitespaces etc."""
-        doc_as_list = doc.split('\n')
-        final_doc = []
-        for index, line in enumerate(doc_as_list):
-            line = line.lstrip('\n').rstrip('\n')
-            line = line.lstrip('\t').rstrip('\t')
-            line = line.lstrip('\n').rstrip('\n')
-            line = line.lstrip().rstrip()   
-            if index > 0:
-                line = ' ' + line # add space to left in case of new line            
-            final_doc.append(line)
-        final_doc = ''.join(final_doc)
-        final_doc = final_doc.lstrip().rstrip()
-        return final_doc
+        # doc_as_list = doc.split('\n')
+        # final_doc = []
+        # for index, line in enumerate(doc_as_list):
+        #     line = line.lstrip('\n').rstrip('\n')
+        #     line = line.lstrip('\t').rstrip('\t')
+        #     line = line.lstrip('\n').rstrip('\n')
+        #     line = line.lstrip().rstrip()   
+        #     if index > 0:
+        #         line = ' ' + line # add space to left in case of new line            
+        #     final_doc.append(line)
+        # final_doc = ''.join(final_doc)
+        # final_doc = final_doc.lstrip().rstrip()
+        return inspect.cleandoc(doc)
     
 
 

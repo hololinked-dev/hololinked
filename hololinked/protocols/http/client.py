@@ -15,7 +15,7 @@ import tornado.httpclient
 # from rx import Observable
 from tornado.simple_httpclient import HTTPTimeoutError
 
-from hololinked.protocols.client_abstractions import ConsumedThingAction
+from hololinked.client.abstractions import ConsumedThingAction
 from hololinked.td.interaction_affordance import ActionAffordance
 
 # from wotpy.protocols.client import BaseProtocolClient

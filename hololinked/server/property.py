@@ -162,7 +162,8 @@ class Property(Parameter):
 
     def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
         read_value = super().__get__(obj, objtype)
-        self.push_change_event(obj, read_value)
+        if objtype is not None:
+            self.push_change_event(obj, read_value)
         return read_value
          
 
@@ -198,9 +199,6 @@ class Property(Parameter):
             elif issubklass(self.model, BaseModel):
                 self.validator(value)
         return super().validate_and_adapt(value)
-    
-
-    
     
 
     def external_set(self, obj: Parameterized, value : typing.Any) -> None:

@@ -1,5 +1,5 @@
 import time
-from hololinked.server import Thing, action, Property
+from hololinked.server import Thing, action, Property, Event
 
 
 class TestThing(Thing):
@@ -32,7 +32,9 @@ class TestThing(Thing):
         time.sleep(10)
 
 
-    test_property = Property(default=None, doc='test property')
+    test_property = Property(default=None, doc='test property', allow_None=True)
+
+    test_event = Event(friendly_name='test-event', doc='test event')
     
    
 

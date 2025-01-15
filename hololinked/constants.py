@@ -30,31 +30,6 @@ class ResourceTypes(StrEnum):
     THING = "THING"
     
 
-class CommonRPC(StrEnum):
-    """some common RPC and their associated instructions for quick access by lower level code"""
-
-    ZMQ_RESOURCES = 'zmq-resources'
-    HTTP_RESOURCES = '/resources/http-server'
-    OBJECT_INFO = '/object-info'
-    PING = '/ping'
-
-    @classmethod
-    def zmq_resource_read(cls, instance_name : str) -> str:
-        return f"{cls.ZMQ_RESOURCES}"
-
-    @classmethod
-    def http_resource_read(cls, instance_name : str) -> str:
-        return f"/{instance_name}{cls.HTTP_RESOURCES}/read"
-    
-    @classmethod
-    def object_info_read(cls, instance_name : str) -> str: 
-        return f"/{instance_name}{cls.OBJECT_INFO}/read"
-    
-    @classmethod
-    def object_info_write(cls, instance_name : str) -> str: 
-        return f"/{instance_name}{cls.OBJECT_INFO}/write"
-
-
 class REGEX(StrEnum):
     """common regexes"""
 
@@ -100,51 +75,6 @@ class ZMQ_TRANSPORTS(StrEnum):
     INPROC = "INPROC"
 
 
-class ClientMessage(IntEnum):
-    """
-    ZMQ client sent message indexing for accessing message indices with names 
-    instead of numbers
-    """
-    ADDRESS = 0
-    CLIENT_TYPE = 2
-    MESSAGE_TYPE = 3
-    MESSAGE_ID = 4
-    TIMEOUT = 5
-    INSTRUCTION = 6
-    ARGUMENTS = 7
-    EXECUTION_CONTEXT = 8
-
-
-class ServerMessage(IntEnum):
-    """
-    ZMQ server sent message indexing for accessing message indices with names 
-    instead of numbers
-    """
-    ADDRESS = 0
-    SERVER_TYPE = 2
-    MESSAGE_TYPE = 3
-    MESSAGE_ID = 4
-    DATA = 5
-    ENCODED_DATA = 6
-
-
-class ServerTypes(Enum):
-    "type of ZMQ servers"
-
-    UNKNOWN_TYPE = b'UNKNOWN' 
-    RPC = b'RPC'  
-    THING = b'THING'
-    POOL = b'POOL'
-       
-       
-class ClientTypes(Enum):
-    "type of ZMQ clients"
-
-    HTTP_SERVER = b'HTTP_SERVER'
-    PROXY = b'PROXY'
-    TUNNELER = b'TUNNELER' # message passer from inproc client to inrproc server within RPC
-
-
 class HTTPServerTypes(StrEnum):
     "types of HTTP server"
 
@@ -187,6 +117,7 @@ class Operations(StrEnum):
     readProperty = 'readProperty'
     writeProperty = 'writeProperty'
     deleteProperty = 'deleteProperty'
+    observeProperty = 'observeProperty'
     invokeAction = 'invokeAction'
     subscribeEvent = 'subscribeEvent'
     unsubscribeEvent = 'unsubscribeEvent'

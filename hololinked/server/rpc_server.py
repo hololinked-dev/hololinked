@@ -333,7 +333,7 @@ class RPCServer(BaseZMQServer):
                             "return_value" : return_value[0],
                             "execution_logs" : list_handler.log_list
                         }
-                    payload = SerializableData(return_value[0], Serializers.for_object(thing_id, objekt))
+                    payload = SerializableData(return_value[0], Serializers.for_object(thing_id, instance.__class__.__name__, objekt))
                     if isinstance(return_value[1], bytes):
                         preserialized_payload = PreserializedData(return_value[1])
                 elif isinstance(return_value, bytes):
@@ -346,7 +346,7 @@ class RPCServer(BaseZMQServer):
                             "return_value" : return_value,
                             "execution_logs" : list_handler.log_list
                         }
-                    payload = SerializableData(return_value, Serializers.for_object(thing_id, objekt))
+                    payload = SerializableData(return_value, Serializers.for_object(thing_id, instance.__class__.__name__, objekt))
                     preserialized_payload = PreserializedData(EMPTY_BYTE, content_type='text/plain')
                 # set reply
                 instance._last_operation_reply = (payload, preserialized_payload)

@@ -90,45 +90,36 @@ class ActionMixin(TestBrokerMixin):
 
     @classmethod
     def setUpActions(self):
-        echo_action_info = ActionAffordance.from_TD('echo_action', test_thing_TD)
         self.echo_action = Action(
                                 sync_client=None,
-                                resource=echo_action_info,
+                                resource=ActionAffordance.from_TD('echo_action', test_thing_TD),
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 async_client=self.client, 
                                 schema_validator=None
                             )
-        
-
-        get_serialized_data_action_info = ActionAffordance.from_TD(
-                                            'get_serialized_data', test_thing_TD)
+    
         self.get_serialized_data_action = Action(
                                 sync_client=None,
-                                resource=get_serialized_data_action_info,
+                                resource=ActionAffordance.from_TD('get_serialized_data', test_thing_TD)
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 async_client=self.client, 
                                 schema_validator=None
                             )
         
-
-        sleep_action_info = ActionAffordance.from_TD('sleep', test_thing_TD)
         self.sleep_action = Action(
                                 sync_client=None,
-                                resource=sleep_action_info,
+                                resource=ActionAffordance.from_TD('sleep', test_thing_TD),
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 async_client=self.client, 
                                 schema_validator=None
                             )
 
-
-        get_mixed_content_data_action_info = ActionAffordance.from_TD(
-                                        'get_mixed_content_data', test_thing_TD)
         self.get_mixed_content_data_action = Action(
                         sync_client=None,
-                        resource=get_mixed_content_data_action_info,
+                        resource= ActionAffordance.from_TD('get_mixed_content_data', test_thing_TD),
                         invokation_timeout=5, 
                         execution_timeout=5, 
                         async_client=self.client, 

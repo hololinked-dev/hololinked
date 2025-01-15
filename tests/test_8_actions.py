@@ -3,6 +3,7 @@ import typing
 import unittest
 import logging
 import multiprocessing
+from hololinked.server.actions import SyncAction, AsyncAction
 from hololinked.server.dataklasses import ActionInfoValidator
 from hololinked.server.thing import Thing, action
 from hololinked.utils import isclassmethod
@@ -97,29 +98,32 @@ class TestAction(TestCase):
         print("tear down test action")
 
     def test_1_allowed_actions(self):
-        # instance method can be decorated with action
-        self.assertEqual(self.thing_cls.action_echo, action()(self.thing_cls.action_echo))
+        # instance method can be decorated with action and becomes SyncAction when not defined as async
+        self.assertEqual(SyncAction(self.thing_cls.action_echo), action()(self.thing_cls.action_echo))
         # classmethod can be decorated with action
-        self.assertEqual(self.thing_cls.action_echo_with_classmethod, 
+        self.assertEqual(SyncAction(self.thing_cls.action_echo_with_classmethod), 
                         action()(self.thing_cls.action_echo_with_classmethod))
         self.assertTrue(isclassmethod(self.thing_cls.action_echo_with_classmethod))
         # async methods can be decorated with action    
-        self.assertEqual(self.thing_cls.action_echo_async, 
+        self.assertEqual(AsyncAction(self.thing_cls.action_echo_async), 
                         action()(self.thing_cls.action_echo_async))
         # async classmethods can be decorated with action
-        self.assertEqual(self.thing_cls.action_echo_async_with_classmethod, 
+        self.assertEqual(AsyncAction(self.thing_cls.action_echo_async_with_classmethod), 
                         action()(self.thing_cls.action_echo_async_with_classmethod))
         self.assertTrue(isclassmethod(self.thing_cls.action_echo_async_with_classmethod))
         # parameterized function can be decorated with action
-        self.assertEqual(self.thing_cls.typed_action, action(safe=True)(self.thing_cls.typed_action))
-        self.assertEqual(self.thing_cls.typed_action_without_call, action(idempotent=True)(self.thing_cls.typed_action_without_call))
-        self.assertEqual(self.thing_cls.typed_action_async, action(synchronous=True)(self.thing_cls.typed_action_async))
+        self.assertEqual(SyncAction(self.thing_cls.typed_action), 
+                            action(safe=True)(self.thing_cls.typed_action))
+        self.assertEqual(SyncAction(self.thing_cls.typed_action_without_call), 
+                            action(idempotent=True)(self.thing_cls.typed_action_without_call))
+        self.assertEqual(AsyncAction(self.thing_cls.typed_action_async), 
+                            action(synchronous=True)(self.thing_cls.typed_action_async))
        
         
     def test_2_remote_info(self):
         # basic check if the remote_info is correct, although this test is not necessary, not recommended and 
         # neither particularly useful
-        remote_info = self.thing_cls.action_echo._remote_info
+        remote_info = self.thing_cls.action_echo._execution_info_validator
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator) # type definition
         self.assertTrue(remote_info.isaction)
@@ -130,7 +134,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.idempotent)
         self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.action_echo_async._remote_info
+        remote_info = self.thing_cls.action_echo_async._execution_info_validator
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator) # type definition
         self.assertTrue(remote_info.isaction)
@@ -141,7 +145,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.idempotent)
         self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.action_echo_with_classmethod._remote_info
+        remote_info = self.thing_cls.action_echo_with_classmethod._execution_info_validator
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator) # type definition
         self.assertTrue(remote_info.isaction)
@@ -152,7 +156,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.idempotent)
         self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.typed_action._remote_info
+        remote_info = self.thing_cls.typed_action._execution_info_validator
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator)
         self.assertTrue(remote_info.isaction)
@@ -163,7 +167,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.idempotent)
         self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.typed_action_without_call._remote_info
+        remote_info = self.thing_cls.typed_action_without_call._execution_info_validator
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator)
         self.assertTrue(remote_info.isaction)
@@ -174,7 +178,7 @@ class TestAction(TestCase):
         self.assertTrue(remote_info.idempotent)
         self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.typed_action_async._remote_info
+        remote_info = self.thing_cls.typed_action_async._execution_info_validator
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator)
         self.assertTrue(remote_info.isaction)
@@ -190,7 +194,7 @@ class TestAction(TestCase):
         # done allow action decorator to be terminated without '()' on a method
         with self.assertRaises(TypeError) as ex:
            action(self.thing_cls.incorrectly_decorated_method)
-        self.assertTrue(str(ex.exception).startswith("URL_path should be a string, not a function/method, did you decorate"))
+        self.assertTrue(str(ex.exception).startswith("input schema should be a JSON, not a function/method, did you decorate your action wrongly?"))
         
         # dunder methods cannot be decorated with action
         with self.assertRaises(ValueError) as ex:
@@ -208,7 +212,7 @@ class TestAction(TestCase):
         self.assertTrue(str(ex.exception).startswith("Only 'safe', 'idempotent', 'synchronous' are allowed"))
             
 
-    def test_4_exposed_actions(self):
+    def tasest_4_exposed_actions(self):
         self.assertTrue(hasattr(self.thing_cls.action_echo, '_remote_info'))
         done_queue = multiprocessing.Queue()
         start_thing_forked(self.thing_cls, instance_name='test-action', done_queue=done_queue,

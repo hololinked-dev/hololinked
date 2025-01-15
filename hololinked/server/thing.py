@@ -12,19 +12,19 @@ import zmq
 import zmq.asyncio
 
 
-from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
+from ..param.parameterized import Parameterized, ParameterizedFunction, ParameterizedMetaclass, edit_constant as edit_constant_parameters
 from ..constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
-from ..utils import get_default_logger, getattr_without_descriptor_read
+from ..utils import get_default_logger, getattr_without_descriptor_read, issubklass
 from ..exceptions import *
 from ..serializers.serializers import JSONSerializer
 from .database import ThingDB, ThingInformation
-from .dataklasses import build_our_temp_TD, get_organised_resources
+from .dataklasses import ActionInfoValidator, build_our_temp_TD, get_organised_resources
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .state_machine import StateMachine
-from .actions import RemoteInvokable, action
+from .actions import RemoteInvokable, action, Action
 from .property import Property, ClassProperties
 from .properties import String, ClassSelector, Selector, TypedKeyMappingsConstrainedDict
-from .events import EventSource
+from .events import EventSource, Event
 
 
 
@@ -54,8 +54,13 @@ class ThingMeta(ParameterizedMetaclass):
         )
 
     def __new__(cls, __name, __bases, __dict : TypedKeyMappingsConstrainedDict):
-        return super().__new__(cls, __name, __bases, __dict._inner)
-
+        class_ = super().__new__(cls, __name, __bases, __dict._inner)
+        for action in class_.actions.values():
+            action.owner = class_
+        for event in class_.events.values():
+            event.owner = class_
+        return class_ 
+    
     def __call__(mcls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
         instance.__post_init__()
@@ -76,6 +81,45 @@ class ThingMeta(ParameterizedMetaclass):
         ``Parameters`` instance. See code of ``param``.
         """
         return mcs._param_container
+    
+    @property
+    def actions(mcs) -> typing.Dict[str, Action]:
+        """
+        a dictionary with all the actions of the object as values (methods that are decorated with ``action``) and 
+        their names as keys.
+        """
+        try:
+            return getattr(mcs, f'_{mcs.__name__}_actions')
+        except AttributeError:
+            actions = dict()
+            for name, method in inspect._getmembers(
+                        mcs, 
+                        lambda f : inspect.ismethod(f) or (hasattr(f, '_execution_info_validator') and 
+                                    isinstance(f._execution_info_validator, ActionInfoValidator)) or \
+                                    isinstance(f, Action) or issubklass(f, ParameterizedFunction),  
+                        getattr_without_descriptor_read
+                    ): 
+                if hasattr(method, '_execution_info_validator'):
+                    actions[name] = method
+                elif isinstance(method, Action) or issubklass(method, ParameterizedFunction):
+                    actions[name] = method
+            setattr(mcs, f'_{mcs.__name__}_actions', actions)
+            return actions
+    
+    @property
+    def events(mcs) -> typing.Dict[str, Event]:
+        try:
+            return getattr(mcs, f'_{mcs.__name__}_events')
+        except AttributeError:
+            events = dict()
+            for name, evt in inspect._getmembers(mcs, lambda o: isinstance(o, Event), 
+                                                getattr_without_descriptor_read):
+                assert isinstance(evt, Event), "object is not an event"
+                if evt._observable:
+                    continue
+                events[name] = evt
+            setattr(mcs, f'_{mcs.__name__}_events', events)
+            return events
 
 
 
@@ -96,16 +140,6 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                         doc="""logging.Logger instance to print log messages. Default 
                             logger with a IO-stream handler and network accessible handler is created 
                             if none supplied.""") # type: logging.Logger
-    # zmq_serializer = ClassSelector(class_=(BaseSerializer, str), 
-    #                     allow_None=True, default='json', remote=False,
-    #                     doc="""Serializer used for exchanging messages with ZMQ clients. Subclass the base serializer 
-    #                     or one of the available serializers to implement your own serialization requirements; or, register 
-    #                     type replacements. Default is JSON. Some serializers like MessagePack improve performance many times 
-    #                     compared to JSON and can be useful for data intensive applications within python.""") # type: BaseSerializer
-    # http_serializer = ClassSelector(class_=(JSONSerializer, str), default=None, allow_None=True, remote=False,
-    #                     doc="""Serializer used for exchanging messages with a HTTP clients,
-    #                         subclass JSONSerializer to implement your own JSON serialization requirements; or, 
-    #                         register type replacements. Other types of serializers are currently not allowed for HTTP clients.""") # type: JSONSerializer
     schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True, 
                         remote=False, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
@@ -146,20 +180,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         logger: logging.Logger, optional
             logging.Logger instance to print log messages. Default logger with a IO-stream handler and network 
             accessible handler is created if none supplied.
-        serializer: JSONSerializer, optional
-            custom JSON serializer. To use separate serializer for different protocols, use keyword arguments 
-            like zmq_serializer and http_serializer and leave this argument at None.
         **kwargs: typing.Dict[str, Any]
-            - zmq_serializer: BaseSerializer | str, optional 
-                Serializer used for exchanging messages with ZMQ clients. If string value is supplied, 
-                supported are 'msgpack', 'pickle', 'serpent', 'json'. Subclass the base serializer 
-                ``hololinked.server.serializer.BaseSerializer`` or one of the available serializers to implement your 
-                own serialization requirements; or, register type replacements. Default is JSON. Some serializers like 
-                MessagePack improve performance many times  compared to JSON and can be useful for data intensive 
-                applications within python. The serializer supplied here must also be supplied to object proxy from 
-                ``hololinked.client``. 
-            - http_serializer: JSONSerializer, optional
-                serializer used for cross platform HTTP clients. 
             - logger_remote_access: bool, Default True
                 if False, network accessible handler is not attached to the logger. This value can also be set as a 
                 class attribute, see docs.
