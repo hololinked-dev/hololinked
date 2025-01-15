@@ -6,13 +6,9 @@ import logging
 import uuid
 from zmq.utils.monitor import parse_monitor_message
 
-from ..config import global_config
-from ..constants import JSON, CommonRPC, Operations, Operations, ServerMessage, ResourceTypes, ZMQ_TRANSPORTS
-from ..serializers.serializers import BaseSerializer
-from ..server.dataklasses import ZMQAction, ZMQEvent, ZMQResource
-from ..protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, ResponseMessage, SerializableData, EMPTY_BYTE 
-from ..protocols.zmq.message import ERROR, TIMEOUT, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED
-from ..server.schema_validators import BaseSchemaValidator
+
+from ..constants import ZMQ_TRANSPORTS
+from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
 
 
 
@@ -61,45 +57,43 @@ class ObjectProxy:
         '_schema_validator'
     ])
 
-    def __init__(self, id : str, protocol : str = ZMQ_TRANSPORTS.IPC, invokation_timeout : float = 5, 
-                    load_thing = True, **kwargs) -> None:
+    def __init__(self, 
+                id: str, 
+                protocol: str = ZMQ_TRANSPORTS.IPC, 
+                invokation_timeout : float = 5, 
+                load_thing = True, 
+                **kwargs
+            ) -> None:
         self._allow_foreign_attributes = kwargs.get('allow_foreign_attributes', False)
         self._noblock_messages = dict()
         self._schema_validator = kwargs.get('schema_validator', None)
         self.id = id
+        self.logger = kwargs.pop('logger', logging.Logger(self.identity, 
+                                    level=kwargs.get('log_level', logging.INFO)))
+        
+
         self.invokation_timeout = invokation_timeout
         self.execution_timeout = kwargs.get("execution_timeout", None)
         self.identity = f"{id}|{uuid.uuid4()}"
-        self.logger = kwargs.pop('logger', logging.Logger(self.identity, 
-                                                    level=kwargs.get('log_level', logging.INFO)))
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
-        self.async_zmq_client = None    
-        self.zmq_client = SyncZMQClient(id, self.identity, client_type=PROXY, protocol=protocol, 
-                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
-                                            logger=self.logger, **kwargs)
-        if kwargs.get("async_mixin", False):
-            self.async_zmq_client = AsyncZMQClient(id, self.identity + '|async', client_type=PROXY, protocol=protocol, 
-                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
-                                            logger=self.logger, **kwargs)
-        if load_thing:
-            self.load_thing()
+        
 
     def __getattribute__(self, __name: str) -> typing.Any:
         obj = super().__getattribute__(__name)
-        if isinstance(obj, _Property):
+        if isinstance(obj, ConsumedThingProperty):
             return obj.get()
         return obj
 
     def __setattr__(self, __name : str, __value : typing.Any) -> None:
         if (__name in ObjectProxy._own_attrs or (__name not in self.__dict__ and 
-                isinstance(__value, __allowed_attribute_types__)) or self._allow_foreign_attributes):
-            # allowed attribute types are _Property and _Action defined after this class
+                isinstance(__value, ClientFactory.__allowed_attribute_types__)) or self._allow_foreign_attributes):
+            # allowed attribute types are ConsumedThingProperty and ConsumedThingAction defined after this class
             return super(ObjectProxy, self).__setattr__(__name, __value)
         elif __name in self.__dict__:
             obj = self.__dict__[__name]
-            if isinstance(obj, _Property):
+            if isinstance(obj, ConsumedThingProperty):
                 obj.set(value=__value)
                 return
             raise AttributeError(f"Cannot set attribute {__name} again to ObjectProxy for {self.id}.")
@@ -115,11 +109,12 @@ class ObjectProxy:
         pass
 
     def __bool__(self) -> bool: 
-        try: 
-            self.zmq_client.handshake(num_of_tries=10)
-            return True
-        except RuntimeError:
-            return False
+        raise NotImplementedError("Cannot convert ObjectProxy to bool. Use is_connected() instead.")
+        # try: 
+        #     self.zmq_client.handshake(num_of_tries=10)
+        #     return True
+        # except RuntimeError:
+        #     return False
 
     def __eq__(self, other) -> bool:
         if other is self:
@@ -167,6 +162,55 @@ class ObjectProxy:
                                 "Defaults to None (i.e. waits indefinitely until return) and network times not considered."
     )
 
+    @property
+    # @abstractmethod
+    def protocol(self):
+        """Protocol of this client instance.
+        A member of the Protocols enum."""
+        raise NotImplementedError()
+
+    # @abstractmethod
+    def is_supported_interaction(self, td, name):
+        """Returns True if the any of the Forms for the Interaction
+        with the given name is supported in this Protocol Binding client."""
+        raise NotImplementedError()
+
+    # @abstractmethod
+    def invoke_action(self, td, name, input_value, timeout=None):
+        """Invokes an Action on a remote Thing.
+        Returns a Future."""
+        raise NotImplementedError()
+
+    # @abstractmethod
+    def write_property(self, td, name, value, timeout=None):
+        """Updates the value of a Property on a remote Thing.
+        Returns a Future."""
+        raise NotImplementedError()
+
+    # @abstractmethod
+    def read_property(self, td, name, timeout=None):
+        """Reads the value of a Property on a remote Thing.
+        Returns a Future."""
+        raise NotImplementedError()
+
+    # @abstractmethod
+    def subscribe_event(self, td, name):
+        """Subscribes to an event on a remote Thing.
+        Returns an Observable."""
+        raise NotImplementedError()
+
+    # @abstractmethod
+    def observe_property(self, td, name):
+        """Subscribes to property changes on a remote Thing.
+        Returns an Observable"""
+        raise NotImplementedError()
+
+    # @abstractmethod
+    def on_td_change(self, url):
+        """Subscribes to Thing Description changes on a remote Thing.
+        Returns an Observable."""
+        raise NotImplementedError()
+
 
     def invoke_action(self, method : str, oneway : bool = False, noblock : bool = False, 
                                 *args, **kwargs) -> typing.Any:
@@ -198,9 +242,9 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated 
         """
-        method = getattr(self, method, None) # type: _Action 
-        if not isinstance(method, _Action):
-            raise AttributeError(f"No remote method named {method}")
+        method = getattr(self, method, None) # type: ConsumedThingAction 
+        if not isinstance(method, ConsumedThingAction):
+            raise AttributeError(f"No remote method named {method} in Thing {self.td['id']}")
         if oneway:
             method.oneway(*args, **kwargs)
         elif noblock:
@@ -239,8 +283,8 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated
         """
-        method = getattr(self, method, None) # type: _Action 
-        if not isinstance(method, _Action):
+        method = getattr(self, method, None) # type: ConsumedThingAction 
+        if not isinstance(method, ConsumedThingAction):
             raise AttributeError(f"No remote method named {method}")
         return await method.async_call(*args, **kwargs)
 
@@ -263,8 +307,8 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated
         """
-        prop = self.__dict__.get(name, None) # type: _Property
-        if not isinstance(prop, _Property):
+        prop = self.__dict__.get(name, None) # type: ConsumedThingProperty
+        if not isinstance(prop, ConsumedThingProperty):
             raise AttributeError(f"No property named {prop}")
         if noblock:
             msg_id = prop.noblock_get()
@@ -298,8 +342,8 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated
         """
-        prop = self.__dict__.get(name, None) # type: _Property
-        if not isinstance(prop, _Property):
+        prop = self.__dict__.get(name, None) # type: ConsumedThingProperty
+        if not isinstance(prop, ConsumedThingProperty):
             raise AttributeError(f"No property named {prop}")
         if oneway:
             prop.oneway_set(value)
@@ -327,8 +371,8 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated
         """
-        prop = self.__dict__.get(name, None) # type: _Property
-        if not isinstance(prop, _Property):
+        prop = self.__dict__.get(name, None) # type: ConsumedThingProperty
+        if not isinstance(prop, ConsumedThingProperty):
             raise AttributeError(f"No property named {prop}")
         return await prop.async_get()
     
@@ -352,8 +396,8 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated
         """
-        prop = self.__dict__.get(name, None) # type: _Property
-        if not isinstance(prop, _Property):
+        prop = self.__dict__.get(name, None) # type: ConsumedThingProperty
+        if not isinstance(prop, ConsumedThingProperty):
             raise AttributeError(f"No property named {prop}")
         await prop.async_set(value)
 
@@ -374,7 +418,7 @@ class ObjectProxy:
         Dict[str, Any]:
             dictionary with names as keys and values corresponding to those keys
         """
-        method = getattr(self, '_get_properties', None) # type: _Action
+        method = getattr(self, '_get_properties', None) # type: ConsumedThingAction
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if noblock:
@@ -409,7 +453,7 @@ class ObjectProxy:
         """
         if len(properties) == 0:
             raise ValueError("no properties given to set_properties")
-        method = getattr(self, '_set_properties', None) # type: _Action
+        method = getattr(self, '_set_properties', None) # type: ConsumedThingAction
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if oneway:
@@ -436,7 +480,7 @@ class ObjectProxy:
         Dict[str, Any]:
             dictionary with property names as keys and values corresponding to those keys
         """
-        method = getattr(self, '_get_properties', None) # type: _Action
+        method = getattr(self, '_get_properties', None) # type: ConsumedThingAction
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         return await method.async_call(names=names)
@@ -460,7 +504,7 @@ class ObjectProxy:
         """
         if len(properties) == 0:
             raise ValueError("no properties given to set_properties")
-        method = getattr(self, '_set_properties', None) # type: _Action
+        method = getattr(self, '_set_properties', None) # type: ConsumedThingAction
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         await method.async_call(**properties)
@@ -487,8 +531,8 @@ class ObjectProxy:
         AttributeError: 
             if no event with specified name is found
         """
-        event = getattr(self, name, None) # type: _Event
-        if not isinstance(event, _Event):
+        event = getattr(self, name, None) # type: ConsumedThingEvent
+        if not isinstance(event, ConsumedThingEvent):
             raise AttributeError(f"No event named {name}")
         event._deserialize = deserialize
         if event._subscribed:
@@ -515,8 +559,8 @@ class ObjectProxy:
         AttributeError: 
             if no event with specified name is found
         """
-        event = getattr(self, name, None) # type: _Event
-        if not isinstance(event, _Event):
+        event = getattr(self, name, None) # type: ConsumedThingEvent
+        if not isinstance(event, ConsumedThingEvent):
             raise AttributeError(f"No event named {name}")
         event.unsubscribe()
 
@@ -534,20 +578,66 @@ class ObjectProxy:
                                     raise_client_side_exception=True)
         if not reply:
             raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
-        if isinstance(obj, _Action):
+        if isinstance(obj, ConsumedThingAction):
             obj._last_return_value = reply 
             return obj.last_return_value # note the missing underscore
-        elif isinstance(obj, _Property):
+        elif isinstance(obj, ConsumedThingProperty):
             obj._last_value = reply 
             return obj.last_read_value
 
+
+   
+
+
+
+class ClientFactory: 
+            
+    __allowed_attribute_types__ = (ConsumedThingProperty, ConsumedThingAction, ConsumedThingEvent)
+    __WRAPPER_ASSIGNMENTS__ =  ('__name__', '__qualname__', '__doc__')
+
+    def get_zmq_client(self):
+        self.async_zmq_client = None    
+        self.zmq_client = SyncZMQClient(id, self.identity, client_type=PROXY, protocol=protocol, 
+                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
+                                            logger=self.logger, **kwargs)
+        if kwargs.get("async_mixin", False):
+            self.async_zmq_client = AsyncZMQClient(id, self.identity + '|async', client_type=PROXY, protocol=protocol, 
+                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
+                                            logger=self.logger, **kwargs)
+        if load_thing:
+            self.load_thing()
+
+    def add_method(client_obj : ObjectProxy, method : ConsumedThingAction, func_info) -> None:
+        if not func_info.top_owner:
+            return 
+            raise RuntimeError("logic error")
+        for dunder in __WRAPPER_ASSIGNMENTS__:
+            if dunder == '__qualname__':
+                info = '{}.{}'.format(client_obj.__class__.__name__, func_info.get_dunder_attr(dunder).split('.')[1])
+            else:
+                info = func_info.get_dunder_attr(dunder)
+            setattr(method, dunder, info)
+        client_obj.__setattr__(func_info.obj_name, method)
+
+    def add_property(client_obj : ObjectProxy, property : ConsumedThingProperty, property_info) -> None:
+        if not property_info.top_owner:
+            return
+            raise RuntimeError("logic error")
+        for attr in ['__doc__', '__name__']: 
+            # just to imitate _add_method logic
+            setattr(property, attr, property_info.get_dunder_attr(attr))
+        client_obj.__setattr__(property_info.obj_name, property)
+
+    def add_event(client_obj : ObjectProxy, event : ConsumedThingEvent, event_info) -> None:
+        setattr(client_obj, event_info.obj_name, event)
+    
 
     def load_thing(self):
         """
         Get exposed resources from server (methods, properties, events) and remember them as attributes of the proxy.
         """
-        fetch = _Action(self.zmq_client, CommonRPC.zmq_resource_read(id=self.id), 
-                                    invokation_timeout=self._invokation_timeout) # type: _Action
+        fetch = ConsumedThingAction(self.zmq_client, CommonRPC.zmq_resource_read(id=self.id), 
+                                    invokation_timeout=self._invokation_timeout) # type: ConsumedThingAction
         reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
         for name, data in reply.items():
@@ -566,76 +656,17 @@ class ObjectProxy:
             elif not isinstance(data, ZMQResource):
                 raise RuntimeError("Logic error - deserialized info about server not instance of hololinked.server.data_classes.ZMQResource")
             if data.what == ResourceTypes.ACTION:
-                _add_method(self, _Action(self.zmq_client, data.instruction, self.invokation_timeout, 
+                _add_method(self, ConsumedThingAction(self.zmq_client, data.instruction, self.invokation_timeout, 
                                                 self.execution_timeout, data.argument_schema, self.async_zmq_client, self._schema_validator), data)
             elif data.what == ResourceTypes.PROPERTY:
-                _add_property(self, _Property(self.zmq_client, data.instruction, self.invokation_timeout,
+                _add_property(self, ConsumedThingProperty(self.zmq_client, data.instruction, self.invokation_timeout,
                                                 self.execution_timeout, self.async_zmq_client), data)
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ZMQEvent)
-                event = _Event(self.zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
+                event = ConsumedThingEvent(self.zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
                             serialization_specific=data.serialization_specific, serializer=self.zmq_client.zmq_serializer, logger=self.logger)
                 _add_event(self, event, data)
                 self.__dict__[data.name] = event 
-
-
-
-def raise_local_exception(error_message : typing.Dict[str, typing.Any]) -> None:
-    """
-    raises an exception on client side using an exception from server by mapping it to the correct one based on type.
-
-    Parameters
-    ----------
-    exception: Dict[str, Any]
-        exception dictionary made by server with following keys - type, message, traceback, notes
-
-    """
-    if isinstance(error_message, Exception):
-        raise error_message from None
-    elif isinstance(error_message, dict) and 'exception' in error_message.keys():
-        exc = getattr(builtins, error_message["type"], None)
-        message = error_message["message"]
-        if exc is None:
-            ex = error_message(message)
-        else: 
-            ex = exc(message)
-        error_message["traceback"][0] = f"Server {error_message['traceback'][0]}"
-        ex.__notes__ = error_message["traceback"][0:-1]
-        raise ex from None 
-    elif isinstance(error_message, str) and error_message in ['invokation', 'execution']:
-        raise TimeoutError(f"{error_message[0].upper()}{error_message[1:]} timeout occured. Server did not respond within specified timeout") from None
-    raise RuntimeError("unknown error occurred on server side") from None
-
-
-             
-            
-__allowed_attribute_types__ = (_Property, _Action, _Event)
-__WRAPPER_ASSIGNMENTS__ =  ('__name__', '__qualname__', '__doc__')
-
-def _add_method(client_obj : ObjectProxy, method : _Action, func_info : ZMQResource) -> None:
-    if not func_info.top_owner:
-        return 
-        raise RuntimeError("logic error")
-    for dunder in __WRAPPER_ASSIGNMENTS__:
-        if dunder == '__qualname__':
-            info = '{}.{}'.format(client_obj.__class__.__name__, func_info.get_dunder_attr(dunder).split('.')[1])
-        else:
-            info = func_info.get_dunder_attr(dunder)
-        setattr(method, dunder, info)
-    client_obj.__setattr__(func_info.obj_name, method)
-
-def _add_property(client_obj : ObjectProxy, property : _Property, property_info : ZMQResource) -> None:
-    if not property_info.top_owner:
-        return
-        raise RuntimeError("logic error")
-    for attr in ['__doc__', '__name__']: 
-        # just to imitate _add_method logic
-        setattr(property, attr, property_info.get_dunder_attr(attr))
-    client_obj.__setattr__(property_info.obj_name, property)
-
-def _add_event(client_obj : ObjectProxy, event : _Event, event_info : ZMQEvent) -> None:
-    setattr(client_obj, event_info.obj_name, event)
-    
 
 
 class ReplyNotArrivedError(Exception):

@@ -19,7 +19,7 @@ class Action:
     """
     Object that models an action.
     """
-    __slots__ = ['obj', 'owner', 'owner_inst', 
+    __slots__ = ['obj', 'owner', 
                 '_execution_info', '_execution_info_validator']
 
     def __init__(self, obj) -> None:
@@ -27,20 +27,19 @@ class Action:
         
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
-        from .thing import Thing, ThingMeta
+        from .thing import ThingMeta
         # owner class and instance
-        self.owner : ThingMeta  
-        self.owner_inst : Thing
+        self.owner: ThingMeta  
         # the validator that was used to accept user inputs to this action.
         # stored only for reference, hardly used. 
-        self._execution_info_validator : ActionInfoValidator
-        self._execution_info : ActionResource
+        self._execution_info_validator: ActionInfoValidator
+        self._execution_info: ActionResource
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError("call must be implemented by subclass")
     
     def __str__(self) -> str:
-        return f"Action({self.obj.__name__})"
+        return f"Action({self.owner.__name__}.{self.obj.__name__})"
     
     def __eq__(self, other) -> bool:
         if not isinstance(other, Action):
@@ -206,10 +205,11 @@ def action(
         else:
             final_obj = functools.wraps(original)(SyncAction(original)) # type: Action
         final_obj._execution_info_validator = execution_info_validator
+        obj._execution_info_validator = execution_info_validator
         return final_obj
     if callable(input_schema):
         raise TypeError("input schema should be a JSON, not a function/method, did you decorate your action wrongly? " +
-                        "use @action() instead of @action.")
+                        "use @action() instead of @action")
     if any(key not in __action_kw_arguments__ for key in kwargs.keys()):
         raise ValueError("Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, " + 
                         f"unknown arguments found {kwargs.keys()}")
@@ -234,35 +234,12 @@ class RemoteInvokable:
             action.owner = self.__class__
             action.owner_inst = self
 
-    @property
-    def actions(self) -> typing.Dict[str, Action]:
-        """
-        a dictionary with all the actions of the object as values (methods that are decorated with ``action``) and 
-        their names as keys.
-        """
-        try:
-            return getattr(self, f'_{self.id}_actions')
-        except AttributeError:
-            actions = dict()
-            for name, method in inspect._getmembers(
-                        self, 
-                        lambda f : inspect.ismethod(f) or (hasattr(f, '__execution_info_validator') and 
-                                    isinstance(f.__execution_info_validator, ActionInfoValidator)) or \
-                                    isinstance(f, Action) or issubklass(f, ParameterizedFunction),  
-                        getattr_without_descriptor_read
-                    ): 
-                if hasattr(method, '__execution_info_validator'):
-                    actions[name] = method
-                elif isinstance(method, Action) or issubklass(method, ParameterizedFunction):
-                    actions[name] = method
-            setattr(self, f'_{self.id}_actions', actions)
-            return actions
-
-
+    
 
 
 __all__ = [
-    action.__name__
+    action.__name__,
+    Action.__name__
 ]
 
 
