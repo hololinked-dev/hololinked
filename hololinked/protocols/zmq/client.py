@@ -1,23 +1,55 @@
 import logging
 import typing
-
+import threading
+import warnings
+from uuid import uuid4
 
 from ...constants import Operations
-from ..client_abstractions import raise_local_exception
 from ...serializers import BaseSerializer, Serializers
 from ...serializers.payloads import SerializableData, PreserializedData
 from ...td import PropertyAffordance, ActionAffordance, EventAffordance
+from ..client_abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
 from .message import ResponseMessage
-from .message import EMPTY_BYTE, REPLY
-from .brokers import SyncZMQClient, AsyncZMQClient
+from .message import EMPTY_BYTE, REPLY, TIMEOUT, ERROR, INVALID_MESSAGE
+from .brokers import SyncZMQClient, AsyncZMQClient, EventConsumer
+
+
+__error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
 
 
+class ZMQConsumedAffordanceMixin:
 
-class Action:
+    _last_zmq_response: ResponseMessage
+
+    def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
+        """
+        cached return value of the last call to the method
+        """
+        payload = self._last_zmq_response.payload.deserialize()
+        preserialized_payload = self._last_zmq_response.preserialized_payload.value
+        if self._last_zmq_response.type in __error_message_types__ and raise_exception:
+            raise_local_exception(payload)
+        if preserialized_payload != EMPTY_BYTE:
+            if payload is None:
+                return preserialized_payload
+            return payload, preserialized_payload
+        return payload
     
-    __slots__ = ['_zmq_client', '_async_zmq_client', '_resource', '_invokation_timeout', '_execution_timeout',
-                '_schema_validator', '_last_return_value', '__name__', '__qualname__', '__doc__',
+    @property
+    def last_zmq_response(self) -> ResponseMessage:
+        """
+        cache of last message received for this property
+        """
+        return self._last_zmq_response
+    
+
+
+
+class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
+    
+    __slots__ = ['_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout',
+                '_schema_validator', '_last_return_value', 
                 '_thing_execution_context' 
                 ]
     # method call abstraction
@@ -40,38 +72,15 @@ class Action:
         instruction: str
             The instruction needed to call the method        
         """
+        super().__init__(resource, **kwargs)
         self._zmq_client = sync_client
         self._async_zmq_client = async_client
         self._invokation_timeout = kwargs.get('invokation_timeout', 5)
         self._execution_timeout = kwargs.get('execution_timeout', 5)
-        self._resource = resource
-        self._schema_validator = None
-        # self._schema_validator = schema_validator(resource_info.argument_schema) if (schema_validator and 
-        #                                                             resource_info.argument_schema and 
-        #                                                             global_config.validate_schema_on_client) else None
         self._thing_execution_context = dict(fetch_execution_logs=False) 
    
-
-    def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
-        """
-        cached return value of the last call to the method
-        """
-        payload = self._last_return_value.payload.deserialize()
-        preserialized_payload = self._last_return_value.preserialized_payload.value
-        if preserialized_payload != EMPTY_BYTE:
-            if payload is None:
-                return preserialized_payload
-            return payload, preserialized_payload
-        elif self._last_return_value.type != REPLY and raise_exception:
-            raise_local_exception(payload)
-        return payload
-    
-    last_return_value = property(fget=get_last_return_value,
+    last_return_value = property(fget=ZMQConsumedAffordanceMixin.get_last_return_value,
                                 doc="cached return value of the last call to the method")
-    
-    @property
-    def last_zmq_message(self) -> ResponseMessage:
-        return self._last_return_value
     
     def __call__(self, *args, **kwargs) -> typing.Any:
         """
@@ -81,18 +90,18 @@ class Action:
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        self._last_return_value = self._zmq_client.execute(
+        self._last_zmq_response = self._zmq_client.execute(
                                             thing_id=self._resource.thing_id,
                                             objekt=self._resource.name,
                                             operation=Operations.invokeAction,
-                                            payload=SerializableData(kwargs, content_type='application/json'), 
+                                            payload=SerializableData(kwargs, content_type=self.invokation_form['contentType']), 
                                             server_execution_context=dict(
-                                                invokation_timeout=self._invokation_timeout, 
-                                                execution_timeout=self._execution_timeout
-                                            ),
+                                                    invokation_timeout=self._invokation_timeout, 
+                                                    execution_timeout=self._execution_timeout
+                                                ),
                                             thing_execution_context=self._thing_execution_context
                                         )
-        return self.get_last_return_value(True) # note the missing underscore
+        return self.get_last_return_value(True)
     
     def oneway(self, *args, **kwargs) -> None:
         """
@@ -107,7 +116,7 @@ class Action:
                                     thing_id=self._resource.thing_id, 
                                     objekt=self._resource.name,
                                     operation=Operations.invokeAction,
-                                    payload=SerializableData(kwargs, content_type='application/json'), 
+                                    payload=SerializableData(kwargs, content_type=self.invokation_form['contentType']), 
                                     server_execution_context=dict(
                                             invokation_timeout=self._invokation_timeout, 
                                             execution_timeout=self._execution_timeout,
@@ -116,7 +125,7 @@ class Action:
                                     thing_execution_context=self._thing_execution_context
                                 )
 
-    def noblock(self, *args, **kwargs) -> None:
+    def noblock(self, *args, **kwargs) -> str:
         if len(args) > 0: 
             kwargs["__args__"] = args
         elif self._schema_validator:
@@ -125,15 +134,15 @@ class Action:
                                     thing_id=self._resource.thing_id, 
                                     objekt=self._resource.name,
                                     operation=Operations.invokeAction,
-                                    arguments=kwargs, 
+                                    payload=SerializableData(kwargs, content_type=self.invokation_form['contentType']),
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
                                         execution_timeout=self._execution_timeout,
-                                        ),
+                                    ),
                                     thing_execution_context=self._thing_execution_context    
                                 )
      
-    async def async_call(self, *args, **kwargs):
+    async def async_call(self, *args, **kwargs) -> typing.Any:
         """
         async execute method on server
         """
@@ -143,25 +152,30 @@ class Action:
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        self._last_return_value = await self._async_zmq_client.async_execute(
+        self._last_zmq_response = await self._async_zmq_client.async_execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
                                                 operation=Operations.invokeAction,
-                                                payload=SerializableData(kwargs, content_type='application/json'),
+                                                payload=SerializableData(kwargs, content_type=self.invokation_form['contentType']),
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout, 
                                                     execution_timeout=self._execution_timeout,
                                                 ),
                                                 thing_execution_context=self._thing_execution_context
                                             )
-        return self.get_last_return_value(True) # note the missing underscore
+        return self.get_last_return_value(True)
 
 
+    
+    
 
-class Property:
 
-    __slots__ = ['_zmq_client', '_async_zmq_client', '_resource_info', 
-                '_invokation_timeout', '_execution_timeout', '_last_return_value', '__name__', '__doc__']   
+class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
+
+    __slots__ = ['_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout', 
+                '_schema_validator', '_last_return_value', 
+                '_thing_execution_context'
+                ]   
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
@@ -171,92 +185,63 @@ class Property:
                 async_client: AsyncZMQClient | None = None,
                 **kwargs    
             ) -> None:
+        super().__init__(resource, **kwargs)
         self._zmq_client = sync_client
         self._async_zmq_client = async_client
         self._invokation_timeout = kwargs.get('invokation_timeout', 5)
         self._execution_timeout = kwargs.get('execution_timeout', 5)
-        self._resource = resource
         self._schema_validator = None
+        self._thing_execution_context = dict(fetch_execution_logs=False)
         
-    # @property # i.e. cannot have setter
-    # def last_read_value(self) -> typing.Any:
-    #     """
-    #     cache of last read value
-    #     """
-    #     if len(self._last_value[SM_INDEX_ENCODED_DATA]) > 0:
-    #         return self._last_value[SM_INDEX_ENCODED_DATA]
-    #         # property should either be encoded or not encoded
-    #     return self._last_value[SM_INDEX_DATA]
-    
-
-    def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
-        """
-        cached return value of the last call to the method
-        """
-        payload = self._last_return_value.payload.deserialize() 
-        preserialized_payload = self._last_return_value.preserialized_payload.value
-        if preserialized_payload != EMPTY_BYTE:
-            if payload is None:
-                return preserialized_payload
-            return payload, preserialized_payload
-        elif self._last_return_value.type != REPLY and raise_exception:
-            raise_local_exception(payload)
-        return payload
-    
-    last_return_value = property(fget=get_last_return_value,
+    last_read_value = property(fget=ZMQConsumedAffordanceMixin.get_last_return_value,
                                 doc="cached return value of the last call to the method")
 
-
-    @property
-    def last_zmq_message(self) -> typing.List:
-        """
-        cache of last message received for this property
-        """
-        return self._last_return_value
-    
-    def set(self, value : typing.Any) -> None:
-        self._last_return_value = self._zmq_client.execute(
+    def set(self, value: typing.Any) -> None:
+        self._last_zmq_response = self._zmq_client.execute(
                                                 thing_id=self._resource.thing_id, 
                                                 objekt=self._resource.name,
                                                 operation=Operations.writeProperty,
-                                                payload=SerializableData(value, content_type='application/json'),
+                                                payload=SerializableData(value, content_type=self.write_property_form['contentType']),
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout,
                                                     execution_timeout=self._execution_timeout
-                                                )
+                                                ),
+                                                thing_execution_context=self._thing_execution_context
                                             )
         self.get_last_return_value(True)
      
     def get(self) -> typing.Any:
-        self._last_return_value = self._zmq_client.execute(
+        self._last_zmq_response = self._zmq_client.execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
                                                 operation=Operations.readProperty,
                                                 server_execution_context=dict(
                                                     invocation_timeout=self._invokation_timeout,
                                                     execution_timeout=self._execution_timeout
-                                                )
+                                                ),
+                                                thing_execution_context=self._thing_execution_context
                                             )
         return self.get_last_return_value(True) 
     
-    async def async_set(self, value : typing.Any) -> None:
+    async def async_set(self, value: typing.Any) -> None:
         if not self._async_zmq_client:
             raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
-        self._last_return_value = await self._async_zmq_client.async_execute(
+        self._last_zmq_response = await self._async_zmq_client.async_execute(
                                                         thing_id=self._resource.thing_id,
                                                         objekt=self._resource.name,
                                                         operation=Operations.writeProperty,
-                                                        payload=SerializableData(value, content_type='application/json'),
+                                                        payload=SerializableData(value, content_type=self.write_property_form['contentType']),
                                                         server_execution_context=dict(
                                                             invokation_timeout=self._invokation_timeout, 
                                                             execution_timeout=self._execution_timeout
                                                         ),
+                                                        thing_execution_context=self._thing_execution_context
                                                     )
     
     async def async_get(self) -> typing.Any:
         if not self._async_zmq_client:
             raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
-        self._last_return_value = await self._async_zmq_client.async_execute(
+        self._last_zmq_response = await self._async_zmq_client.async_execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
                                                 operation=Operations.readProperty,
@@ -264,8 +249,22 @@ class Property:
                                                     invokation_timeout=self._invokation_timeout, 
                                                     execution_timeout=self._execution_timeout
                                                 ),
+                                                thing_execution_context=self._thing_execution_context
                                             )
         return self.get_last_return_value(True) 
+    
+    def noblock_set(self, value : typing.Any) -> None:
+        return self._zmq_client.send_request(   
+                                        thing_id=self._resource.thing_id,
+                                        objekt=self._resource.name,
+                                        operation=Operations.writeProperty,
+                                        payload=SerializableData(value, content_type=self.write_property_form['contentType']),
+                                        server_execution_context=dict(
+                                            invokation_timeout=self._invokation_timeout, 
+                                            execution_timeout=self._execution_timeout
+                                        ),
+                                        thing_execution_context=self._thing_execution_context
+                                    )
     
     def noblock_get(self) -> None:
         return self._zmq_client.send_request(
@@ -275,35 +274,27 @@ class Property:
                                             server_execution_context=dict(
                                                 invokation_timeout=self._invokation_timeout, 
                                                 execution_timeout=self._execution_timeout
-                                            )
+                                            ),
+                                            thing_execution_context=self._thing_execution_context
                                         )
     
-    def noblock_set(self, value : typing.Any) -> None:
-        return self._zmq_client.send_request(   
-                                        thing_id=self._resource.thing_id,
-                                        objekt=self._resource.name,
-                                        operation=Operations.writeProperty,
-                                        payload=SerializableData(value, content_type='application/json'),
-                                        server_execution_context=dict(
-                                            invokation_timeout=self._invokation_timeout, 
-                                            execution_timeout=self._execution_timeout
-                                        )
-                                    )
     
-    def oneway_set(self, value : typing.Any) -> None:
+    def oneway_set(self, value: typing.Any) -> None:
         self._zmq_client.send_request(
                                     thing_id=self._resource.thing_id,
                                     objekt=self._resource.name,
                                     operation=Operations.writeProperty,
-                                    payload=SerializableData(value, content_type='application/json'),
+                                    payload=SerializableData(value, content_type=self.write_property_form['contentType']),
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
-                                        execution_timeout=self._execution_timeout
-                                    ))
+                                        execution_timeout=self._execution_timeout,
+                                        oneway=True
+                                    ),
+                                )
   
 
 
-class Event:
+class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     
     __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
                     '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger',
@@ -311,33 +302,23 @@ class Event:
     # event subscription
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
-    def __init__(self, client : SyncZMQClient, name : str, obj_name : str, unique_identifier : str, socket : str, 
-                    serialization_specific : bool = False, serializer : BaseSerializer = None, logger : logging.Logger = None) -> None:
-        self._zmq_client = client
-        self._name = name
-        self._obj_name = obj_name
-        self._unique_identifier = unique_identifier
-        self._socket_address = socket
-        self._serialization_specific = serialization_specific
-        self._callbacks = None 
+    def __init__(self, 
+                resource: EventAffordance,
+                sync_client: SyncZMQClient, 
+                serializer: BaseSerializer = None, 
+                logger: logging.Logger = None,
+                **kwargs
+            ) -> None:
+        super().__init__(resource=resource, logger=logger, **kwargs)
+        self._zmq_client = sync_client      
         self._serializer = serializer
-        self._logger = logger 
-        self._subscribed = False
-        self._deserialize = True
 
-    def add_callbacks(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable]) -> None:
-        if not self._callbacks:
-            self._callbacks = [] 
-        if isinstance(callbacks, list):
-            self._callbacks.extend(callbacks)
-        else:
-            self._callbacks.append(callbacks)
 
     def subscribe(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable], 
                     thread_callbacks : bool = False, deserialize : bool = True) -> None:
         self._event_consumer = EventConsumer(
                                     'zmq-' + self._unique_identifier if self._serialization_specific else self._unique_identifier, 
-                                    self._socket_address, f"{self._name}|RPCEvent|{uuid.uuid4()}", b'PROXY',
+                                    self._socket_address, f"{self._name}|RPCEvent|{uuid4()}", b'PROXY',
                                     zmq_serializer=self._serializer, logger=self._logger
                                 )
         self.add_callbacks(callbacks) 
@@ -373,3 +354,10 @@ class Event:
         self._event_consumer.interrupt()
         if join_thread:
             self._thread.join()
+
+
+__all__ = [
+    ZMQAction.__name__,
+    ZMQProperty.__name__,
+    ZMQEvent.__name__,
+]

@@ -30,30 +30,19 @@ SUCCESS     = 'SUCCESS'
 
 
 EMPTY_BYTE = b''
-EMPTY_DICT = {}
 """
 Message indices 
 
-client's message to server: |br|
-[address, message type, messsage id, server execution context, 
-[   0   ,      1      ,      2     ,          3              ,  
-    
-thing instance name,  objekt, operation, payload, thing execution context] 
-      4            ,    5   ,      6   ,     7    ,       8              ] 
+| Index | 0       | 1      |   2     |          3            |
+|-------|---------|--------|---------|-----------------------|
+| Desc  | address | header | payload | preserialized payload |
 
-    
-[address, message_type, message id, data, pre encoded data]|br|
-[   0   ,      1      ,      2    ,  3  ,       4         ]|br|
 """
 # CM = Client Message
 INDEX_ADDRESS = 0
 INDEX_HEADER= 1
 INDEX_BODY = 2
 INDEX_PRESERIALIZED_BODY = 3
-
-
-SerializableNone = SerializableData(None, content_type='application/json')
-PreserializedEmptyByte = PreserializedData(EMPTY_BYTE, content_type='text/plain')
 
 
 class ServerExecutionContext(msgspec.Struct):
@@ -73,6 +62,10 @@ default_server_execution_context = ServerExecutionContext(
 default_thing_execution_context = ThingExecutionContext(
     fetchExecutionLogs=False
 )
+
+SerializableNone = SerializableData(None, content_type='application/json')
+PreserializedEmptyByte = PreserializedData(EMPTY_BYTE, content_type='text/plain')
+
 
 
 class RequestHeader(msgspec.Struct):
