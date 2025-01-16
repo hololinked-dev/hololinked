@@ -202,6 +202,17 @@ def isclassmethod(method):
     return False
 
 
+def has_async_def(method):
+    """
+    Checks if async def is found in method signature. Especially useful for class methods. 
+    https://github.com/python/cpython/issues/100224#issuecomment-2000895467
+    """
+    source = inspect.getsource(method)
+    if re.search(r'^\s*async\s+def\s+' + re.escape(method.__name__) + r'\s*\(', source, re.MULTILINE):
+        return True
+    return False
+
+
 def issubklass(obj, cls):
     """
     Safely check if `obj` is a subclass of `cls`.
