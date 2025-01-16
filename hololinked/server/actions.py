@@ -21,6 +21,9 @@ class Action:
 
     def __init__(self, obj) -> None:
         self.obj = obj
+
+    def __set_name__(self, owner, name):
+        self.owner = owner
         
     def __str__(self) -> str:
         return f"<Action({self.owner.__name__}.{self.obj.__name__})>"
@@ -39,6 +42,9 @@ class Action:
         if self._execution_info.iscoroutine:
             return BoundAsyncAction(self.obj, self._execution_info, instance, owner)
         return BoundSyncAction(self.obj, self._execution_info, instance, owner)
+    
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError("Bound methods must be called, not the action itself (even if classmethod)")
        
     @property
     def name(self) -> str:
@@ -58,7 +64,7 @@ class Action:
     def to_affordance(self, obj):
         from hololinked.td import ActionAffordance
         affordance = ActionAffordance()
-        affordance._build(self, obj)
+        affordance._build(self, obj) 
         return affordance
     
 
@@ -135,7 +141,7 @@ class BoundAction:
         return super().__getattribute__(name)
 
     def to_affordance(self):
-        return Action.to_affordance(self, self.owner_inst)
+        return Action.to_affordance(self, self.owner_inst or self.owner)
 
         
 
@@ -212,13 +218,7 @@ def action(
             obj = obj.__func__
         if obj.__name__.startswith('__'):
             raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")
-        if hasattr(obj, '_execution_info_validator') and not isinstance(obj._execution_info_validator, ActionInfoValidator): 
-            raise NameError(
-                "variable name '_execution_info_validator' reserved for hololinked package. ",  
-                "Please do not assign this variable to any other object except hololinked.server.dataklasses.ActionInfoValidator."
-            )             
-        else:
-            execution_info_validator = ActionInfoValidator() 
+        execution_info_validator = ActionInfoValidator() 
         if state is not None:
             if isinstance(state, (Enum, str)):
                 execution_info_validator.state = (state,)
@@ -250,7 +250,6 @@ def action(
  
         final_obj = Action(original) # type: Action
         final_obj.execution_info = execution_info_validator
-        obj._execution_info_validator = execution_info_validator
         return final_obj
     if callable(input_schema):
         raise TypeError("input schema should be a JSON, not a function/method, did you decorate your action wrongly? " +

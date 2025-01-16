@@ -144,8 +144,9 @@ class TestAction(TestCase):
         self.assertIsInstance(thing.action_echo_with_classmethod, BoundAction)
         self.assertIsInstance(thing.action_echo_with_classmethod, BoundSyncAction)
         self.assertNotIsInstance(thing.action_echo_with_classmethod, BoundAsyncAction)
-        self.assertIsInstance(self.thing_cls.action_echo_with_classmethod, Action)
-        self.assertNotIsInstance(self.thing_cls.action_echo_with_classmethod, BoundAction)
+        self.assertIsInstance(self.thing_cls.action_echo_with_classmethod, BoundAction)
+        self.assertIsInstance(self.thing_cls.action_echo_with_classmethod, BoundSyncAction)
+        self.assertNotIsInstance(self.thing_cls.action_echo_with_classmethod, Action)
         # associated attributes of BoundAction
         assert isinstance(thing.action_echo_with_classmethod, BoundAction)
         self.assertEqual(thing.action_echo_with_classmethod.name, 'action_echo_with_classmethod')
@@ -154,7 +155,7 @@ class TestAction(TestCase):
         self.assertEqual(thing.action_echo_with_classmethod.execution_info, self.thing_cls.action_echo_with_classmethod.execution_info)
         self.assertEqual(str(thing.action_echo_with_classmethod),
                         f"<BoundAction({self.thing_cls.__name__}.{thing.action_echo_with_classmethod.name} of {thing.id})>")
-        self.assertNotEqual(thing.action_echo_with_classmethod, self.thing_cls.action_echo_with_classmethod)
+        self.assertEqual(thing.action_echo_with_classmethod, self.thing_cls.action_echo_with_classmethod)
         self.assertEqual(thing.action_echo_with_classmethod.bound_obj, self.thing_cls)
         
         # 3. async methods can be decorated with action
@@ -178,8 +179,9 @@ class TestAction(TestCase):
         self.assertIsInstance(thing.action_echo_async_with_classmethod, BoundAction)
         self.assertNotIsInstance(thing.action_echo_async_with_classmethod, BoundSyncAction)
         self.assertIsInstance(thing.action_echo_async_with_classmethod, BoundAsyncAction)
-        self.assertIsInstance(self.thing_cls.action_echo_async_with_classmethod, Action)
-        self.assertNotIsInstance(self.thing_cls.action_echo_async_with_classmethod, BoundAction)
+        self.assertIsInstance(self.thing_cls.action_echo_async_with_classmethod, BoundAction)
+        self.assertIsInstance(self.thing_cls.action_echo_async_with_classmethod, BoundAsyncAction)
+        self.assertNotIsInstance(self.thing_cls.action_echo_async_with_classmethod, Action)
         # associated attributes of BoundAction
         assert isinstance(thing.action_echo_async_with_classmethod, BoundAction)
         self.assertEqual(thing.action_echo_async_with_classmethod.name, 'action_echo_async_with_classmethod')
@@ -188,7 +190,7 @@ class TestAction(TestCase):
         self.assertEqual(thing.action_echo_async_with_classmethod.execution_info, self.thing_cls.action_echo_async_with_classmethod.execution_info)
         self.assertEqual(str(thing.action_echo_async_with_classmethod),
                         f"<BoundAction({self.thing_cls.__name__}.{thing.action_echo_async_with_classmethod.name} of {thing.id})>")
-        self.assertNotEqual(thing.action_echo_async_with_classmethod, self.thing_cls.action_echo_async_with_classmethod)
+        self.assertEqual(thing.action_echo_async_with_classmethod, self.thing_cls.action_echo_async_with_classmethod)
         self.assertEqual(thing.action_echo_async_with_classmethod.bound_obj, self.thing_cls)
 
         # 5. parameterized function can be decorated with action
