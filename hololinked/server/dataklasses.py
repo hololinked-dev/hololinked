@@ -123,18 +123,10 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
                     doc="metadata information whether the action is synchronous") # type: bool
     isparameterized = Boolean(default=False,
                     doc="True for a parameterized function") # type: bool
+    isclassmethod = Boolean(default=False,
+                    doc="True for a classmethod") # type: bool
 
-    def to_dataclass(self, obj : typing.Any = None, bound_obj : typing.Any = None) -> "RemoteResource":
-        return ActionResource(
-                    state=tuple(self.state) if self.state is not None else None, 
-                    obj_name=self.obj_name, isaction=self.isaction, iscoroutine=self.iscoroutine,
-                    isproperty=self.isproperty, obj=obj, bound_obj=bound_obj, 
-                    schema_validator=(bound_obj.schema_validator)(self.argument_schema) if not global_config.validate_schema_on_client and self.argument_schema else None,
-                    create_task=self.create_task, isparameterized=self.isparameterized
-                ) 
     
-
-
 __dataclass_kwargs = dict()
 if float('.'.join(platform.python_version().split('.')[0:2])) >= 3.11:
     __dataclass_kwargs["slots"] = True
@@ -198,6 +190,7 @@ class ActionResource(RemoteResource):
         schema validator for the callable if to be validated server side
     """ 
     iscoroutine : bool
+    isclassmethod : bool
     schema_validator : typing.Optional[BaseSchemaValidator]
     create_task : bool 
     isparameterized : bool
