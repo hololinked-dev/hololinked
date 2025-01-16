@@ -19,25 +19,17 @@ class Action:
     """
     Object that models an action.
     """
-    __slots__ = ['obj', 'owner', 
-                '_execution_info', '_execution_info_validator']
+    __slots__ = ['obj', 'owner', '_execution_info']
 
     def __init__(self, obj) -> None:
         self.obj = obj
         
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
-        from .thing import ThingMeta
-        # owner class and instance
-        self.owner: ThingMeta  
         # the validator that was used to accept user inputs to this action.
         # stored only for reference, hardly used. 
-        self._execution_info_validator: ActionInfoValidator
         self._execution_info: ActionResource
 
-    def __call__(self, *args, **kwargs):
-        raise NotImplementedError("call must be implemented by subclass")
-    
     def __str__(self) -> str:
         return f"Action({self.owner.__name__}.{self.obj.__name__})"
     
@@ -49,65 +41,116 @@ class Action:
     def __hash__(self) -> int:
         return hash(self.obj)
     
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        if self._execution_info.iscoroutine:
+            return BoundAsyncAction(self.obj, self._execution_info, instance, owner)
+        return BoundSyncAction(self.obj, self._execution_info, instance, owner)
+       
     @property
     def name(self) -> str:
         """name of the action"""
         return self.obj.__name__           
       
     @property
-    def execution_info(self) -> ActionResource:
+    def execution_info(self) -> ActionInfoValidator:
         return self._execution_info
         
     @execution_info.setter
-    def execution_info(self, value : ActionResource) -> None:
-        if not isinstance(value, ActionResource):
+    def execution_info(self, value : ActionInfoValidator) -> None:
+        if not isinstance(value, ActionInfoValidator):
             raise TypeError("execution_info must be of type ActionResource")
         self._execution_info = value
     
+    def to_affordance(self, obj):
+        from hololinked.td import ActionAffordance
+        affordance = ActionAffordance()
+        affordance._build(self, obj)
+        return affordance
+    
+
+
+class BoundAction:
+
+    __slots__ = ['obj', 'execution_info', 'owner_inst', 'owner']
+
+    def __init__(self, obj, execution_info, owner_inst, owner) -> None:
+        self.obj = obj
+        self.execution_info = execution_info
+        self.owner = owner
+        self.owner_inst = owner_inst
+
+    def __post_init__(self):
+        # never called, neither possible to call, only type hinting
+        from .thing import ThingMeta, Thing
+        # owner class and instance
+        self.owner: ThingMeta  
+        self.owner_inst: Thing
+        self.obj: FunctionType
+        # the validator that was used to accept user inputs to this action.
+        # stored only for reference, hardly used. 
+        self.execution_info_validator: ActionInfoValidator
+        self.execution_info: ActionResource
+
     def validate_call(self, args, kwargs : typing.Dict[str, typing.Any]) -> None:
         """
         Validate the call to the action, like payload, state machine state etc. 
         Errors are raised as exceptions.
         """
-        if self._execution_info.state is None or (hasattr(self.owner_inst, 'state_machine') and 
-                            self.owner_inst.state_machine.current_state in self._execution_info.state):
-                # Note that because we actually find the resource within __prepare_self.owner_inst__, its already bound
-                # and we dont have to separately bind it. 
-                if self._execution_info.schema_validator is not None and len(args) == 0:
-                    self._execution_info.schema_validator.validate(kwargs)
+        if self.execution_info.state is None or (hasattr(self.owner_inst, 'state_machine') and 
+                            self.owner_inst.state_machine.current_state in self.execution_info.state):
+            if self.execution_info.schema_validator is not None and len(args) == 0:
+                self.execution_info.schema_validator.validate(kwargs)
         else: 
             raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
-                    self.owner_inst.id, self.owner_inst.state, self._execution_info.state))      
-        if self._execution_info.isparameterized and len(args) > 0:
+                    self.owner_inst.id, self.owner_inst.state, self.execution_info.state))      
+        if self.execution_info.isparameterized and len(args) > 0:
             raise RuntimeError("parameterized functions cannot have positional arguments")
         
+    @property
+    def name(self) -> str:
+        """name of the action"""
+        return self.obj.__name__           
+        
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError("call must be implemented by subclass")
+    
     def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
         raise NotImplementedError("external_call must be implemented by subclass")
-
-    def to_affordance(self) -> dict:
-        from hololinked.td import ActionAffordance
-        affordance = ActionAffordance()
-        affordance._build(self, self.owner_inst, None)
-        return affordance
     
+    def __str__(self):
+        return f"BoundAction({self.owner.__name__}.{self.obj.__name__} of {self.owner_inst.id})"
+    
+    def __eq__(self, value):
+        if not isinstance(value, BoundAction):
+            return False
+        return self.obj == value.obj
+    
+    def __hash__(self):
+        return hash(str(self))
+    
+    def to_affordance(self):
+        return Action.to_affordance(self, self.owner_inst)
 
+        
 
-class SyncAction(Action):  
+class BoundSyncAction(BoundAction):  
     """
     non async(io) action call. The call is passed to the method as-it-is to allow local 
     invocation without state machine checks.
     """
     def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
-        self.validate_call(args, kwargs)
-        return self(*args, **kwargs)
+        self.validate_call(self.owner_inst, args, kwargs)
+        return self.obj(self.owner_inst, *args, **kwargs)
         
     def __call__(self, *args, **kwargs):
         return self.obj(self.owner_inst, *args, **kwargs)
 
 
-class AsyncAction(Action):
+class BoundAsyncAction(BoundAction):
     """
     async(io) action call. The call is passed to the method as-it-is to allow local 
     invocation without state machine checks.
@@ -115,7 +158,7 @@ class AsyncAction(Action):
     async def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
         self.validate_call(args, kwargs)
-        return await self(*args, **kwargs)
+        return await self.obj(self.owner_inst, *args, **kwargs)
 
     async def __call__(self, *args, **kwargs):
         return await self.obj(self.owner_inst, *args, **kwargs)
@@ -199,12 +242,9 @@ def action(
             jsonschema.Draft7Validator.check_schema(input_schema)
         if global_config.validate_schemas and output_schema:
             jsonschema.Draft7Validator.check_schema(output_schema)
-
-        if execution_info_validator.iscoroutine:
-            final_obj = functools.wraps(original)(AsyncAction(original)) # type: Action
-        else:
-            final_obj = functools.wraps(original)(SyncAction(original)) # type: Action
-        final_obj._execution_info_validator = execution_info_validator
+ 
+        final_obj = Action(original) # type: Action
+        final_obj.execution_info = execution_info_validator
         obj._execution_info_validator = execution_info_validator
         return final_obj
     if callable(input_schema):
@@ -230,9 +270,8 @@ class RemoteInvokable:
 
     def _prepare(self) -> None:
         """update owner of actions"""
-        for action in self.actions.values():
-            action.owner = self.__class__
-            action.owner_inst = self
+        pass 
+
 
     
 
