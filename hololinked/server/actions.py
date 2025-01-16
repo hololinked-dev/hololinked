@@ -1,5 +1,3 @@
-import functools
-import inspect
 import typing
 import jsonschema
 from enum import Enum
@@ -9,7 +7,7 @@ from inspect import iscoroutinefunction, getfullargspec
 from ..param.parameterized import ParameterizedFunction
 from ..constants import JSON
 from ..config import global_config
-from ..utils import getattr_without_descriptor_read, issubklass, isclassmethod
+from ..utils import has_async_def, issubklass, isclassmethod
 from ..exceptions import StateMachineError
 from .dataklasses import ActionInfoValidator, ActionResource
 
@@ -24,14 +22,8 @@ class Action:
     def __init__(self, obj) -> None:
         self.obj = obj
         
-    def __post_init__(self):
-        # never called, neither possible to call, only type hinting
-        # the validator that was used to accept user inputs to this action.
-        # stored only for reference, hardly used. 
-        self._execution_info: ActionResource
-
     def __str__(self) -> str:
-        return f"Action({self.owner.__name__}.{self.obj.__name__})"
+        return f"<Action({self.owner.__name__}.{self.obj.__name__})>"
     
     def __eq__(self, other) -> bool:
         if not isinstance(other, Action):
@@ -42,7 +34,7 @@ class Action:
         return hash(self.obj)
     
     def __get__(self, instance, owner):
-        if instance is None:
+        if instance is None and not self._execution_info.isclassmethod:
             return self
         if self._execution_info.iscoroutine:
             return BoundAsyncAction(self.obj, self._execution_info, instance, owner)
@@ -61,7 +53,7 @@ class Action:
     def execution_info(self, value : ActionInfoValidator) -> None:
         if not isinstance(value, ActionInfoValidator):
             raise TypeError("execution_info must be of type ActionResource")
-        self._execution_info = value
+        self._execution_info = value # type: ActionResource
     
     def to_affordance(self, obj):
         from hololinked.td import ActionAffordance
@@ -73,13 +65,14 @@ class Action:
 
 class BoundAction:
 
-    __slots__ = ['obj', 'execution_info', 'owner_inst', 'owner']
+    __slots__ = ['obj', 'execution_info', 'owner_inst', 'owner', 'bound_obj']
 
     def __init__(self, obj, execution_info, owner_inst, owner) -> None:
         self.obj = obj
         self.execution_info = execution_info
         self.owner = owner
         self.owner_inst = owner_inst
+        self.bound_obj = owner if execution_info.isclassmethod else owner_inst
 
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
@@ -98,6 +91,10 @@ class BoundAction:
         Validate the call to the action, like payload, state machine state etc. 
         Errors are raised as exceptions.
         """
+        if self.execution_info.isparameterized and len(args) > 0:
+            raise RuntimeError("parameterized functions cannot have positional arguments")
+        if self.owner_inst is None:
+            return 
         if self.execution_info.state is None or (hasattr(self.owner_inst, 'state_machine') and 
                             self.owner_inst.state_machine.current_state in self.execution_info.state):
             if self.execution_info.schema_validator is not None and len(args) == 0:
@@ -105,8 +102,7 @@ class BoundAction:
         else: 
             raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
                     self.owner_inst.id, self.owner_inst.state, self.execution_info.state))      
-        if self.execution_info.isparameterized and len(args) > 0:
-            raise RuntimeError("parameterized functions cannot have positional arguments")
+        
         
     @property
     def name(self) -> str:
@@ -121,7 +117,7 @@ class BoundAction:
         raise NotImplementedError("external_call must be implemented by subclass")
     
     def __str__(self):
-        return f"BoundAction({self.owner.__name__}.{self.obj.__name__} of {self.owner_inst.id})"
+        return f"<BoundAction({self.owner.__name__}.{self.obj.__name__} of {self.owner_inst.id})>"
     
     def __eq__(self, value):
         if not isinstance(value, BoundAction):
@@ -131,6 +127,13 @@ class BoundAction:
     def __hash__(self):
         return hash(str(self))
     
+    def __getattribute__(self, name):
+        "Emulate method_getset() in Objects/classobject.c"
+        # https://docs.python.org/3/howto/descriptor.html#functions-and-methods
+        if name == '__doc__':
+            return self.obj.__doc__
+        return super().__getattribute__(name)
+
     def to_affordance(self):
         return Action.to_affordance(self, self.owner_inst)
 
@@ -144,10 +147,10 @@ class BoundSyncAction(BoundAction):
     def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
         self.validate_call(self.owner_inst, args, kwargs)
-        return self.obj(self.owner_inst, *args, **kwargs)
+        return self.obj(self.bound_obj, *args, **kwargs)
         
     def __call__(self, *args, **kwargs):
-        return self.obj(self.owner_inst, *args, **kwargs)
+        return self.obj(self.bound_obj, *args, **kwargs)
 
 
 class BoundAsyncAction(BoundAction):
@@ -157,11 +160,11 @@ class BoundAsyncAction(BoundAction):
     """
     async def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
-        self.validate_call(args, kwargs)
-        return await self.obj(self.owner_inst, *args, **kwargs)
+        self.validate_call(self.owner_inst, args, kwargs)
+        return await self.obj(self.bound_obj, *args, **kwargs)
 
     async def __call__(self, *args, **kwargs):
-        return await self.obj(self.owner_inst, *args, **kwargs)
+        return await self.obj(self.bound_obj, *args, **kwargs)
 
 
 
@@ -232,12 +235,14 @@ def action(
         execution_info_validator.idempotent = kwargs.get('idempotent', False)
         execution_info_validator.synchronous = kwargs.get('synchronous', False)
 
-        if issubklass(obj, ParameterizedFunction):
+        if isclassmethod(original):
+            execution_info_validator.iscoroutine = has_async_def(obj)
+            execution_info_validator.isclassmethod = True
+        elif issubklass(obj, ParameterizedFunction):
             execution_info_validator.iscoroutine = iscoroutinefunction(obj.__call__)
             execution_info_validator.isparameterized = True
         else:
             execution_info_validator.iscoroutine = iscoroutinefunction(obj)
-            execution_info_validator.isparameterized = False 
         if global_config.validate_schemas and input_schema:
             jsonschema.Draft7Validator.check_schema(input_schema)
         if global_config.validate_schemas and output_schema:
