@@ -250,13 +250,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from .events import EventPublisher
         self.rpc_server = None # type: typing.Optional[RPCServer]
         self.event_publisher = None # type: typing.Optional[EventPublisher] 
-        for property in self.properties.descriptors.values():
-            property.owner = self.__class__
-        for action in self.actions.values():
-            action.owner = self.__class__
-        for event in self.events.values():
-            event.owner = self.__class__
-
+       
 
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
         if  __name == '_internal_fixed_attributes' or __name in self._internal_fixed_attributes: 
