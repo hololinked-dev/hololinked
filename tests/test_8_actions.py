@@ -11,12 +11,14 @@ from hololinked.server.dataklasses import ActionInfoValidator
 from hololinked.server.thing import Thing, action
 from hololinked.server.properties import Number, String, ClassSelector
 from hololinked.client import ObjectProxy
+from hololinked.td.interaction_affordance import ActionAffordance
 try:
     from .utils import TestCase, TestRunner
-    from .things import TestThing
+    from .things import start_thing_forked 
 except ImportError:
     from utils import TestCase, TestRunner
     from things import start_thing_forked 
+
 
 
 class TestThing(Thing):
@@ -48,7 +50,6 @@ class TestThing(Thing):
         def __call__(self, instance, arg1, arg2, arg3):
             return instance.id, arg1, arg2, arg3
 
-
     class typed_action_without_call(ParameterizedFunction):
 
         arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
@@ -56,7 +57,6 @@ class TestThing(Thing):
         arg2 = String(default='hello', doc='arg2 description', regex='[a-z]+')
         arg3 = ClassSelector(class_=(int, float, str),
                             default=5, doc='arg3 description')
-
 
     class typed_action_async(ParameterizedFunction):
             
@@ -69,7 +69,6 @@ class TestThing(Thing):
         async def __call__(self, instance, arg1, arg2, arg3):
             await asyncio.sleep(0.1)
             return instance.id, arg1, arg2, arg3
-
 
     def __internal__(self, value):
         return value
@@ -91,8 +90,9 @@ class TestAction(TestCase):
     @classmethod
     def setUpClass(self):
         super().setUpClass()
-        print("test action")
+        print(f"test action with {self.__name__}")
         self.thing_cls = TestThing 
+
 
     def test_1_allowed_actions(self):
         """Test if methods can be decorated with action"""
@@ -339,11 +339,123 @@ class TestAction(TestCase):
         self.assertTrue(str(ex.exception).startswith("Only 'safe', 'idempotent', 'synchronous' are allowed"))
 
 
-    def _test_4_exposed_actions(self):
-        self.assertTrue(hasattr(self.thing_cls.action_echo, '_remote_info'))
+    def test_5_thing_cls_actions(self):
+        
+        thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
+        # class level
+        for name, action in self.thing_cls.actions.items():  
+            self.assertIsInstance(action, Action) 
+        for name in replace_methods_with_actions._exposed_actions:
+            self.assertTrue(name in self.thing_cls.actions)
+        # instance level 
+        for name, action in thing.actions.items(): 
+            self.assertIsInstance(action, BoundAction)
+        for name in replace_methods_with_actions._exposed_actions:
+            self.assertTrue(name in thing.actions)
+        # cannot call an instance bound action at class level
+        self.assertRaises(NotImplementedError, lambda: self.thing_cls.action_echo(thing, 1))
+        # but can call instance bound action with instance
+        self.assertEqual(1, thing.action_echo(1))
+        # can also call classmethods as usual 
+        self.assertEqual(2, self.thing_cls.action_echo_with_classmethod(2))
+        self.assertEqual(3, thing.action_echo_with_classmethod(3))            
+        # async methods behave similarly 
+        self.assertEqual(4, asyncio.run(thing.action_echo_async(4)))
+        self.assertEqual(5, asyncio.run(self.thing_cls.action_echo_async_with_classmethod(5)))
+        self.assertRaises(NotImplementedError, lambda: asyncio.run(self.thing_cls.action_echo(7)))
+        # parameterized actions behave similarly
+        self.assertEqual(('test-action', 1, 'hello1', 1.1), thing.typed_action(1, 'hello1', 1.1))
+        self.assertEqual(('test-action', 2, 'hello2', 'foo2'), asyncio.run(thing.typed_action_async(2, 'hello2', 'foo2')))
+        self.assertRaises(NotImplementedError, lambda: self.thing_cls.typed_action(3, 'hello3', 5))
+        self.assertRaises(NotImplementedError, lambda: asyncio.run(self.thing_cls.typed_action_async(4, 'hello4', 5)))
+
+
+    def test_6_action_affordance(self):
+        
+        thing = TestThing(id='test-action', log_level=logging.ERROR)
+
+        assert isinstance(thing.action_echo, BoundAction) # type definition
+        affordance = thing.action_echo.to_affordance()
+        self.assertIsInstance(affordance, ActionAffordance)
+        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
+        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
+        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
+        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
+        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+        
+        assert isinstance(thing.action_echo_with_classmethod, BoundAction) # type definition
+        affordance = thing.action_echo_with_classmethod.to_affordance()
+        self.assertIsInstance(affordance, ActionAffordance)
+        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
+        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
+        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
+        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
+        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+
+        assert isinstance(thing.action_echo_async, BoundAction) # type definition
+        affordance = thing.action_echo_async.to_affordance()
+        self.assertIsInstance(affordance, ActionAffordance)
+        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
+        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
+        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
+        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
+        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+
+        assert isinstance(thing.action_echo_async_with_classmethod, BoundAction) # type definition
+        affordance = thing.action_echo_async_with_classmethod.to_affordance()
+        self.assertIsInstance(affordance, ActionAffordance)
+        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
+        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
+        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
+        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
+        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+
+        assert isinstance(thing.typed_action, BoundAction) # type definition
+        affordance = thing.typed_action.to_affordance()
+        self.assertIsInstance(affordance, ActionAffordance)
+        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
+        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(affordance.safe) # by default, not safe
+        # self.assertIsInstance(affordance.input, dict)
+        # self.assertIsInstance(affordance.output, dict)
+        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
+        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
+        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+
+        assert isinstance(thing.typed_action_without_call, BoundAction) # type definition
+        affordance = thing.typed_action_without_call.to_affordance()
+        self.assertIsInstance(affordance, ActionAffordance)
+        self.assertTrue(affordance.idempotent) # by default, not idempotent
+        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
+        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
+        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
+        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+
+        assert isinstance(thing.typed_action_async, BoundAction) # type definition
+        affordance = thing.typed_action_async.to_affordance()
+        self.assertIsInstance(affordance, ActionAffordance)
+        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
+        self.assertTrue(affordance.synchronous) # by default, not synchronous
+        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
+        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
+        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
+        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+        
+
+    def test_8_exposed_actions(self):
         done_queue = multiprocessing.Queue()
-        start_thing_forked(self.thing_cls, id='test-action', done_queue=done_queue,
-                                        log_level=logging.ERROR+10, prerun_callback=replace_methods_with_actions)
+        start_thing_forked(
+            thing_cls=self.thing_cls, 
+            id='test-action', 
+            done_queue=done_queue,
+            log_level=logging.ERROR+10, 
+            prerun_callback=replace_methods_with_actions
+        )
 
         thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
 
@@ -376,16 +488,33 @@ class TestAction(TestCase):
 
 def replace_methods_with_actions(thing_cls):
     thing_cls.action_echo = action()(thing_cls.action_echo)
-        # classmethod can be decorated with action   
+    thing_cls.action_echo.__set_name__(thing_cls, 'action_echo')
+    # classmethod can be decorated with action   
     thing_cls.action_echo_with_classmethod = action()(thing_cls.action_echo_with_classmethod)   
+    # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+
     # async methods can be decorated with action       
     thing_cls.action_echo_async = action()(thing_cls.action_echo_async)
+    thing_cls.action_echo_async.__set_name__(thing_cls, 'action_echo_async')
     # async classmethods can be decorated with action    
     thing_cls.action_echo_async_with_classmethod = action()(thing_cls.action_echo_async_with_classmethod)
+    # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+
     # parameterized function can be decorated with action
     thing_cls.typed_action = action(safe=True)(thing_cls.typed_action)
+    thing_cls.typed_action.__set_name__(thing_cls, 'typed_action')  
+
     thing_cls.typed_action_without_call = action(idempotent=True)(thing_cls.typed_action_without_call)
+    thing_cls.typed_action_without_call.__set_name__(thing_cls, 'typed_action_without_call')
+
     thing_cls.typed_action_async = action(synchronous=True)(thing_cls.typed_action_async)
+    thing_cls.typed_action_async.__set_name__(thing_cls, 'typed_action_async')
+
+    replace_methods_with_actions._exposed_actions = [
+                                    'action_echo', 'action_echo_with_classmethod', 'action_echo_async',
+                                    'action_echo_async_with_classmethod', 'typed_action', 'typed_action_without_call',
+                                    'typed_action_async'
+                                ]
 
 
 
