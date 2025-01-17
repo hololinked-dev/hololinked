@@ -94,14 +94,18 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                             thing_id=self._resource.thing_id,
                                             objekt=self._resource.name,
                                             operation=Operations.invokeAction,
-                                            payload=SerializableData(kwargs, content_type=self.invokation_form['contentType']), 
+                                            payload=SerializableData(
+                                                value=kwargs, 
+                                                content_type=self._resource.get_invokation_form('zmq', {}).get('contentType', 'application/json') 
+                                                            
+                                            ),
                                             server_execution_context=dict(
-                                                    invokation_timeout=self._invokation_timeout, 
-                                                    execution_timeout=self._execution_timeout
-                                                ),
+                                                invokation_timeout=self._invokation_timeout, 
+                                                execution_timeout=self._execution_timeout
+                                            ),
                                             thing_execution_context=self._thing_execution_context
                                         )
-        return self.get_last_return_value(True)
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
     
     def oneway(self, *args, **kwargs) -> None:
         """
@@ -163,7 +167,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                                 ),
                                                 thing_execution_context=self._thing_execution_context
                                             )
-        return self.get_last_return_value(True)
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
 
 
     
@@ -208,7 +212,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                                 ),
                                                 thing_execution_context=self._thing_execution_context
                                             )
-        self.get_last_return_value(True)
+        ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
      
     def get(self) -> typing.Any:
         self._last_zmq_response = self._zmq_client.execute(
@@ -221,7 +225,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                                 ),
                                                 thing_execution_context=self._thing_execution_context
                                             )
-        return self.get_last_return_value(True) 
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True) 
     
     async def async_set(self, value: typing.Any) -> None:
         if not self._async_zmq_client:
@@ -251,7 +255,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                                 ),
                                                 thing_execution_context=self._thing_execution_context
                                             )
-        return self.get_last_return_value(True) 
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True) 
     
     def noblock_set(self, value : typing.Any) -> None:
         return self._zmq_client.send_request(   

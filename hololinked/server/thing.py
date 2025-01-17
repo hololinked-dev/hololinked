@@ -592,7 +592,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 logger=self.logger
             )   
         else: 
-            from ..protocols.zmq import ZMQServer
+            from ..protocols.zmq.server import ZMQServer
             ZMQServer(
                 id=self.id, 
                 things=[self],

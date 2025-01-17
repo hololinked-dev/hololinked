@@ -248,8 +248,8 @@ class RequestMessage:
         extract the body and deserialize payload and thing execution context
         """
         self._body = [
-            SerializableData(self._bytes[INDEX_BODY], self.header['payloadContentType']),
-            PreserializedData(self._bytes[INDEX_PRESERIALIZED_BODY], self.header['preencodedPayloadContentType'])
+            SerializableData(self._bytes[INDEX_BODY], content_type=self.header['payloadContentType']),
+            PreserializedData(self._bytes[INDEX_PRESERIALIZED_BODY], content_type=self.header['preencodedPayloadContentType'])
         ]
 
 
@@ -454,8 +454,8 @@ class ResponseMessage:
     def parse_body(self) -> None:
         """parse the body"""
         self._body = [
-            SerializableData(self._bytes[INDEX_BODY], self.header['payloadContentType']),
-            PreserializedData(self._bytes[INDEX_PRESERIALIZED_BODY], self.header['preencodedPayloadContentType'])
+            SerializableData(self._bytes[INDEX_BODY], content_type=self.header['payloadContentType']),
+            PreserializedData(self._bytes[INDEX_PRESERIALIZED_BODY], content_type=self.header['preencodedPayloadContentType'])
         ]
 
     @classmethod
