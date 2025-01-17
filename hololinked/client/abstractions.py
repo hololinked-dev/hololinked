@@ -47,7 +47,8 @@ class ConsumedThingAction:
             dataclass object representing the action
         """
         self._resource = resource
-               
+        self._schema_validator = None # schema_validator
+
     def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
         """retrieve return value of the last call to the action"""
         raise NotImplementedError("implement get_last_return_value per protocol")

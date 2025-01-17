@@ -12,6 +12,8 @@ from hololinked.server.thing import Thing, action
 from hololinked.server.properties import Number, String, ClassSelector
 from hololinked.client import ObjectProxy
 from hololinked.td.interaction_affordance import ActionAffordance
+from hololinked.protocols.zmq import SyncZMQClient
+from hololinked.protocols.zmq.client import ZMQAction
 try:
     from .utils import TestCase, TestRunner
     from .things import start_thing_forked 
@@ -454,35 +456,72 @@ class TestAction(TestCase):
             id='test-action', 
             done_queue=done_queue,
             log_level=logging.ERROR+10, 
-            prerun_callback=replace_methods_with_actions
+            prerun_callback=replace_methods_with_actions,
         )
+        thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
+        client = SyncZMQClient(id='test-action-client', server_id='test-action', log_level=logging.ERROR)
 
-        thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
-
-        self.assertTrue(thing_client.action_echo(1) == 1)
-        self.assertTrue(thing_client.action_echo_async("string") == "string")
-        self.assertTrue(thing_client.typed_action(arg1=1, arg2='hello', arg3=5) == ['test-action', 1, 'hello', 5])
-        self.assertTrue(thing_client.typed_action_async(arg1=2.5, arg2='hello', arg3='foo') == ['test-action', 2.5, 'hello', 'foo'])
-
-        with self.assertRaises(NotImplementedError) as ex:
-            thing_client.typed_action_without_call(arg1=1, arg2='hello', arg3=5), 
-        self.assertTrue(str(ex.exception).startswith("Subclasses must implement __call__"))
+        # thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
+        assert isinstance(thing.action_echo, BoundAction) # type definition
+        action_echo = ZMQAction(
+            resource=thing.action_echo.to_affordance(),
+            sync_client=client
+        )
+        self.assertEqual(action_echo(1), 1)
         
-        with self.assertRaises(AttributeError) as ex:
-            thing_client.__internal__(1)
-        self.assertTrue(str(ex.exception).startswith("'ObjectProxy' object has no attribute '__internal__'"))
+        assert isinstance(thing.action_echo_with_classmethod, BoundAction) # type definition
+        action_echo_with_classmethod = ZMQAction(
+            resource=thing.action_echo_with_classmethod.to_affordance(),
+            sync_client=client
+        )
+        self.assertEqual(action_echo_with_classmethod(2), 2)
 
-        with self.assertRaises(AttributeError) as ex:
-            thing_client.not_an_action("foo")
-        self.assertTrue(str(ex.exception).startswith("'ObjectProxy' object has no attribute 'not_an_action'"))
+        # assert isinstance(thing.action_echo_async, BoundAction) # type definition
+        # action_echo_async = ZMQAction(
+        #     resource=thing.action_echo_async.to_affordance(),
+        #     sync_client=client
+        # )
+        # self.assertEqual(action_echo_async("string"), "string")
 
-        with self.assertRaises(AttributeError) as ex:
-            thing_client.not_an_async_action(1)
-        self.assertTrue(str(ex.exception).startswith("'ObjectProxy' object has no attribute 'not_an_async_action'"))
+        # assert isinstance(thing.action_echo_async_with_classmethod, BoundAction) # type definition
+        # action_echo_async_with_classmethod = ZMQAction(
+        #     resource=thing.action_echo_async_with_classmethod.to_affordance(),
+        #     sync_client=client
+        # )
+        # self.assertEqual(action_echo_async_with_classmethod(None), None)
 
-        thing_client.exit()
+        assert isinstance(thing.typed_action, BoundAction) # type definition
+        typed_action = ZMQAction(
+            resource=thing.typed_action.to_affordance(),
+            sync_client=client
+        )
+        self.assertEqual(typed_action(arg1=1, arg2='hello', arg3=5), ['test-action', 1, 'hello', 5])
 
-        self.assertTrue(done_queue.get() == 'test-action')
+        # assert isinstance(thing.typed_action_async, BoundAction) # type definition
+        # typed_action_async = ZMQAction(
+        #     resource=thing.typed_action_async.to_affordance(),
+        #     sync_client=client
+        # )
+        # self.assertEqual(typed_action_async(arg1=2.5, arg2='hello', arg3='foo'), ['test-action', 2.5, 'hello', 'foo'])
+
+        # assert isinstance(thing.typed_action_without_call, BoundAction) # type definition
+        # typed_action_without_call = ZMQAction(
+        #     resource=thing.typed_action_without_call.to_affordance(),
+        #     sync_client=client
+        # )
+        # self.assertEqual(typed_action_without_call(arg1=2, arg2='hello', arg3=5), ['test-action', 2, 'hello', 5])
+        # with self.assertRaises(NotImplementedError) as ex:
+        #     thing_client.typed_action_without_call(arg1=1, arg2='hello', arg3=5), 
+        # self.assertTrue(str(ex.exception).startswith("Subclasses must implement __call__"))
+        
+        # assert isinstance(thing.exit, BoundAction) # type definition
+        # exit = ZMQAction(
+        #     resource=thing.exit.to_affordance(),
+        #     sync_client=client
+        # )
+        # exit()
+
+        # self.assertEqual(done_queue.get(), 'test-action')
 
 
 

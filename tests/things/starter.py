@@ -48,19 +48,19 @@ def start_http_server(id : str) -> None:
 
 
 def start_thing_forked(
-    thing_cls : ThingMeta, 
-    id : str, 
-    protocols : typing.List[str] = ['IPC'], 
-    tcp_socket_address : str = None,
-    done_queue : typing.Optional[multiprocessing.Queue] = None,
-    log_level : int = logging.WARN,
-    prerun_callback : typing.Optional[typing.Callable] = None,
-    as_process : bool = True,
-    http_server : bool = False
+    thing_cls: ThingMeta, 
+    id: str, 
+    protocols: typing.List[str] = ['IPC'], 
+    tcp_socket_address: str = None,
+    done_queue: typing.Optional[multiprocessing.Queue] = None,
+    log_level: int = logging.WARN,
+    prerun_callback: typing.Optional[typing.Callable] = None,
+    as_process: bool = True,
+    http_server: bool = False
 ):
     if as_process:
         P = multiprocessing.Process(
-                        target=run_thing,
+                        target=run_thing_with_zmq_server,
                         kwargs=dict(
                             thing_cls=thing_cls,
                             id=id,
@@ -94,7 +94,7 @@ def start_thing_forked(
             )
         else:
             T = threading.Thread(
-                target=run_thing,
+                target=run_thing_with_zmq_server,
                 kwargs=dict(
                     thing_cls=thing_cls,
                     id=id,

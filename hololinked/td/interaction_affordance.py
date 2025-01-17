@@ -35,6 +35,21 @@ class InteractionAffordance(Schema):
         raise NotImplementedError("Unknown interaction affordance - implement in subclass of InteractionAffordance")
     
     @property
+    def owner(self):
+        if self._owner is None:
+            raise ValueError("owner is not set for this interaction affordance")
+        return self._owner
+    
+    @owner.setter
+    def owner(self, value):
+        from ..server import Thing
+        if not isinstance(value, Thing):
+            raise TypeError(f"owner must be instance of Thing, given type {type(value)}")
+        self._owner = value
+        self._thing_cls = value.__class__.__name__
+        self._thing_id = value.id
+    
+    @property
     def name(self):
         if self._name is None:
             raise ValueError("name is not set for this interaction affordance")
@@ -238,10 +253,13 @@ class ActionAffordance(InteractionAffordance):
 
     @action.setter
     def action(self, value: typing.Callable | None):
+        if value is None:
+            return
         from ..server import BoundAction
-        if value is not None and not isinstance(value, BoundAction):
+        if not isinstance(value, BoundAction):
             raise TypeError(f"Action affordance can only be generated for Action, given type - {type(value)}")
         self._action = value # type: BoundAction
+        self._name = value.name
 
     def _build(self, action, owner) -> None:
         self.action = action
@@ -306,19 +324,15 @@ class ActionAffordance(InteractionAffordance):
         action_affordance._thing_id = TD["id"]
         return action_affordance
     
-    @property
-    def invokation_form(self) -> JSON:
-        try: 
-            self._invokation_form
-        except AttributeError:
+    def get_invokation_form(self, protocol: str, default: typing.Any = None) -> JSON:
+        if hasattr(self, 'forms'):
             for form in self.forms:
                 if form.op == Operations.invokeAction:
-                    self._invokation_form = form
-                    break
-            return self._invokation_form
-        
+                    return form
+        return default
+      
     def __hash__(self):
-        return hash(self.thing_id + "" if not self.thing_cls else self.thing_cls + self.name)
+        return hash(self.thing_id + "" if not self.thing_cls else self.thing_cls.__name__ + self.name)
 
     def __str__(self):
         if self.thing_cls:

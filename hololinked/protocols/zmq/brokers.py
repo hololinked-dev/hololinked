@@ -551,7 +551,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         response_message = ResponseMessage.craft_with_message_type(
                                                             request_message=request_message,
                                                             message_type=logging.ERROR,
-                                                            payload=exception
+                                                            payload=SerializableData(exception, content_type='application/json')
                                                         )
         await self.socket.send_multipart(response_message.byte_array)    
         self.logger.info(f"sent exception message to client '{response_message.receiver_id}'." +
