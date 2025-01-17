@@ -218,46 +218,56 @@ class ActionAffordance(InteractionAffordance):
     creates action affordance schema from actions (or methods).
     schema - https://www.w3.org/TR/wot-thing-description11/#actionaffordance
     """
-    input : JSON
-    output : JSON
-    safe : bool
-    idempotent : bool 
-    synchronous : bool 
+    input: JSON
+    output: JSON
+    safe: bool
+    idempotent: bool 
+    synchronous: bool 
 
     def __init__(self, action: typing.Callable | None = None):
         super().__init__()
-        from ..server import Action
-        assert action is None or isinstance(action, Action), f"Action affordance can only be generated for Action, " + \
-                                                                           f"given type - {type(action)}"
-        self.action = action # type: Action
+        self.action = action 
 
     @property 
     def what(self):
         return ResourceTypes.ACTION
-            
-    def _build(self, action: typing.Callable, owner) -> None:
-        if self.action._execution_info_validator.argument_schema: 
-            self.input = self.action._execution_info_validator.argument_schema 
-        if self.action._execution_info_validator.return_value_schema: 
-            self.output = self.action._execution_info_validator.return_value_schema 
-        self.title = self.action.__name__
+    
+    @property
+    def action(self):
+        return self._action
+
+    @action.setter
+    def action(self, value: typing.Callable | None):
+        from ..server import BoundAction
+        if value is not None and not isinstance(value, BoundAction):
+            raise TypeError(f"Action affordance can only be generated for Action, given type - {type(value)}")
+        self._action = value # type: BoundAction
+
+    def _build(self, action, owner) -> None:
+        self.action = action
+        self.owner = owner
+        self.title = self.action.name
         if self.action.__doc__:
             self.description = self.format_doc(action.__doc__)
+        if self.action.execution_info.argument_schema:
+            self.input = self.action.execution_info.argument_schema 
+        if self.action.execution_info.return_value_schema: 
+            self.output = self.action.execution_info.return_value_schema 
         if (not (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
-                owner.state_machine.has_object(action._execution_info_validator.obj)) and 
-                self.action._execution_info_validator.idempotent):
-            self.idempotent = self.action._execution_info_validator.idempotent
-        if self.action._execution_info_validator.synchronous:
-            self.synchronous = self.action._execution_info_validator.synchronous
-        if self.action._execution_info_validator.safe:
-            self.safe = self.action._execution_info_validator.safe 
+                owner.state_machine.has_object(action.execution_info.obj)) and 
+                self.action.execution_info.idempotent):
+            self.idempotent = self.action.execution_info.idempotent
+        if self.action.execution_info.synchronous:
+            self.synchronous = self.action.execution_info.synchronous
+        if self.action.execution_info.safe:
+            self.safe = self.action.execution_info.safe 
 
     def _build_forms(self, protocol: str, authority : str, **protocol_metadata) -> None:
         self.forms = []
         for method in self.action.execution_info_validator.http_method:
             form = Form()
             form.op = 'invokeaction'
-            form.href = f'{authority}/{owner.id}/{action._remote_info.URL_path}'
+            form.href = f'{authority}/{self.owner.id}/{protocol_metadata.get("path", "")}/{self.action.name}'
             form.htv_methodName = method.upper()
             form.contentType = 'application/json'
             # form.additionalResponses = [AdditionalExpectedResponse().asdict()]

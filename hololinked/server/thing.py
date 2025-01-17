@@ -21,7 +21,7 @@ from .database import ThingDB, ThingInformation
 from .dataklasses import ActionInfoValidator, build_our_temp_TD, get_organised_resources
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .state_machine import StateMachine
-from .actions import RemoteInvokable, action, Action
+from .actions import BoundAction, RemoteInvokable, action, Action
 from .property import Property, ClassProperties
 from .properties import String, ClassSelector, Selector, TypedKeyMappingsConstrainedDict
 from .events import EventSource, Event
@@ -54,13 +54,8 @@ class ThingMeta(ParameterizedMetaclass):
         )
 
     def __new__(cls, __name, __bases, __dict : TypedKeyMappingsConstrainedDict):
-        class_ = super().__new__(cls, __name, __bases, __dict._inner)
-        for action in class_.actions.values():
-            action.owner = class_
-        for event in class_.events.values():
-            event.owner = class_
-        return class_ 
-    
+        return super().__new__(cls, __name, __bases, __dict._inner)
+       
     def __call__(mcls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
         instance.__post_init__()
@@ -94,15 +89,10 @@ class ThingMeta(ParameterizedMetaclass):
             actions = dict()
             for name, method in inspect._getmembers(
                         mcs, 
-                        lambda f : inspect.ismethod(f) or (hasattr(f, '_execution_info_validator') and 
-                                    isinstance(f._execution_info_validator, ActionInfoValidator)) or \
-                                    isinstance(f, Action) or issubklass(f, ParameterizedFunction),  
+                        lambda f: isinstance(f, Action),
                         getattr_without_descriptor_read
                     ): 
-                if hasattr(method, '_execution_info_validator'):
-                    actions[name] = method
-                elif isinstance(method, Action) or issubklass(method, ParameterizedFunction):
-                    actions[name] = method
+                actions[name] = method
             setattr(mcs, f'_{mcs.__name__}_actions', actions)
             return actions
     

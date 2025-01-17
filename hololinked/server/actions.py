@@ -1,3 +1,4 @@
+import inspect
 import typing
 import jsonschema
 from enum import Enum
@@ -24,7 +25,7 @@ class Action:
 
     def __set_name__(self, owner, name):
         self.owner = owner
-        
+                
     def __str__(self) -> str:
         return f"<Action({self.owner.__name__}.{self.obj.__name__})>"
     
@@ -44,7 +45,8 @@ class Action:
         return BoundSyncAction(self.obj, self._execution_info, instance, owner)
     
     def __call__(self, *args, **kwargs):
-        raise NotImplementedError("Bound methods must be called, not the action itself (even if classmethod)")
+        raise NotImplementedError(f"Cannot invoke unbound action {self.name} of {self.owner.__name__}." + 
+                        " Bound methods must be called, not the action itself. Use the appropriate instance to call the method.")
        
     @property
     def name(self) -> str:
@@ -56,15 +58,16 @@ class Action:
         return self._execution_info
         
     @execution_info.setter
-    def execution_info(self, value : ActionInfoValidator) -> None:
+    def execution_info(self, value: ActionInfoValidator) -> None:
         if not isinstance(value, ActionInfoValidator):
             raise TypeError("execution_info must be of type ActionResource")
         self._execution_info = value # type: ActionResource
     
-    def to_affordance(self, obj):
+    def to_affordance(self, owner_inst):
+        assert isinstance(owner_inst, self.owner), "owner_inst must be an instance of the owner class"
         from hololinked.td import ActionAffordance
         affordance = ActionAffordance()
-        affordance._build(self, obj) 
+        affordance._build(self, owner_inst) 
         return affordance
     
 
@@ -73,7 +76,7 @@ class BoundAction:
 
     __slots__ = ['obj', 'execution_info', 'owner_inst', 'owner', 'bound_obj']
 
-    def __init__(self, obj, execution_info, owner_inst, owner) -> None:
+    def __init__(self, obj: FunctionType, execution_info: ActionInfoValidator, owner_inst, owner) -> None:
         self.obj = obj
         self.execution_info = execution_info
         self.owner = owner
@@ -90,7 +93,7 @@ class BoundAction:
         # the validator that was used to accept user inputs to this action.
         # stored only for reference, hardly used. 
         self.execution_info_validator: ActionInfoValidator
-        self.execution_info: ActionResource
+        self.execution_info: ActionInfoValidator
 
     def validate_call(self, args, kwargs : typing.Dict[str, typing.Any]) -> None:
         """
@@ -108,7 +111,6 @@ class BoundAction:
         else: 
             raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
                     self.owner_inst.id, self.owner_inst.state, self.execution_info.state))      
-        
         
     @property
     def name(self) -> str:
@@ -153,9 +155,11 @@ class BoundSyncAction(BoundAction):
     def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
         self.validate_call(self.owner_inst, args, kwargs)
-        return self.obj(self.bound_obj, *args, **kwargs)
+        self.__call__(*args, **kwargs)
         
     def __call__(self, *args, **kwargs):
+        if self.execution_info.isclassmethod:
+            return self.obj(*args, **kwargs)
         return self.obj(self.bound_obj, *args, **kwargs)
 
 
@@ -167,9 +171,11 @@ class BoundAsyncAction(BoundAction):
     async def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
         self.validate_call(self.owner_inst, args, kwargs)
-        return await self.obj(self.bound_obj, *args, **kwargs)
+        return await self.__call__(*args, **kwargs)
 
     async def __call__(self, *args, **kwargs):
+        if self.execution_info.isclassmethod:
+            return await self.obj(*args, **kwargs)
         return await self.obj(self.bound_obj, *args, **kwargs)
 
 
@@ -275,6 +281,25 @@ class RemoteInvokable:
     def _prepare(self) -> None:
         """update owner of actions"""
         pass 
+
+    @property
+    def actions(self) -> typing.Dict[str, Action]:
+        """
+        All bound actions available on the object. Access `self.__class__.actions` to retrieve unbound actions.
+       
+        Returns
+        -------
+        Dict[str, Action]
+            dictionary of actions available on the object along with their names as keys
+        """
+        try:
+            return getattr(self, f'_{self.id}_actions')
+        except AttributeError:
+            actions = dict()
+            for name, method in self.__class__.actions.items():
+                actions[name] = getattr(self, name)
+            setattr(self, f'_{self.id}_actions', actions)
+            return actions
 
 
     
