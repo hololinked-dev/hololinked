@@ -73,6 +73,14 @@ class InteractionAffordance(Schema):
     def _build_forms(self, interaction: typing.Any, owner, authority: str) -> None:
         raise NotImplementedError("_build_forms must be implemented in subclass of InteractionAffordance")
     
+    def retrieve_form(self, op: str, default: typing.Any = None) -> JSON:
+        if not hasattr(self, 'forms'):
+            return default
+        for form in self.forms:
+            if form.op == op:
+                return form
+        return default
+    
     @classmethod 
     def generate(cls, interaction: typing.Any, owner, authority: str) -> JSON:
         raise NotImplementedError("generate_schema must be implemented in subclass of InteractionAffordance")
@@ -190,41 +198,6 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
                             f"Given type {type(schema_generator)}" )
         PropertyAffordance._custom_schema_generators[descriptor] = schema_generator
 
-    @property 
-    def read_property_form(self) -> JSON:
-        try: 
-            self._read_property_form
-        except AttributeError:
-            for form in self._resource.forms:
-                if form.op == Operations.readProperty:
-                    self._read_property_form = form
-                    return self._read_property_form
-            raise NotImplementedError("This property cannot be read")
-        
-    @property
-    def write_property_form(self) -> JSON:
-        try: 
-            if not self._resource.readOnly:
-                self._write_property_form
-        except AttributeError:
-            for form in self._resource.forms:
-                if form.op == Operations.writeProperty:
-                    self._write_property_form = form
-                    return self._write_property_form
-        raise NotImplementedError("This property cannot be written")
-        
-    @property
-    def observe_property_form(self) -> JSON:
-        try: 
-            self._observe_property_form
-        except AttributeError:
-            for form in self._resource.forms:
-                if form.op == Operations.observeProperty:
-                    self._observe_property_form = form
-                    return self._observe_property_form
-            raise NotImplementedError("This property cannot be observed")
-
-
 
 
 @dataclass
@@ -272,7 +245,7 @@ class ActionAffordance(InteractionAffordance):
         if self.action.execution_info.return_value_schema: 
             self.output = self.action.execution_info.return_value_schema 
         if (not (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
-                owner.state_machine.has_object(action.execution_info.obj)) and 
+                owner.state_machine.has_object(self.action)) and 
                 self.action.execution_info.idempotent):
             self.idempotent = self.action.execution_info.idempotent
         if self.action.execution_info.synchronous:
