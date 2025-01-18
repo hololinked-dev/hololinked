@@ -62,12 +62,12 @@ class ZMQServer(RPCServer):
         super().run_external_message_listener()
 
 
-    def stop(self) -> None:
+    def stop(self, wait: bool = True) -> None:
         if self.ipc_server is not None:
             self.ipc_server.stop_polling()
         if self.tcp_server is not None:
             self.tcp_server.stop_polling()
-        super().stop()
+        super().stop(wait)
 
 
     def exit(self) -> None:

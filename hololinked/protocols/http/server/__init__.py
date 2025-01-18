@@ -15,7 +15,7 @@ from ....param.parameters import Integer, IPAddress, ClassSelector, Selector, Ty
 from ....constants import HTTP_METHODS, ZMQ_TRANSPORTS, HTTPServerTypes, Operations
 from ....utils import get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, run_callable_somehow
 from ....serializers.serializers import JSONSerializer
-from ....server.schema_validators import BaseSchemaValidator, JsonSchemaValidator
+from ....schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from ....server.property import Property
 from ....server.actions import Action
 from ....server.events import Event

@@ -6,7 +6,7 @@ from ..utils import issubklass
 from ..exceptions import StateMachineError
 from .dataklasses import RemoteResource, RemoteResourceInfoValidator
 from .events import Event, EventDispatcher
-from .schema_validators import JsonSchemaValidator
+from ..schema_validators import JsonSchemaValidator
 
 
 

@@ -9,8 +9,7 @@ from ....utils import *
 from ....config import global_config
 from ...zmq.brokers import AsyncEventConsumer, EventConsumer
 from ....constants import Operations
-# from ....server.dataklasses import ZMQEvent
-from ....server.schema_validators import BaseSchemaValidator
+from ....schema_validators import BaseSchemaValidator
 from ....td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
 
 

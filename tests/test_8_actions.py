@@ -4,6 +4,7 @@ import unittest
 import logging
 import multiprocessing
 
+from hololinked.protocols.zmq.message import EXIT, RequestMessage
 from hololinked.utils import isclassmethod
 from hololinked.param import ParameterizedFunction
 from hololinked.server.actions import Action, BoundAction, BoundSyncAction, BoundAsyncAction
@@ -476,19 +477,19 @@ class TestAction(TestCase):
         )
         self.assertEqual(action_echo_with_classmethod(2), 2)
 
-        # assert isinstance(thing.action_echo_async, BoundAction) # type definition
-        # action_echo_async = ZMQAction(
-        #     resource=thing.action_echo_async.to_affordance(),
-        #     sync_client=client
-        # )
-        # self.assertEqual(action_echo_async("string"), "string")
+        assert isinstance(thing.action_echo_async, BoundAction) # type definition
+        action_echo_async = ZMQAction(
+            resource=thing.action_echo_async.to_affordance(),
+            sync_client=client
+        )
+        self.assertEqual(action_echo_async("string"), "string")
 
-        # assert isinstance(thing.action_echo_async_with_classmethod, BoundAction) # type definition
-        # action_echo_async_with_classmethod = ZMQAction(
-        #     resource=thing.action_echo_async_with_classmethod.to_affordance(),
-        #     sync_client=client
-        # )
-        # self.assertEqual(action_echo_async_with_classmethod(None), None)
+        assert isinstance(thing.action_echo_async_with_classmethod, BoundAction) # type definition
+        action_echo_async_with_classmethod = ZMQAction(
+            resource=thing.action_echo_async_with_classmethod.to_affordance(),
+            sync_client=client
+        )
+        self.assertEqual(action_echo_async_with_classmethod([1, 2]), [1, 2])
 
         assert isinstance(thing.typed_action, BoundAction) # type definition
         typed_action = ZMQAction(
@@ -497,31 +498,30 @@ class TestAction(TestCase):
         )
         self.assertEqual(typed_action(arg1=1, arg2='hello', arg3=5), ['test-action', 1, 'hello', 5])
 
-        # assert isinstance(thing.typed_action_async, BoundAction) # type definition
-        # typed_action_async = ZMQAction(
-        #     resource=thing.typed_action_async.to_affordance(),
-        #     sync_client=client
-        # )
-        # self.assertEqual(typed_action_async(arg1=2.5, arg2='hello', arg3='foo'), ['test-action', 2.5, 'hello', 'foo'])
+        assert isinstance(thing.typed_action_async, BoundAction) # type definition
+        typed_action_async = ZMQAction(
+            resource=thing.typed_action_async.to_affordance(),
+            sync_client=client
+        )
+        self.assertEqual(typed_action_async(arg1=2.5, arg2='hello', arg3='foo'), ['test-action', 2.5, 'hello', 'foo'])
 
-        # assert isinstance(thing.typed_action_without_call, BoundAction) # type definition
-        # typed_action_without_call = ZMQAction(
-        #     resource=thing.typed_action_without_call.to_affordance(),
-        #     sync_client=client
-        # )
-        # self.assertEqual(typed_action_without_call(arg1=2, arg2='hello', arg3=5), ['test-action', 2, 'hello', 5])
-        # with self.assertRaises(NotImplementedError) as ex:
-        #     thing_client.typed_action_without_call(arg1=1, arg2='hello', arg3=5), 
-        # self.assertTrue(str(ex.exception).startswith("Subclasses must implement __call__"))
+        assert isinstance(thing.typed_action_without_call, BoundAction) # type definition
+        typed_action_without_call = ZMQAction(
+            resource=thing.typed_action_without_call.to_affordance(),
+            sync_client=client
+        )
+        with self.assertRaises(NotImplementedError) as ex:
+            typed_action_without_call(arg1=2, arg2='hello', arg3=5)
+        self.assertTrue(str(ex.exception).startswith("Subclasses must implement __call__"))
         
-        # assert isinstance(thing.exit, BoundAction) # type definition
-        # exit = ZMQAction(
-        #     resource=thing.exit.to_affordance(),
-        #     sync_client=client
-        # )
-        # exit()
+        exit_message = RequestMessage.craft_with_message_type(
+            sender_id='test-action-client', 
+            receiver_id='test-action',
+            message_type=EXIT
+        )
+        client.socket.send_multipart(exit_message.byte_array)
 
-        # self.assertEqual(done_queue.get(), 'test-action')
+        self.assertEqual(done_queue.get(), 'test-action')
 
 
 

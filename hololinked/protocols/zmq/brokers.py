@@ -13,7 +13,7 @@ from ...config import global_config
 from ...constants import ZMQ_TRANSPORTS, get_socket_type_name
 from ...serializers.serializers import JSONSerializer
 from ...exceptions import BreakLoop
-from .message import (EMPTY_BYTE, EXIT, HANDSHAKE, INVALID_MESSAGE, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
+from .message import (EMPTY_BYTE, EXIT, HANDSHAKE, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
         RequestMessage, ResponseMessage, SerializableData, PreserializedData, SerializableNone, PreserializedEmptyByte,
         ServerExecutionContext, ThingExecutionContext, default_server_execution_context, default_thing_execution_context)
 
@@ -449,7 +449,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
             ResponseMessage.craft_from_arguments(
                 receiver_id=request_message.sender_id,
                 sender_id=self.id, 
-                message_type=message_type,
+                message_type=message_type or REPLY,
                 message_id=request_message.id,
                 payload=payload,
                 preserialized_payload=preserialized_payload
