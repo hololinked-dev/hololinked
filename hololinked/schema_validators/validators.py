@@ -1,4 +1,5 @@
 import typing
+from pydantic import BaseModel
 from ..constants import JSON
 
 class JSONSchemaError(Exception):
@@ -22,7 +23,7 @@ class BaseSchemaValidator: # type definition
     Base class for all schema validators. 
     Serves as a type definition. 
     """
-    def __init__(self, schema : JSON) -> None:
+    def __init__(self, schema: JSON | BaseModel) -> None:
         self.schema = schema
 
     def validate(self, data) -> None:
@@ -95,6 +96,27 @@ class JsonSchemaValidator(BaseSchemaValidator):
     def __set_state__(self, schema):
         return JsonSchemaValidator(schema)
     
+
+class PydanticSchemaValidator(BaseSchemaValidator):
+    """
+    JSON schema validator according to pydantic.
+    """
+    def __init__(self, schema: BaseModel) -> None:
+        super().__init__(schema)
+        self.validator = schema.model_validate
+
+    def validate(self, data) -> None:
+        self.validator(data)
+
+    def json(self):
+        """allows JSON (de-)serializable of the instance itself"""
+        return self.schema.model_dump_json()
+
+    def __get_state__(self):
+        return self.json()
+    
+    def __set_state__(self, schema: JSON):
+        return PydanticSchemaValidator(BaseModel(**schema))
 
 
 def _get_validator_from_user_options(option : typing.Optional[str] = None) -> BaseSchemaValidator:

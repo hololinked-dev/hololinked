@@ -9,7 +9,10 @@ import types
 import traceback
 import typing
 import ifaddr
+from collections import OrderedDict
 from dataclasses import asdict
+from pydantic import BaseModel, ConfigDict, create_model, Field
+from inspect import Parameter, signature
 
 
 def get_IP_from_interface(interface_name : str = 'Ethernet', adapter_name = None) -> str:
@@ -188,8 +191,12 @@ def getattr_without_descriptor_read(instance, key):
     return getattr(instance, key, None) # we can deal with None where we use this getter, so dont raise AttributeError  
 
 
-def isclassmethod(method):
-    """https://stackoverflow.com/questions/19227724/check-if-a-function-uses-classmethod"""
+def isclassmethod(method) -> bool:
+    """
+    Returns `True` if the method is a classmethod, `False` otherwise.
+    https://stackoverflow.com/questions/19227724/check-if-a-function-uses-classmethod
+    
+    """
     bound_to = getattr(method, '__self__', None)
     if not isinstance(bound_to, type):
         # must be bound to a class
@@ -202,10 +209,20 @@ def isclassmethod(method):
     return False
 
 
-def has_async_def(method):
+def has_async_def(method) -> bool:
     """
     Checks if async def is found in method signature. Especially useful for class methods. 
     https://github.com/python/cpython/issues/100224#issuecomment-2000895467
+
+    Parameters
+    ----------
+    method: Callable
+        function or method
+
+    Returns
+    -------
+    bool
+        True if async def is found in method signature, False otherwise
     """
     source = inspect.getsource(method)
     if re.search(r'^\s*async\s+def\s+' + re.escape(method.__name__) + r'\s*\(', source, re.MULTILINE):
@@ -213,16 +230,21 @@ def has_async_def(method):
     return False
 
 
-def issubklass(obj, cls):
+def issubklass(obj, cls) -> bool:
     """
     Safely check if `obj` is a subclass of `cls`.
 
-    Parameters:
-    obj: The object to check if it's a subclass.
-    cls: The class (or tuple of classes) to compare against.
+    Parameters
+    ----------
+    obj: typing.Any 
+        The object to check if it's a subclass.
+    cls: typing.Any 
+        The class (or tuple of classes) to compare against.
 
-    Returns:
-    bool: True if `obj` is a subclass of `cls`, False otherwise.
+    Returns
+    -------
+    bool
+        True if `obj` is a subclass of `cls`, False otherwise.
     """
     try:
         # Check if obj is a class or a tuple of classes
@@ -293,6 +315,7 @@ class Singleton(type):
     
 
 class MappableSingleton(Singleton):
+    """Singleton with dict-like access to attributes"""
     
     def __setitem__(self, key, value) -> None:
         setattr(self, key, value)
@@ -305,6 +328,127 @@ class MappableSingleton(Singleton):
 
     
 
+def input_model_from_signature(
+    func: typing.Callable,
+    ignore: typing.Sequence[str] | None = None,
+) -> type[BaseModel] | None:
+    """
+    Create a pydantic model for a function's signature.
+
+    This is deliberately quite a lot more basic than
+    `pydantic.decorator.ValidatedFunction` because it is designed
+    to handle JSON input. That means that we don't want positional
+    arguments, unless there's exactly one (in which case we have a
+    single value, not an object, and this may or may not be supported).
+
+    This will fail for position-only arguments, though that may change
+    in the future.
+
+    :param remove_first_positional_arg: Remove the first argument from the
+        model (this is appropriate for methods, as the first argument,
+        self, is baked in when it's called, but is present in the
+        signature).
+    :param ignore: Ignore arguments that have the specified name.
+        This is useful for e.g. dependencies that are injected by LabThings.
+    :returns: A pydantic model class describing the input parameters
+
+    TODO: deal with (or exclude) functions with a single positional parameter
+    """
+    parameters = OrderedDict(signature(func).parameters) # type: OrderedDict[str, Parameter]
+    if len(parameters) == 0:
+        return None
+
+    # Raise errors if positional-only or variable positional args are present
+    if any(p.kind == Parameter.VAR_POSITIONAL for p in parameters.values()):
+        raise TypeError(
+            f"{func.__name__} accepts extra positional arguments, "
+            "which is not supported."
+        )
+    if any(p.kind == Parameter.POSITIONAL_ONLY for p in parameters.values()):
+        raise TypeError(
+            f"{func.__name__} has positional-only arguments which are not supported."
+        )
+
+    # The line below determines if we accept arbitrary extra parameters (**kwargs)
+    takes_v_kwargs = False  # will be updated later
+    # fields is a dictionary of tuples of (type, default) that defines the input model
+    type_hints = typing.get_type_hints(func, include_extras=True)
+    fields = {} # type: typing.Dict[str, typing.Tuple[type, typing.Any]]
+    for name, p in parameters.items():
+        if ignore and name in ignore:
+            continue
+        if p.kind == Parameter.VAR_KEYWORD:
+            takes_v_kwargs = True  # we accept arbitrary extra arguments
+            continue  # **kwargs should not appear in the schema
+        # `type_hints` does more processing than p.annotation - but will
+        # not have entries for missing annotations.
+        p_type = typing.Any if p.annotation is Parameter.empty else type_hints[name]
+        # pydantic uses `...` to represent missing defaults (i.e. required params)
+        default = Field(...) if p.default is Parameter.empty else p.default
+        fields[name] = (p_type, default)
+    model = create_model(  # type: ignore[call-overload]
+        f"{func.__name__}_input",
+        model_config=ConfigDict(extra="allow" if takes_v_kwargs else "forbid"),
+        **fields,
+    )
+    # If there are no fields, we don't want to return a model
+    if len(fields) == 0:
+        return None
+    return model
+
+
+# def return_type(func: Callable) -> Type:
+#     """Determine the return type of a function."""
+#     sig = inspect.signature(func)
+#     if sig.return_annotation == inspect.Signature.empty:
+#         return Any  # type: ignore[return-value]
+#     else:
+#         # We use `get_type_hints` rather than just `sig.return_annotation`
+#         # because it resolves forward references, etc.
+#         type_hints = get_type_hints(func, include_extras=True)
+#         return type_hints["return"]
+
+
+# def get_docstring(obj: Any, remove_summary=False) -> Optional[str]:
+#     """Return the docstring of an object
+
+#     If `remove_newlines` is `True` (default), newlines are removed from the string.
+#     If `remove_summary` is `True` (not default), and the docstring's second line
+#     is blank, the first two lines are removed.  If the docstring follows the
+#     convention of a one-line summary, a blank line, and a description, this will
+#     get just the description.
+
+#     If `remove_newlines` is `False`, the docstring is processed by
+#     `inspect.cleandoc()` to remove whitespace from the start of each line.
+
+#     :param obj: Any Python object
+#     :param remove_newlines: bool (Default value = True)
+#     :param remove_summary: bool (Default value = False)
+#     :returns: str: Object docstring
+
+#     """
+#     ds = obj.__doc__
+#     if not ds:
+#         return None
+#     if remove_summary:
+#         lines = ds.splitlines()
+#         if len(lines) > 2 and lines[1].strip() == "":
+#             ds = "\n".join(lines[2:])
+#     return inspect.cleandoc(ds)  # Strip spurious indentation/newlines
+
+
+# def get_summary(obj: Any) -> Optional[str]:
+#     """Return the first line of the dosctring of an object
+
+#     :param obj: Any Python object
+#     :returns: str: First line of object docstring
+
+#     """
+#     docs = get_docstring(obj)
+#     if docs:
+#         return docs.partition("\n")[0].strip()
+#     else:
+#         return None
 
 
 __all__ = [
