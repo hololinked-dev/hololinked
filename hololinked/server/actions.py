@@ -5,6 +5,8 @@ from enum import Enum
 from types import FunctionType, MethodType
 from inspect import iscoroutinefunction, getfullargspec
 
+from hololinked.schema_validators.validators import JsonSchemaValidator
+
 from ..param.parameterized import ParameterizedFunction
 from ..constants import JSON
 from ..config import global_config
@@ -154,8 +156,8 @@ class BoundSyncAction(BoundAction):
     """
     def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
-        self.validate_call(self.owner_inst, args, kwargs)
-        self.__call__(*args, **kwargs)
+        self.validate_call(args, kwargs)
+        return self.__call__(*args, **kwargs)
         
     def __call__(self, *args, **kwargs):
         if self.execution_info.isclassmethod:
@@ -170,7 +172,7 @@ class BoundAsyncAction(BoundAction):
     """
     async def external_call(self, *args, **kwargs):
         """validated call to the action with state machine and payload checks"""
-        self.validate_call(self.owner_inst, args, kwargs)
+        self.validate_call(args, kwargs)
         return await self.__call__(*args, **kwargs)
 
     async def __call__(self, *args, **kwargs):
@@ -250,9 +252,10 @@ def action(
         else:
             execution_info_validator.iscoroutine = iscoroutinefunction(obj)
         if global_config.validate_schemas and input_schema:
-            jsonschema.Draft7Validator.check_schema(input_schema)
+            execution_info_validator.schema_validator = JsonSchemaValidator(input_schema)
         if global_config.validate_schemas and output_schema:
-            jsonschema.Draft7Validator.check_schema(output_schema)
+            jsonschema.Draft7Validator.check_schema(output_schema) 
+            # output is not validated by us, so we just check the schema and dont create a validator
  
         final_obj = Action(original) # type: Action
         final_obj.execution_info = execution_info_validator
