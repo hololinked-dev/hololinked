@@ -19,7 +19,7 @@ from ..exceptions import *
 from ..serializers.serializers import JSONSerializer
 from .database import ThingDB, ThingInformation
 from .dataklasses import ActionInfoValidator, build_our_temp_TD, get_organised_resources
-from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
+from ..schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .state_machine import StateMachine
 from .actions import BoundAction, RemoteInvokable, action, Action
 from .property import Property, ClassProperties
@@ -559,7 +559,6 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         if self.rpc_server is None:
             return
         if self._owner is None:
-            self.rpc_server.stop()
             raise BreakInnerLoop # stops the inner loop of the object
         else:
             warnings.warn("call exit on the top object, composed objects cannot exit the loop.", RuntimeWarning)

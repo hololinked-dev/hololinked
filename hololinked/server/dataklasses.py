@@ -15,7 +15,7 @@ from ..param.parameterized import ParameterizedMetaclass
 from ..constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, REGEX, JSONSerializable, ResourceTypes
 from ..utils import SerializableDataclass, get_signature, pep8_to_dashed_name
 from ..config import global_config
-from .schema_validators import BaseSchemaValidator
+from ..schema_validators import BaseSchemaValidator
 
 
 class RemoteResourceInfoValidator:
@@ -125,6 +125,8 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
                     doc="True for a parameterized function") # type: bool
     isclassmethod = Boolean(default=False,
                     doc="True for a classmethod") # type: bool
+    schema_validator = ClassSelector(default=None, allow_None=True, class_=BaseSchemaValidator,
+                    doc="schema validator for the callable if to be validated server side") # type: BaseSchemaValidator
 
     
 __dataclass_kwargs = dict()

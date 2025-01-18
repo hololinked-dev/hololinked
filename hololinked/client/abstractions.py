@@ -333,6 +333,7 @@ def raise_local_exception(error_message : typing.Dict[str, typing.Any]) -> None:
     if isinstance(error_message, Exception):
         raise error_message from None
     elif isinstance(error_message, dict) and 'exception' in error_message.keys():
+        error_message = error_message["exception"]
         exc = getattr(builtins, error_message["type"], None)
         message = error_message["message"]
         if exc is None:

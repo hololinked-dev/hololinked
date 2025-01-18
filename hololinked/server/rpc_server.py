@@ -18,13 +18,13 @@ from ..exceptions import *
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import format_exception_as_json, get_current_async_loop, get_default_logger
 from ..config import global_config
-from ..protocols.zmq.message import EMPTY_BYTE, PreserializedData, RequestMessage, SerializableData
+from ..protocols.zmq.message import EMPTY_BYTE, ERROR, REPLY, PreserializedData, RequestMessage, SerializableData
 from ..protocols.zmq.brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
 from ..serializers import Serializers
 from .thing import Thing, ThingMeta
 from .property import Property
 from .properties import Boolean, TypedDict
-from .actions import Action, action as remote_method
+from .actions import BoundAction, action as remote_method
 from .logger import ListHandler
 
 
@@ -152,8 +152,13 @@ class RPCServer(BaseZMQServer):
         """
         eventloop = asyncio.get_event_loop()
         while not self.stop_poll:
-            request_messages = await server.poll_requests() 
-            # when stop poll is set, this will exit with an empty list
+            try:
+                request_messages = await server.poll_requests() 
+                # when stop poll is set, this will exit with an empty list
+            except BreakLoop:
+                self.stop(wait=False)
+                break
+            
             for request_message in request_messages:
                 try:
                     # handle invokation timeout
@@ -174,10 +179,6 @@ class RPCServer(BaseZMQServer):
                                                 )
                                             )
                         eventloop.call_soon(lambda : timeout_task)
-
-                except BreakLoop:
-                    self.stop()
-                    break
                 except Exception as ex:
                     # handle invalid message
                     self.logger.error(f"exception occurred for message id '{request_message.id}' - {str(ex)}")
@@ -266,7 +267,7 @@ class RPCServer(BaseZMQServer):
                             exception=RuntimeError("No reply from thing - logic error")
                         )
                 continue
-            payload, preserialized_payload = reply
+            payload, preserialized_payload, message_type = reply
             instance._last_operation_reply = Undefined
 
             # check if execution completed within time
@@ -281,8 +282,9 @@ class RPCServer(BaseZMQServer):
                 continue 
 
             # send reply to client            
-            await origin_server.async_send_response(
+            await origin_server.async_send_response_with_message_type(
                 request_message=request_message,
+                message_type=message_type,
                 payload=payload,
                 preserialized_payload=preserialized_payload
             ) 
@@ -336,6 +338,15 @@ class RPCServer(BaseZMQServer):
                     payload = SerializableData(return_value[0], Serializers.for_object(thing_id, instance.__class__.__name__, objekt))
                     if isinstance(return_value[1], bytes):
                         preserialized_payload = PreserializedData(return_value[1])
+                # elif isinstance(return_value, PreserializedData):
+                #     if fetch_execution_logs:
+                #         return_value = {
+                #             "return_value" : return_value.value,
+                #             "execution_logs" : list_handler.log_list
+                #         }
+                #     payload = SerializableData(return_value.value, content_type='application/json')
+                #     preserialized_payload = return_value
+
                 elif isinstance(return_value, bytes):
                     payload = SerializableData(None, content_type='application/json')
                     preserialized_payload = PreserializedData(return_value)
@@ -349,8 +360,8 @@ class RPCServer(BaseZMQServer):
                     payload = SerializableData(return_value, Serializers.for_object(thing_id, instance.__class__.__name__, objekt))
                     preserialized_payload = PreserializedData(EMPTY_BYTE, content_type='text/plain')
                 # set reply
-                instance._last_operation_reply = (payload, preserialized_payload)
-            except (BreakInnerLoop, BreakAllLoops):
+                instance._last_operation_reply = (payload, preserialized_payload, REPLY)
+            except BreakInnerLoop:
                 # exit the loop and stop the thing
                 instance.logger.info("Thing {} with instance name {} exiting event loop.".format(
                                                             instance.__class__.__name__, instance.id))
@@ -360,7 +371,11 @@ class RPCServer(BaseZMQServer):
                         "return_value" : None,
                         "execution_logs" : list_handler.log_list
                     }
-                instance._last_operation_reply = (SerializableData(return_value, 'application/json'), PreserializedData(EMPTY_BYTE, 'text/plain'))
+                instance._last_operation_reply = (
+                    SerializableData(return_value, content_type='application/json'), 
+                    PreserializedData(EMPTY_BYTE, content_type='text/plain'),
+                    None
+                )
                 return 
             except Exception as ex:
                 # error occurred while executing the operation
@@ -369,7 +384,11 @@ class RPCServer(BaseZMQServer):
                 return_value = dict(exception=format_exception_as_json(ex))
                 if fetch_execution_logs:
                     return_value["execution_logs"] = list_handler.log_list
-                instance._last_operation_reply = (SerializableData(return_value, 'application/json'), PreserializedData(EMPTY_BYTE, 'text/plain'))
+                instance._last_operation_reply = (
+                    SerializableData(return_value, content_type='application/json'), 
+                    PreserializedData(EMPTY_BYTE, content_type='text/plain'),
+                    ERROR
+                )
             finally:
                 # send reply
                 instance._last_operation_request = Undefined
@@ -394,23 +413,23 @@ class RPCServer(BaseZMQServer):
             return getattr(instance, prop.name) 
         elif operation == 'writeProperty':
             prop = instance.properties[objekt] # type: Property
-            final_payload = payload
             if preserialized_payload != EMPTY_BYTE:
-                final_payload = preserialized_payload
-            return prop.external_set(instance, final_payload)
+                prop_value = preserialized_payload
+            else:
+                prop_value = payload
+            return prop.external_set(instance, prop_value)
         elif operation == 'deleteProperty':
             prop = instance.properties[objekt] # type: Property
             del prop # raises NotImplementedError when deletion is not implemented which is mostly the case
         elif operation == 'invokeAction':
-            action = instance.actions[objekt] # type: Action
+            action = instance.actions[objekt] # type: BoundAction
             args = payload.pop('__args__', tuple())
             # payload then become kwargs
             if preserialized_payload != EMPTY_BYTE:
                 args = (preserialized_payload,) + args
-            # if action.execution_info.iscoroutine:
-            #     return await action.external_call(*args, **payload)
-            # else:
-            return action(*args, **payload) 
+            if action.execution_info.iscoroutine:
+                return await action.external_call(*args, **payload)
+            return action.external_call(*args, **payload) 
         elif operation == 'readMultipleProperties' or operation == 'readAllProperties':
             if objekt is None:
                 return instance._get_properties()
@@ -496,7 +515,7 @@ class RPCServer(BaseZMQServer):
         self.logger.info("server stopped")
 
 
-    def stop(self):
+    def stop(self, wait: bool = True):
         """
         stop polling method ``poll()``
         """
@@ -506,7 +525,8 @@ class RPCServer(BaseZMQServer):
             # quit tunneling messages to things 
             instance._zmq_message_arrived_event.set() 
             instance._request_execution_ready_event.set()
-        self._server_stopped_event.wait()
+        if wait:
+            self._server_stopped_event.wait()
 
 
     def exit(self):
