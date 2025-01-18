@@ -334,10 +334,10 @@ def raise_local_exception(error_message : typing.Dict[str, typing.Any]) -> None:
         raise error_message from None
     elif isinstance(error_message, dict) and 'exception' in error_message.keys():
         error_message = error_message["exception"]
-        exc = getattr(builtins, error_message["type"], None)
         message = error_message["message"]
+        exc = getattr(builtins, error_message["type"], None)
         if exc is None:
-            ex = error_message(message)
+            ex = Exception(message)
         else: 
             ex = exc(message)
         error_message["traceback"][0] = f"Server {error_message['traceback'][0]}"

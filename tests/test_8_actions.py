@@ -3,18 +3,19 @@ import typing
 import unittest
 import logging
 import multiprocessing
+import jsonschema
 
-from hololinked.protocols.zmq.message import EXIT, RequestMessage
 from hololinked.utils import isclassmethod
 from hololinked.param import ParameterizedFunction
 from hololinked.server.actions import Action, BoundAction, BoundSyncAction, BoundAsyncAction
 from hololinked.server.dataklasses import ActionInfoValidator
 from hololinked.server.thing import Thing, action
 from hololinked.server.properties import Number, String, ClassSelector
-from hololinked.client import ObjectProxy
 from hololinked.td.interaction_affordance import ActionAffordance
 from hololinked.protocols.zmq import SyncZMQClient
+from hololinked.protocols.zmq.message import EXIT, RequestMessage
 from hololinked.protocols.zmq.client import ZMQAction
+from hololinked.schema_validators import JsonSchemaValidator
 try:
     from .utils import TestCase, TestRunner
     from .things import start_thing_forked 
@@ -42,7 +43,7 @@ class TestThing(Thing):
         await asyncio.sleep(0.1)
         return value
     
-    class typed_action(ParameterizedFunction):
+    class parameterized_action(ParameterizedFunction):
 
         arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
                     doc='arg1 description')
@@ -53,7 +54,7 @@ class TestThing(Thing):
         def __call__(self, instance, arg1, arg2, arg3):
             return instance.id, arg1, arg2, arg3
 
-    class typed_action_without_call(ParameterizedFunction):
+    class parameterized_action_without_call(ParameterizedFunction):
 
         arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
                     doc='arg1 description')
@@ -61,7 +62,7 @@ class TestThing(Thing):
         arg3 = ClassSelector(class_=(int, float, str),
                             default=5, doc='arg3 description')
 
-    class typed_action_async(ParameterizedFunction):
+    class parameterized_action_async(ParameterizedFunction):
             
         arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
                     doc='arg1 description')
@@ -86,7 +87,19 @@ class TestThing(Thing):
         await asyncio.sleep(0.1)
         return value
     
-
+    def json_schema_validated_action(self, val1: int, val2: str, val3: dict, val4: list):
+        return {
+            'val1': val1,
+            'val3': val3           
+        }
+    
+    def pydantic_validated_action(self, val1: int, val2: str, val3: dict, val4: list) -> typing.Dict[str, typing.Union[int, dict]]:
+        return {
+            'val1': val1,
+            'val3': val3           
+        }
+    
+    
 
 class TestAction(TestCase):
 
@@ -95,6 +108,9 @@ class TestAction(TestCase):
         super().setUpClass()
         print(f"test action with {self.__name__}")
         self.thing_cls = TestThing 
+        self.client = SyncZMQClient(id='test-action-client', server_id='test-action', log_level=logging.ERROR, 
+                                    handshake=False)
+        self.done_queue = multiprocessing.Queue()
 
 
     def test_1_allowed_actions(self):
@@ -113,13 +129,19 @@ class TestAction(TestCase):
                         action()(self.thing_cls.action_echo_async_with_classmethod))
         self.assertTrue(isclassmethod(self.thing_cls.action_echo_async_with_classmethod))
         # 5. parameterized function can be decorated with action
-        self.assertEqual(Action(self.thing_cls.typed_action), 
-                            action(safe=True)(self.thing_cls.typed_action))
-        self.assertEqual(Action(self.thing_cls.typed_action_without_call), 
-                            action(idempotent=True)(self.thing_cls.typed_action_without_call))
-        self.assertEqual(Action(self.thing_cls.typed_action_async), 
-                            action(synchronous=True)(self.thing_cls.typed_action_async))
-
+        self.assertEqual(Action(self.thing_cls.parameterized_action), 
+                            action(safe=True)(self.thing_cls.parameterized_action))
+        self.assertEqual(Action(self.thing_cls.parameterized_action_without_call), 
+                            action(idempotent=True)(self.thing_cls.parameterized_action_without_call))
+        self.assertEqual(Action(self.thing_cls.parameterized_action_async), 
+                            action(synchronous=True)(self.thing_cls.parameterized_action_async))
+        # 6. actions with input and output schema
+        self.assertEqual(Action(self.thing_cls.json_schema_validated_action),
+                            action(input_schema={'val1': 'integer', 'val2': 'string', 'val3': 'object', 'val4': 'array'},
+                                      output_schema={'val1': 'int', 'val3': 'dict'})(self.thing_cls.json_schema_validated_action))
+        self.assertEqual(Action(self.thing_cls.pydantic_validated_action),
+                            action()(self.thing_cls.pydantic_validated_action))  
+        
 
     def test_2_bound_method(self):
         """Test if methods decorated with action are correctly bound"""
@@ -197,55 +219,72 @@ class TestAction(TestCase):
         self.assertEqual(thing.action_echo_async_with_classmethod.bound_obj, self.thing_cls)
 
         # 5. parameterized function can be decorated with action
-        self.assertIsInstance(thing.typed_action, BoundAction)
-        self.assertIsInstance(thing.typed_action, BoundSyncAction)
-        self.assertNotIsInstance(thing.typed_action, BoundAsyncAction)
-        self.assertIsInstance(self.thing_cls.typed_action, Action)
-        self.assertNotIsInstance(self.thing_cls.typed_action, BoundAction)
+        self.assertIsInstance(thing.parameterized_action, BoundAction)
+        self.assertIsInstance(thing.parameterized_action, BoundSyncAction)
+        self.assertNotIsInstance(thing.parameterized_action, BoundAsyncAction)
+        self.assertIsInstance(self.thing_cls.parameterized_action, Action)
+        self.assertNotIsInstance(self.thing_cls.parameterized_action, BoundAction)
         # associated attributes of BoundAction
-        assert isinstance(thing.typed_action, BoundAction)
-        self.assertEqual(thing.typed_action.name, 'typed_action')
-        self.assertEqual(thing.typed_action.owner_inst, thing)
-        self.assertEqual(thing.typed_action.owner, self.thing_cls)
-        self.assertEqual(thing.typed_action.execution_info, self.thing_cls.typed_action.execution_info)
-        self.assertEqual(str(thing.typed_action),
-                        f"<BoundAction({self.thing_cls.__name__}.{thing.typed_action.name} of {thing.id})>")
-        self.assertNotEqual(thing.typed_action, self.thing_cls.typed_action)
-        self.assertEqual(thing.typed_action.bound_obj, thing)
+        assert isinstance(thing.parameterized_action, BoundAction)
+        self.assertEqual(thing.parameterized_action.name, 'parameterized_action')
+        self.assertEqual(thing.parameterized_action.owner_inst, thing)
+        self.assertEqual(thing.parameterized_action.owner, self.thing_cls)
+        self.assertEqual(thing.parameterized_action.execution_info, self.thing_cls.parameterized_action.execution_info)
+        self.assertEqual(str(thing.parameterized_action),
+                        f"<BoundAction({self.thing_cls.__name__}.{thing.parameterized_action.name} of {thing.id})>")
+        self.assertNotEqual(thing.parameterized_action, self.thing_cls.parameterized_action)
+        self.assertEqual(thing.parameterized_action.bound_obj, thing)
 
         # 6. parameterized function can be decorated with action
-        self.assertIsInstance(thing.typed_action_without_call, BoundAction)
-        self.assertIsInstance(thing.typed_action_without_call, BoundSyncAction)
-        self.assertNotIsInstance(thing.typed_action_without_call, BoundAsyncAction)
-        self.assertIsInstance(self.thing_cls.typed_action_without_call, Action)
-        self.assertNotIsInstance(self.thing_cls.typed_action_without_call, BoundAction)
+        self.assertIsInstance(thing.parameterized_action_without_call, BoundAction)
+        self.assertIsInstance(thing.parameterized_action_without_call, BoundSyncAction)
+        self.assertNotIsInstance(thing.parameterized_action_without_call, BoundAsyncAction)
+        self.assertIsInstance(self.thing_cls.parameterized_action_without_call, Action)
+        self.assertNotIsInstance(self.thing_cls.parameterized_action_without_call, BoundAction)
         # associated attributes of BoundAction
-        assert isinstance(thing.typed_action_without_call, BoundAction)
-        self.assertEqual(thing.typed_action_without_call.name, 'typed_action_without_call')
-        self.assertEqual(thing.typed_action_without_call.owner_inst, thing)
-        self.assertEqual(thing.typed_action_without_call.owner, self.thing_cls)
-        self.assertEqual(thing.typed_action_without_call.execution_info, self.thing_cls.typed_action_without_call.execution_info)
-        self.assertEqual(str(thing.typed_action_without_call),
-                        f"<BoundAction({self.thing_cls.__name__}.{thing.typed_action_without_call.name} of {thing.id})>")
-        self.assertNotEqual(thing.typed_action_without_call, self.thing_cls.typed_action_without_call)
-        self.assertEqual(thing.typed_action_without_call.bound_obj, thing)
+        assert isinstance(thing.parameterized_action_without_call, BoundAction)
+        self.assertEqual(thing.parameterized_action_without_call.name, 'parameterized_action_without_call')
+        self.assertEqual(thing.parameterized_action_without_call.owner_inst, thing)
+        self.assertEqual(thing.parameterized_action_without_call.owner, self.thing_cls)
+        self.assertEqual(thing.parameterized_action_without_call.execution_info, self.thing_cls.parameterized_action_without_call.execution_info)
+        self.assertEqual(str(thing.parameterized_action_without_call),
+                        f"<BoundAction({self.thing_cls.__name__}.{thing.parameterized_action_without_call.name} of {thing.id})>")
+        self.assertNotEqual(thing.parameterized_action_without_call, self.thing_cls.parameterized_action_without_call)
+        self.assertEqual(thing.parameterized_action_without_call.bound_obj, thing)
 
         # 7. parameterized function can be decorated with action
-        self.assertIsInstance(thing.typed_action_async, BoundAction)
-        self.assertNotIsInstance(thing.typed_action_async, BoundSyncAction)
-        self.assertIsInstance(thing.typed_action_async, BoundAsyncAction)
-        self.assertIsInstance(self.thing_cls.typed_action_async, Action)
-        self.assertNotIsInstance(self.thing_cls.typed_action_async, BoundAction)
+        self.assertIsInstance(thing.parameterized_action_async, BoundAction)
+        self.assertNotIsInstance(thing.parameterized_action_async, BoundSyncAction)
+        self.assertIsInstance(thing.parameterized_action_async, BoundAsyncAction)
+        self.assertIsInstance(self.thing_cls.parameterized_action_async, Action)
+        self.assertNotIsInstance(self.thing_cls.parameterized_action_async, BoundAction)
         # associated attributes of BoundAction
-        assert isinstance(thing.typed_action_async, BoundAction)
-        self.assertEqual(thing.typed_action_async.name, 'typed_action_async')
-        self.assertEqual(thing.typed_action_async.owner_inst, thing)
-        self.assertEqual(thing.typed_action_async.owner, self.thing_cls)
-        self.assertEqual(thing.typed_action_async.execution_info, self.thing_cls.typed_action_async.execution_info)
-        self.assertEqual(str(thing.typed_action_async),
-                        f"<BoundAction({self.thing_cls.__name__}.{thing.typed_action_async.name} of {thing.id})>")
-        self.assertNotEqual(thing.typed_action_async, self.thing_cls.typed_action_async)
-        self.assertEqual(thing.typed_action_async.bound_obj, thing)
+        assert isinstance(thing.parameterized_action_async, BoundAction)
+        self.assertEqual(thing.parameterized_action_async.name, 'parameterized_action_async')
+        self.assertEqual(thing.parameterized_action_async.owner_inst, thing)
+        self.assertEqual(thing.parameterized_action_async.owner, self.thing_cls)
+        self.assertEqual(thing.parameterized_action_async.execution_info, self.thing_cls.parameterized_action_async.execution_info)
+        self.assertEqual(str(thing.parameterized_action_async),
+                        f"<BoundAction({self.thing_cls.__name__}.{thing.parameterized_action_async.name} of {thing.id})>")
+        self.assertNotEqual(thing.parameterized_action_async, self.thing_cls.parameterized_action_async)
+        self.assertEqual(thing.parameterized_action_async.bound_obj, thing)
+
+        # 8. actions with input and output schema
+        self.assertIsInstance(thing.json_schema_validated_action, BoundAction)
+        self.assertIsInstance(thing.json_schema_validated_action, BoundSyncAction)
+        self.assertNotIsInstance(thing.json_schema_validated_action, BoundAsyncAction)
+        self.assertIsInstance(self.thing_cls.json_schema_validated_action, Action)
+        self.assertNotIsInstance(self.thing_cls.json_schema_validated_action, BoundAction)
+        # associated attributes of BoundAction
+        assert isinstance(thing.json_schema_validated_action, BoundAction)
+        self.assertEqual(thing.json_schema_validated_action.name, 'json_schema_validated_action')
+        self.assertEqual(thing.json_schema_validated_action.owner_inst, thing)
+        self.assertEqual(thing.json_schema_validated_action.owner, self.thing_cls)
+        self.assertEqual(thing.json_schema_validated_action.execution_info, self.thing_cls.json_schema_validated_action.execution_info)
+        self.assertEqual(str(thing.json_schema_validated_action),
+                        f"<BoundAction({self.thing_cls.__name__}.{thing.json_schema_validated_action.name} of {thing.id})>")
+        self.assertNotEqual(thing.json_schema_validated_action, self.thing_cls.json_schema_validated_action)
+        self.assertEqual(thing.json_schema_validated_action.bound_obj, thing)
 
 
     def test_3_remote_info(self):
@@ -285,7 +324,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.idempotent)
         self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.typed_action.execution_info
+        remote_info = self.thing_cls.parameterized_action.execution_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator)
         self.assertTrue(remote_info.isaction)
@@ -296,7 +335,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.idempotent)
         self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.typed_action_without_call.execution_info
+        remote_info = self.thing_cls.parameterized_action_without_call.execution_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator)
         self.assertTrue(remote_info.isaction)
@@ -307,7 +346,7 @@ class TestAction(TestCase):
         self.assertTrue(remote_info.idempotent)
         self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.typed_action_async.execution_info
+        remote_info = self.thing_cls.parameterized_action_async.execution_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator)
         self.assertTrue(remote_info.isaction)
@@ -318,9 +357,21 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.idempotent)
         self.assertTrue(remote_info.synchronous)
 
+        remote_info = self.thing_cls.json_schema_validated_action.execution_info
+        self.assertIsInstance(remote_info, ActionInfoValidator)
+        assert isinstance(remote_info, ActionInfoValidator)
+        self.assertTrue(remote_info.isaction)
+        self.assertFalse(remote_info.iscoroutine)
+        self.assertFalse(remote_info.isproperty)
+        self.assertFalse(remote_info.isparameterized)
+        self.assertFalse(remote_info.safe)
+        self.assertFalse(remote_info.idempotent)
+        self.assertFalse(remote_info.synchronous)
+        self.assertIsInstance(remote_info.schema_validator, JsonSchemaValidator)
+
 
     def test_4_api_and_invalid_actions(self):
-        """Test if action prevents invalid objects and raises neat errors"""
+        """Test if action prevents invalid objects from being named as actions and raises neat errors"""
         # done allow action decorator to be terminated without '()' on a method
         with self.assertRaises(TypeError) as ex:
            action(self.thing_cls.incorrectly_decorated_method)
@@ -343,7 +394,7 @@ class TestAction(TestCase):
 
 
     def test_5_thing_cls_actions(self):
-        
+        """Test class and instance level action access"""
         thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
         # class level
         for name, action in self.thing_cls.actions.items():  
@@ -367,14 +418,14 @@ class TestAction(TestCase):
         self.assertEqual(5, asyncio.run(self.thing_cls.action_echo_async_with_classmethod(5)))
         self.assertRaises(NotImplementedError, lambda: asyncio.run(self.thing_cls.action_echo(7)))
         # parameterized actions behave similarly
-        self.assertEqual(('test-action', 1, 'hello1', 1.1), thing.typed_action(1, 'hello1', 1.1))
-        self.assertEqual(('test-action', 2, 'hello2', 'foo2'), asyncio.run(thing.typed_action_async(2, 'hello2', 'foo2')))
-        self.assertRaises(NotImplementedError, lambda: self.thing_cls.typed_action(3, 'hello3', 5))
-        self.assertRaises(NotImplementedError, lambda: asyncio.run(self.thing_cls.typed_action_async(4, 'hello4', 5)))
+        self.assertEqual(('test-action', 1, 'hello1', 1.1), thing.parameterized_action(1, 'hello1', 1.1))
+        self.assertEqual(('test-action', 2, 'hello2', 'foo2'), asyncio.run(thing.parameterized_action_async(2, 'hello2', 'foo2')))
+        self.assertRaises(NotImplementedError, lambda: self.thing_cls.parameterized_action(3, 'hello3', 5))
+        self.assertRaises(NotImplementedError, lambda: asyncio.run(self.thing_cls.parameterized_action_async(4, 'hello4', 5)))
 
 
     def test_6_action_affordance(self):
-        
+        """Test if action affordance is correctly created"""
         thing = TestThing(id='test-action', log_level=logging.ERROR)
 
         assert isinstance(thing.action_echo, BoundAction) # type definition
@@ -417,8 +468,8 @@ class TestAction(TestCase):
         self.assertTrue(not hasattr(affordance, 'output')) # no output schema
         self.assertTrue(not hasattr(affordance, 'description')) # no doc
 
-        assert isinstance(thing.typed_action, BoundAction) # type definition
-        affordance = thing.typed_action.to_affordance()
+        assert isinstance(thing.parameterized_action, BoundAction) # type definition
+        affordance = thing.parameterized_action.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
         self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
@@ -429,8 +480,8 @@ class TestAction(TestCase):
         self.assertTrue(not hasattr(affordance, 'output')) # no output schema
         self.assertTrue(not hasattr(affordance, 'description')) # no doc
 
-        assert isinstance(thing.typed_action_without_call, BoundAction) # type definition
-        affordance = thing.typed_action_without_call.to_affordance()
+        assert isinstance(thing.parameterized_action_without_call, BoundAction) # type definition
+        affordance = thing.parameterized_action_without_call.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(affordance.idempotent) # by default, not idempotent
         self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
@@ -439,8 +490,8 @@ class TestAction(TestCase):
         self.assertTrue(not hasattr(affordance, 'output')) # no output schema
         self.assertTrue(not hasattr(affordance, 'description')) # no doc
 
-        assert isinstance(thing.typed_action_async, BoundAction) # type definition
-        affordance = thing.typed_action_async.to_affordance()
+        assert isinstance(thing.parameterized_action_async, BoundAction) # type definition
+        affordance = thing.parameterized_action_async.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
         self.assertTrue(affordance.synchronous) # by default, not synchronous
@@ -448,80 +499,114 @@ class TestAction(TestCase):
         self.assertTrue(not hasattr(affordance, 'input')) # no input schema
         self.assertTrue(not hasattr(affordance, 'output')) # no output schema
         self.assertTrue(not hasattr(affordance, 'description')) # no doc
-        
 
-    def test_8_exposed_actions(self):
-        done_queue = multiprocessing.Queue()
+        assert isinstance(thing.json_schema_validated_action, BoundAction) # type definition
+        affordance = thing.json_schema_validated_action.to_affordance()
+        self.assertIsInstance(affordance, ActionAffordance)
+        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
+        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
+        self.assertIsInstance(affordance.input, dict)
+        self.assertIsInstance(affordance.output, dict)
+        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+
+        
+    def test_7_exposed_actions(self):
+        """Test if actions can be invoked by a client"""
         start_thing_forked(
             thing_cls=self.thing_cls, 
             id='test-action', 
-            done_queue=done_queue,
+            done_queue=self.done_queue,
             log_level=logging.ERROR+10, 
             prerun_callback=replace_methods_with_actions,
         )
         thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
-        client = SyncZMQClient(id='test-action-client', server_id='test-action', log_level=logging.ERROR)
+        self.client.handshake()
 
         # thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
         assert isinstance(thing.action_echo, BoundAction) # type definition
         action_echo = ZMQAction(
             resource=thing.action_echo.to_affordance(),
-            sync_client=client
+            sync_client=self.client
         )
         self.assertEqual(action_echo(1), 1)
         
         assert isinstance(thing.action_echo_with_classmethod, BoundAction) # type definition
         action_echo_with_classmethod = ZMQAction(
             resource=thing.action_echo_with_classmethod.to_affordance(),
-            sync_client=client
+            sync_client=self.client
         )
         self.assertEqual(action_echo_with_classmethod(2), 2)
 
         assert isinstance(thing.action_echo_async, BoundAction) # type definition
         action_echo_async = ZMQAction(
             resource=thing.action_echo_async.to_affordance(),
-            sync_client=client
+            sync_client=self.client
         )
         self.assertEqual(action_echo_async("string"), "string")
 
         assert isinstance(thing.action_echo_async_with_classmethod, BoundAction) # type definition
         action_echo_async_with_classmethod = ZMQAction(
             resource=thing.action_echo_async_with_classmethod.to_affordance(),
-            sync_client=client
+            sync_client=self.client
         )
         self.assertEqual(action_echo_async_with_classmethod([1, 2]), [1, 2])
 
-        assert isinstance(thing.typed_action, BoundAction) # type definition
-        typed_action = ZMQAction(
-            resource=thing.typed_action.to_affordance(),
-            sync_client=client
+        assert isinstance(thing.parameterized_action, BoundAction) # type definition
+        parameterized_action = ZMQAction(
+            resource=thing.parameterized_action.to_affordance(),
+            sync_client=self.client
         )
-        self.assertEqual(typed_action(arg1=1, arg2='hello', arg3=5), ['test-action', 1, 'hello', 5])
+        self.assertEqual(parameterized_action(arg1=1, arg2='hello', arg3=5), ['test-action', 1, 'hello', 5])
 
-        assert isinstance(thing.typed_action_async, BoundAction) # type definition
-        typed_action_async = ZMQAction(
-            resource=thing.typed_action_async.to_affordance(),
-            sync_client=client
+        assert isinstance(thing.parameterized_action_async, BoundAction) # type definition
+        parameterized_action_async = ZMQAction(
+            resource=thing.parameterized_action_async.to_affordance(),
+            sync_client=self.client
         )
-        self.assertEqual(typed_action_async(arg1=2.5, arg2='hello', arg3='foo'), ['test-action', 2.5, 'hello', 'foo'])
+        self.assertEqual(parameterized_action_async(arg1=2.5, arg2='hello', arg3='foo'), ['test-action', 2.5, 'hello', 'foo'])
 
-        assert isinstance(thing.typed_action_without_call, BoundAction) # type definition
-        typed_action_without_call = ZMQAction(
-            resource=thing.typed_action_without_call.to_affordance(),
-            sync_client=client
+        assert isinstance(thing.parameterized_action_without_call, BoundAction) # type definition
+        parameterized_action_without_call = ZMQAction(
+            resource=thing.parameterized_action_without_call.to_affordance(),
+            sync_client=self.client
         )
         with self.assertRaises(NotImplementedError) as ex:
-            typed_action_without_call(arg1=2, arg2='hello', arg3=5)
+            parameterized_action_without_call(arg1=2, arg2='hello', arg3=5)
         self.assertTrue(str(ex.exception).startswith("Subclasses must implement __call__"))
         
+
+    def test_8_schema_validation(self):
+        """Test if schema validation is working correctly"""
+        thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
+        self.client.handshake()
+
+        assert isinstance(thing.json_schema_validated_action, BoundAction) # type definition
+        action_affordance = thing.json_schema_validated_action.to_affordance()
+        json_schema_validated_action = ZMQAction(
+            resource=action_affordance,
+            sync_client=self.client
+        )
+        # data with invalid schema 
+        with self.assertRaises(Exception) as ex:
+            json_schema_validated_action(val1='1', val2='hello', val3={'field' : 'value'}, val4=[])
+        self.assertTrue(str(ex.exception).startswith("'1' is not of type 'integer'"))
+        # data with valid schema
+        return_value = json_schema_validated_action(val1=1, val2='hello', val3={'field' : 'value'}, val4=[])
+        self.assertEqual(return_value, {'val1': 1, 'val3': {'field': 'value'}})
+        jsonschema.Draft7Validator(action_affordance.output).validate(return_value)
+
+
+
+    def test_9_exit(self):
         exit_message = RequestMessage.craft_with_message_type(
             sender_id='test-action-client', 
             receiver_id='test-action',
             message_type=EXIT
         )
-        client.socket.send_multipart(exit_message.byte_array)
+        self.client.socket.send_multipart(exit_message.byte_array)
 
-        self.assertEqual(done_queue.get(), 'test-action')
+        self.assertEqual(self.done_queue.get(), 'test-action')
 
 
 
@@ -540,19 +625,41 @@ def replace_methods_with_actions(thing_cls):
     # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
 
     # parameterized function can be decorated with action
-    thing_cls.typed_action = action(safe=True)(thing_cls.typed_action)
-    thing_cls.typed_action.__set_name__(thing_cls, 'typed_action')  
+    thing_cls.parameterized_action = action(safe=True)(thing_cls.parameterized_action)
+    thing_cls.parameterized_action.__set_name__(thing_cls, 'parameterized_action')  
 
-    thing_cls.typed_action_without_call = action(idempotent=True)(thing_cls.typed_action_without_call)
-    thing_cls.typed_action_without_call.__set_name__(thing_cls, 'typed_action_without_call')
+    thing_cls.parameterized_action_without_call = action(idempotent=True)(thing_cls.parameterized_action_without_call)
+    thing_cls.parameterized_action_without_call.__set_name__(thing_cls, 'parameterized_action_without_call')
 
-    thing_cls.typed_action_async = action(synchronous=True)(thing_cls.typed_action_async)
-    thing_cls.typed_action_async.__set_name__(thing_cls, 'typed_action_async')
+    thing_cls.parameterized_action_async = action(synchronous=True)(thing_cls.parameterized_action_async)
+    thing_cls.parameterized_action_async.__set_name__(thing_cls, 'parameterized_action_async')
+
+    # schema validated actions
+    thing_cls.json_schema_validated_action = action(
+        input_schema={
+            'type': 'object',
+            'properties': {
+                'val1': {'type': 'integer'},
+                'val2': {'type': 'string'},
+                'val3': {'type': 'object'},
+                'val4': {'type': 'array'}
+            }
+        },
+        output_schema={
+            'type': 'object',
+            'properties': {
+                'val1': {'type': 'integer'},
+                'val3': {'type': 'object'}
+            }
+        }
+    )(thing_cls.json_schema_validated_action)
+    thing_cls.json_schema_validated_action.__set_name__(thing_cls, 'json_schema_validated_action')
+
 
     replace_methods_with_actions._exposed_actions = [
                                     'action_echo', 'action_echo_with_classmethod', 'action_echo_async',
-                                    'action_echo_async_with_classmethod', 'typed_action', 'typed_action_without_call',
-                                    'typed_action_async'
+                                    'action_echo_async_with_classmethod', 'parameterized_action', 'parameterized_action_without_call',
+                                    'parameterized_action_async', 'json_schema_validated_action'
                                 ]
 
 

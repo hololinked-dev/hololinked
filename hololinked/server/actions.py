@@ -1,17 +1,18 @@
-import inspect
 import typing
+import warnings
 import jsonschema
 from enum import Enum
 from types import FunctionType, MethodType
 from inspect import iscoroutinefunction, getfullargspec
+from pydantic import BaseModel
 
-from hololinked.schema_validators.validators import JsonSchemaValidator
 
 from ..param.parameterized import ParameterizedFunction
 from ..constants import JSON
 from ..config import global_config
-from ..utils import has_async_def, issubklass, isclassmethod
+from ..utils import has_async_def, input_model_from_signature, issubklass, isclassmethod
 from ..exceptions import StateMachineError
+from ..schema_validators.validators import JsonSchemaValidator, PydanticSchemaValidator
 from .dataklasses import ActionInfoValidator, ActionResource
 
 
@@ -179,7 +180,7 @@ class BoundAsyncAction(BoundAction):
         if self.execution_info.isclassmethod:
             return await self.obj(*args, **kwargs)
         return await self.obj(self.bound_obj, *args, **kwargs)
-
+    
 
 
 __action_kw_arguments__ = ['safe', 'idempotent', 'synchronous'] 
@@ -219,11 +220,15 @@ def action(
     
     def inner(obj):
         original = obj
-        if (not isinstance(obj, (FunctionType, MethodType)) and not isclassmethod(obj) and 
+        if (not isinstance(obj, (FunctionType, MethodType, Action, BoundAction)) and not isclassmethod(obj) and 
             not issubklass(obj, ParameterizedFunction)):
                 raise TypeError(f"target for action or is not a function/method. Given type {type(obj)}") from None 
         if isclassmethod(obj):
             obj = obj.__func__
+        if isinstance(obj, (Action, BoundAction)):
+            warnings.warn(f"{obj.name} is already wrapped as an action, wrapping it again with newer settings.",
+                        category=UserWarning)
+            obj = obj.obj
         if obj.__name__.startswith('__'):
             raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")
         execution_info_validator = ActionInfoValidator() 
@@ -251,12 +256,20 @@ def action(
             execution_info_validator.isparameterized = True
         else:
             execution_info_validator.iscoroutine = iscoroutinefunction(obj)
+
+        if not input_schema:
+            input_schema = input_model_from_signature(obj)
         if global_config.validate_schemas and input_schema:
-            execution_info_validator.schema_validator = JsonSchemaValidator(input_schema)
-        if global_config.validate_schemas and output_schema:
+            if isinstance(input_schema, dict):
+                execution_info_validator.schema_validator = JsonSchemaValidator(input_schema)
+            elif isinstance(input_schema, BaseModel):
+                execution_info_validator.schema_validator = PydanticSchemaValidator(input_schema)
+            else:
+                raise TypeError("input schema must be a JSON schema or a Pydantic model, got {}".format(type(input_schema)))
+        if output_schema:
             jsonschema.Draft7Validator.check_schema(output_schema) 
             # output is not validated by us, so we just check the schema and dont create a validator
- 
+
         final_obj = Action(original) # type: Action
         final_obj.execution_info = execution_info_validator
         return final_obj
@@ -279,11 +292,7 @@ class RemoteInvokable:
     def __init__(self):
         self.id : str
         super().__init__()
-        self._prepare()
-
-    def _prepare(self) -> None:
-        """update owner of actions"""
-        pass 
+      
 
     @property
     def actions(self) -> typing.Dict[str, Action]:

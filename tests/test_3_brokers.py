@@ -11,7 +11,6 @@ from hololinked.utils import get_current_async_loop, get_default_logger
 from hololinked.td import ActionAffordance
 # from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes
 from hololinked.protocols.zmq.client import Action, Property
-from tests.things import test_thing
 
 
 try:
