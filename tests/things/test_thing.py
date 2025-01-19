@@ -37,7 +37,6 @@ class TestThing(Thing):
     test_event = Event(friendly_name='test-event', doc='test event')
     
    
-
 test_thing_TD = {
     'title' : 'TestThing',
     'id': 'test-thing',
@@ -71,3 +70,8 @@ test_thing_TD = {
         }
     }
 }
+
+
+if __name__ == '__main__':
+    T = TestThing(id='test-thing')
+    T.run()

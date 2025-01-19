@@ -1,29 +1,31 @@
 import typing
 import warnings
 import jsonschema
+import functools
 from enum import Enum
 from types import FunctionType, MethodType
 from inspect import iscoroutinefunction, getfullargspec
-from pydantic import BaseModel
-
+from pydantic import BaseModel, RootModel, validate_call
 
 from ..param.parameterized import ParameterizedFunction
 from ..constants import JSON
 from ..config import global_config
-from ..utils import has_async_def, input_model_from_signature, issubklass, isclassmethod
+from ..utils import (get_return_type_from_signature, has_async_def, get_input_model_from_signature, 
+                    issubklass, isclassmethod)
 from ..exceptions import StateMachineError
 from ..schema_validators.validators import JsonSchemaValidator, PydanticSchemaValidator
-from .dataklasses import ActionInfoValidator, ActionResource
+from .dataklasses import ActionInfoValidator
 
 
 
 class Action:
     """
-    Object that models an action.
+    Object that models an action. 
+    These actions are unbound and return a bound action when accessed using the owning object. 
     """
     __slots__ = ['obj', 'owner', '_execution_info']
 
-    def __init__(self, obj) -> None:
+    def __init__(self, obj: FunctionType) -> None:
         self.obj = obj
 
     def __set_name__(self, owner, name):
@@ -63,11 +65,10 @@ class Action:
     @execution_info.setter
     def execution_info(self, value: ActionInfoValidator) -> None:
         if not isinstance(value, ActionInfoValidator):
-            raise TypeError("execution_info must be of type ActionResource")
-        self._execution_info = value # type: ActionResource
+            raise TypeError("execution_info must be of type ActionInfoValidator")
+        self._execution_info = value # type: ActionInfoValidator
     
     def to_affordance(self, owner_inst):
-        assert isinstance(owner_inst, self.owner), "owner_inst must be an instance of the owner class"
         from hololinked.td import ActionAffordance
         affordance = ActionAffordance()
         affordance._build(self, owner_inst) 
@@ -95,9 +96,8 @@ class BoundAction:
         self.obj: FunctionType
         # the validator that was used to accept user inputs to this action.
         # stored only for reference, hardly used. 
-        self.execution_info_validator: ActionInfoValidator
-        self.execution_info: ActionInfoValidator
-
+        self._execution_info: ActionInfoValidator
+       
     def validate_call(self, args, kwargs : typing.Dict[str, typing.Any]) -> None:
         """
         Validate the call to the action, like payload, state machine state etc. 
@@ -109,11 +109,11 @@ class BoundAction:
             return 
         if self.execution_info.state is None or (hasattr(self.owner_inst, 'state_machine') and 
                             self.owner_inst.state_machine.current_state in self.execution_info.state):
-            if self.execution_info.schema_validator is not None and len(args) == 0:
-                self.execution_info.schema_validator.validate(kwargs)
+            if self.execution_info.schema_validator is not None:
+                self.execution_info.schema_validator.validate_method_call(args, kwargs)
         else: 
-            raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
-                    self.owner_inst.id, self.owner_inst.state, self.execution_info.state))      
+            raise StateMachineError("Thing '{}' is in '{}' state, however action can be executed only in '{}' state".format(
+                    f'{self.owner.__class__}.{self.owner_inst.id}', self.owner_inst.state, self.execution_info.state))      
         
     @property
     def name(self) -> str:
@@ -149,7 +149,6 @@ class BoundAction:
         return Action.to_affordance(self, self.owner_inst or self.owner)
 
         
-
 class BoundSyncAction(BoundAction):  
     """
     non async(io) action call. The call is passed to the method as-it-is to allow local 
@@ -220,9 +219,11 @@ def action(
     
     def inner(obj):
         original = obj
-        if (not isinstance(obj, (FunctionType, MethodType, Action, BoundAction)) and not isclassmethod(obj) and 
-            not issubklass(obj, ParameterizedFunction)):
-                raise TypeError(f"target for action or is not a function/method. Given type {type(obj)}") from None 
+        if (
+            not isinstance(obj, (FunctionType, MethodType, Action, BoundAction)) and 
+            not isclassmethod(obj) and not issubklass(obj, ParameterizedFunction)
+        ):
+            raise TypeError(f"target for action or is not a function/method. Given type {type(obj)}") from None 
         if isclassmethod(obj):
             obj = obj.__func__
         if isinstance(obj, (Action, BoundAction)):
@@ -240,8 +241,6 @@ def action(
         if 'request' in getfullargspec(obj).kwonlyargs:
             execution_info_validator.request_as_argument = True
         execution_info_validator.isaction = True
-        execution_info_validator.argument_schema = input_schema
-        execution_info_validator.return_value_schema = output_schema
         execution_info_validator.obj = original
         execution_info_validator.create_task = create_task
         execution_info_validator.safe = kwargs.get('safe', False)
@@ -258,24 +257,52 @@ def action(
             execution_info_validator.iscoroutine = iscoroutinefunction(obj)
 
         if not input_schema:
-            input_schema = input_model_from_signature(obj)
+            try:
+                input_schema = get_input_model_from_signature(obj)
+            except Exception as ex:
+                if global_config.validate_schemas:
+                    warnings.warn(
+                        f"Could not infer input schema for {obj.__name__} due to {str(ex)}. "  +
+                        "Considering filing a bug report if you think this should have worked correctly", 
+                        category=RuntimeError
+                    ) 
         if global_config.validate_schemas and input_schema:
             if isinstance(input_schema, dict):
                 execution_info_validator.schema_validator = JsonSchemaValidator(input_schema)
-            elif isinstance(input_schema, BaseModel):
+            elif isinstance(input_schema, (BaseModel, RootModel)):
                 execution_info_validator.schema_validator = PydanticSchemaValidator(input_schema)
             else:
                 raise TypeError("input schema must be a JSON schema or a Pydantic model, got {}".format(type(input_schema)))
+        if isinstance(input_schema, (BaseModel, RootModel)):
+            execution_info_validator.argument_schema = input_schema.model_json_schema()
+        elif isinstance(input_schema, dict):
+            execution_info_validator.argument_schema = input_schema
+   
         if output_schema:
-            jsonschema.Draft7Validator.check_schema(output_schema) 
             # output is not validated by us, so we just check the schema and dont create a validator
-
+            if isinstance(output_schema, dict):
+                jsonschema.Draft7Validator.check_schema(output_schema) 
+                execution_info_validator.return_value_schema = output_schema
+            elif isinstance(output_schema, (BaseModel, RootModel)):
+                execution_info_validator.return_value_schema = output_schema.model_json_schema()
+            else: 
+                try:
+                    output_schema_model = get_return_type_from_signature(obj)
+                    execution_info_validator.return_value_schema = output_schema_model.model_json_schema()
+                except Exception as ex:
+                    warnings.warn(
+                        f"Could not infer output schema for {obj.__name__} due to {ex}. "  +
+                        "Considering filing a bug report if you think this should have worked correctly", 
+                        category=RuntimeError
+                    )
+        
         final_obj = Action(original) # type: Action
+        final_obj.__call__ = functools.wraps(original)(final_obj.__call__)
         final_obj.execution_info = execution_info_validator
         return final_obj
     if callable(input_schema):
-        raise TypeError("input schema should be a JSON, not a function/method, did you decorate your action wrongly? " +
-                        "use @action() instead of @action")
+        raise TypeError("input schema should be a JSON or pydantic BaseModel, not a function/method, " + 
+                        "did you decorate your action wrongly? use @action() instead of @action")
     if any(key not in __action_kw_arguments__ for key in kwargs.keys()):
         raise ValueError("Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, " + 
                         f"unknown arguments found {kwargs.keys()}")
@@ -293,9 +320,8 @@ class RemoteInvokable:
         self.id : str
         super().__init__()
       
-
     @property
-    def actions(self) -> typing.Dict[str, Action]:
+    def actions(self) -> typing.Dict[str, BoundAction]:
         """
         All bound actions available on the object. Access `self.__class__.actions` to retrieve unbound actions.
        
