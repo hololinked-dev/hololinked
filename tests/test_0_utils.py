@@ -2,7 +2,7 @@
 import unittest
 import typing
 from pydantic import BaseModel, ValidationError
-from hololinked.utils import input_model_from_signature, issubklass, validate_args_kwargs
+from hololinked.utils import get_input_model_from_signature, issubklass, validate_args_kwargs
 try:
     from .utils import TestCase, TestRunner
 except ImportError:
@@ -17,7 +17,7 @@ class TestUtils(TestCase):
 
         def func_without_args():
             return 1
-        model = input_model_from_signature(func_without_args)
+        model = get_input_model_from_signature(func_without_args)
         self.assertTrue(model is None)
         
         """
@@ -49,7 +49,7 @@ class TestUtils(TestCase):
         # 1. func_with_annotations(a: int, b: int) -> int:
         def func_with_annotations(a: int, b: int) -> int:
             return a + b
-        model = input_model_from_signature(func_with_annotations)
+        model = get_input_model_from_signature(func_with_annotations)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['a'].annotation, int)
         self.assertEqual(model.model_fields['b'].annotation, int)
@@ -112,7 +112,7 @@ class TestUtils(TestCase):
         # 2. func_with_missing_annotations(a: int, b):
         def func_with_missing_annotations(a: int, b):
             return a + b
-        model = input_model_from_signature(func_with_missing_annotations)
+        model = get_input_model_from_signature(func_with_missing_annotations)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['a'].annotation, int)
         self.assertEqual(model.model_fields['b'].annotation, typing.Any)
@@ -173,7 +173,7 @@ class TestUtils(TestCase):
         # 3. func_with_no_annotations(a, b):
         def func_with_no_annotations(a, b):
             return a + b 
-        model = input_model_from_signature(func_with_no_annotations)
+        model = get_input_model_from_signature(func_with_no_annotations)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['a'].annotation, typing.Any)
         self.assertEqual(model.model_fields['b'].annotation, typing.Any)
@@ -235,7 +235,7 @@ class TestUtils(TestCase):
         # 4. func_with_kwargs(a: int, b: int, **kwargs):
         def func_with_kwargs(a: int, b: int, **kwargs):
             return a + b
-        model = input_model_from_signature(func_with_kwargs)
+        model = get_input_model_from_signature(func_with_kwargs)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['a'].annotation, int)
         self.assertEqual(model.model_fields['b'].annotation, int)
@@ -290,7 +290,7 @@ class TestUtils(TestCase):
         # 5. func_with_annotated_kwargs(a: int, b: int, **kwargs: typing.Dict[str, int]):
         def func_with_annotated_kwargs(a: int, b: int, **kwargs: typing.Dict[str, int]):
             return a + b
-        model = input_model_from_signature(func_with_annotated_kwargs)
+        model = get_input_model_from_signature(func_with_annotated_kwargs)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['a'].annotation, int)
         self.assertEqual(model.model_fields['b'].annotation, int)
@@ -332,7 +332,7 @@ class TestUtils(TestCase):
       
         def func_with_args(*args):
             return sum(args)
-        model = input_model_from_signature(func_with_args)
+        model = get_input_model_from_signature(func_with_args)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['args'].annotation, typing.Tuple)
         self.assertEqual(len(model.model_fields), 1)
@@ -341,7 +341,7 @@ class TestUtils(TestCase):
 
         def func_with_annotated_args(*args: typing.List[int]):
             return sum(args)
-        model = input_model_from_signature(func_with_annotated_args)
+        model = get_input_model_from_signature(func_with_annotated_args)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['args'].annotation, typing.List[int])
         self.assertEqual(len(model.model_fields), 1)
@@ -358,7 +358,7 @@ class TestUtils(TestCase):
 
         def func_with_args_and_kwargs(*args, **kwargs):
             return sum(args) + sum(kwargs.values())
-        model = input_model_from_signature(func_with_args_and_kwargs)
+        model = get_input_model_from_signature(func_with_args_and_kwargs)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['args'].annotation, typing.Tuple)
         self.assertEqual(model.model_fields['kwargs'].annotation, typing.Dict[str, typing.Any])
@@ -367,7 +367,7 @@ class TestUtils(TestCase):
 
         def func_with_annotated_args_and_kwargs(*args: typing.List[int], **kwargs: typing.Dict[str, int]):
             return sum(args) + sum(kwargs.values())
-        model = input_model_from_signature(func_with_annotated_args_and_kwargs)
+        model = get_input_model_from_signature(func_with_annotated_args_and_kwargs)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['args'].annotation, typing.List[int])
         self.assertEqual(model.model_fields['kwargs'].annotation, typing.Dict[str, int])

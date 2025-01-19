@@ -187,8 +187,7 @@ __action_kw_arguments__ = ['safe', 'idempotent', 'synchronous']
 def action(
         input_schema : JSON | None = None, 
         output_schema : JSON | None = None, 
-        state : str | Enum | None = None, 
-        create_task : bool = False, 
+        state : str | Enum | None = None,
         **kwargs
     ) -> Action:
     """
@@ -218,6 +217,11 @@ def action(
     """
     
     def inner(obj):
+        input_schema = inner._arguments.get('input_schema') 
+        output_schema = inner._arguments.get('output_schema')
+        state = inner._arguments.get('state')
+        kwargs = inner._arguments
+
         original = obj
         if (
             not isinstance(obj, (FunctionType, MethodType, Action, BoundAction)) and 
@@ -242,7 +246,7 @@ def action(
             execution_info_validator.request_as_argument = True
         execution_info_validator.isaction = True
         execution_info_validator.obj = original
-        execution_info_validator.create_task = create_task
+        execution_info_validator.create_task = kwargs.get('create_task', False)
         execution_info_validator.safe = kwargs.get('safe', False)
         execution_info_validator.idempotent = kwargs.get('idempotent', False)
         execution_info_validator.synchronous = kwargs.get('synchronous', False)
@@ -269,7 +273,7 @@ def action(
         if global_config.validate_schemas and input_schema:
             if isinstance(input_schema, dict):
                 execution_info_validator.schema_validator = JsonSchemaValidator(input_schema)
-            elif isinstance(input_schema, (BaseModel, RootModel)):
+            elif issubklass(input_schema, (BaseModel, RootModel)):
                 execution_info_validator.schema_validator = PydanticSchemaValidator(input_schema)
             else:
                 raise TypeError("input schema must be a JSON schema or a Pydantic model, got {}".format(type(input_schema)))
@@ -297,7 +301,6 @@ def action(
                     )
         
         final_obj = Action(original) # type: Action
-        final_obj.__call__ = functools.wraps(original)(final_obj.__call__)
         final_obj.execution_info = execution_info_validator
         return final_obj
     if callable(input_schema):
@@ -306,6 +309,12 @@ def action(
     if any(key not in __action_kw_arguments__ for key in kwargs.keys()):
         raise ValueError("Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, " + 
                         f"unknown arguments found {kwargs.keys()}")
+    inner._arguments = dict(
+        input_schema=input_schema,
+        output_schema=output_schema,
+        state=state,
+        kwargs=kwargs
+    )
     return inner 
 
 

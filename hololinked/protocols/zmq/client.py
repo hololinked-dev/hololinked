@@ -96,8 +96,8 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                             operation=Operations.invokeAction,
                                             payload=SerializableData(
                                                 value=kwargs, 
-                                                content_type=self._resource.get_invokation_form('zmq', {}).get('contentType', 'application/json') 
-                                                            
+                                                content_type=self._resource.get_invokation_form('zmq', {}).get(
+                                                                                'contentType', 'application/json') 
                                             ),
                                             server_execution_context=dict(
                                                 invokation_timeout=self._invokation_timeout, 
@@ -120,7 +120,11 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                     thing_id=self._resource.thing_id, 
                                     objekt=self._resource.name,
                                     operation=Operations.invokeAction,
-                                    payload=SerializableData(kwargs, content_type=self.invokation_form['contentType']), 
+                                    payload=SerializableData(
+                                        value=kwargs, 
+                                        content_type=self._resource.get_invokation_form('zmq', {}).get(
+                                                                        'contentType', 'application/json') 
+                                    ), 
                                     server_execution_context=dict(
                                             invokation_timeout=self._invokation_timeout, 
                                             execution_timeout=self._execution_timeout,
@@ -138,7 +142,11 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                     thing_id=self._resource.thing_id, 
                                     objekt=self._resource.name,
                                     operation=Operations.invokeAction,
-                                    payload=SerializableData(kwargs, content_type=self.invokation_form['contentType']),
+                                    payload=SerializableData(
+                                        value=kwargs, 
+                                        content_type=self._resource.get_invokation_form('zmq', {}).get(
+                                                                        'contentType', 'application/json')
+                                    ),
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
                                         execution_timeout=self._execution_timeout,
@@ -160,7 +168,11 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
                                                 operation=Operations.invokeAction,
-                                                payload=SerializableData(kwargs, content_type=self.invokation_form['contentType']),
+                                                payload=SerializableData(
+                                                    value=kwargs, 
+                                                    content_type=self._resource.get_invokation_form('zmq', {}).get(
+                                                                        'contentType', 'application/json')
+                                                ),
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout, 
                                                     execution_timeout=self._execution_timeout,
