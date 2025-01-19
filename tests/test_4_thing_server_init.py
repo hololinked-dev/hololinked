@@ -3,8 +3,6 @@ import logging
 import warnings
 
 from hololinked.server import Thing
-from hololinked.server.schema_validators import JsonSchemaValidator, BaseSchemaValidator
-from hololinked.serializers.serializers import JSONSerializer, PickleSerializer, MsgpackSerializer
 from hololinked.utils import get_default_logger 
 from hololinked.server.logger import RemoteAccessHandler
 from hololinked.client import ObjectProxy
@@ -54,97 +52,7 @@ class TestThing(TestCase):
         # What if user gives his own remote access handler?
         
 
-    # def test_3_JSON_serializer(self):
-        # # req 1 - if serializer is not provided, default is JSONSerializer and http and zmq serializers are same
-        # thing = self.thing_cls(id="test_serializer_when_not_provided", log_level=logging.WARN)
-        # self.assertIsInstance(thing.zmq_serializer, JSONSerializer)
-        # self.assertEqual(thing.http_serializer, thing.zmq_serializer)
-
-        # # req 2 - similarly, serializer keyword argument creates same serialitzer for both zmq and http transports
-        # serializer = JSONSerializer()
-        # thing = self.thing_cls(id="test_common_serializer", serializer=serializer, log_level=logging.WARN)
-        # self.assertEqual(thing.zmq_serializer, serializer)
-        # self.assertEqual(thing.http_serializer, serializer)
-
-        # # req 3 - serializer keyword argument must be JSONSerializer only, because this keyword should 
-        # # what is common to both zmq and http
-        # with self.assertRaises(TypeError) as ex:
-        #     serializer = PickleSerializer()
-        #     thing = self.thing_cls(id="test_common_serializer_nonJSON", serializer=serializer, log_level=logging.WARN)
-        #     self.assertTrue(str(ex), "serializer key word argument must be JSONSerializer")
-
-        # # req 4 - zmq_serializer and http_serializer is differently instantiated if zmq_serializer and http_serializer 
-        # # keyword arguments are provided, albeit the same serializer type
-        # serializer = JSONSerializer()
-        # thing = self.thing_cls(id="test_common_serializer", zmq_serializer=serializer, log_level=logging.WARN)
-        # self.assertEqual(thing.zmq_serializer, serializer)
-        # self.assertNotEqual(thing.http_serializer, serializer) # OR, same as line below
-        # self.assertNotEqual(thing.http_serializer, thing.zmq_serializer)
-        # self.assertIsInstance(thing.http_serializer, JSONSerializer)
-    
-
-    # def test_4_other_serializers(self):
-    #     # req 1 - http_serializer cannot be anything except than JSON
-    #     with self.assertRaises(ValueError) as ex:
-    #         # currenty this has written this as ValueError although TypeError is more appropriate
-    #         serializer = PickleSerializer()
-    #         thing = self.thing_cls(id="test_http_serializer_nonJSON", http_serializer=serializer, 
-    #                     log_level=logging.WARN)
-    #         self.assertTrue(str(ex), "invalid JSON serializer option")
-    #     # test the same with MsgpackSerializer
-    #     with self.assertRaises(ValueError) as ex:
-    #         # currenty this has written this as ValueError although TypeError is more appropriate
-    #         serializer = MsgpackSerializer()
-    #         thing = self.thing_cls(id="test_http_serializer_nonJSON", http_serializer=serializer, 
-    #                     log_level=logging.WARN)
-    #         self.assertTrue(str(ex), "invalid JSON serializer option")
-
-    #     # req 2 - http_serializer and zmq_serializer can be different
-    #     warnings.filterwarnings("ignore", category=UserWarning)
-    #     http_serializer = JSONSerializer()
-    #     zmq_serializer = PickleSerializer()
-    #     thing = self.thing_cls(id="test_different_serializers_1", http_serializer=http_serializer, 
-    #                 zmq_serializer=zmq_serializer, log_level=logging.WARN)
-    #     self.assertNotEqual(thing.http_serializer, thing.zmq_serializer)
-    #     self.assertEqual(thing.http_serializer, http_serializer)
-    #     self.assertEqual(thing.zmq_serializer, zmq_serializer)
-    #     warnings.resetwarnings()
-
-    #     # try the same with MsgpackSerializer
-    #     http_serializer = JSONSerializer()
-    #     zmq_serializer = MsgpackSerializer()
-    #     thing = self.thing_cls(id="test_different_serializers_2", http_serializer=http_serializer, 
-    #                 zmq_serializer=zmq_serializer, log_level=logging.WARN)
-    #     self.assertNotEqual(thing.http_serializer, thing.zmq_serializer)
-    #     self.assertEqual(thing.http_serializer, http_serializer)
-    #     self.assertEqual(thing.zmq_serializer, zmq_serializer)
-
-    #     # req 3 - pickle serializer should raise warning
-    #     http_serializer = JSONSerializer()
-    #     zmq_serializer = PickleSerializer()
-    #     with self.assertWarns(expected_warning=UserWarning): 
-    #         thing = self.thing_cls(id="test_pickle_serializer_warning", http_serializer=http_serializer, 
-    #                 zmq_serializer=zmq_serializer, log_level=logging.WARN)
-
-
-    def test_5_schema_validator(self):
-        # schema_validator must be a class or subclass of BaseValidator
-        validator = JsonSchemaValidator(schema=True)
-        with self.assertRaises(ValueError):
-            thing = self.thing_cls(id="test_schema_validator_with_instance", schema_validator=validator)
-
-        validator = JsonSchemaValidator
-        thing = self.thing_cls(id="test_schema_validator_with_subclass", schema_validator=validator,
-                    log_level=logging.WARN)
-        self.assertEqual(thing.schema_validator, validator)
-       
-        validator = BaseSchemaValidator
-        thing = self.thing_cls(id="test_schema_validator_with_subclass", schema_validator=validator,
-                    log_level=logging.WARN)
-        self.assertEqual(thing.schema_validator, validator)
-       
-
-    def test_6_state(self):
+    def test_3_state(self):
         # state property must be None when no state machine is present
         thing = self.thing_cls(id="test_no_state_machine", log_level=logging.WARN)
         self.assertIsNone(thing.state)

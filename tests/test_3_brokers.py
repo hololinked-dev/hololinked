@@ -10,7 +10,7 @@ from hololinked.protocols.zmq.brokers import AsyncZMQServer, MessageMappedZMQCli
 from hololinked.utils import get_current_async_loop, get_default_logger
 from hololinked.td import ActionAffordance
 # from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes
-from hololinked.protocols.zmq.client import Action, Property
+from hololinked.protocols.zmq.client import ZMQAction, ZMQProperty
 
 
 try:
@@ -89,7 +89,7 @@ class ActionMixin(TestBrokerMixin):
 
     @classmethod
     def setUpActions(self):
-        self.echo_action = Action(
+        self.echo_action = ZMQAction(
                                 sync_client=None,
                                 resource=ActionAffordance.from_TD('echo_action', test_thing_TD),
                                 invokation_timeout=5, 
@@ -98,16 +98,16 @@ class ActionMixin(TestBrokerMixin):
                                 schema_validator=None
                             )
     
-        self.get_serialized_data_action = Action(
+        self.get_serialized_data_action = ZMQAction(
                                 sync_client=None,
-                                resource=ActionAffordance.from_TD('get_serialized_data', test_thing_TD)
+                                resource=ActionAffordance.from_TD('get_serialized_data', test_thing_TD),
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 async_client=self.client, 
                                 schema_validator=None
                             )
         
-        self.sleep_action = Action(
+        self.sleep_action = ZMQAction(
                                 sync_client=None,
                                 resource=ActionAffordance.from_TD('sleep', test_thing_TD),
                                 invokation_timeout=5, 
@@ -116,7 +116,7 @@ class ActionMixin(TestBrokerMixin):
                                 schema_validator=None
                             )
 
-        self.get_mixed_content_data_action = Action(
+        self.get_mixed_content_data_action = ZMQAction(
                         sync_client=None,
                         resource= ActionAffordance.from_TD('get_mixed_content_data', test_thing_TD),
                         invokation_timeout=5, 
