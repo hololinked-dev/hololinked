@@ -59,30 +59,6 @@ class RemoteResourceInfoValidator:
         for key, value in kwargs.items(): 
             setattr(self, key, value)
     
-    def to_dataclass(self, obj : typing.Any = None, bound_obj : typing.Any = None) -> "RemoteResource":
-        """
-        For a plain, faster and uncomplicated access, a dataclass in created & used by the
-        event loop. 
-        
-        Parameters
-        ----------
-        obj : Union[Property | Callable]  
-            property or method/action
-
-        bound_obj : owner instance
-            ``Thing`` instance
-       
-        Returns
-        -------
-        RemoteResource
-            dataclass equivalent of this object
-        """
-        return RemoteResource(
-                    state=tuple(self.state) if self.state is not None else None, 
-                    obj_name=self.obj_name, isaction=self.isaction, 
-                    isproperty=self.isproperty, obj=obj, bound_obj=bound_obj, 
-                ) 
-        # http method is manually always stored as a tuple
     
 
 class ActionInfoValidator(RemoteResourceInfoValidator):
@@ -129,76 +105,6 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
                     doc="schema validator for the callable if to be validated server side") # type: BaseSchemaValidator
 
     
-__dataclass_kwargs = dict()
-if float('.'.join(platform.python_version().split('.')[0:2])) >= 3.11:
-    __dataclass_kwargs["slots"] = True
-
-@dataclass(frozen=True, **__dataclass_kwargs)
-class RemoteResource(SerializableDataclass):
-    """
-    This container class is used by the ``EventLoop`` methods (for example ``execute_once()``) to access resource 
-    metadata instead of directly using ``RemoteResourceInfoValidator``. Instances of this dataclass is stored under 
-    ``Thing.zmq_resources`` dictionary for each property & method/action. Events use similar dataclass with 
-    metadata but with much less information. 
-
-    Attributes
-    ----------
-    state : str
-        State machine state at which a callable will be executed or attribute/property can be 
-        written. Does not apply to read-only attributes/properties. 
-    obj_name : str, default - extracted object name
-        the name of the object which will be supplied to the ``ObjectProxy`` class to populate
-        its own namespace. For HTTP clients, HTTP method and URL path is important and for 
-        object proxies clients, the obj_name is important. 
-    isaction : bool
-        True for a method or function or callable
-    isproperty : bool
-        True for a property
-    obj : Union[Property | Callable]  
-            property or method/action
-    bound_obj : owner instance
-        ``Thing`` instance
-    """
-    state : typing.Optional[typing.Union[typing.Tuple, str]] 
-    obj_name : str 
-    isaction : bool 
-    isproperty : bool
-    obj : typing.Any
-    bound_obj : typing.Any
-    
-    def json(self):
-        """
-        return this object as a JSON serializable dictionary
-        """
-        # try:
-        #     return self._json # accessing dynamic attr from frozen object
-        # except AttributeError: # always causes attribute error when slots are True
-        json_dict = {}
-        for field in fields(self):
-            if field.name != 'obj' and field.name != 'bound_obj':
-                json_dict[field.name] = getattr(self, field.name)
-        # object.__setattr__(self, '_json', json_dict) # because object is frozen - used to work, but not now 
-        return json_dict     
-
-
-@dataclass(frozen=True, **__dataclass_kwargs)
-class ActionResource(RemoteResource):  
-    """
-    Attributes
-    ----------
-    iscoroutine : bool
-        whether the callable should be awaited
-    schema_validator : BaseSchemaValidator
-        schema validator for the callable if to be validated server side
-    """ 
-    iscoroutine : bool
-    isclassmethod : bool
-    schema_validator : typing.Optional[BaseSchemaValidator]
-    create_task : bool 
-    isparameterized : bool
-    # no need safe, idempotent, synchronous
-
-
 
 def build_our_temp_TD(instance, authority : typing.Optional[str] = None , 
                     ignore_errors : bool = False) -> typing.Dict[str, JSONSerializable]:

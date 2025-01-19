@@ -1,6 +1,9 @@
 import typing
 from pydantic import BaseModel
+
+from ..utils import validate_args_kwargs
 from ..constants import JSON
+
 
 class JSONSchemaError(Exception):
     """
@@ -31,6 +34,12 @@ class BaseSchemaValidator: # type definition
         validate the data against the schema. 
         """
         raise NotImplementedError("validate method must be implemented by subclass")
+    
+    def validate_method_call(self, args, kwargs) -> None:
+        """
+        validate the method call against the schema. 
+        """
+        raise NotImplementedError("validate_method_call method must be implemented by subclass")
 
 
 try: 
@@ -86,6 +95,9 @@ class JsonSchemaValidator(BaseSchemaValidator):
     def validate(self, data) -> None:
         self.validator.validate(data)
 
+    def validate_method_call(self, args, kwargs) -> None:
+        raise NotImplementedError("validate_method_call method must be implemented by subclass")
+
     def json(self):
         """allows JSON (de-)serializable of the instance itself"""
         return self.schema
@@ -108,6 +120,9 @@ class PydanticSchemaValidator(BaseSchemaValidator):
     def validate(self, data) -> None:
         self.validator(data)
 
+    def validate_method_call(self, args, kwargs) -> None:
+        validate_args_kwargs(self.schema, args, kwargs)
+
     def json(self):
         """allows JSON (de-)serializable of the instance itself"""
         return self.schema.model_dump_json()
@@ -118,14 +133,3 @@ class PydanticSchemaValidator(BaseSchemaValidator):
     def __set_state__(self, schema: JSON):
         return PydanticSchemaValidator(BaseModel(**schema))
 
-
-def _get_validator_from_user_options(option : typing.Optional[str] = None) -> BaseSchemaValidator:
-    """
-    returns a JSON schema validator based on user options
-    """
-    if option == "fastjsonschema":
-        return FastJsonSchemaValidator
-    elif option == "jsonschema" or not option:
-        return JsonSchemaValidator
-    else:
-        raise ValueError(f"Unknown JSON schema validator option: {option}")

@@ -11,7 +11,7 @@ import typing
 import ifaddr
 from collections import OrderedDict
 from dataclasses import asdict
-from pydantic import BaseModel, ConfigDict, create_model, Field
+from pydantic import BaseModel, ConfigDict, create_model, Field, RootModel
 from inspect import Parameter, signature
 
 
@@ -328,7 +328,7 @@ class MappableSingleton(Singleton):
 
     
 
-def input_model_from_signature(
+def get_input_model_from_signature(
     func: typing.Callable,
     ignore: typing.Sequence[str] | None = None,
 ) -> type[BaseModel] | None:
@@ -359,11 +359,6 @@ def input_model_from_signature(
         return None
 
     # Raise errors if positional-only or variable positional args are present
-    if any(p.kind == Parameter.VAR_POSITIONAL for p in parameters.values()):
-        raise TypeError(
-            f"{func.__name__} accepts extra positional arguments, "
-            "which is not supported."
-        )
     if any(p.kind == Parameter.POSITIONAL_ONLY for p in parameters.values()):
         raise TypeError(
             f"{func.__name__} has positional-only arguments which are not supported."
@@ -377,36 +372,107 @@ def input_model_from_signature(
     for name, p in parameters.items():
         if ignore and name in ignore:
             continue
-        if p.kind == Parameter.VAR_KEYWORD:
-            takes_v_kwargs = True  # we accept arbitrary extra arguments
-            continue  # **kwargs should not appear in the schema
-        # `type_hints` does more processing than p.annotation - but will
-        # not have entries for missing annotations.
-        p_type = typing.Any if p.annotation is Parameter.empty else type_hints[name]
-        # pydantic uses `...` to represent missing defaults (i.e. required params)
-        default = Field(...) if p.default is Parameter.empty else p.default
+        if p.kind == Parameter.VAR_KEYWORD: 
+            p_type = typing.Annotated[typing.Dict[str, typing.Any] if p.annotation is Parameter.empty else type_hints[name], Parameter.VAR_KEYWORD] 
+            default = dict() if p.default is Parameter.empty else p.default
+        elif p.kind == Parameter.VAR_POSITIONAL:
+            p_type = typing.Annotated[typing.Tuple if p.annotation is Parameter.empty else type_hints[name], Parameter.VAR_POSITIONAL] 
+            default = tuple() if p.default is Parameter.empty else p.default
+        else:   
+            # `type_hints` does more processing than p.annotation - but will
+            # not have entries for missing annotations.
+            p_type = typing.Any if p.annotation is Parameter.empty else type_hints[name]
+            # pydantic uses `...` to represent missing defaults (i.e. required params)
+            default = Field(...) if p.default is Parameter.empty else p.default
         fields[name] = (p_type, default)
-    model = create_model(  # type: ignore[call-overload]
-        f"{func.__name__}_input",
-        model_config=ConfigDict(extra="allow" if takes_v_kwargs else "forbid"),
-        **fields,
-    )
+    
     # If there are no fields, we don't want to return a model
     if len(fields) == 0:
         return None
-    return model
+    
+    model = create_model(  # type: ignore[call-overload]
+        f"{func.__name__}_input",
+        model_config=ConfigDict(extra="allow" if takes_v_kwargs else "forbid", strict=True),
+        **fields,
+    )
+    return model 
 
 
-# def return_type(func: Callable) -> Type:
-#     """Determine the return type of a function."""
-#     sig = inspect.signature(func)
-#     if sig.return_annotation == inspect.Signature.empty:
-#         return Any  # type: ignore[return-value]
-#     else:
-#         # We use `get_type_hints` rather than just `sig.return_annotation`
-#         # because it resolves forward references, etc.
-#         type_hints = get_type_hints(func, include_extras=True)
-#         return type_hints["return"]
+def validate_args_kwargs(model: typing.Type[BaseModel], args: typing.Tuple = tuple(), kwargs: typing.Dict = dict()) -> None:
+    """
+    Validate and separate *args and **kwargs according to the fields of the given pydantic model.
+
+    Parameters
+    ----------
+    model: Type[BaseModel]
+        The pydantic model class to validate against.
+    *args: tuple
+        Positional arguments to validate.
+    **kwargs: dict
+        Keyword arguments to validate.
+
+    Returns
+    -------
+    None 
+
+    Raises
+    ------
+    ValueError
+        If the arguments do not match the model's fields.
+    ValidationError
+        If the arguments are invalid
+    """
+    field_names = list(model.model_fields.keys())
+    data = {}
+
+    # Assign positional arguments to the corresponding fields
+    for i, arg in enumerate(args):
+        if i >= len(field_names):
+            raise ValueError(f"Too many positional arguments. Expected at most {len(field_names)}.")
+        field_name = field_names[i]
+        if Parameter.VAR_POSITIONAL in model.model_fields[field_name].metadata:
+            if typing.get_origin(model.model_fields[field_name].annotation) is list:
+                data[field_name] = list(args[i:])
+            else: 
+                data[field_name] = args[i:] # *args become end of positional arguments
+            break 
+        elif field_name in data:
+            raise ValueError(f"Multiple values for argument '{field_name}'.")
+        data[field_names[i]] = arg
+
+    extra_kwargs = {}
+    # Assign keyword arguments to the corresponding fields
+    for key, value in kwargs.items():
+        if key in data or key in extra_kwargs: # Check for duplicate arguments
+            raise ValueError(f"Multiple values for argument '{key}'.")
+        if key in field_names:
+            data[key] = value
+        else:
+            extra_kwargs[key] = value
+
+    if extra_kwargs:
+        for i in range(len(field_names)):
+            if Parameter.VAR_KEYWORD in model.model_fields[field_names[i]].metadata:                 
+                data[field_names[i]] = extra_kwargs
+                break
+            elif i == len(field_names) - 1:
+                raise ValueError(f"Unexpected keyword arguments: {', '.join(extra_kwargs.keys())}")
+    # Validate and create the model instance
+    model.model_validate(data)
+
+
+def get_return_type_from_signature(func: typing.Callable) -> RootModel:
+    """Determine the return type of a function."""
+    sig = inspect.signature(func)
+    if sig.return_annotation == inspect.Signature.empty:
+        return typing.Any  # type: ignore[return-value]
+    else:
+        # We use `get_type_hints` rather than just `sig.return_annotation`
+        # because it resolves forward references, etc.
+        type_hints = typing.get_type_hints(func, include_extras=True)
+        from server.property import wrap_plain_types_in_rootmodel
+        return wrap_plain_types_in_rootmodel(type_hints["return"])
+    
 
 
 # def get_docstring(obj: Any, remove_summary=False) -> Optional[str]:
@@ -461,6 +527,9 @@ __all__ = [
     get_signature.__name__,
     isclassmethod.__name__,
     issubklass.__name__,
-    get_current_async_loop.__name__
+    get_current_async_loop.__name__,
+    get_input_model_from_signature.__name__,,
+    validate_args_kwargs.__name__,
+    get_return_type_from_signature.__name__
 ]
 
