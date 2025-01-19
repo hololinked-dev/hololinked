@@ -140,7 +140,7 @@ class Property(Parameter):
         if model:
             if isinstance(model, dict):
                 self.model = model
-                self.validator = JsonSchemaValidator(model)
+                self.validator = JsonSchemaValidator(model).validate
             else:
                 self.model = wrap_plain_types_in_rootmodel(model) # type: BaseModel
                 self.validator = self.model.model_validate
@@ -190,14 +190,16 @@ class Property(Parameter):
     def validate_and_adapt(self, value) -> typing.Any:
         if value is None:
             if self.allow_None:
-                return value 
+                return 
             else:
                 raise ValueError(f"Property {self.name} does not allow None values")
         if self.model:
             if isinstance(self.model, dict):
-                self.validator.validate(value)
-            elif issubklass(self.model, BaseModel):
                 self.validator(value)
+            elif issubklass(self.model, BaseModel):
+                value = self.model(**value)
+            elif issubklass(self.model, RootModel):
+                value = self.model(value)
         return super().validate_and_adapt(value)
     
 
@@ -317,7 +319,7 @@ class ClassProperties(ClassParameters):
     
 try: 
     from pydantic import BaseModel, RootModel, create_model
-    def wrap_plain_types_in_rootmodel(model : type) -> type["BaseModel"]:
+    def wrap_plain_types_in_rootmodel(model: type) -> type[BaseModel] | type[RootModel]:
         """
         Ensure a type is a subclass of BaseModel.
 
@@ -326,13 +328,13 @@ try:
         In the future, we may explicitly check that the argument is a type
         and not a model instance.
         """
-        try:  # This needs to be a `try` as basic types are not classes
-            assert issubclass(model, BaseModel)
+        if issubklass(model, BaseModel):
             return model
-        except (TypeError, AssertionError):
-            return create_model(f"{model!r}", root=(model, ...), __base__=RootModel)
-        except NameError:
-            raise ImportError("pydantic is not installed, please install it to use this feature") from None
+        return create_model(
+            f"{model!r}", 
+            root=(model, ...),
+            __base__=RootModel
+        )
 except ImportError:
     def wrap_plain_types_in_rootmodel(model : type) -> type:
         raise ImportError("pydantic is not installed, please install it to use this feature") from None
