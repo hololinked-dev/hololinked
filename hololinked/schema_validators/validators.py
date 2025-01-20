@@ -1,23 +1,8 @@
-import typing
+import jsonschema
 from pydantic import BaseModel
 
-from ..utils import validate_args_kwargs
+from ..utils import pydantic_validate_args_kwargs, json_schema_merge_args_to_kwargs
 from ..constants import JSON
-
-
-class JSONSchemaError(Exception):
-    """
-    common error to be raised for JSON schema
-    validation irrespective of internal validation used
-    """
-    pass 
-
-class JSONValidationError(Exception):
-    """
-    common error to be raised for JSON validation
-    irrespective of internal validation used
-    """
-    pass
 
 
 
@@ -40,46 +25,7 @@ class BaseSchemaValidator: # type definition
         validate the method call against the schema. 
         """
         raise NotImplementedError("validate_method_call method must be implemented by subclass")
-
-
-try: 
-    import fastjsonschema 
     
-    class FastJsonSchemaValidator(BaseSchemaValidator):
-        """
-        JSON schema validator according to fast JSON schema.
-        Useful for performance with dictionary based schema specification
-        which msgspec has no built in support. Normally, for speed, 
-        one should try to use msgspec's struct concept.
-        """
-
-        def __init__(self, schema : JSON) -> None:
-            super().__init__(schema)
-            self.validator = fastjsonschema.compile(schema)
-
-        def validate(self, data) -> None:
-            """validates and raises exception when failed directly to the caller"""
-            try: 
-                self.validator(data)
-            except fastjsonschema.JsonSchemaException as ex: 
-                raise JSONSchemaError(str(ex)) from None
-
-        def json(self):
-            """allows JSON (de-)serializable of the instance itself"""
-            return self.schema
-
-        def __get_state__(self):
-            return self.schema
-        
-        def __set_state__(self, schema):
-            return FastJsonSchemaValidator(schema)
-
-except ImportError as ex:
-    pass
-
-
-
-import jsonschema
 
 class JsonSchemaValidator(BaseSchemaValidator):
     """
@@ -96,9 +42,11 @@ class JsonSchemaValidator(BaseSchemaValidator):
         self.validator.validate(data)
 
     def validate_method_call(self, args, kwargs) -> None:
-        raise NotImplementedError("validate_method_call method must be implemented by subclass")
+        if len(args) > 0:
+            kwargs = json_schema_merge_args_to_kwargs(self.schema, args, kwargs)
+        self.validate(kwargs)
 
-    def json(self):
+    def json(self) -> JSON:
         """allows JSON (de-)serializable of the instance itself"""
         return self.schema
 
@@ -121,9 +69,9 @@ class PydanticSchemaValidator(BaseSchemaValidator):
         self.validator(data)
 
     def validate_method_call(self, args, kwargs) -> None:
-        validate_args_kwargs(self.schema, args, kwargs)
+        pydantic_validate_args_kwargs(self.schema, args, kwargs)
 
-    def json(self):
+    def json(self) -> JSON:
         """allows JSON (de-)serializable of the instance itself"""
         return self.schema.model_dump_json()
 
@@ -132,4 +80,45 @@ class PydanticSchemaValidator(BaseSchemaValidator):
     
     def __set_state__(self, schema: JSON):
         return PydanticSchemaValidator(BaseModel(**schema))
+
+
+
+
+try: 
+    import fastjsonschema 
+    
+    class FastJsonSchemaValidator(BaseSchemaValidator):
+        """
+        JSON schema validator according to fast JSON schema.
+        Useful for performance with dictionary based schema specification
+        which msgspec has no built in support. Normally, for speed, 
+        one should try to use msgspec's struct concept.
+        """
+
+        def __init__(self, schema : JSON) -> None:
+            super().__init__(schema)
+            self.validator = fastjsonschema.compile(schema)
+
+        def validate(self, data) -> None:
+            """validates and raises exception when failed directly to the caller"""
+            self.validator(data)          
+
+        def validate_method_call(self, args, kwargs) -> None:
+            if len(args) > 0:
+                kwargs = json_schema_merge_args_to_kwargs(self.schema, args, kwargs)
+            self.validate(kwargs)
+
+        def json(self) -> JSON:
+            """allows JSON (de-)serializable of the instance itself"""
+            return self.schema
+
+        def __get_state__(self):
+            return self.schema
+        
+        def __set_state__(self, schema):
+            return FastJsonSchemaValidator(schema)
+
+except ImportError as ex:
+    pass
+
 

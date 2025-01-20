@@ -330,7 +330,9 @@ class MappableSingleton(Singleton):
 
 def get_input_model_from_signature(
     func: typing.Callable,
+    remove_first_positional_arg: bool = False,
     ignore: typing.Sequence[str] | None = None,
+    model_for_empty_annotations: bool = False,
 ) -> type[BaseModel] | None:
     """
     Create a pydantic model for a function's signature.
@@ -344,28 +346,38 @@ def get_input_model_from_signature(
     This will fail for position-only arguments, though that may change
     in the future.
 
-    :param remove_first_positional_arg: Remove the first argument from the
-        model (this is appropriate for methods, as the first argument,
-        self, is baked in when it's called, but is present in the
-        signature).
-    :param ignore: Ignore arguments that have the specified name.
-        This is useful for e.g. dependencies that are injected by LabThings.
-    :returns: A pydantic model class describing the input parameters
+    Parameters
+    ----------
+    func : Callable
+        The function for which to create the pydantic model.
+    remove_first_positional_arg : bool, optional
+        Remove the first argument from the model (this is appropriate for methods, 
+        as the first argument, self, is baked in when it's called, but is present 
+        in the signature).
+    ignore : Sequence[str], optional
+        Ignore arguments that have the specified name. This is useful for e.g. 
+        dependencies that are injected by LabThings.
+    model_for_empty_annotations : bool, optional
+        If True, create a model even if there are no annotations.
 
-    TODO: deal with (or exclude) functions with a single positional parameter
+    Returns
+    -------
+    Type[BaseModel] or None
+        A pydantic model class describing the input parameters, or None if there are no parameters.
     """
     parameters = OrderedDict(signature(func).parameters) # type: OrderedDict[str, Parameter]
     if len(parameters) == 0:
         return None
+    
+    if all(p.annotation is Parameter.empty for p in parameters.values()) and not model_for_empty_annotations: 
+        return None
+    
+    if remove_first_positional_arg:
+        name, parameter = next(iter((parameters.items())))  # get the first parameter
+        if parameter.kind in (Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD):
+            raise ValueError("Can't remove first positional argument: there is none.")
+        del parameters[name]
 
-    # Raise errors if positional-only or variable positional args are present
-    if any(p.kind == Parameter.POSITIONAL_ONLY for p in parameters.values()):
-        raise TypeError(
-            f"{func.__name__} has positional-only arguments which are not supported."
-        )
-
-    # The line below determines if we accept arbitrary extra parameters (**kwargs)
-    takes_v_kwargs = False  # will be updated later
     # fields is a dictionary of tuples of (type, default) that defines the input model
     type_hints = typing.get_type_hints(func, include_extras=True)
     fields = {} # type: typing.Dict[str, typing.Tuple[type, typing.Any]]
@@ -392,13 +404,13 @@ def get_input_model_from_signature(
     
     model = create_model(  # type: ignore[call-overload]
         f"{func.__name__}_input",
-        model_config=ConfigDict(extra="allow" if takes_v_kwargs else "forbid", strict=True),
+        model_config=ConfigDict(extra="forbid", strict=True),
         **fields,
     )
     return model 
 
 
-def validate_args_kwargs(model: typing.Type[BaseModel], args: typing.Tuple = tuple(), kwargs: typing.Dict = dict()) -> None:
+def pydantic_validate_args_kwargs(model: typing.Type[BaseModel], args: typing.Tuple = tuple(), kwargs: typing.Dict = dict()) -> None:
     """
     Validate and separate *args and **kwargs according to the fields of the given pydantic model.
 
@@ -422,6 +434,7 @@ def validate_args_kwargs(model: typing.Type[BaseModel], args: typing.Tuple = tup
     ValidationError
         If the arguments are invalid
     """
+    
     field_names = list(model.model_fields.keys())
     data = {}
 
@@ -438,7 +451,7 @@ def validate_args_kwargs(model: typing.Type[BaseModel], args: typing.Tuple = tup
             break 
         elif field_name in data:
             raise ValueError(f"Multiple values for argument '{field_name}'.")
-        data[field_names[i]] = arg
+        data[field_name] = arg
 
     extra_kwargs = {}
     # Assign keyword arguments to the corresponding fields
@@ -459,6 +472,55 @@ def validate_args_kwargs(model: typing.Type[BaseModel], args: typing.Tuple = tup
                 raise ValueError(f"Unexpected keyword arguments: {', '.join(extra_kwargs.keys())}")
     # Validate and create the model instance
     model.model_validate(data)
+
+
+
+def json_schema_merge_args_to_kwargs(schema: dict, args: typing.Tuple = tuple(), kwargs: typing.Dict = dict()) -> typing.Dict[str, typing.Any]:
+    """
+    Merge positional arguments into keyword arguments according to the schema.
+
+    Parameters
+    ----------
+    schema: dict
+        The JSON schema to validate against.
+    args: tuple
+        Positional arguments to merge.
+    kwargs: dict
+        Keyword arguments to merge.
+
+    Returns
+    -------
+    dict
+        The merged arguments as a dictionary, usually a JSON
+    """
+    if schema['type'] != 'object':
+        raise ValueError("Schema must be an object.")
+    
+    field_names = list(OrderedDict(schema['properties']).keys())
+    data = {}
+
+    for i, arg in enumerate(args):
+        if i >= len(field_names):
+            raise ValueError(f"Too many positional arguments. Expected at most {len(field_names)}.")
+        field_name = field_names[i]
+        if field_name in data:
+            raise ValueError(f"Multiple values for argument '{field_name}'.")
+        data[field_name] = arg
+
+    extra_kwargs = {}
+    # Assign keyword arguments to the corresponding fields
+    for key, value in kwargs.items():
+        if key in data or key in extra_kwargs: # Check for duplicate arguments
+            raise ValueError(f"Multiple values for argument '{key}'.")
+        if key in field_names:
+            data[key] = value
+        else:
+            extra_kwargs[key] = value
+
+    if extra_kwargs:
+        data.update(extra_kwargs)
+    return data
+    
 
 
 def get_return_type_from_signature(func: typing.Callable) -> RootModel:
@@ -529,7 +591,7 @@ __all__ = [
     issubklass.__name__,
     get_current_async_loop.__name__,
     get_input_model_from_signature.__name__,
-    validate_args_kwargs.__name__,
+    pydantic_validate_args_kwargs.__name__,
     get_return_type_from_signature.__name__
 ]
 
