@@ -95,8 +95,8 @@ class TestThing(Thing):
     
     def pydantic_validated_action(self, val1: int, val2: str, val3: dict, val4: list) -> typing.Dict[str, typing.Union[int, dict]]:
         return {
-            'val1': val1,
-            'val3': val3           
+            'val2': val2,
+            'val4': val4           
         }
     
     
@@ -375,7 +375,7 @@ class TestAction(TestCase):
         # done allow action decorator to be terminated without '()' on a method
         with self.assertRaises(TypeError) as ex:
            action(self.thing_cls.incorrectly_decorated_method)
-        self.assertTrue(str(ex.exception).startswith("input schema should be a JSON, not a function/method, did you decorate your action wrongly?"))
+        self.assertTrue(str(ex.exception).startswith("input schema should be a JSON or pydantic BaseModel, not a function/method, did you decorate your action wrongly?"))
         
         # dunder methods cannot be decorated with action
         with self.assertRaises(ValueError) as ex:
@@ -578,9 +578,16 @@ class TestAction(TestCase):
 
     def test_8_schema_validation(self):
         """Test if schema validation is working correctly"""
+        self._test_8_json_schema_validation()
+        self._test_8_pydantic_validation()
+
+    
+    def _test_8_json_schema_validation(self):
+
         thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
         self.client.handshake()
 
+        # JSON schema validation
         assert isinstance(thing.json_schema_validated_action, BoundAction) # type definition
         action_affordance = thing.json_schema_validated_action.to_affordance()
         json_schema_validated_action = ZMQAction(
@@ -588,14 +595,78 @@ class TestAction(TestCase):
             sync_client=self.client
         )
         # data with invalid schema 
-        with self.assertRaises(Exception) as ex:
+        with self.assertRaises(Exception) as ex1:
             json_schema_validated_action(val1='1', val2='hello', val3={'field' : 'value'}, val4=[])
-        self.assertTrue(str(ex.exception).startswith("'1' is not of type 'integer'"))
+        self.assertTrue(str(ex1.exception).startswith("'1' is not of type 'integer'"))
+        with self.assertRaises(Exception) as ex2:
+            json_schema_validated_action('1', val2='hello', val3={'field' : 'value'}, val4=[])
+        self.assertTrue(str(ex2.exception).startswith("'1' is not of type 'integer'"))
+        with self.assertRaises(Exception) as ex3:
+            json_schema_validated_action(1, 2, val3={'field' : 'value'}, val4=[])
+        self.assertTrue(str(ex3.exception).startswith("2 is not of type 'string'"))
+        with self.assertRaises(Exception) as ex4:
+            json_schema_validated_action(1, 'hello', val3='field', val4=[])
+        self.assertTrue(str(ex4.exception).startswith("'field' is not of type 'object'"))
+        with self.assertRaises(Exception) as ex5:
+            json_schema_validated_action(1, 'hello', val3={'field' : 'value'}, val4='[]')
+        self.assertTrue(str(ex5.exception).startswith("'[]' is not of type 'array'"))
         # data with valid schema
         return_value = json_schema_validated_action(val1=1, val2='hello', val3={'field' : 'value'}, val4=[])
         self.assertEqual(return_value, {'val1': 1, 'val3': {'field': 'value'}})
         jsonschema.Draft7Validator(action_affordance.output).validate(return_value)
 
+    
+    def _test_8_pydantic_validation(self):
+
+        thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
+        self.client.handshake()
+
+        # Pydantic schema validation
+        assert isinstance(thing.pydantic_validated_action, BoundAction) # type definition
+        action_affordance = thing.pydantic_validated_action.to_affordance()
+        pydantic_validated_action = ZMQAction(
+            resource=action_affordance,
+            sync_client=self.client
+        )
+        # data with invalid schema
+        with self.assertRaises(Exception) as ex1:
+            pydantic_validated_action(val1='1', val2='hello', val3={'field' : 'value'}, val4=[])
+        self.assertTrue(
+            "validation error for pydantic_validated_action_input" in str(ex1.exception) and 
+            'val1' in str(ex1.exception) and 'val2' not in str(ex1.exception) and 'val3' not in str(ex1.exception) and 
+            'val4' not in str(ex1.exception)
+        ) # {obj.name}_input is the pydantic model name
+        with self.assertRaises(Exception) as ex2:
+            pydantic_validated_action('1', val2='hello', val3={'field' : 'value'}, val4=[])
+        self.assertTrue(
+            "validation error for pydantic_validated_action_input" in str(ex2.exception) and 
+            'val1' in str(ex2.exception) and 'val2' not in str(ex2.exception) and 'val3' not in str(ex2.exception) and
+            'val4' not in str(ex2.exception)
+        )
+        with self.assertRaises(Exception) as ex3:
+            pydantic_validated_action(1, 2, val3={'field' : 'value'}, val4=[])
+        self.assertTrue(
+            "validation error for pydantic_validated_action_input" in str(ex3.exception) and 
+            'val1' not in str(ex3.exception) and 'val2' in str(ex3.exception) and 'val3' not in str(ex3.exception) and
+            'val4' not in str(ex3.exception)           
+        )
+        with self.assertRaises(Exception) as ex4:
+            pydantic_validated_action(1, 'hello', val3='field', val4=[])
+        self.assertTrue(
+            "validation error for pydantic_validated_action_input" in str(ex4.exception) and 
+            'val1' not in str(ex4.exception) and 'val2' not in str(ex4.exception) and 'val3' in str(ex4.exception) and
+            'val4' not in str(ex4.exception)            
+        )
+        with self.assertRaises(Exception) as ex5:
+            pydantic_validated_action(1, 'hello', val3={'field' : 'value'}, val4='[]')
+        self.assertTrue(
+            "validation error for pydantic_validated_action_input" in str(ex5.exception) and 
+            'val1' not in str(ex5.exception) and 'val2' not in str(ex5.exception) and 'val3' not in str(ex5.exception) and
+            'val4' in str(ex5.exception)
+        )
+        # data with valid schema
+        return_value = pydantic_validated_action(val1=1, val2='hello', val3={'field' : 'value'}, val4=[])        
+        self.assertEqual(return_value, {'val2': 'hello', 'val4': []})
 
 
     def test_9_exit(self):
@@ -654,6 +725,9 @@ def replace_methods_with_actions(thing_cls):
         }
     )(thing_cls.json_schema_validated_action)
     thing_cls.json_schema_validated_action.__set_name__(thing_cls, 'json_schema_validated_action')
+
+    thing_cls.pydantic_validated_action = action()(thing_cls.pydantic_validated_action)
+    thing_cls.pydantic_validated_action.__set_name__(thing_cls, 'pydantic_validated_action')
 
 
     replace_methods_with_actions._exposed_actions = [

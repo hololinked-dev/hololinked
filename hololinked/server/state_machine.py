@@ -70,7 +70,7 @@ class StateMachine:
         #     self.state_change_event = Event('state-change') 
 
     def _prepare(self, owner) -> None:
-        from .thing import Thing
+        from .thing import Thing, Property, Action
         assert isinstance(owner, Thing), "state machine can only be attached to a Thing class."
         
         if self.states is None and self.initial_state is None:    
@@ -94,7 +94,7 @@ class StateMachine:
         for state, objects in self.machine.items():
             if state in self:
                 for resource in objects:
-                    if hasattr(resource, '_execution_info_validator'):
+                    if isinstance(resource, (Property, Action)):
                         assert isinstance(resource._execution_info_validator, RemoteResourceInfoValidator) # type definition
                         if resource._execution_info_validator.isaction and resource not in owner_methods: 
                             raise AttributeError("Given object {} for state machine does not belong to class {}".format(
