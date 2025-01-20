@@ -2,7 +2,8 @@
 import unittest
 import typing
 from pydantic import BaseModel, ValidationError
-from hololinked.utils import get_input_model_from_signature, issubklass, validate_args_kwargs
+from hololinked.utils import (get_input_model_from_signature, issubklass, pydantic_validate_args_kwargs,
+                                json_schema_merge_args_to_kwargs)
 try:
     from .utils import TestCase, TestRunner
 except ImportError:
@@ -13,7 +14,7 @@ except ImportError:
 class TestUtils(TestCase):
     
 
-    def test_1_pydantic_input_model_generator(self):
+    def test_1_pydantic_function_signature_validation(self):
 
         def func_without_args():
             return 1
@@ -42,6 +43,9 @@ class TestUtils(TestCase):
         7. func_with_annotated_args(*args: typing.List[int]):
         8. func_with_args_and_kwargs(*args, **kwargs):
         9. func_with_annotated_args_and_kwargs(*args: typing.List[int], **kwargs: typing.Dict[str, int]):
+        10. func_with_positional_only_args(a, b, /):
+        11. func_with_keyword_only_args(*, a, b):
+        12. func_with_positional_only_args_and_kwargs(a, *args, b, **kwargs):
         """
 
         ####################
@@ -57,41 +61,41 @@ class TestUtils(TestCase):
         self.assertEqual(model.model_config['extra'], 'forbid')
         ##### validate correct usage
         # 1. correct usage with keyword arguments
-        validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
         # 2. incorrect argument types with keyword arguments
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': 1, 'b': '2'})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': '2'})
         # 3. missing keyword arguments
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': 1})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1})
         # 4. too many keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})
         self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
         # 5. correct usage with positional arguments
-        validate_args_kwargs(model, args=(1, 2))
+        pydantic_validate_args_kwargs(model, args=(1, 2))
         # 6. incorrect argument types with positional arguments
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, args=(1, '2')) 
+            pydantic_validate_args_kwargs(model, args=(1, '2')) 
         # 7. too many positional arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1, 2, 3))
+            pydantic_validate_args_kwargs(model, args=(1, 2, 3))
         self.assertTrue(str(ex.exception).startswith("Too many positional arguments"))
         # 8. missing positional arguments
         with self.assertRaises(ValidationError) as ex:
-            validate_args_kwargs(model, args=(1,))
+            pydantic_validate_args_kwargs(model, args=(1,))
         # 9. correct usage with positional and keyword arguments
-        validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
+        pydantic_validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
         # 10. incorrect ordering with positional and keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
+            pydantic_validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
         self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
         # 11. incorrect usage with both positional and keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1, 2), kwargs={'c': 3})
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'c': 3})
         self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=('1', 2), kwargs={'c': 3})
+            pydantic_validate_args_kwargs(model, args=('1', 2), kwargs={'c': 3})
         self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
         ####################
 
@@ -119,52 +123,52 @@ class TestUtils(TestCase):
         self.assertEqual(len(model.model_fields), 2)
         self.assertEqual(model.model_config['extra'], 'forbid')
         ##### validate correct usage
-        # 1. correct usage
-        validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
-        validate_args_kwargs(model, kwargs={'a': 1, 'b': '2'})
-        validate_args_kwargs(model, kwargs={'a': 2, 'b': list()})
-        # 2. incorrect argument types
+        # 1. correct usage with keyword arguments
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': '2'})
+        pydantic_validate_args_kwargs(model, kwargs={'a': 2, 'b': list()})
+        # 2. incorrect argument types with keyword arguments
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': '1', 'b': '2'})
+            pydantic_validate_args_kwargs(model, kwargs={'a': '1', 'b': '2'})
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': list(), 'b': dict()})
-        # 3. missing keyword arguments
+            pydantic_validate_args_kwargs(model, kwargs={'a': list(), 'b': dict()})
+        # 3. missing keyword arguments 
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': 1})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1})
         # 4. too many keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})
         self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
         # 5. correct positional arguments
-        validate_args_kwargs(model, args=(1, 2))
-        validate_args_kwargs(model, args=(1, '2'))
-        validate_args_kwargs(model, args=(2, list()))
+        pydantic_validate_args_kwargs(model, args=(1, 2))
+        pydantic_validate_args_kwargs(model, args=(1, '2'))
+        pydantic_validate_args_kwargs(model, args=(2, list()))
         # 6. incorrect argument types with positional arguments
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, args=('1', '2'))
+            pydantic_validate_args_kwargs(model, args=('1', '2'))
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, args=(list(), dict()))
+            pydantic_validate_args_kwargs(model, args=(list(), dict()))
         # 7. too many positional arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1,2,3))
+            pydantic_validate_args_kwargs(model, args=(1,2,3))
         self.assertTrue(str(ex.exception).startswith("Too many positional arguments"))
         # 8. missing positional arguments
         with self.assertRaises(ValidationError) as ex:
-            validate_args_kwargs(model, args=(1,))
+            pydantic_validate_args_kwargs(model, args=(1,))
         # 9. correct usage with positional and keyword arguments
-        validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
-        validate_args_kwargs(model, args=(1,), kwargs={'b': '2'})
-        validate_args_kwargs(model, args=(2,), kwargs={'b': list()})
+        pydantic_validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
+        pydantic_validate_args_kwargs(model, args=(1,), kwargs={'b': '2'})
+        pydantic_validate_args_kwargs(model, args=(2,), kwargs={'b': list()})
         # 10. incorrect ordering with positional and keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
+            pydantic_validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
         self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
         # 11. incorrect usage with both positional and keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1, 2), kwargs={'c': 3})
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'c': 3})
         self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=('1', 2), kwargs={'c': 3})
+            pydantic_validate_args_kwargs(model, args=('1', 2), kwargs={'c': 3})
         self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
         ####################
 
@@ -173,7 +177,7 @@ class TestUtils(TestCase):
         # 3. func_with_no_annotations(a, b):
         def func_with_no_annotations(a, b):
             return a + b 
-        model = get_input_model_from_signature(func_with_no_annotations)
+        model = get_input_model_from_signature(func_with_no_annotations, model_for_empty_annotations=True)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['a'].annotation, typing.Any)
         self.assertEqual(model.model_fields['b'].annotation, typing.Any)
@@ -181,54 +185,57 @@ class TestUtils(TestCase):
         self.assertEqual(model.model_config['extra'], 'forbid')
         ##### validate correct usage
         # 1. correct usage
-        validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
-        validate_args_kwargs(model, kwargs={'a': 1.2, 'b': '2'})
-        validate_args_kwargs(model, kwargs={'a': dict(), 'b': list()})
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1.2, 'b': '2'})
+        pydantic_validate_args_kwargs(model, kwargs={'a': dict(), 'b': list()})
         # 2. incorrect argument types
         # typing.Any allows any type, so no ValidationError
         # 3. missing keyword arguments
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': list()})
+            pydantic_validate_args_kwargs(model, kwargs={'a': list()})
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'b': dict()})
+            pydantic_validate_args_kwargs(model, kwargs={'b': dict()})
         # 4. too many keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})  
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})  
         self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
         # 5. correct positional arguments
-        validate_args_kwargs(model, args=(1, 2))
-        validate_args_kwargs(model, args=(1, '2'))
-        validate_args_kwargs(model, args=(dict(), list()))
-        validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
+        pydantic_validate_args_kwargs(model, args=(1, 2))
+        pydantic_validate_args_kwargs(model, args=(1, '2'))
+        pydantic_validate_args_kwargs(model, args=(dict(), list()))
+        pydantic_validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
         # 6. incorrect argument types with positional arguments
         # typing.Any allows any type, so no ValidationError
         # 7. too many positional arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1,2,3))
+            pydantic_validate_args_kwargs(model, args=(1,2,3))
         self.assertTrue(str(ex.exception).startswith("Too many positional arguments"))
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(dict(), list(), 3))
+            pydantic_validate_args_kwargs(model, args=(dict(), list(), 3))
         self.assertTrue(str(ex.exception).startswith("Too many positional arguments"))
         # 8. missing positional arguments
         with self.assertRaises(ValidationError) as ex:
-            validate_args_kwargs(model, args=(1,))
+            pydantic_validate_args_kwargs(model, args=(1,))
         with self.assertRaises(ValidationError) as ex:
-            validate_args_kwargs(model, args=(dict(),))
+            pydantic_validate_args_kwargs(model, args=(dict(),))
         # 9. correct usage with positional and keyword arguments
-        validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
-        validate_args_kwargs(model, args=(1.1,), kwargs={'b': '2'})
-        validate_args_kwargs(model, args=(dict(),), kwargs={'b': list()})
+        pydantic_validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
+        pydantic_validate_args_kwargs(model, args=(1.1,), kwargs={'b': '2'})
+        pydantic_validate_args_kwargs(model, args=(dict(),), kwargs={'b': list()})
         # 10. incorrect ordering with positional and keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
+            pydantic_validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
         self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
         # 11. incorrect usage with both positional and keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1, 2), kwargs={'c': 3})
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'c': 3})
         self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=('1', 2), kwargs={'c': 3})
+            pydantic_validate_args_kwargs(model, args=('1', 2), kwargs={'c': 3})
         self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
+
+        model = get_input_model_from_signature(func_with_no_annotations)
+        self.assertTrue(model is None)
 
         ####################
         ##### create model from function signature
@@ -243,46 +250,46 @@ class TestUtils(TestCase):
         self.assertEqual(model.model_config['extra'], 'forbid')
         ##### validate correct usage
         # 1. correct usage
-        validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
-        validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})
-        validate_args_kwargs(model, args=(1,2), kwargs={'c': '3'}) 
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})
+        pydantic_validate_args_kwargs(model, args=(1,2), kwargs={'c': '3'}) 
         # 2. incorrect argument types
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': 1, 'b': '2'})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': '2'})
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': 1, 'b': '2', 'c': '3'})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': '2', 'c': '3'})
         # 3. missing keyword arguments
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': 1})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1})
         # 4. too many keyword arguments
-        validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3, 'd': 4}) # OK 
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3, 'd': 4}) # OK 
         # 5. correct positional arguments
-        validate_args_kwargs(model, args=(1, 2))
+        pydantic_validate_args_kwargs(model, args=(1, 2))
         # 6. incorrect argument types with positional arguments
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, args=(1, '2'))
+            pydantic_validate_args_kwargs(model, args=(1, '2'))
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, args=('1', 2))
+            pydantic_validate_args_kwargs(model, args=('1', 2))
         # 7. too many positional arguments
         with self.assertRaises(ValidationError) as ex:
-            validate_args_kwargs(model, args=(1, 2, 3))        
-        # 7. missing positional arguments
+            pydantic_validate_args_kwargs(model, args=(1, 2, 3))        
+        # 8. missing positional arguments
         with self.assertRaises(ValidationError) as ex:
-            validate_args_kwargs(model, args=(1,))
-        # 8. correct usage with positional and keyword arguments
-        validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
-        validate_args_kwargs(model, args=(1,), kwargs={'b': 2, 'c': 3})
-        # 9. incorrect ordering with positional and keyword arguments
+            pydantic_validate_args_kwargs(model, args=(1,))
+        # 9. correct usage with positional and keyword arguments
+        pydantic_validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
+        pydantic_validate_args_kwargs(model, args=(1,), kwargs={'b': 2, 'c': 3})
+        # 10. incorrect ordering with positional and keyword arguments
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
+            pydantic_validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
         self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1, 2), kwargs={'a': 3})
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'a': 3})
         self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
         with self.assertRaises(ValueError) as ex:
-            validate_args_kwargs(model, args=(1, 2), kwargs={'b': 3})
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'b': 3})
         self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
-        # 10. incorrect usage with both positional and keyword arguments
+        # 11. incorrect usage with both positional and keyword arguments
         # any extra keyword argument is allowed
 
         ####################
@@ -298,28 +305,52 @@ class TestUtils(TestCase):
         self.assertEqual(len(model.model_fields), 3)
         self.assertEqual(model.model_config['extra'], 'forbid')
         # 1. correct usage
-        validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
-        validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})
-        validate_args_kwargs(model, args=(1, 2), kwargs={'c': 3})
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3})
+        pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'c': 3})
         # 2. incorrect argument types
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': 1, 'b': '2'})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': '2'})
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': '3'})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': '3'})
+        with self.assertRaises(ValidationError):
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': list()})
         # 3. missing keyword arguments
         with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, kwargs={'a': 1})
+            pydantic_validate_args_kwargs(model, kwargs={'a': 1})
         # 4. too many keyword arguments
         # OK 
         # 5. correct positional arguments
-        validate_args_kwargs(model, args=(1, 2))
-        # 6. too many positional arguments
+        pydantic_validate_args_kwargs(model, args=(1, 2))
+        # 6. incorrect argument types with positional arguments
+        with self.assertRaises(ValidationError):
+            pydantic_validate_args_kwargs(model, args=(1, '2'))
+        with self.assertRaises(ValidationError):
+            pydantic_validate_args_kwargs(model, args=(dict(), 2))
+        # 7. too many positional arguments
         with self.assertRaises(ValidationError) as ex:
-            validate_args_kwargs(model, args=(1,2,3))
-        # 7. missing positional arguments
+            pydantic_validate_args_kwargs(model, args=(1,2,3))
+        # 8. missing positional arguments
         with self.assertRaises(ValidationError) as ex:
-            validate_args_kwargs(model, args=(1,))
-        
+            pydantic_validate_args_kwargs(model, args=(1,))
+        # 9. correct usage with positional and keyword arguments
+        pydantic_validate_args_kwargs(model, args=(1,), kwargs={'b': 2})
+        pydantic_validate_args_kwargs(model, args=(1,), kwargs={'b': 2, 'c': 3})
+        # 10. incorrect ordering with positional and keyword arguments
+        with self.assertRaises(ValueError) as ex:
+            pydantic_validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
+        self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
+        with self.assertRaises(ValueError) as ex:
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'a': 3})
+        self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
+        with self.assertRaises(ValueError) as ex:
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'b': 3})
+        self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
+        with self.assertRaises(ValueError) as ex:
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'a': list(), 'c': 3})
+        self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
+        # 11. incorrect usage with both positional and keyword arguments
+        # any extra keyword argument is allowed so long it is of type int
 
 
         # both the following are not allowed in python
@@ -329,16 +360,56 @@ class TestUtils(TestCase):
         # def func_with_double_kwargs(**kwargs1, **kwargs2):
         #     """syntax error"""
         #     return
-      
+
+        ####################
+        ##### create model from function signature
+        # 6. func_with_args(*args):
         def func_with_args(*args):
             return sum(args)
-        model = get_input_model_from_signature(func_with_args)
+        model = get_input_model_from_signature(func_with_args, model_for_empty_annotations=True)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['args'].annotation, typing.Tuple)
         self.assertEqual(len(model.model_fields), 1)
         self.assertEqual(model.model_config['extra'], 'forbid')
+        # 1. correct usage
+        pydantic_validate_args_kwargs(model, args=(1, 2))
+        pydantic_validate_args_kwargs(model)
+        pydantic_validate_args_kwargs(model, args=(dict()))
+        # 2. incorrect argument types
+        # Cant do 
+        # 3. missing keyword arguments
+        # OK, since args is a tuple
+        # 4. too many keyword arguments
+        with self.assertRaises(ValueError) as ex:
+            pydantic_validate_args_kwargs(model, kwargs={'a' : 1})
+        self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
+        # 5. correct positional arguments
+        pydantic_validate_args_kwargs(model, args=(1, 2))
+        # 6. incorrect argument types with positional arguments
+        # OK, since args is a tuple of any type
+        # 7. too many positional arguments
+        # OK, since args is a tuple of any length
+        # 8. missing positional arguments
+        # OK, since args is a tuple of any length
+        # 9. correct usage with positional and keyword arguments
+        # no keyword arguments
+        # 10. incorrect ordering with positional and keyword arguments
+        # OK, since args is a tuple and not keywords, no multiple values       
+        # 11. incorrect usage with both positional and keyword arguments
+        with self.assertRaises(ValueError) as ex:
+            pydantic_validate_args_kwargs(model, args=(1,), kwargs={'a': 2})
+        self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
+        with self.assertRaises(ValueError) as ex:
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={'c': 3})
+        self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
 
+        model = get_input_model_from_signature(func_with_args)
+        self.assertTrue(model is None)
+        ####################
 
+        ####################
+        ##### create model from function signature
+        # 7. func_with_annotated_args(*args: typing.List[int]):
         def func_with_annotated_args(*args: typing.List[int]):
             return sum(args)
         model = get_input_model_from_signature(func_with_annotated_args)
@@ -346,24 +417,45 @@ class TestUtils(TestCase):
         self.assertEqual(model.model_fields['args'].annotation, typing.List[int])
         self.assertEqual(len(model.model_fields), 1)
         self.assertEqual(model.model_config['extra'], 'forbid')
-        # 1. correct usage
-        validate_args_kwargs(model, args=(1, 2))
-        validate_args_kwargs(model)
-        # 2. incorrect argument types
-        with self.assertRaises(ValidationError):
-            validate_args_kwargs(model, args=(1, '2'))
+        # 1. correct usage with keyword arguments
+        # not possible 
+        # 2. incorrect argument types with keyword arguments
+        # keyword arguments are not allowed
+        # 3. missing keyword arguments
+        # not possible
+        # 4. too many keyword arguments
         with self.assertRaises(ValueError):
-            validate_args_kwargs(model, kwargs={'a' : 1})
-
-
+            pydantic_validate_args_kwargs(model, kwargs={'a' : 1})
+        # 5. correct usage with positional arguments
+        pydantic_validate_args_kwargs(model)
+        pydantic_validate_args_kwargs(model, args=(1, 2))
+        # 6. incorrect argument types with positional arguments
+        with self.assertRaises(ValidationError):
+            pydantic_validate_args_kwargs(model, args=(1, '2'))
+        with self.assertRaises(ValidationError):
+            pydantic_validate_args_kwargs(model, args=(dict(),))
+        # 7. too many positional arguments
+        # OK, since args is a list of any length
+        # 8. missing positional arguments
+        # OK, since args is a list of any length
+        # 9. correct usage with positional and keyword arguments
+        # not possible
+        # 10. incorrect ordering with positional and keyword arguments
+        # OK, since args is a list and not keywords, no multiple values
+        # 11. incorrect usage with both positional and keyword arguments
+        # not possible
+    
         def func_with_args_and_kwargs(*args, **kwargs):
             return sum(args) + sum(kwargs.values())
-        model = get_input_model_from_signature(func_with_args_and_kwargs)
+        model = get_input_model_from_signature(func_with_args_and_kwargs, model_for_empty_annotations=True)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['args'].annotation, typing.Tuple)
         self.assertEqual(model.model_fields['kwargs'].annotation, typing.Dict[str, typing.Any])
         self.assertEqual(len(model.model_fields), 2)
         self.assertEqual(model.model_config['extra'], 'forbid')
+
+        model = get_input_model_from_signature(func_with_args_and_kwargs)
+        self.assertTrue(model is None)
 
         def func_with_annotated_args_and_kwargs(*args: typing.List[int], **kwargs: typing.Dict[str, int]):
             return sum(args) + sum(kwargs.values())
@@ -373,6 +465,10 @@ class TestUtils(TestCase):
         self.assertEqual(model.model_fields['kwargs'].annotation, typing.Dict[str, int])
         self.assertEqual(len(model.model_fields), 2)
         self.assertEqual(model.model_config['extra'], 'forbid')
+
+
+    def test_2_json_schema_function_signature_validation(self):
+        pass
 
     
 

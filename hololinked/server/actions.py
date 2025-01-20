@@ -185,8 +185,8 @@ class BoundAsyncAction(BoundAction):
 __action_kw_arguments__ = ['safe', 'idempotent', 'synchronous'] 
 
 def action(
-        input_schema : JSON | None = None, 
-        output_schema : JSON | None = None, 
+        input_schema: JSON | BaseModel | RootModel | None = None, 
+        output_schema: JSON | BaseModel | RootModel | None = None, 
         state : str | Enum | None = None,
         **kwargs
     ) -> Action:
@@ -217,10 +217,10 @@ def action(
     """
     
     def inner(obj):
-        input_schema = inner._arguments.get('input_schema') 
-        output_schema = inner._arguments.get('output_schema')
-        state = inner._arguments.get('state')
-        kwargs = inner._arguments
+        input_schema = inner._arguments.get('input_schema', None) 
+        output_schema = inner._arguments.get('output_schema', None)
+        state = inner._arguments.get('state', None)
+        kwargs = inner._arguments.get('kwargs', {})
 
         original = obj
         if (
@@ -262,7 +262,7 @@ def action(
 
         if not input_schema:
             try:
-                input_schema = get_input_model_from_signature(obj)
+                input_schema = get_input_model_from_signature(obj, remove_first_positional_arg=True)
             except Exception as ex:
                 if global_config.validate_schemas:
                     warnings.warn(
