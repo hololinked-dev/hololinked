@@ -517,7 +517,7 @@ class TestAction(TestCase):
             thing_cls=self.thing_cls, 
             id='test-action', 
             done_queue=self.done_queue,
-            log_level=logging.ERROR+10, 
+            log_level=logging.ERROR + 10, 
             prerun_callback=replace_methods_with_actions,
         )
         thing = self.thing_cls(id='test-action', log_level=logging.ERROR)

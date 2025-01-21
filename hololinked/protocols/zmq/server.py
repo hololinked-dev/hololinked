@@ -56,18 +56,18 @@ class ZMQServer(RPCServer):
         eventloop = get_current_async_loop()
        
         if self.ipc_server is not None:
-            eventloop.call_soon(lambda : asyncio.create_task(self.recv_requests(self.ipc_server)))
+            eventloop.call_soon(lambda : asyncio.create_task(self.recv_and_dispatch_requests(self.ipc_server)))
         if self.tcp_server is not None:
-            eventloop.call_soon(lambda : asyncio.create_task(self.recv_requests(self.tcp_server)))
+            eventloop.call_soon(lambda : asyncio.create_task(self.recv_and_dispatch_requests(self.tcp_server)))
         super().run_external_message_listener()
 
 
-    def stop(self, wait: bool = True) -> None:
+    def stop(self) -> None:
         if self.ipc_server is not None:
             self.ipc_server.stop_polling()
         if self.tcp_server is not None:
             self.tcp_server.stop_polling()
-        super().stop(wait)
+        super().stop()
 
 
     def exit(self) -> None:
