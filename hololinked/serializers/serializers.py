@@ -294,13 +294,13 @@ class Serializers(metaclass=MappableSingleton):
     The default serializer is `JSONSerializer`, which will be provided to any unregistered object.
     """
     json = ClassSelector(default=JSONSerializer(), class_=BaseSerializer, class_member=True, 
-                        doc="The default serializer for all properties, actions and events")
+                        doc="The default serializer for all properties, actions and events") # type: BaseSerializer
     pickle = ClassSelector(default=PickleSerializer(), class_=BaseSerializer, class_member=True, 
-                        doc="pickle serializer, unsafe without encryption but useful for faster & flexible serialization of python specific types")
+                        doc="pickle serializer, unsafe without encryption but useful for faster & flexible serialization of python specific types") # type: BaseSerializer
     msgpack = ClassSelector(default=MsgpackSerializer(), class_=BaseSerializer, class_member=True, 
-                        doc="MessagePack serializer, efficient binary format that is both fast & interoperable between languages ")
+                        doc="MessagePack serializer, efficient binary format that is both fast & interoperable between languages ") # type: BaseSerializer
     text = ClassSelector(default=TextSerializer(), class_=BaseSerializer, class_member=True, 
-                        doc="Text serializer, converts string or string compatible types to bytes and vice versa")
+                        doc="Text serializer, converts string or string compatible types to bytes and vice versa") # type: BaseSerializer
     default = ClassSelector(default=json.default, class_=BaseSerializer, class_member=True, 
                         doc="The default serialization to be used") # type: BaseSerializer
     default_content_type = String(default=default.default.content_type, class_member=True,
