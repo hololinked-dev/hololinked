@@ -226,12 +226,12 @@ class RequestMessage:
     def thing_execution_context(self) -> typing.Dict[str, typing.Any]:
         """thing execution context"""
         return self.header['thingExecutionContext']
-
-    @property
-    def thing_execution_info(self) -> typing.Tuple[str, str, str, SerializableData, PreserializedData, typing.Dict[str, typing.Any]]:
-        """thing execution info"""
-        return self.header['thingID'], self.header['objekt'], self.header['operation'], self.body[0], self.body[1], self.header['thingExecutionContext']
     
+    @property
+    def qualified_operation(self) -> str:
+        """qualified objekt"""
+        return f"{self.header['thingID']}.{self.header['objekt']}.{self.header['operation']}"
+
     def parse_header(self) -> None:
         """
         extract the header and deserialize the server execution context
@@ -591,64 +591,4 @@ class EventMessage(ResponseMessage):
 
 
 
-
-def parse_response( 
-                message : ResponseMessage, 
-                raise_client_side_exception : bool = False, 
-                deserialize_response : bool = True
-            ) -> typing.Any:
-    """
-    server's message to client: 
-
-    ::
-        [address, bytes(), server_type, message_type, message id, data, pre encoded data]|br|
-        [   0   ,   1    ,    2       ,      3      ,      4    ,  5  ,       6         ]|br|
-
-    Parameters
-    ----------
-    message: List[bytes]
-        message sent be server
-    raise_client_side_exception: bool
-        raises exception from server on client
-    deserialize_response: bool
-        deserializes the data field of the message
-    
-    Raises
-    ------
-    NotImplementedError:
-        if message type is not response, handshake or invalid
-    """
-    if len(message) == 2: # socket monitor message, not our message
-        try: 
-            if ZMQ_EVENT_MAP[parse_monitor_message(message)['event']] == SERVER_DISCONNECTED:
-                raise ConnectionAbortedError(f"server disconnected for {message.sender_id}")
-            return None # None should simply continue the message receive logic
-        except RuntimeError as ex:
-            raise RuntimeError(f'message received from monitor socket cannot be deserialized for {self.id}') from None
-    message_type = message.type
-    if message_type == REPLY:
-        pass 
-    elif message_type == ERROR or message_type == INVALID_MESSAGE:
-        if not raise_client_side_exception:
-            return message
-        if message[SM_INDEX_DATA].get('exception', None) is not None:
-            self.raise_local_exception(message[SM_INDEX_DATA]['exception'])
-        else:
-            raise NotImplementedError("message type {} received. No exception field found, exception field mandatory.".format(
-                message_type))
-    elif message_type == TIMEOUT:
-        if self.client_type == HTTP_SERVER:
-            timeout_type = self.http_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
-        elif self.client_type == PROXY:
-            timeout_type = self.zmq_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
-        exception =  TimeoutError(f"{timeout_type} timeout occurred")
-        if raise_client_side_exception:
-            raise exception from None 
-        message[SM_INDEX_DATA] = format_exception_as_json(exception)
-        return message
-    elif response_message.type == HANDSHAKE:
-                pass 
-    else:
-        raise NotImplementedError("Unknown message type {} received. This message cannot be dealt.".format(message_type))
-    
 
