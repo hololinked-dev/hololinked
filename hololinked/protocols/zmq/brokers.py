@@ -538,6 +538,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                 sender_id=self.id,
                 message_type=INVALID_MESSAGE,
                 message_id=request_message.id,
+                payload=SerializableData(dict(exception=format_exception_as_json(exception)), content_type='application/json')
             ).byte_array
         )         
         self.logger.info(f"sent invalid message to client '{request_message.sender_id}'." +
