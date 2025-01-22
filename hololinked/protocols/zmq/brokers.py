@@ -1800,7 +1800,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             ``Event`` object that needs to be registered. Events created at ``__init__()`` of Thing are 
             automatically registered. 
         """
-        from ...server import EventDispatcher
+        from ...core import EventDispatcher
         assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
         if event._unique_identifier in self.events and event not in self.events:
             raise AttributeError(f"event {event._unique_identifier} already found in list of events, please use another name.")
@@ -2080,7 +2080,7 @@ class EventConsumer(BaseEventConsumer):
     
         
 
-# from ...server.events import EventDispatcher
+# from ...core.events import EventDispatcher
 
 
 __all__ = [

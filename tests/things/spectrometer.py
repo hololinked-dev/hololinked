@@ -6,13 +6,13 @@ import numpy
 from dataclasses import dataclass
 
 
-from hololinked.server import Thing, Property, action, Event
-from hololinked.server.properties import (String, Integer, Number, List, Boolean,
+from hololinked.core import Thing, Property, action, Event
+from hololinked.core.properties import (String, Integer, Number, List, Boolean,
                                     Selector, ClassSelector, TypedList)
-from hololinked.server.state_machine import StateMachine
-from hololinked.server import JSONSerializer
+from hololinked.core.state_machine import StateMachine
+from hololinked.core import JSONSerializer
 from hololinked.td import JSONSchema
-from hololinked.server import HTTPServer
+from hololinked.core import HTTPServer
 
 
 @dataclass 

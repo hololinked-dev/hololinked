@@ -27,7 +27,7 @@ class BaseSchemaValidator: # type definition
         raise NotImplementedError("validate_method_call method must be implemented by subclass")
     
 
-class JsonSchemaValidator(BaseSchemaValidator):
+class JSONSchemaValidator(BaseSchemaValidator):
     """
     JSON schema validator according to standard python JSON schema.
     Somewhat slow, consider msgspec if possible. 
@@ -54,7 +54,7 @@ class JsonSchemaValidator(BaseSchemaValidator):
         return self.schema
     
     def __set_state__(self, schema):
-        return JsonSchemaValidator(schema)
+        return JSONSchemaValidator(schema)
     
 
 class PydanticSchemaValidator(BaseSchemaValidator):

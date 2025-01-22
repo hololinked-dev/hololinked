@@ -6,7 +6,7 @@ import asyncio
 import time 
 from collections import deque
 
-from ..constants import HTTP_METHODS
+from ..utils import get_default_logger
 from .events import Event
 from .properties import List
 from .properties import Integer, Number
@@ -212,6 +212,39 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
                             doc="logs at all levels accumulated in order of collection/execution")
     
 
+
+def prepare_object_logger(instance: RemoteObject, log_level: int, log_file: str, remote_access: bool = False) -> None:
+    """
+    Setup logger for the object with default settings. If a logger is already present, it is not recreated.
+    If remote access is present, it is not recreated. This is a single-shot method to be run at __init__.
+    
+    Parameters
+    ----------
+    log_level: int
+        logging level.
+    log_file: str
+        log file path. A FileHandler is attached to the logger if this is not None.
+    remote_access: bool
+        if True, a RemoteAccessHandler is attached to the logger.
+    """
+    if instance.logger is None:
+        instance.logger = get_default_logger(
+                                instance.id, 
+                                logging.INFO if not log_level else log_level, 
+                                None if not log_file else log_file
+                            )
+        
+    if remote_access and not any(isinstance(handler, RemoteAccessHandler) for handler in instance.logger.handlers):
+        instance._remote_access_loghandler = RemoteAccessHandler(id='logger', maxlen=500, 
+                                                        emit_interval=1, logger=instance.logger) 
+        # we set logger=instance.logger because so that we dont recreate one for remote access handler
+        instance.logger.addHandler(instance._remote_access_loghandler)
+    
+    if not isinstance(instance, logging.Logger):
+        for handler in instance.logger.handlers:
+            # if remote access is True or not, if such a handler is found, make it a sub thing
+            if isinstance(handler, RemoteAccessHandler):
+                instance._remote_access_loghandler = handler        
 
 __all__ = [
     ListHandler.__name__, 

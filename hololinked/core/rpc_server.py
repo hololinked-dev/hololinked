@@ -13,7 +13,6 @@ from collections import deque
 from uuid import uuid4
 
 
-from ..param.parameterized import Undefined
 from ..exceptions import *
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import format_exception_as_json, get_current_async_loop, get_default_logger
@@ -46,6 +45,7 @@ def set_event_loop_policy():
 set_event_loop_policy()
 
 
+Undefined = NotImplemented
 
 RemoteObject = Thing # reading convenience
 
@@ -55,12 +55,12 @@ class RPCServer(BaseZMQServer):
     event loop (an instance of Thing) listen on their own ROUTER socket and execute methods or allow read and write
     of attributes upon receiving instructions. Socket listening is implemented in an async (asyncio) fashion. 
   
-    Top level ZMQ RPC server used by ``Thing`` and ``Eventloop``. 
+    Top level ZMQ RPC server used by `Thing` and `Eventloop`. 
 
     Parameters
     ----------
     id: str
-        ``id`` of the server
+        `id` of the server
     server_type: str
         server type metadata
     context: Optional, zmq.asyncio.Context
@@ -492,7 +492,7 @@ class RPCServer(BaseZMQServer):
     def run_external_message_listener(self):
         """
         Runs ZMQ's sockets which are visible to clients.
-        This method is automatically called by ``run()`` method. 
+        This method is automatically called by `run()` method. 
         Please dont call this method when the async loop is already running. 
         """
         self.logger.info("starting external message listener thread")
@@ -512,8 +512,8 @@ class RPCServer(BaseZMQServer):
 
     def run_things_executor(self, things: typing.List[Thing]):
         """
-        Run ZMQ sockets which provide queued instructions to ``Thing``.
-        This method is automatically called by ``run()`` method. 
+        Run ZMQ sockets which provide queued instructions to `Thing`.
+        This method is automatically called by `run()` method. 
         Please dont call this method when the async loop is already running. 
         """
         thing_executor_loop = get_current_async_loop()
@@ -547,7 +547,7 @@ class RPCServer(BaseZMQServer):
 
     def stop(self):
         """
-        stop polling method ``poll()``
+        stop polling method `poll()`
         """
         self._run = False
         self.req_rep_server.stop_polling()
@@ -701,6 +701,39 @@ class Scheduler:
         pass
     
 
+
+def prepare_rpc_server(
+                    instance: Thing, 
+                    transports: ZMQ_TRANSPORTS, 
+                    context: zmq.asyncio.Context | None = None,
+                    **kwargs
+                ) -> None:
+    # expose_eventloop: bool, False
+    #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
+    #     adding more objects to the same event loop.
+    # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
+    if context is not None and not isinstance(context, zmq.asyncio.Context):
+        raise TypeError("context must be an instance of zmq.asyncio.Context")
+    context = context or zmq.asyncio.Context()
+
+    if transports == 'INPROC' or transports == ZMQ_TRANSPORTS.INPROC:
+        RPCServer(
+            id=instance.id, 
+            things=[instance],
+            context=context, 
+            protocols=ZMQ_TRANSPORTS.INPROC, 
+            logger=instance.logger
+        )   
+    else: 
+        from ..protocols.zmq.server import ZMQServer
+        ZMQServer(
+            id=instance.id, 
+            things=[instance],
+            context=context, 
+            protocols=transports, 
+            tcp_socket_address=kwargs.get('tcp_socket_address', None),
+            logger=instance.logger
+        )
 
     
 __all__ = [

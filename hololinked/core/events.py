@@ -146,65 +146,6 @@ class EventDispatcher:
         
 
 
-
-
-class EventSource:
-    """Class to add event functionality to the object"""
-
-    id : str
-
-    def __init__(self) -> None:
-          self._event_publisher = None # type : typing.Optional["EventPublisher"]
-      
-    @property
-    def change_events(self) -> typing.Dict[str, Event]:
-        try:
-            return getattr(self, f'_{self.id}_change_events')
-        except AttributeError:
-            change_events = dict()
-            for name, evt in inspect._getmembers(self, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
-                assert isinstance(evt, Event), "object is not an event"
-                if not evt._observable:
-                    continue
-                change_events[name] = evt
-            setattr(self, f'_{self.id}_change_events', change_events)
-            return change_events
-    
-    @property   
-    def observables(self):
-        raise NotImplementedError("observables property not implemented yet")
-    
-    @property
-    def event_publisher(self) -> "EventPublisher":
-        """
-        event publishing PUB socket owning object, valid only after 
-        ``run()`` is called, otherwise raises AttributeError.
-        """
-        return self._event_publisher 
-                   
-    @event_publisher.setter
-    def event_publisher(self, value : "EventPublisher") -> None:
-        from .thing import Thing
-
-        if self._event_publisher is not None:
-            raise AttributeError("Can set event publisher only once")
-        if value is None:
-            return 
-        
-        def recusively_set_event_publisher(obj : Thing, publisher : "EventPublisher") -> None:
-            for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
-                assert isinstance(evt, Event), "object is not an event"
-                # above is type definition
-                evt._publisher = publisher
-            for name, subobj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
-                if name == '_owner':
-                    continue 
-                recusively_set_event_publisher(subobj, publisher)
-            obj._event_publisher = publisher            
-
-        recusively_set_event_publisher(self, value)
-
-
 from ..protocols.zmq.brokers import EventPublisher
 
 __all__ = [

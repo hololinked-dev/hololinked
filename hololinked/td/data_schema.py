@@ -28,7 +28,7 @@ class DataSchema(Schema):
 
     def _build_from_property(self, property, owner) -> None:
         """generates the schema"""
-        from ..server.properties import Property
+        from ..core.properties import Property
         assert isinstance(property, Property), f"only Property is a subclass of dataschema, not {type(property)}"
         self.title = property.label or property.name 
         if property.constant:
@@ -80,7 +80,7 @@ class StringSchema(DataSchema):
         
     def _build_from_property(self, property, owner) -> None:
         """generates the schema"""
-        from ..server.properties import String
+        from ..core.properties import String
         self.type = 'string' 
         super()._build_from_property(property, owner)
         if isinstance(property, String): 
@@ -105,7 +105,7 @@ class NumberSchema(DataSchema):
         
     def _build_from_property(self, property, owner) -> None:
         """generates the schema"""
-        from ..server.properties import Integer, Number
+        from ..core.properties import Integer, Number
         if isinstance(property, Integer):
             self.type = 'integer'
         elif isinstance(property, Number): # dont change order - one is subclass of other
@@ -142,7 +142,7 @@ class ArraySchema(DataSchema):
         
     def _build_from_property(self, property, owner) -> None:
         """generates the schema"""
-        from ..server.properties import List, Tuple, TypedList, TupleSelector
+        from ..core.properties import List, Tuple, TypedList, TupleSelector
         self.type = 'array'
         super()._build_from_property(property, owner)
         self.items = []
@@ -224,7 +224,7 @@ class OneOfSchema(DataSchema):
 
     def _build_from_property(self, property, owner) -> None:
         """generates the schema"""
-        from ..server.properties import Selector, ClassSelector
+        from ..core.properties import Selector, ClassSelector
         self.oneOf = []
         if isinstance(property, ClassSelector):
             if not property.isinstance:
@@ -286,7 +286,7 @@ class EnumSchema(OneOfSchema):
         
     def _build_from_property(self, property, owner) -> None:
         """generates the schema"""
-        from ..server.properties import Selector
+        from ..core.properties import Selector
         assert isinstance(property, Selector), f"EnumSchema compatible property is only Selector, not {property.__class__}"
         self.enum = list(property.objects)
         super()._build_from_property(property, owner)

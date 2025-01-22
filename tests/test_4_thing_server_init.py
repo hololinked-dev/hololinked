@@ -2,9 +2,9 @@ import unittest
 import logging
 import warnings
 
-from hololinked.server import Thing
+from hololinked.core import Thing
 from hololinked.utils import get_default_logger 
-from hololinked.server.logger import RemoteAccessHandler
+from hololinked.core.logger import RemoteAccessHandler
 from hololinked.client import ObjectProxy
 try:
     from .things import OceanOpticsSpectrometer, start_thing_forked
@@ -15,7 +15,7 @@ except ImportError:
 
 
 class TestThing(TestCase):
-    """Test Thing class from hololinked.server.thing module."""
+    """Test Thing class from hololinked.core.thing module."""
     
     @classmethod
     def setUpClass(self):
