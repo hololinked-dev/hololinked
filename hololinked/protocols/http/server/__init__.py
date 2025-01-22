@@ -15,11 +15,11 @@ from ....param.parameters import Integer, IPAddress, ClassSelector, Selector, Ty
 from ....constants import HTTP_METHODS, ZMQ_TRANSPORTS, HTTPServerTypes, Operations
 from ....utils import get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, run_callable_somehow
 from ....serializers.serializers import JSONSerializer
-from ....schema_validators import BaseSchemaValidator, JsonSchemaValidator
-from ....server.property import Property
-from ....server.actions import Action
-from ....server.events import Event
-from ....server.thing import Thing, ThingMeta
+from ....schema_validators import BaseSchemaValidator, JSONSchemaValidator
+from ....core.property import Property
+from ....core.actions import Action
+from ....core.events import Event
+from ....core.thing import Thing, ThingMeta
 from ....td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...zmq.brokers import  AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import ActionHandler, PropertyHandler, BaseHandler, EventHandler, ThingsHandler, StopHandler
@@ -73,7 +73,7 @@ class HTTPServer(Parameterized):
                             doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, ActionHandler]
     event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, BaseHandler), isinstance=False, 
                             doc="custom event handler of your choice for handling events") # type: typing.Union[BaseHandler, EventHandler]
-    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True, isinstance=False,
+    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JSONSchemaValidator, allow_None=True, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
     
    
@@ -83,7 +83,7 @@ class HTTPServer(Parameterized):
                 port : int = 8080, address : str = '0.0.0.0', host : typing.Optional[str] = None, 
                 logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
                 serializer : typing.Optional[JSONSerializer] = None, ssl_context : typing.Optional[ssl.SSLContext] = None, 
-                schema_validator : typing.Optional[BaseSchemaValidator] = JsonSchemaValidator,
+                schema_validator : typing.Optional[BaseSchemaValidator] = JSONSchemaValidator,
                 certfile : str = None, keyfile : str = None, 
                 # protocol_version : int = 1, network_interface : str = 'Ethernet', 
                 allowed_clients : typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   

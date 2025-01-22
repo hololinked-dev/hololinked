@@ -463,6 +463,24 @@ class batch_db_commit:
                 pass
 
 
+def prepare_object_database(instance, default_db : bool = False, config_file : str = None):
+    if not default_db and not config_file: 
+        instance.object_info
+        return 
+    # 1. create engine 
+    instance.db_engine = ThingDB(instance=instance, config_file=None if default_db else config_file, 
+                                serializer=instance.zmq_serializer) # type: ThingDB 
+    # 2. create an object metadata to be used by different types of clients
+    object_info = instance.db_engine.fetch_own_info()
+    if object_info is not None:
+        instance._object_info = object_info
+    # 3. enter properties to DB if not already present 
+    if instance.object_info.class_name != instance.__class__.__name__:
+        raise ValueError("Fetched instance name and class name from database not matching with the ", 
+            "current Thing class/subclass. You might be reusing an instance name of another subclass ", 
+            "and did not remove the old data from database. Please clean the database using database tools to ", 
+            "start fresh.")
+    instance.load_properties_from_DB()
   
 __all__ = [
     BaseAsyncDB.__name__,

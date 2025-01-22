@@ -1,1 +1,1 @@
-from .validators import BaseSchemaValidator, JsonSchemaValidator
+from .validators import BaseSchemaValidator, JSONSchemaValidator, PydanticSchemaValidator
