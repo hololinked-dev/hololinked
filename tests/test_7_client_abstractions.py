@@ -6,7 +6,7 @@ import logging
 import zmq.asyncio
 
 from hololinked.constants import ResourceTypes
-from hololinked.server.dataklasses import ZMQResource
+from hololinked.core.dataklasses import ZMQResource
 from hololinked.client import ObjectProxy
 from hololinked.client.proxy import _Property, _Action, _Event
 

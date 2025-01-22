@@ -208,3 +208,12 @@ class StateMachine:
         return False
     
 
+def prepare_object_FSM(instance) -> None:
+    """
+    prepare state machine attached to thing class 
+    """
+    from .thing import Thing
+    assert isinstance(instance, Thing), "state machine can only be attached to a Thing class."
+    if instance.state_machine and isinstance(instance.state_machine, StateMachine):
+        instance.state_machine._prepare(instance)
+        instance.logger.debug("setup state machine")

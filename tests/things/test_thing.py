@@ -1,5 +1,5 @@
 import time
-from hololinked.server import Thing, action, Property, Event
+from hololinked.core import Thing, action, Property, Event
 
 
 class TestThing(Thing):

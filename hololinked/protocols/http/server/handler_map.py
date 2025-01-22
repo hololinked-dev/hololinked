@@ -1,4 +1,4 @@
-from ....server.properties import (
+from ....core.properties import (
     String,
     Bytes,
     Integer,

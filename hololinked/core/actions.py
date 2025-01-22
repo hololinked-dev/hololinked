@@ -1,7 +1,6 @@
 import typing
 import warnings
 import jsonschema
-import functools
 from enum import Enum
 from types import FunctionType, MethodType
 from inspect import iscoroutinefunction, getfullargspec
@@ -13,7 +12,7 @@ from ..config import global_config
 from ..utils import (get_return_type_from_signature, has_async_def, get_input_model_from_signature, 
                     issubklass, isclassmethod)
 from ..exceptions import StateMachineError
-from ..schema_validators.validators import JsonSchemaValidator, PydanticSchemaValidator
+from ..schema_validators.validators import JSONSchemaValidator, PydanticSchemaValidator
 from .dataklasses import ActionInfoValidator
 
 
@@ -212,8 +211,8 @@ def action(
 
     Returns
     -------
-    Callable
-        returns the callable object wrapped in an ``Action`` object
+    Action
+        returns the callable object wrapped in an `Action` object
     """
     
     def inner(obj):
@@ -272,7 +271,7 @@ def action(
                     ) 
         if global_config.validate_schemas and input_schema:
             if isinstance(input_schema, dict):
-                execution_info_validator.schema_validator = JsonSchemaValidator(input_schema)
+                execution_info_validator.schema_validator = JSONSchemaValidator(input_schema)
             elif issubklass(input_schema, (BaseModel, RootModel)):
                 execution_info_validator.schema_validator = PydanticSchemaValidator(input_schema)
             else:
@@ -317,39 +316,6 @@ def action(
     )
     return inner 
 
-
-
-
-class RemoteInvokable:
-    """
-    Base class providing additional functionality related to actions, 
-    it is not meant to be subclassed directly by the end-user.
-    """
-    def __init__(self):
-        self.id : str
-        super().__init__()
-      
-    @property
-    def actions(self) -> typing.Dict[str, BoundAction]:
-        """
-        All bound actions available on the object. Access `self.__class__.actions` to retrieve unbound actions.
-       
-        Returns
-        -------
-        Dict[str, Action]
-            dictionary of actions available on the object along with their names as keys
-        """
-        try:
-            return getattr(self, f'_{self.id}_actions')
-        except AttributeError:
-            actions = dict()
-            for name, method in self.__class__.actions.items():
-                actions[name] = getattr(self, name)
-            setattr(self, f'_{self.id}_actions', actions)
-            return actions
-
-
-    
 
 
 __all__ = [

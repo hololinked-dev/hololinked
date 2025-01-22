@@ -42,7 +42,7 @@ class InteractionAffordance(Schema):
     
     @owner.setter
     def owner(self, value):
-        from ..server import Thing
+        from ..core import Thing
         if not isinstance(value, Thing):
             raise TypeError(f"owner must be instance of Thing, given type {type(value)}")
         self._owner = value
@@ -110,12 +110,12 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
 
     def _build(self, property, owner) -> None:
         """generates the schema"""
-        from ..server import Property
+        from ..core import Property
         assert isinstance(property, Property)
         DataSchema._build_from_property(self, property, owner)
     
     def _build_forms(self, property, owner, authority: str) -> None:
-        from ..server import Property
+        from ..core import Property
         self.forms = []
         for index, method in enumerate(property._remote_info.http_method):
             form = Form()
@@ -144,12 +144,12 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
 
     @classmethod
     def generate(self, property, owner, authority : str) -> JSON:
-        from ..server.properties import (String, Number, Integer, Boolean, 
+        from ..core.properties import (String, Number, Integer, Boolean, 
                                     List, TypedList, Tuple, TupleSelector,
                                     Selector, TypedDict, TypedKeyMappingsDict,
                                     ClassSelector, Filename, Foldername, Path)
 
-        from ..server import Property
+        from ..core import Property
         assert isinstance(property, Property)
 
         if not isinstance(property, Property):
@@ -189,7 +189,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
     
     @classmethod
     def register_descriptor(cls, descriptor, schema_generator) -> None:
-        from ..server import Property
+        from ..core import Property
         if not isinstance(descriptor, Property):
             raise TypeError("custom schema generator can also be registered for Property." +
                             f" Given type {type(descriptor)}")
@@ -228,7 +228,7 @@ class ActionAffordance(InteractionAffordance):
     def action(self, value: typing.Callable | None):
         if value is None:
             return
-        from ..server import BoundAction
+        from ..core.actions import BoundAction
         if not isinstance(value, BoundAction):
             raise TypeError(f"Action affordance can only be generated for Action, given type - {type(value)}")
         self._action = value # type: BoundAction

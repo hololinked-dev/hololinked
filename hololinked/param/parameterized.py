@@ -1903,9 +1903,9 @@ class Parameterized(metaclass=ParameterizedMetaclass):
     see documentation for the 'logging' module.
     """
     def __init__(self, **params):
-        self.create_param_containers(**params)
+        self.create_param_container(**params)
         
-    def create_param_containers(self, **params):
+    def create_param_container(self, **params):
         self._param_container = InstanceParameters(self.__class__, self)
         self._param_container._setup_parameters(**params)
     

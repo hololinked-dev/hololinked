@@ -1,12 +1,12 @@
 import typing
 from enum import Enum
 
-from ..param.parameterized import Parameter, ClassParameters, Parameterized, ParameterizedMetaclass
+from ..param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
 from ..utils import issubklass
 from ..exceptions import StateMachineError
+from ..schema_validators import JSONSchemaValidator
 from .dataklasses import RemoteResourceInfoValidator
 from .events import Event, EventDispatcher
-from ..schema_validators import JsonSchemaValidator
 
 
 
@@ -140,7 +140,7 @@ class Property(Parameter):
         if model:
             if isinstance(model, dict):
                 self.model = model
-                self.validator = JsonSchemaValidator(model).validate
+                self.validator = JSONSchemaValidator(model).validate
             else:
                 self.model = wrap_plain_types_in_rootmodel(model) # type: BaseModel
                 self.validator = self.model.model_validate
@@ -236,87 +236,14 @@ class Property(Parameter):
     def is_remote(self):
         return self._execution_info_validator is not None
     
-    def to_affordance(self) -> dict:
+    def to_affordance(self, owner_inst) -> dict:
         from hololinked.td import PropertyAffordance
         affordance = PropertyAffordance()
-        affordance._build(self, self.owner_inst, None)
+        affordance._build(self, owner_inst)
         return affordance
 
 
    
-__property_info__ = [
-                'allow_None' , 'class_member', 'db_init', 'db_persist', 
-                'db_commit', 'deepcopy_default', 'per_instance_descriptor', 
-                'state', 'precedence', 'constant', 'default'
-            ]
-
-   
-class ClassProperties(ClassParameters):
-    """
-    Object that holds the namespace and implementation of Parameterized methods as well as any state that is not 
-    in __slots__ or the Properties themselves.
-    Exists at metaclass level (instantiated by the metaclass). Contains state specific to the class.
-    """
-
-    @property
-    def db_persisting_objects(self):
-        try:
-            return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_db_persisting_remote_params')
-        except AttributeError: 
-            paramdict = self.remote_objects
-            db_persisting_remote_params = {}
-            for name, desc in paramdict.items():
-                if desc.db_persist:
-                    db_persisting_remote_params[name] = desc
-            setattr(self.owner_cls, f'_{self.owner_cls.__name__}_db_persisting_remote_params', db_persisting_remote_params)
-        return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_db_persisting_remote_params')
-
-    @property
-    def db_init_objects(self) -> typing.Dict[str, Property]:
-        try:
-            return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_db_init_remote_params')
-        except AttributeError: 
-            paramdict = self.remote_objects
-            init_load_params = {}
-            for name, desc in paramdict.items():
-                if desc.db_init or desc.db_persist:
-                    init_load_params[name] = desc
-            setattr(self.owner_cls, f'_{self.owner_cls.__name__}_db_init_remote_params', init_load_params)
-        return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_db_init_remote_params')
-        
-    @property
-    def remote_objects(self) -> typing.Dict[str, Property]:
-        try:
-            return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_remote_params')
-        except AttributeError: 
-            paramdict = super().descriptors
-            remote_params = {}
-            for name, desc in paramdict.items():
-                if isinstance(desc, Property):
-                    remote_params[name] = desc
-            setattr(self.owner_cls, f'_{self.owner_cls.__name__}_remote_params', remote_params)
-        return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_remote_params')
-
-    def webgui_info(self, for_remote_params : typing.Union[Property, typing.Dict[str, Property], None] = None):
-        info = {}
-        if isinstance(for_remote_params, dict):
-            objects = for_remote_params 
-        elif isinstance(for_remote_params, Property):
-            objects = { for_remote_params.name : for_remote_params } 
-        else:
-            objects = self.remote_objects
-        for param in objects.values():
-            state = param.__getstate__()
-            info[param.name] = dict(
-                python_type = param.__class__.__name__,
-            )
-            for field in __property_info__:
-                info[param.name][field] = state.get(field, None) 
-        return info 
-
-
-    
-    
 try: 
     from pydantic import BaseModel, RootModel, create_model
     def wrap_plain_types_in_rootmodel(model: type) -> type[BaseModel] | type[RootModel]:

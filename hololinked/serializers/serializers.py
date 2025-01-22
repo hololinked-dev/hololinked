@@ -405,7 +405,7 @@ class Serializers(metaclass=MappableSingleton):
         """
         if content_type not in cls.content_types:
             raise ValueError("content type {} unsupported".format(content_type))
-        from ..server import Property, Action, Event, Thing
+        from ..core import Property, Action, Event, Thing
         if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
             raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
         if issubklass(objekt, Thing):
@@ -441,7 +441,7 @@ class Serializers(metaclass=MappableSingleton):
         """
         if not content_type in cls.content_types:
             raise ValueError("content type {} unsupported".format(content_type))
-        from ..server import Property, Action, Event
+        from ..core import Property, Action, Event
         if not isinstance(objekt, (Property, Action, Event, str)):
             raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
         if not isinstance(objekt, str):
@@ -483,7 +483,7 @@ class Serializers(metaclass=MappableSingleton):
         """
         if not isinstance(serializer, BaseSerializer):
             raise ValueError("serializer must be an instance of BaseSerializer, given : {}".format(type(serializer)))
-        from ..server import Property, Action, Event, Thing
+        from ..core import Property, Action, Event, Thing
         if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
             raise ValueError("object must be a Property, Action or Event, or Thing, got : {}".format(type(objekt)))
         if issubklass(objekt, Thing):

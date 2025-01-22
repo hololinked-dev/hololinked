@@ -7,15 +7,15 @@ import jsonschema
 
 from hololinked.utils import isclassmethod
 from hololinked.param import ParameterizedFunction
-from hololinked.server.actions import Action, BoundAction, BoundSyncAction, BoundAsyncAction
-from hololinked.server.dataklasses import ActionInfoValidator
-from hololinked.server.thing import Thing, action
-from hololinked.server.properties import Number, String, ClassSelector
+from hololinked.core.actions import Action, BoundAction, BoundSyncAction, BoundAsyncAction
+from hololinked.core.dataklasses import ActionInfoValidator
+from hololinked.core.thing import Thing, action
+from hololinked.core.properties import Number, String, ClassSelector
 from hololinked.td.interaction_affordance import ActionAffordance
 from hololinked.protocols.zmq import SyncZMQClient
 from hololinked.protocols.zmq.message import EXIT, RequestMessage
 from hololinked.protocols.zmq.client import ZMQAction
-from hololinked.schema_validators import JsonSchemaValidator
+from hololinked.schema_validators import JSONSchemaValidator
 try:
     from .utils import TestCase, TestRunner
     from .things import start_thing_forked 
@@ -367,7 +367,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.safe)
         self.assertFalse(remote_info.idempotent)
         self.assertFalse(remote_info.synchronous)
-        self.assertIsInstance(remote_info.schema_validator, JsonSchemaValidator)
+        self.assertIsInstance(remote_info.schema_validator, JSONSchemaValidator)
 
 
     def test_4_api_and_invalid_actions(self):
