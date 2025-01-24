@@ -162,8 +162,7 @@ class Property(Parameter):
 
     def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
         read_value = super().__get__(obj, objtype)
-        if objtype is not None:
-            self.push_change_event(obj, read_value)
+        self.push_change_event(obj, read_value)
         return read_value
          
 
@@ -172,6 +171,8 @@ class Property(Parameter):
         Pushes change event both on read and write if an event publisher object is available
         on the owning Thing.        
         """
+        if obj is None:
+            return
         if self._observable and obj.event_publisher:
             event_dispatcher = getattr(obj, self._observable_event_descriptor._obj_name, None) # type: EventDispatcher
             old_value = obj.__dict__.get(self._old_value_internal_name, NotImplemented)
