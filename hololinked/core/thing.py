@@ -3,9 +3,9 @@ import inspect
 import threading
 import ssl
 import typing
+import socket
 
-from ..param.parameterized import edit_constant as edit_constant_parameters
-from ..constants import JSON, JSONSerializable, ZMQ_TRANSPORTS
+from ..constants import JSON, ZMQ_TRANSPORTS
 from ..utils import *
 from ..exceptions import *
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
@@ -16,7 +16,8 @@ from .properties import String, ClassSelector
 from .property import Property
 from .actions import BoundAction, action
 from .events import EventDispatcher
-from .meta import ThingMeta, Propertized, InstanceProperties, RemoteInvokable, EventSource
+from .meta import (ThingMeta, Propertized, PropertyRegistry, RemoteInvokable, 
+                EventSource, ActionsRegistry, EventsRegistry)
 
 
 
@@ -43,7 +44,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     # remote properties
     state = String(default=None, allow_None=True, readonly=True, observable=True, 
-                fget=lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
+                fget=lambda self : self.state_machine.current_state if self.state_machine is not None else None,  
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
     
     # object_info = Property(doc="contains information about this object like the class name, script location etc.") # type: ThingInformation
@@ -88,7 +89,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 if not using a default database, supply a JSON configuration file to create a database connection. Check documentaion
                 of `hololinked.core.database`.  
         """          
-        super().__init__(id=id, logger=logger, **kwargs)
+        Propertized.__init__(self, id=id, logger=logger, **kwargs)
+        RemoteInvokable.__init__(self)
+        EventSource.__init__(self)
         if self.id.startswith('/'):
             self.id = self.id[1:]
             self.logger.info("removed leading '/' from id")
@@ -141,19 +144,19 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     
     @property
-    def properties(self) -> InstanceProperties:
+    def properties(self) -> PropertyRegistry:
         """container for the property descriptors of the object."""
-        return self._properties_container
+        return self._properties_registry
     
     @property
-    def actions(self):
+    def actions(self) -> ActionsRegistry:
         """container for the action descriptors of the object."""
-        return self._actions_container
+        return self._actions_registry
     
     @property
-    def events(self):
+    def events(self) -> EventsRegistry:
         """container for the event descriptors of the object."""
-        return self._events_container
+        return self._events_registry
 
     @property
     def sub_things(self) -> typing.Dict[str, "Thing"]:
@@ -306,6 +309,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from ..protocols.http.server import HTTPServer        
         from ..protocols.zmq.server import ZMQServer
         from .rpc_server import RPCServer, prepare_rpc_server
+
         
         rpc_server = None
         if not any(isinstance(server, (RPCServer, ZMQServer)) for server in servers):
@@ -341,17 +345,17 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def ping(self) -> None:
         """ping the Thing to see if it is alive. No timeout or exception must be raised on the client."""
         pass 
-    
 
-    def __hash__(self):
-        return hash(self.__class__.__name__ + self.id)
+    def __hash__(self) -> int:
+        return hash(inspect.getfile(self.__class__) + self.__class__.__name__ + self.id)
+        # i.e. unique to a computer 
     
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if not isinstance(other, Thing):
             return False
         return self.__class__ == other.__class__ and self.id == other.id
     
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.__class__.__name__}({self.id})"
     
     def __contains__(self, item: Property | BoundAction | EventDispatcher) -> bool:

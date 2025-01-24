@@ -465,7 +465,6 @@ class batch_db_commit:
 
 def prepare_object_database(instance, default_db : bool = False, config_file : str = None):
     if not default_db and not config_file: 
-        instance.object_info
         return 
     # 1. create engine 
     instance.db_engine = ThingDB(instance=instance, config_file=None if default_db else config_file, 

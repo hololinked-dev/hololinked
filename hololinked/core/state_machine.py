@@ -66,11 +66,12 @@ class StateMachine:
         self.initial_state = initial_state
         self.machine = machine
         self.push_state_change_event = push_state_change_event
-        # if :
-        #     self.state_change_event = Event('state-change') 
+   
 
     def _prepare(self, owner) -> None:
-        from .thing import Thing, Property, Action
+        return 
+        from .thing import Thing, Property
+        from .actions import Action
         assert isinstance(owner, Thing), "state machine can only be attached to a Thing class."
         
         if self.states is None and self.initial_state is None:    
@@ -206,6 +207,22 @@ class StateMachine:
             if object in objects:
                 return True 
         return False
+    
+    def __hash__(self):
+        return hash(self.owner.id + (str(state) for state in self.states) + str(self.initial_state) + self.owner.__class__.__name__)
+
+    def __str__(self):
+        return f"StateMachine(owner={self.owner.__class__.__name__} id={self.owner.id} initial_state={self.initial_state}, states={self.states})"
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, StateMachine):
+            return False
+        return (
+            self.states == other.states and 
+            self.initial_state == other.initial_state and 
+            self.owner.__class__ == other.owner.__class__ and
+            self.owner.id == other.owner.id
+        )
     
 
 def prepare_object_FSM(instance) -> None:
