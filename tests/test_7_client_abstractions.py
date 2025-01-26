@@ -11,12 +11,12 @@ from hololinked.client import ObjectProxy
 from hololinked.client.proxy import _Property, _Action, _Event
 
 try:    
-    from .test_3_brokers import TestBrokerMixin
+    from .test_5_brokers import TestBrokerMixin
     from .things.starter import run_thing_with_zmq_server
     from .things import TestThing
     from .utils import TestRunner
 except ImportError:
-    from test_3_brokers import TestBrokerMixin
+    from tests.test_5_brokers import TestBrokerMixin
     from things.starter import run_thing_with_zmq_server
     from things import TestThing
     from utils import TestRunner

@@ -592,6 +592,7 @@ __all__ = [
     get_current_async_loop.__name__,
     get_input_model_from_signature.__name__,
     pydantic_validate_args_kwargs.__name__,
-    get_return_type_from_signature.__name__
+    get_return_type_from_signature.__name__,
+    getattr_without_descriptor_read.__name__
 ]
 

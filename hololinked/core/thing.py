@@ -3,7 +3,6 @@ import inspect
 import threading
 import ssl
 import typing
-import socket
 
 from ..constants import JSON, ZMQ_TRANSPORTS
 from ..utils import *
@@ -11,13 +10,11 @@ from ..exceptions import *
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
 from ..protocols.server import BaseProtocolServer
 from .dataklasses import build_our_temp_TD
-from .state_machine import StateMachine
 from .properties import String, ClassSelector
 from .property import Property
 from .actions import BoundAction, action
 from .events import EventDispatcher
-from .meta import (ThingMeta, Propertized, PropertyRegistry, RemoteInvokable, 
-                EventSource, ActionsRegistry, EventsRegistry)
+from .meta import ThingMeta, Propertized, RemoteInvokable, EventSource
 
 
 
@@ -40,11 +37,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 doc="""logging.Logger instance to track log messages. Default logger with a IO-stream handler 
                     and network accessible handler is created if none supplied.""") # type: logging.Logger
     
-    state_machine = None # type: typing.Optional[StateMachine]
+    state_machine = None # type: typing.Optional["StateMachine"]
 
     # remote properties
-    state = String(default=None, allow_None=True, readonly=True, observable=True, 
-                fget=lambda self : self.state_machine.current_state if self.state_machine is not None else None,  
+    state = String(default=None, allow_None=True, readonly=True, observable=True,
+                fget=lambda self: self._state_machine_state if self.state_machine else None,
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
     
     # object_info = Property(doc="contains information about this object like the class name, script location etc.") # type: ThingInformation
@@ -123,9 +120,12 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self.rpc_server = None # type: typing.Optional[RPCServer]
         self.event_publisher = None # type: typing.Optional[EventPublisher] 
         self._owner = None # type: typing.Optional[Thing]
-        self._remote_access_loghandler = None # type: typing.Optional[RemoteAccessHandler] 
+        self._remote_access_loghandler: typing.Optional[RemoteAccessHandler] 
         self._internal_fixed_attributes: typing.List[str]
         self._qualified_id: str
+        self._state_machine_state: str
+        # database operations
+        self.properties.load_from_DB()
         # object is ready
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.id}")
        
@@ -144,25 +144,17 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     
     @property
-    def properties(self) -> PropertyRegistry:
-        """container for the property descriptors of the object."""
-        return self._properties_registry
-    
-    @property
-    def actions(self) -> ActionsRegistry:
-        """container for the action descriptors of the object."""
-        return self._actions_registry
-    
-    @property
-    def events(self) -> EventsRegistry:
-        """container for the event descriptors of the object."""
-        return self._events_registry
-
-    @property
     def sub_things(self) -> typing.Dict[str, "Thing"]:
         """other `Thing`'s that are composed within this `Thing`."""
-        return inspect._getmembers(self, lambda obj: isinstance(obj, Thing), getattr_without_descriptor_read)
-    
+        things = dict()
+        for name, value in inspect._getmembers(
+                                self, 
+                                lambda obj: isinstance(obj, Thing), 
+                                getattr_without_descriptor_read
+                            ):
+            things[name] = value
+        return things
+        
 
     @action()
     def get_thing_model(self, ignore_errors: bool = False) -> JSON:
@@ -310,7 +302,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from ..protocols.zmq.server import ZMQServer
         from .rpc_server import RPCServer, prepare_rpc_server
 
-        
         rpc_server = None
         if not any(isinstance(server, (RPCServer, ZMQServer)) for server in servers):
             prepare_rpc_server(transports=ZMQ_TRANSPORTS.INPROC)
@@ -366,3 +357,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         pass
+
+
+from .state_machine import StateMachine
+
+__all__ = [
+    Thing.__name__
+]
