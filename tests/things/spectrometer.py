@@ -10,9 +10,9 @@ from hololinked.core import Thing, Property, action, Event
 from hololinked.core.properties import (String, Integer, Number, List, Boolean,
                                     Selector, ClassSelector, TypedList)
 from hololinked.core.state_machine import StateMachine
-from hololinked.core import JSONSerializer
+from hololinked.serializers import JSONSerializer
 from hololinked.td import JSONSchema
-from hololinked.core import HTTPServer
+from hololinked.protocols.http import HTTPServer
 
 
 @dataclass 

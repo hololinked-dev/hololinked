@@ -213,7 +213,7 @@ class Property(Parameter):
             return self.__set__(obj, value)
         else: 
             raise StateMachineError("Thing {} is in `{}` state, however attribute can be written only in `{}` state".format(
-                obj.instance_name, obj.state_machine.current_state, self.execution_info.state))
+                obj.id, obj.state_machine.current_state, self.execution_info.state))
         
 
     def _post_value_set(self, obj, value : typing.Any) -> None:

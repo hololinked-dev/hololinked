@@ -64,12 +64,12 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         }
     """
 
-    def __init__(self, instance_name : str = 'logger', maxlen : int = 500, stream_interval : float = 1.0, 
+    def __init__(self, id : str = 'logger', maxlen : int = 500, stream_interval : float = 1.0, 
                     **kwargs) -> None:
         """
         Parameters
         ----------
-        instance_name: str, default 'logger'
+        id: str, default 'logger'
             instance name of the object, generally only one instance per ``Thing`` necessary, therefore defaults to
             'logger'
         maxlen: int, default 500
@@ -89,7 +89,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
                 length of critical logs, default maxlen/5
         """
         logging.Handler.__init__(self)
-        RemoteObject.__init__(self, instance_name=instance_name, **kwargs)
+        RemoteObject.__init__(self, id=id, **kwargs)
         self.set_maxlen(maxlen, **kwargs)
         self.stream_interval = stream_interval
         self.diff_logs = []
@@ -235,12 +235,14 @@ def prepare_object_logger(instance: RemoteObject, log_level: int, log_file: str,
                             )
         
     if remote_access and not any(isinstance(handler, RemoteAccessHandler) for handler in instance.logger.handlers):
-        instance._remote_access_loghandler = RemoteAccessHandler(id='logger', maxlen=500, 
-                                                        emit_interval=1, logger=instance.logger) 
+        instance._remote_access_loghandler = RemoteAccessHandler(
+                                                        id='logger', maxlen=500, 
+                                                        emit_interval=1, logger=instance.logger
+                                                    ) 
         # we set logger=instance.logger because so that we dont recreate one for remote access handler
         instance.logger.addHandler(instance._remote_access_loghandler)
     
-    if not isinstance(instance, logging.Logger):
+    if not isinstance(instance, RemoteAccessHandler):
         for handler in instance.logger.handlers:
             # if remote access is True or not, if such a handler is found, make it a sub thing
             if isinstance(handler, RemoteAccessHandler):

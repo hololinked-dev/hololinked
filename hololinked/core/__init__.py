@@ -4,6 +4,4 @@ from .actions import *
 from .property import *
 from .database import *
 from .thing import *
-
-from ..protocols.http import HTTPServer
-from ..protocols.zmq.server import ZMQServer
+from .meta import ThingMeta
