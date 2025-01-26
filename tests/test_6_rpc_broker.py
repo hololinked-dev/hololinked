@@ -7,10 +7,10 @@ from hololinked.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient
 from hololinked.utils import get_current_async_loop
 
 try:
-    from .test_3_brokers import ActionMixin
+    from .test_5_brokers import ActionMixin
     from .utils import TestRunner
 except ImportError:
-    from test_3_brokers import ActionMixin
+    from tests.test_5_brokers import ActionMixin
     from utils import TestRunner
 
 

@@ -2,11 +2,12 @@ import typing
 from types import FunctionType, MethodType
 from enum import EnumMeta, Enum, StrEnum
 
+from ..param import edit_constant
 from ..exceptions import StateMachineError
-from .dataklasses import RemoteResourceInfoValidator
 from .property import Property
 from .properties import ClassSelector, TypedDict, Boolean
-
+from .thing import Thing
+from .actions import Action
 
 
 
@@ -22,21 +23,21 @@ class StateMachine:
                         doc="list/enum of allowed states") # type: typing.Union[EnumMeta, tuple, list]
     on_enter = TypedDict(default=None, allow_None=True, key_type=str,
                         doc="""callbacks to execute when a certain state is entered; 
-                        specfied as map with state as keys and callbacks as list""") # typing.Dict[str, typing.List[typing.Callable]]
+                        specfied as map with state as keys and callbacks as list""") # type: typing.Dict[str, typing.List[typing.Callable]]
     on_exit = TypedDict(default=None, allow_None=True, key_type=str,
                         doc="""callbacks to execute when certain state is exited; 
-                        specfied as map with state as keys and callbacks as list""") # typing.Dict[str, typing.List[typing.Callable]]
+                        specfied as map with state as keys and callbacks as list""") # type: typing.Dict[str, typing.List[typing.Callable]]
     machine = TypedDict(default=None, allow_None=True, item_type=(list, tuple), key_type=str, # i.e. its like JSON
-                        doc="the machine specification with state as key and objects as list") # typing.Dict[str, typing.List[typing.Callable, Property]]
+                        doc="the machine specification with state as key and objects as list") # type: typing.Dict[str, typing.List[typing.Callable, Property]]
     valid = Boolean(default=False, readonly=True, fget=lambda self: self._valid, 
                         doc="internally computed, True if states, initial_states and the machine is valid")
     
     def __init__(self, 
-            states : typing.Union[EnumMeta, typing.List[str], typing.Tuple[str]], *, 
-            initial_state : typing.Union[StrEnum, str], push_state_change_event : bool = True,
-            on_enter : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
-            on_exit  : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
-            **machine : typing.Dict[str, typing.Union[typing.Callable, Property]]
+            states: typing.Union[EnumMeta, typing.List[str], typing.Tuple[str]], *, 
+            initial_state: typing.Union[StrEnum, str], push_state_change_event : bool = True,
+            on_enter: typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
+            on_exit: typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
+            **machine: typing.Dict[str, typing.Union[typing.Callable, Property]]
         ) -> None:
         """
         Parameters
@@ -69,49 +70,46 @@ class StateMachine:
    
 
     def _prepare(self, owner) -> None:
-        return 
-        from .thing import Thing, Property
-        from .actions import Action
         assert isinstance(owner, Thing), "state machine can only be attached to a Thing class."
         
         if self.states is None and self.initial_state is None:    
             self._valid = False 
-            self._state = None
+            owner._state_machine_state = None
             return
         elif self.initial_state not in self.states:
             raise AttributeError(f"specified initial state {self.initial_state} not in Enum of states {self.states}.")
 
-        self._state = self._get_machine_compliant_state(self.initial_state)
+        owner._state_machine_state = self._get_machine_compliant_state(self.initial_state)
         self.owner = owner
-        owner_properties = owner.parameters.descriptors.values() # same as owner.properties.descriptors.values()
-        owner_methods = owner.actions.values()
+        owner_properties = owner.properties.descriptors.values() # same as owner.properties.descriptors.values()
+        owner_methods = owner.actions.descriptors.values()
         
         if isinstance(self.states, list):
-            self.__class__.states.constant = False 
-            self.states = tuple(self.states) # freeze the list of states
-            self.__class__.states.constant = True   
+            with edit_constant(self.__class__.states): # type: ignore
+                self.states = tuple(self.states) # freeze the list of states
             
         # first validate machine
         for state, objects in self.machine.items():
             if state in self:
                 for resource in objects:
-                    if isinstance(resource, (Property, Action)):
-                        assert isinstance(resource._execution_info_validator, RemoteResourceInfoValidator) # type definition
-                        if resource._execution_info_validator.isaction and resource not in owner_methods: 
+                    if isinstance(resource, Action):
+                        if resource not in owner_methods: 
                             raise AttributeError("Given object {} for state machine does not belong to class {}".format(
                                                                                                 resource, owner))
-                        if resource._execution_info_validator.isproperty and resource not in owner_properties: 
-                            raise AttributeError("Given object {} - {} for state machine does not belong to class {}".format(
-                                                                                                resource.name, resource, owner))
-                        if resource._execution_info_validator.state is None: 
-                            resource._execution_info_validator.state = self._get_machine_compliant_state(state)
-                        else: 
-                            resource._execution_info_validator.state = resource._execution_info_validator.state + (self._get_machine_compliant_state(state), ) 
+                    elif isinstance(resource, Property):
+                        if resource not in owner_properties: 
+                            raise AttributeError("Given object {} for state machine does not belong to class {}".format(
+                                                                                               resource, owner))
+                        continue # for now
                     else: 
                         raise AttributeError(f"Object {resource} was not made remotely accessible," + 
                                     " use state machine with properties and actions only.")
+                    if resource.execution_info.state is None: 
+                        resource.execution_info.state = self._get_machine_compliant_state(state)
+                    else: 
+                        resource.execution_info.state = resource._execution_info.state + (self._get_machine_compliant_state(state), ) 
             else:
-                raise StateMachineError("Given state {} not in states Enum {}".format(state, self.states.__members__))
+                raise StateMachineError("Given state {} not in allowed states ({})".format(state, self.states.__members__))
             
         # then the callbacks 
         for state, objects in self.on_enter.items():
@@ -133,12 +131,10 @@ class StateMachine:
                     raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")     
         self._valid = True
         
-    def __contains__(self, state : typing.Union[str, StrEnum]):
+    def __contains__(self, state: typing.Union[str, StrEnum]):
         if isinstance(self.states, EnumMeta) and state in self.states.__members__:
             return True
         elif isinstance(self.states, tuple) and state in self.states:
-            return True
-        elif self.has_object(state):
             return True
         return False
         
@@ -162,7 +158,7 @@ class StateMachine:
         -------
         current state: str
         """
-        return self._state
+        return self.owner._state_machine_state
         
     def set_state(self, value : typing.Union[str, StrEnum, Enum], push_event : bool = True, 
                 skip_callbacks : bool = False) -> None:
@@ -179,8 +175,9 @@ class StateMachine:
         """
     
         if value in self.states:
-            previous_state = self._state
-            self._state = self._get_machine_compliant_state(value)
+            previous_state = self.owner._state_machine_state
+            current_state = self._get_machine_compliant_state(value)
+            self.owner._state_machine_state = current_state 
             if push_event and self.push_state_change_event and hasattr(self.owner, 'event_publisher'):
                 self.owner.state # just acces to trigger the observable event
             if skip_callbacks:
@@ -188,8 +185,8 @@ class StateMachine:
             if previous_state in self.on_exit:
                 for func in self.on_exit[previous_state]:
                     func(self.owner)
-            if self._state in self.on_enter:
-                for func in self.on_enter[self._state]: 
+            if current_state in self.on_enter:
+                for func in self.on_enter[current_state]: 
                     func(self.owner)
         else:   
             raise ValueError("given state '{}' not in set of allowed states : {}.".format(value, self.states))
@@ -197,7 +194,7 @@ class StateMachine:
     current_state = property(get_state, set_state, None, 
         doc = """read and write current state of the state machine""")
 
-    def contains_object(self, object : typing.Union[Property, typing.Callable]) -> bool:
+    def contains_object(self, object: typing.Union[Property, typing.Callable]) -> bool:
         """
         returns True if specified object is found in any of the state machine states. 
         Supply unbound method for checking methods, as state machine is specified at class level

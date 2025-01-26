@@ -41,7 +41,7 @@ class RemoteResourceInfoValidator:
         True for a property
     """
     state = Tuple(default=None, item_type=(Enum, str), allow_None=True, accept_list=True, accept_item=True,
-                    doc="State machine state at which a callable will be executed or attribute/property can be written.") # type: typing.Union[Enum, str]
+                    doc="State machine state at which a callable will be executed or attribute/property can be written.") # type: typing.Tuple[typing.Union[Enum, str]]
     obj = ClassSelector(default=None, allow_None=True, class_=(FunctionType, MethodType, classmethod, Parameter, ParameterizedMetaclass), # Property will need circular import so we stick to base class Parameter
                     doc="the unbound object like the unbound method")
     obj_name = String(default=USE_OBJECT_NAME, 
