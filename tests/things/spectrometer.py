@@ -93,6 +93,7 @@ class OceanOpticsSpectrometer(Thing):
     
     def __init__(self, id : str, serial_number : typing.Optional[str] = None, **kwargs) -> None:
         super().__init__(id=id, serial_number=serial_number, **kwargs)
+        self.set_status("disconnected")
         if serial_number is not None:
             self.connect()
         self._acquisition_thread = None 
