@@ -284,6 +284,10 @@ class TestActionRegistry(TestCase):
 
 class TestEventRegistry(TestCase):
 
+    @classmethod
+    def setUpClass(self):
+        super().setUpClass()
+       
     def test_1_owner(self):
         # owner attribute must be the class itself
         self.assertEqual(Thing.events.owner, Thing)
@@ -447,8 +451,6 @@ class TestPropertiesRegistry(TestCase):
             self.assertTrue(value.db_persist)
             self.assertFalse(value.db_init) # in user given cases, this could be true, this is not strict requirement
             self.assertFalse(value.db_commit) # in user given cases, this could be true, this is not strict requirement
-        
-        
 
         # descriptors can be cleared
         self.assertTrue(hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertyRegistry.__name__.lower()}'))
@@ -468,6 +470,82 @@ class TestPropertiesRegistry(TestCase):
             self.assertIn(value, Thing.properties)
             self.assertIn(name, Thing.properties.descriptors.keys())
 
+
+    def test_4_bulk_read_write(self):
+
+        # thing = Thing(id="test_property_registry_owner", log_level=logging.WARN)
+        spectrometer = OceanOpticsSpectrometer(id="test_property_registry_owner", log_level=logging.WARN)
+
+        ## test read in bulk for readAllProperties
+        prop_values = spectrometer.properties.get()
+        # read value is a dictionary
+        self.assertIsInstance(prop_values, dict)
+        self.assertTrue(len(prop_values) > 0)	
+        # all properties are read at instance level and get only reads remote objects
+        self.assertTrue(len(prop_values) == len(spectrometer.properties.remote_objects)) 
+        # read values are not descriptors themselves
+        for name, value in prop_values.items():
+            self.assertIsInstance(name, str)
+            self.assertNotIsInstance(value, Parameter) # descriptor has been read
+        # properties can be read with new names
+        prop_values = spectrometer.properties.get(integration_time='integrationTime', state='State', trigger_mode='triggerMode')
+        self.assertIsInstance(prop_values, dict)
+        self.assertTrue(len(prop_values) == 3)
+        for name, value in prop_values.items():
+            self.assertIsInstance(name, str)
+            self.assertTrue(name in ['integrationTime', 'triggerMode', 'State'])
+            self.assertNotIsInstance(value, Parameter)
+        
+        # read in bulk for readMultipleProperties
+        prop_values = spectrometer.properties.get(names=['integration_time', 'trigger_mode', 'state', 'last_intensity'])
+        # read value is a dictionary
+        self.assertIsInstance(prop_values, dict)
+        self.assertTrue(len(prop_values) == 4)
+        # read values are not descriptors themselves
+        for name, value in prop_values.items():
+            self.assertIsInstance(name, str)
+            self.assertTrue(name in ['integration_time', 'trigger_mode', 'state', 'last_intensity'])
+            self.assertNotIsInstance(value, Parameter)
+
+        # read a property that is not present raises AttributeError
+        with self.assertRaises(AttributeError) as ex:
+            prop_values = spectrometer.properties.get(names=['integration_time', 'trigger_mode', 'non_existent_property', 'last_intensity'])
+        self.assertTrue("property non_existent_property does not exist" in str(ex.exception))
+    
+        # write in bulk
+        prop_values = spectrometer.properties.get()
+        spectrometer.properties.set(
+            integration_time=10,
+            trigger_mode=1            
+        )
+        self.assertNotEqual(prop_values['integration_time'], spectrometer.integration_time)
+        self.assertNotEqual(prop_values['trigger_mode'], spectrometer.trigger_mode)
+
+        # writing a non existent property raises RuntimeError
+        with self.assertRaises(RuntimeError) as ex:
+            spectrometer.properties.set(
+                integration_time=120,
+                trigger_mode=2,
+                non_existent_property=10
+            )
+        self.assertTrue("Some properties could not be set due to errors" in str(ex.exception))
+        self.assertTrue("non_existent_property" in str(ex.exception.__notes__))
+        # but those that exist will still be written
+        self.assertEqual(spectrometer.integration_time, 120)
+        self.assertEqual(spectrometer.trigger_mode, 2)
+
+
+    def test_5_db_properties(self):
+
+        # db operations are supported only at instance level
+        with self.assertRaises(AttributeError) as ex:
+            Thing.properties.load_from_DB()
+        self.assertTrue("database operations are only supported at instance level" in str(ex.exception)) 
+        with self.assertRaises(AttributeError) as ex:
+            Thing.properties.get_from_DB()
+        self.assertTrue("database operations are only supported at instance level" in str(ex.exception))
+
+        # thing = Thing(id="test_property_registry_owner", log_level=logging.WARN)
 
 
 if __name__ == '__main__':
