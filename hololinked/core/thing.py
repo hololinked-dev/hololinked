@@ -41,7 +41,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     # remote properties
     state = String(default=None, allow_None=True, readonly=True, observable=True,
-                fget=lambda self: self._state_machine_state if self.state_machine else None,
+                fget=lambda self: self.state_machine.current_state if self.state_machine else None,
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
     
     # object_info = Property(doc="contains information about this object like the class name, script location etc.") # type: ThingInformation
