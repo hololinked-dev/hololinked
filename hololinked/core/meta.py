@@ -98,6 +98,8 @@ class DescriptorRegistry:
         super().__init__()
         self.owner_cls = owner_cls
         self.owner_inst = owner_inst
+        self.clear() 
+    
 
     @property
     def owner(self):
@@ -180,11 +182,13 @@ class DescriptorRegistry:
             return f"<DescriptorRegistry({self.owner_cls.__name__}({self.owner_inst.id}))>"
         return f"<DescriptorRegistry({self.owner_cls.__name__})>"
     
-    def _get_descriptors(self) -> typing.Dict[str, Property | Action | Event]:
+    def get_descriptors(self, recreate: bool = False) -> typing.Dict[str, Property | Action | Event]:
         """
         a dictionary with all the properties of the object as values (methods that are decorated with `property`) and 
         their names as keys.
         """
+        if recreate:
+            self.clear()
         try:
             return getattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}')
         except AttributeError:
@@ -257,6 +261,7 @@ class PropertyRegistry(DescriptorRegistry):
             self.event_dispatcher = EventDispatcher(owner_inst, self.event_resolver)
             self.event_dispatcher.prepare_instance_dependencies()    
         
+        
     @property
     def descriptor_object(self) -> type[Parameter]:
         return Parameter
@@ -264,8 +269,8 @@ class PropertyRegistry(DescriptorRegistry):
     @property
     def descriptors(self) -> typing.Dict[str, Parameter]:
         if self.owner_inst is None:
-            return super()._get_descriptors()
-        return dict(super()._get_descriptors(), **self._instance_params)
+            return super().get_descriptors()
+        return dict(super().get_descriptors(), **self._instance_params)
     
     values = property(DescriptorRegistry._get_values,
                 doc=DescriptorRegistry._get_values.__doc__) # type: typing.Dict[str, Parameter | Property | typing.Any]
@@ -584,7 +589,7 @@ class ActionsRegistry(DescriptorRegistry):
     def descriptor_object(self) -> type[Action]:
         return Action
     
-    descriptors = property(DescriptorRegistry._get_descriptors) # type: typing.Dict[str, Action]
+    descriptors = property(DescriptorRegistry.get_descriptors) # type: typing.Dict[str, Action]
 
     values = property(DescriptorRegistry._get_values, 
                     doc=DescriptorRegistry._get_values.__doc__) # type: typing.Dict[str, Action]  
@@ -605,7 +610,7 @@ class EventsRegistry(DescriptorRegistry):
     def descriptor_object(self):
         return Event
 
-    descriptors = property(DescriptorRegistry._get_descriptors) # type: typing.Dict[str, Event]
+    descriptors = property(DescriptorRegistry.get_descriptors) # type: typing.Dict[str, Event]
 
     values = property(DescriptorRegistry._get_values, 
                     doc=DescriptorRegistry._get_values.__doc__) # type: typing.Dict[str, EventDispatcher]
