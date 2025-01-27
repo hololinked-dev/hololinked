@@ -7,6 +7,7 @@ from ..exceptions import StateMachineError
 from .property import Property
 from .properties import ClassSelector, TypedDict, Boolean
 from .thing import Thing
+from .meta import ThingMeta
 from .actions import Action
 
 
@@ -59,7 +60,8 @@ class StateMachine:
                 directly pass the state name as an argument along with the methods/properties which are allowed to execute 
                 in that state
         """
-        self._valid = False
+        self._valid = False#
+        self.name = None
         self.on_enter = on_enter
         self.on_exit  = on_exit
         # None cannot be passed in, but constant is necessary. 
@@ -68,21 +70,25 @@ class StateMachine:
         self.machine = machine
         self.push_state_change_event = push_state_change_event
    
+    def __set_name__(self, owner: ThingMeta, name: str) -> None:
+        self.name = name
+        self.owner = owner
 
-    def _prepare(self, owner) -> None:
-        assert isinstance(owner, Thing), "state machine can only be attached to a Thing class."
-        
+    def validate(self, owner: Thing) -> None:
+        # cannot merge this with __set_name__ because descriptor objects are not ready at that time.
+        # reason - metaclass __init__ is called after __set_name__ of descriptors, therefore the new "proper" desriptor
+        # registries are available only after that. Until then only the inherited descriptor registries are available, 
+        # which do not correctly account the subclass's objects. 
+
         if self.states is None and self.initial_state is None:    
             self._valid = False 
-            owner._state_machine_state = None
             return
         elif self.initial_state not in self.states:
             raise AttributeError(f"specified initial state {self.initial_state} not in Enum of states {self.states}.")
 
-        owner._state_machine_state = self._get_machine_compliant_state(self.initial_state)
-        self.owner = owner
-        owner_properties = owner.properties.descriptors.values() # same as owner.properties.descriptors.values()
-        owner_methods = owner.actions.descriptors.values()
+        # owner._state_machine_state = self._get_machine_compliant_state(self.initial_state)
+        owner_properties = owner.properties.get_descriptors(recreate=True).values() 
+        owner_methods = owner.actions.get_descriptors(recreate=True).values()
         
         if isinstance(self.states, list):
             with edit_constant(self.__class__.states): # type: ignore
@@ -130,7 +136,50 @@ class StateMachine:
                 if not isinstance(obj, (FunctionType, MethodType)):
                     raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")     
         self._valid = True
+
+
+    def __get__(self, instance, owner) -> "BoundFSM":
+        if instance is None:
+            return self
+        return BoundFSM(instance, self)
+    
+    def __set__(self, instance, value) -> None:
+        raise AttributeError("Cannot set state machine directly. It is a class level attribute and can be defined only once.")
+    
+    def __contains__(self, state: typing.Union[str, StrEnum]):
+        if isinstance(self.states, EnumMeta) and state in self.states.__members__:
+            return True
+        elif isinstance(self.states, tuple) and state in self.states:
+            return True
+        return False
+    
+    def _get_machine_compliant_state(self, state) -> typing.Union[StrEnum, str]:
+        """
+        In case of not using StrEnum or iterable of str, 
+        this maps the enum of state to the state name.
+        """
+        if isinstance(state, str):
+            return state 
+        if isinstance(state, Enum):
+            return state.name
+        raise TypeError(f"cannot comply state to a string : {state} which is of type {type(state)}.")
+    
+
         
+class BoundFSM:
+
+    def __init__(self, owner: Thing, state_machine: StateMachine) -> None:
+        self.descriptor = state_machine
+        self.initial_state = state_machine.initial_state
+        self.states = state_machine.states
+        self.on_enter = state_machine.on_enter
+        self.on_exit = state_machine.on_exit
+        self.machine = state_machine.machine
+        self.push_state_change_event = state_machine.push_state_change_event
+        self.owner = owner
+        # self.owner._state_machine_state = state_machine.initial_state
+        # self.state_machine._prepare(owner)
+
     def __contains__(self, state: typing.Union[str, StrEnum]):
         if isinstance(self.states, EnumMeta) and state in self.states.__members__:
             return True
@@ -158,10 +207,16 @@ class StateMachine:
         -------
         current state: str
         """
-        return self.owner._state_machine_state
+        try:
+            return self.owner._state_machine_state
+        except AttributeError:
+            return self.initial_state
         
-    def set_state(self, value : typing.Union[str, StrEnum, Enum], push_event : bool = True, 
-                skip_callbacks : bool = False) -> None:
+    def set_state(self, 
+                value : typing.Union[str, StrEnum, Enum], 
+                push_event : bool = True, 
+                skip_callbacks : bool = False
+            ) -> None:
         """ 
         set state of state machine. Also triggers state change callbacks if skip_callbacks=False and pushes a state 
         change event when push_event=True. One can also set state using '=' operator of `current_state` property in which case 
@@ -175,9 +230,9 @@ class StateMachine:
         """
     
         if value in self.states:
-            previous_state = self.owner._state_machine_state
-            current_state = self._get_machine_compliant_state(value)
-            self.owner._state_machine_state = current_state 
+            previous_state = self.current_state
+            next_state = self._get_machine_compliant_state(value)
+            self.owner._state_machine_state = next_state 
             if push_event and self.push_state_change_event and hasattr(self.owner, 'event_publisher'):
                 self.owner.state # just acces to trigger the observable event
             if skip_callbacks:
@@ -185,8 +240,8 @@ class StateMachine:
             if previous_state in self.on_exit:
                 for func in self.on_exit[previous_state]:
                     func(self.owner)
-            if current_state in self.on_enter:
-                for func in self.on_enter[current_state]: 
+            if next_state in self.on_enter:
+                for func in self.on_enter[next_state]: 
                     func(self.owner)
         else:   
             raise ValueError("given state '{}' not in set of allowed states : {}.".format(value, self.states))
@@ -226,8 +281,8 @@ def prepare_object_FSM(instance) -> None:
     """
     prepare state machine attached to thing class 
     """
-    from .thing import Thing
     assert isinstance(instance, Thing), "state machine can only be attached to a Thing class."
-    if instance.state_machine and isinstance(instance.state_machine, StateMachine):
-        instance.state_machine._prepare(instance)
+    cls = instance.__class__
+    if cls.state_machine and isinstance(cls.state_machine, StateMachine):
+        cls.state_machine.validate(instance)
         instance.logger.debug("setup state machine")

@@ -4,7 +4,7 @@ import warnings
 
 from hololinked.core import Thing, ThingMeta, Action, Event, Property
 from hololinked.core.meta import PropertyRegistry, ActionsRegistry, EventsRegistry
-from hololinked.core.state_machine import StateMachine
+from hololinked.core.state_machine import BoundFSM
 from hololinked.utils import get_default_logger 
 from hololinked.core.logger import RemoteAccessHandler
 from hololinked.client import ObjectProxy
@@ -119,21 +119,20 @@ class TestOceanOpticsSpectrometer(TestThing):
 
 
     def test_3_state(self):
-        return
         thing1 = self.thing_cls(id="test_state_machine", log_level=logging.WARN)
         self.assertIsNotNone(thing1.state)
-        self.assertIsInstance(thing1.state_machine, StateMachine)
+        self.assertIsInstance(thing1.state_machine, BoundFSM)
 
         thing2 = self.thing_cls(id="test_state_machine_2", log_level=logging.WARN)
         self.assertIsNotNone(thing2.state)
-        self.assertIsInstance(thing2.state_machine, StateMachine)
+        self.assertIsInstance(thing2.state_machine, BoundFSM)
 
-        self.assertEqual(thing1.state_machine, thing2.state_machine)
+        self.assertNotEqual(thing1.state_machine, thing2.state_machine)
         self.assertEqual(thing1.state, thing2.state) # returns initial state
         
         thing1.state_machine.set_state(thing1.states.ALARM)
         self.assertNotEqual(thing1.state, thing2.state) # returns initial state
-        self.assertEqual(thing1.state_machine, thing2.state_machine)
+        self.assertNotEqual(thing1.state_machine, thing2.state_machine)
 
 
 
