@@ -410,6 +410,7 @@ class PropertyRegistry(DescriptorRegistry):
                 if self.owner_inst is None and not prop.class_member:
                     continue
                 data[name] = prop.__get__(self.owner_inst, self.owner_cls)
+            return data
         elif 'names' in kwargs:
             names = kwargs.get('names')
             if not isinstance(names, (list, tuple, str)):
@@ -443,7 +444,6 @@ class PropertyRegistry(DescriptorRegistry):
         values: typing.Dict[str, typing.Any]
             dictionary of property names and its values
         """
-        produced_error = False
         errors = ''
         for name, value in values.items():
             try:
@@ -456,9 +456,8 @@ class PropertyRegistry(DescriptorRegistry):
                     raise AttributeError(f"property {name} is not a class member and cannot be set at class level")
                 setattr(self.owner, name, value)
             except Exception as ex:
-                errors += f'{name} : {str(ex)}\n'
-                produced_error = True
-        if produced_error:
+                errors += f'{name}: {str(ex)}\n'
+        if errors:
             ex = RuntimeError("Some properties could not be set due to errors. " + 
                             "Check exception notes or server logs for more information.")
             ex.__notes__ = errors
