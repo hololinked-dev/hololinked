@@ -137,7 +137,6 @@ class StateMachine:
                     raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")     
         self._valid = True
 
-
     def __get__(self, instance, owner) -> "BoundFSM":
         if instance is None:
             return self
@@ -162,7 +161,7 @@ class StateMachine:
             return state 
         if isinstance(state, Enum):
             return state.name
-        raise TypeError(f"cannot comply state to a string : {state} which is of type {type(state)}.")
+        raise TypeError(f"cannot comply state to a string: {state} which is of type {type(state)}. owner - {self.owner}.")
     
 
         
@@ -170,34 +169,10 @@ class BoundFSM:
 
     def __init__(self, owner: Thing, state_machine: StateMachine) -> None:
         self.descriptor = state_machine
-        self.initial_state = state_machine.initial_state
-        self.states = state_machine.states
-        self.on_enter = state_machine.on_enter
-        self.on_exit = state_machine.on_exit
-        self.machine = state_machine.machine
         self.push_state_change_event = state_machine.push_state_change_event
         self.owner = owner
         # self.owner._state_machine_state = state_machine.initial_state
         # self.state_machine._prepare(owner)
-
-    def __contains__(self, state: typing.Union[str, StrEnum]):
-        if isinstance(self.states, EnumMeta) and state in self.states.__members__:
-            return True
-        elif isinstance(self.states, tuple) and state in self.states:
-            return True
-        return False
-        
-    def _get_machine_compliant_state(self, state) -> typing.Union[StrEnum, str]:
-        """
-        In case of not using StrEnum or iterable of str, 
-        this maps the enum of state to the state name.
-        """
-        if isinstance(state, str):
-            return state 
-        if isinstance(state, Enum):
-            return state.name
-        raise TypeError(f"cannot comply state to a string : {state} which is of type {type(state)}.")
-    
 
     def get_state(self) -> typing.Union[str, StrEnum, None]:
         """
@@ -231,7 +206,7 @@ class BoundFSM:
     
         if value in self.states:
             previous_state = self.current_state
-            next_state = self._get_machine_compliant_state(value)
+            next_state = self.descriptor._get_machine_compliant_state(value)
             self.owner._state_machine_state = next_state 
             if push_event and self.push_state_change_event and hasattr(self.owner, 'event_publisher'):
                 self.owner.state # just acces to trigger the observable event
@@ -276,8 +251,37 @@ class BoundFSM:
             self.owner.id == other.owner.id
         )
     
+    def __contains__(self, state: typing.Union[str, StrEnum]) -> bool:
+        return state in self.descriptor
+    
+    @property
+    def initial_state(self):
+        """initial state of the machine"""
+        return self.descriptor.initial_state
 
-def prepare_object_FSM(instance) -> None:
+    @property
+    def states(self):
+        """list of allowed states"""
+        return self.descriptor.states
+
+    @property
+    def on_enter(self):
+        """callbacks to execute when a certain state is entered"""
+        return self.descriptor.on_enter
+
+    @property
+    def on_exit(self):
+        """callbacks to execute when certain state is exited"""
+        return self.descriptor.on_exit
+
+    @property
+    def machine(self):
+        """the machine specification with state as key and objects as list"""
+        return self.descriptor.machine
+    
+
+
+def prepare_object_FSM(instance: Thing) -> None:
     """
     prepare state machine attached to thing class 
     """

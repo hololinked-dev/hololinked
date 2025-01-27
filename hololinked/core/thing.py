@@ -51,7 +51,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         obj = super().__new__(cls)
         # defines some internal fixed attributes. attributes created by us that require no validation but 
         # cannot be modified are called _internal_fixed_attributes
-        obj._internal_fixed_attributes = ['_internal_fixed_attributes', '_owner', 'rpc_server', 'event_publisher']        
+        obj._internal_fixed_attributes = ['_internal_fixed_attributes', '_owners', 'rpc_server', 'event_publisher']        
         return obj
 
 
@@ -110,7 +110,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         )   
         prepare_object_FSM(self)
         prepare_object_database(self, kwargs.get('use_default_db', False), kwargs.get('db_config_file', None))   
-        
+       
+        # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
+
 
     def __post_init__(self):
         from .rpc_server import RPCServer
@@ -119,7 +121,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # Type definitions
         self.rpc_server = None # type: typing.Optional[RPCServer]
         self.event_publisher = None # type: typing.Optional[EventPublisher] 
-        self._owner = None # type: typing.Optional[Thing]
+        self._owners = None if not hasattr(self, '_owners') else self._owners # type: typing.Optional[typing.List[Thing]]
         self._remote_access_loghandler: typing.Optional[RemoteAccessHandler] 
         self._internal_fixed_attributes: typing.List[str]
         self._qualified_id: str
@@ -147,12 +149,16 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def sub_things(self) -> typing.Dict[str, "Thing"]:
         """other `Thing`'s that are composed within this `Thing`."""
         things = dict()
-        for name, value in inspect._getmembers(
+        for name, subthing in inspect._getmembers(
                                 self, 
                                 lambda obj: isinstance(obj, Thing), 
                                 getattr_without_descriptor_read
                             ):
-            things[name] = value
+            if not hasattr(subthing, '_owners') or subthing._owners is None:
+                subthing._owners = []
+            if self not in subthing._owners:
+                subthing._owners.append(self)
+            things[name] = subthing
         return things
         
 
@@ -325,11 +331,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         if self.rpc_server is None:
             self.logger.debug("exit() called on a object that is not exposed yet.")
             return 
-        if self._owner is None:
+        if self._owners:
             raise BreakInnerLoop # stops the inner loop of the object
         else:
             raise NotImplementedError("call exit on the top-level object, composed objects cannot exit the loop. "+
-                                f"This object belongs to {self._owner.__class__.__name__} with ID {self._owner.id}.")
+                                f"This object belongs to {self._owners.__class__.__name__} with ID {self._owners.id}.")
         
 
     @action()

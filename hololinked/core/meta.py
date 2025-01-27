@@ -327,7 +327,7 @@ class PropertyRegistry(DescriptorRegistry):
             for name, desc in propdict.items():
                 if not isinstance(desc, Property):
                     continue
-                if desc.db_init or desc.db_persist:
+                if desc.db_init or desc.db_persist or desc.db_commit:
                     db_props[name] = desc
             setattr(
                 self, 
@@ -345,7 +345,7 @@ class PropertyRegistry(DescriptorRegistry):
             propdict = self.db_objects
             db_init_props = {}
             for name, desc in propdict.items():
-                if desc.db_init:
+                if desc.db_init or desc.db_persist:
                     db_init_props[name] = desc
             setattr(
                 self,
@@ -353,6 +353,24 @@ class PropertyRegistry(DescriptorRegistry):
                 db_init_props
             )
             return db_init_props
+        
+    @property
+    def db_commit_objects(self) -> typing.Dict[str, Property]:
+        """dictionary of properties that are committed to the database"""
+        try:
+            return getattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_db_commit')
+        except AttributeError:
+            propdict = self.db_objects
+            db_commit_props = {}
+            for name, desc in propdict.items():
+                if desc.db_commit or desc.db_persist:
+                    db_commit_props[name] = desc
+            setattr(
+                self,
+                f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_db_commit', 
+                db_commit_props
+            )
+            return db_commit_props
     
     @property
     def db_persisting_objects(self) -> typing.Dict[str, Property]:
