@@ -19,11 +19,15 @@ from .events import Event, EventPublisher
 class ThingMeta(ParameterizedMetaclass):
     """
     Metaclass for `Thing`, implements a `__post_init__()` call and instantiation of a registry for properties', actions'
-    and events' descriptor objects. `__post_init__()` is run after the user's `__init__()` method and properties that can be 
-    loaded from a database are written at this time. 	
+    and events' descriptor objects. 
     Accessing properties, actions and events at the class level returns the descriptor object through the `DescriptorRegistry`
-    implementation. Accessing properties, actions and events at instance level can return their values and the descriptors 
-    can be accessed through the `descriptors` property.
+    implementation. Accessing properties, actions and events at instance level return their values (for example -
+    the value of Property `foo` being '5'). At instance level, the descriptors can be accessed through the `descriptors` 
+    property of the `DescriptorRegistry`.
+    Currently `__post_init__()`, which is run after the user's `__init__()` method, properties that can be 
+    loaded from a database are loaded and written. 	
+
+    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
     """
     def __init__(mcs, name, bases, dict_):
         super().__init__(name, bases, dict_)
@@ -84,6 +88,8 @@ class DescriptorRegistry:
     A registry for the descriptors of a `Thing` class or `Thing` instance. 
     Provides a dictionary interface to access the descriptors under the `descriptors` attribute. 
     Each of properties, actions and events subclasss from here to implement a registry of their available objects. 
+
+    [UML Diagram](http://localhost:8000/UML/PDF/DescriptorRegistry.pdf)
     """
 
     def __init__(self, owner_cls: ThingMeta, owner_inst = None) -> None:
@@ -141,6 +147,10 @@ class DescriptorRegistry:
     
     @property
     def values(self) -> typing.Dict[str, typing.Any]: 
+        """
+        The values contained within the descriptors after reading when accessed at instance level, otherwise,
+        the descriptor objects as dictionary when accessed at class level.
+        """
         raise NotImplementedError("Implement values in subclass")
         
     def clear(self) -> None:
@@ -184,8 +194,12 @@ class DescriptorRegistry:
     
     def get_descriptors(self, recreate: bool = False) -> typing.Dict[str, Property | Action | Event]:
         """
-        a dictionary with all the properties of the object as values (methods that are decorated with `property`) and 
-        their names as keys.
+        a dictionary with all the descriptors as values and their names as keys.
+
+        Parameters
+        ----------
+        recreate: bool
+            if True, the descriptors dictionary is recreated and returned, otherwise, the cached dictionary is returned.
         """
         if recreate:
             self.clear()
@@ -204,15 +218,17 @@ class DescriptorRegistry:
             # and parameters are rarely added (and cannot be deleted)      
             return descriptors
     
-    def _get_values(self) -> typing.Dict[str, typing.Any]:
+    def get_values(self) -> typing.Dict[str, typing.Any]:
         """
         the values contained within the descriptors after reading when accessed at instance level, otherwise, 
         the descriptor objects as dictionary when accessed at class level.
         For example, if a `Thing` instance's property contains a value of 5, this method will return 
-        { <property name> : 5 } when accessed at instance level, and { <property name> : <property object> } when accessed 
+        { property_name : 5 } when accessed at instance level, and { property_name : property_object } when accessed 
         at class level.   
+        This method is also the getter of the `values` property.
         """
         if self.owner_inst is None: 
+            return self.descriptors
             return self.descriptors
         values = dict()
         for name, value in self.descriptors.items():
@@ -241,14 +257,12 @@ def supports_only_instance_access(
 class PropertiesRegistry(DescriptorRegistry):
     """
     A `DescriptorRegistry` for properties of a `Thing` class or `Thing` instance.
+
+    [UML Diagram](http://localhost:8000/UML/PDF/DescriptorRegistry.pdf)
     """
 
-    def __init__(self, owner_cls, owner_class_members: dict, owner_inst=None):
+    def __init__(self, owner_cls: ThingMeta, owner_class_members: dict, owner_inst=None):
         super().__init__(owner_cls, owner_inst)
-        """
-        cls is the Parameterized class which is always set.
-        self is the instance if set.
-        """
         if self.owner_inst is None and owner_class_members is not None:
             # instantiated by class 
             self.event_resolver = EventResolver(owner_cls=owner_cls)
@@ -272,8 +286,8 @@ class PropertiesRegistry(DescriptorRegistry):
             return super().get_descriptors()
         return dict(super().get_descriptors(), **self._instance_params)
     
-    values = property(DescriptorRegistry._get_values,
-                doc=DescriptorRegistry._get_values.__doc__) # type: typing.Dict[str, Parameter | Property | typing.Any]
+    values = property(DescriptorRegistry.get_values,
+                doc=DescriptorRegistry.get_values.__doc__) # type: typing.Dict[str, Parameter | Property | typing.Any]
 
     @typing.overload
     def __getitem__(self, key: str) -> Parameter:
@@ -320,7 +334,10 @@ class PropertiesRegistry(DescriptorRegistry):
         
     @property
     def db_objects(self) -> typing.Dict[str, Property]:
-        """dictionary of properties that are stored or loaded from the database"""
+        """
+        dictionary of properties that are stored or loaded from the database 
+        (`db_init`, `db_persist` or `db_commit` set to True)
+        """
         try:
             return getattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_db')
         except AttributeError:
@@ -340,7 +357,7 @@ class PropertiesRegistry(DescriptorRegistry):
     
     @property
     def db_init_objects(self) -> typing.Dict[str, Property]:
-        """dictionary of properties that are initialized from the database"""
+        """dictionary of properties that are initialized from the database (`db_init` or `db_persist` set to True)"""
         try:
             return getattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_db_init')
         except AttributeError:
@@ -358,7 +375,7 @@ class PropertiesRegistry(DescriptorRegistry):
         
     @property
     def db_commit_objects(self) -> typing.Dict[str, Property]:
-        """dictionary of properties that are committed to the database"""
+        """dictionary of properties that are committed to the database (`db_commit` or `db_persist` set to True)"""
         try:
             return getattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_db_commit')
         except AttributeError:
@@ -376,7 +393,7 @@ class PropertiesRegistry(DescriptorRegistry):
     
     @property
     def db_persisting_objects(self) -> typing.Dict[str, Property]:
-        """dictionary of properties that are persisted through the database"""
+        """dictionary of properties that are persisted through the database (`db_persist` set to True)"""
         try:
             return getattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_db_persisting')
         except AttributeError:
@@ -394,16 +411,28 @@ class PropertiesRegistry(DescriptorRegistry):
 
     def get(self, **kwargs: typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
         """
-        read properties from the object, implements WoT operation `readAllProperties` and `readMultipleProperties`
+        read properties from the object, implements WoT operations `readAllProperties` and `readMultipleProperties`
         
         Parameters
         ----------
         **kwargs: typing.Dict[str, typing.Any]
-            - `names`: List[str]
+            - names: `List[str]`
                 list of property names to be fetched
-            - name: str
+            - name: `str`
                 name of the property to be fetched, along with a 'rename' for the property in the response.
                 For example { 'foo_prop' : 'fooProp' } will return the property 'foo_prop' as 'fooProp' in the response.
+
+        Returns
+        -------
+        typing.Dict[str, typing.Any]
+            dictionary of property names and their values
+        
+        Raises
+        ------
+        TypeError
+            if property name is not a string or requested new name is not a string
+        AttributeError
+            if property does not exist or is not remote accessible
         """
         data = {}
         if len(kwargs) == 0:
@@ -438,13 +467,18 @@ class PropertiesRegistry(DescriptorRegistry):
        
     def set(self, **values : typing.Dict[str, typing.Any]) -> None:
         """ 
-        set properties whose name is specified by keys of a dictionary; implements WoT operation `writeMultipleProperties`
+        set properties whose name is specified by keys of a dictionary; implements WoT operations `writeMultipleProperties`
         or `writeAllProperties`. 
         
         Parameters
         ----------
         values: typing.Dict[str, typing.Any]
-            dictionary of property names and its values
+            dictionary of property names and its new values
+        
+        Raises
+        ------
+        AttributeError
+            if property does not exist or is not remote accessible
         """
         errors = ''
         for name, value in values.items():
@@ -520,7 +554,7 @@ class PropertiesRegistry(DescriptorRegistry):
     @supports_only_instance_access("database operations are only supported at instance level")
     def load_from_DB(self):
         """
-        Load and apply property values which have `db_init` or `db_persist` set to `True` from database
+        Load and apply property values from database which have `db_init` or `db_persist` set to `True` 
         """
         if not hasattr(self.owner_inst, 'db_engine'):
             return 
@@ -602,6 +636,8 @@ class PropertiesRegistry(DescriptorRegistry):
 class ActionsRegistry(DescriptorRegistry):
     """
     A `DescriptorRegistry` for actions of a `Thing` class or `Thing` instance.
+
+    [UML Diagram](http://localhost:8000/UML/PDF/DescriptorRegistry.pdf)
     """
 
     @property
@@ -610,8 +646,8 @@ class ActionsRegistry(DescriptorRegistry):
     
     descriptors = property(DescriptorRegistry.get_descriptors) # type: typing.Dict[str, Action]
 
-    values = property(DescriptorRegistry._get_values, 
-                    doc=DescriptorRegistry._get_values.__doc__) # type: typing.Dict[str, Action]  
+    values = property(DescriptorRegistry.get_values, 
+                    doc=DescriptorRegistry.get_values.__doc__) # type: typing.Dict[str, Action]  
                   
     def __getitem__(self, key: str) -> Action | BoundAction:
         if self.owner_inst is not None: 
@@ -625,6 +661,8 @@ class ActionsRegistry(DescriptorRegistry):
 class EventsRegistry(DescriptorRegistry):
     """
     A `DescriptorRegistry` for events of a `Thing` class or `Thing` instance.
+
+    [UML Diagram](http://localhost:8000/UML/PDF/DescriptorRegistry.pdf)
     """
 
     @property
@@ -633,8 +671,8 @@ class EventsRegistry(DescriptorRegistry):
 
     descriptors = property(DescriptorRegistry.get_descriptors) # type: typing.Dict[str, Event]
 
-    values = property(DescriptorRegistry._get_values, 
-                    doc=DescriptorRegistry._get_values.__doc__) # type: typing.Dict[str, EventDispatcher]
+    values = property(DescriptorRegistry.get_values, 
+                    doc=DescriptorRegistry.get_values.__doc__) # type: typing.Dict[str, EventDispatcher]
     
     def __getitem__(self, key: str) -> Event | EventDispatcher:
         if self.owner_inst is not None:
@@ -672,7 +710,7 @@ class EventsRegistry(DescriptorRegistry):
     
     @property   
     def observables(self) -> typing.Dict[str, Property]:
-        """dictionary of all properties that are observable, i.e. push change events"""
+        """dictionary of all properties that are observable, i.e. that which push change events"""
         try:
             return getattr(self, f'_{self._qualified__prefix}_{self.__class__.__name__.lower()}_observables')
         except AttributeError:
