@@ -37,11 +37,11 @@ class ThingMeta(ParameterizedMetaclass):
     
     def _create_param_container(cls, cls_members: dict) -> None:
         """
-        creates `PropertyRegistry` instead of `param`'s own `Parameters` 
+        creates `PropertiesRegistry` instead of `param`'s own `Parameters` 
         as the default container for descriptors. All properties have definitions 
         copied from `param`.
         """
-        cls._param_container = PropertyRegistry(cls, cls_members)
+        cls._param_container = PropertiesRegistry(cls, cls_members)
 
     def _create_actions_registry(cls) -> None:
         """
@@ -60,9 +60,9 @@ class ThingMeta(ParameterizedMetaclass):
         cls._events_registry = EventsRegistry(cls)
 
     @property
-    def properties(cls) -> "PropertyRegistry":
+    def properties(cls) -> "PropertiesRegistry":
         """
-        Container object for Property descriptors. Returns `PropertyRegistry` instance instead of `param`'s own 
+        Container object for Property descriptors. Returns `PropertiesRegistry` instance instead of `param`'s own 
         `Parameters` instance. 
         """
         return cls._param_container
@@ -164,7 +164,7 @@ class DescriptorRegistry:
     
     def __dir__(self) -> typing.List[str]:
         """Adds descriptor object to the dir"""
-        return super().__dir__() + self.descriptors().keys() # type: ignore
+        return super().__dir__() + self.descriptors.keys() # type: ignore
     
     def __iter__(self):
         """Iterates over the descriptors of this object."""
@@ -238,7 +238,7 @@ def supports_only_instance_access(
     return inner 
 
 
-class PropertyRegistry(DescriptorRegistry):
+class PropertiesRegistry(DescriptorRegistry):
     """
     A `DescriptorRegistry` for properties of a `Thing` class or `Thing` instance.
     """
@@ -280,10 +280,12 @@ class PropertyRegistry(DescriptorRegistry):
         ... 
 
     def __getitem__(self, key: str) -> typing.Any:
+        if self.owner_inst is not None:
+            return self.descriptors[key].__get__(self.owner_inst, self.owner_cls)
         return self.descriptors[key]
     
-    def __contains__(self, action: Parameter) -> bool:
-        return action in self.values.values()
+    def __contains__(self, value: str | Parameter) -> bool:
+        return value in self.descriptors.values() or value in self.descriptors
     
     @property
     def defaults(self) -> typing.Dict[str, typing.Any]:
@@ -612,10 +614,12 @@ class ActionsRegistry(DescriptorRegistry):
                     doc=DescriptorRegistry._get_values.__doc__) # type: typing.Dict[str, Action]  
                   
     def __getitem__(self, key: str) -> Action | BoundAction:
+        if self.owner_inst is not None: 
+            return self.descriptors[key].__get__(self.owner_inst, self.owner_cls)
         return self.descriptors[key]
     
-    def __contains__(self, action: Action | BoundAction) -> bool:
-        return action in self.descriptors.values()
+    def __contains__(self, action: str | Action | BoundAction) -> bool:
+        return action in self.descriptors.values() or action in self.descriptors 
     
     
 class EventsRegistry(DescriptorRegistry):
@@ -633,10 +637,12 @@ class EventsRegistry(DescriptorRegistry):
                     doc=DescriptorRegistry._get_values.__doc__) # type: typing.Dict[str, EventDispatcher]
     
     def __getitem__(self, key: str) -> Event | EventDispatcher:
+        if self.owner_inst is not None:
+            return self.descriptors[key].__get__(self.owner_inst, self.owner_cls)
         return self.descriptors[key]
 
     def __contains__(self, event: Event) -> bool:
-        return event in self.descriptors.values()
+        return event in self.descriptors.values() or event in self.descriptors
     
     def clear(self):
         super().clear()
@@ -699,12 +705,12 @@ class Propertized(Parameterized):
     # creating name without underscore causes clash with the metaclass method 
     # with same name
     def create_param_container(self, **params):
-        self._properties_registry = PropertyRegistry(self.__class__, None, self)
+        self._properties_registry = PropertiesRegistry(self.__class__, None, self)
         self._properties_registry._setup_parameters(**params)
         self._param_container = self._properties_registry # backwards compatibility with param
 
     @property
-    def properties(self) -> PropertyRegistry:
+    def properties(self) -> PropertiesRegistry:
         """container for the property descriptors of the object."""
         return self._properties_registry
     

@@ -9,6 +9,7 @@ from ..utils import *
 from ..exceptions import *
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
 from ..protocols.server import BaseProtocolServer
+from ..td.tm import ThingModel
 from .dataklasses import build_our_temp_TD
 from .properties import String, ClassSelector
 from .property import Property
@@ -20,10 +21,12 @@ from .meta import ThingMeta, Propertized, RemoteInvokable, EventSource
 
 class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     """
-    Subclass from here to expose hardware or python objects on the network. Remotely accessible members of the `Thing` are 
+    Subclass from here to expose hardware or python objects on the network. Remotely accessible members of a `Thing` are 
     segragated into properties, actions & events. Utilize properties for data that can be read and written, 
     actions to instruct the object to perform tasks and events to get notified of any relevant information. State Machines
     can be used to contrain operations on properties and actions.  
+    
+    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
     """
 
     # local properties
@@ -31,7 +34,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             doc="""String identifier of the instance. For an interconnected system of hardware, 
             IDs are recommended to be unique. This value is used for many operations,
             for example - creating zmq socket address, tables in databases, and to identify the instance 
-            in the HTTP Server - (http(s)://{domain and sub domain}/{instance name}).""") # type: str
+            in the HTTP Server - (http(s)://{domain and sub domain}/{id}).""") # type: str
     
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False, 
                 doc="""logging.Logger instance to track log messages. Default logger with a IO-stream handler 
@@ -42,7 +45,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     # remote properties
     state = String(default=None, allow_None=True, readonly=True, observable=True,
                 fget=lambda self: self.state_machine.current_state if self.state_machine else None,
-                doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
+                doc="""current state machine's state if state machine present, `None` indicates absence of state machine.
+                State machine returned state is always a string even if specified as an Enum in the state machine.""") #type: typing.Optional[str]
     
     # object_info = Property(doc="contains information about this object like the class name, script location etc.") # type: ThingInformation
     
@@ -65,18 +69,18 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         Parameters
         ----------
         id: str
-            Unique string identifier of the instance. For an interconnected system of hardware,
-            IDs are recommended to be unique. This value is used for many operations,
-            for example - creating zmq socket address, tables in databases, and to identify the instance 
-            in the HTTP Server - (http(s)://{domain and sub domain}/{instance name}).             
+            String identifier of the instance. For an interconnected system of hardware,
+            IDs are recommended to be unique. This value is used for many operations, for example - 
+            creating zmq socket address, tables in databases, and to identify the instance in a 
+            HTTP Server - (http(s)://{domain and sub domain}/{id}).  
         logger: logging.Logger, optional
             logging.Logger instance to track log messages. Default logger with a IO-stream handler 
-            and network accessible handler is created if none supplied.
+            and network accessible handler is created if None supplied.
         serializer: BaseSerializer | JSONSerializer, optional
             Serializer to be used for serializing and deserializing data - preferred is a JSON Serializer. 
             If not supplied, a `msgspec` based JSON Serializer is used.
         **kwargs: typing.Dict[str, Any]
-            - remote_accessible_logger: `bool`, Default True.
+            - remote_accessible_logger: `bool`, Default False.
                 if False, network accessible handler is not attached to the logger. `remote_accessible_logger` can also be set as a 
                 class attribute.
             - use_default_db: `bool`, Default False.
@@ -129,7 +133,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # database operations
         self.properties.load_from_DB()
         # object is ready
-        self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.id}")
+        self.logger.info(f"initialialised Thing class {self.__class__.__name__} with id {self.id}")
        
 
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
@@ -163,9 +167,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         
 
     @action()
-    def get_thing_model(self, ignore_errors: bool = False) -> JSON:
+    def get_thing_model(self, ignore_errors: bool = False) -> ThingModel:
         """
-        generate the Thing Model of the object (https://www.w3.org/TR/wot-thing-description11/#introduction-tm). 
+        generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object. 
         The model is a JSON that describes the object's properties, actions, events and their metadata, without the 
         protocol information. The model can be used by a client to understand the object's capabilities. 
        
@@ -184,13 +188,12 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable 
         #     value for node-wot to ignore validation or claim the accessed value for complaint with the schema.
         #     In other words, schema validation will always pass.  
-        from ..td.tm import ThingModel
         return ThingModel(
                         instance=self, 
                         ignore_errors=ignore_errors
                     ).produce()
     
-    thing_model = property(get_thing_model, doc=get_thing_model.__doc__) # type: JSON
+    thing_model = property(get_thing_model, doc=get_thing_model.__doc__) # type: ThingModel
 
 
     @action()
@@ -211,33 +214,41 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             transports: typing.Sequence[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC, 
             forked: bool = False,
             # expose_eventloop : bool = False,
-            **kwargs 
+            **kwargs: typing.Dict[str, typing.Any]
         ) -> None:
         """
-        Quick-start `Thing` server by creating a default eventloop & ZMQ servers. This 
-        method is blocking until exit() is called.
+        Quick-start to serve `Thing` over ZMQ. This method is fully blocking. This 
+        method is blocking until `exit()` is called.
 
         Parameters
         ----------
         transports: Sequence[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS, Default ZMQ_TRANSPORTS.IPC or "IPC"
-            zmq transport layers at which the object is exposed. 
-            TCP - provides network access apart from HTTP - please supply a socket address additionally.  
-            IPC - inter process communication - connection can be made from other processes running 
+            ZMQ transport layers at which the object is exposed:
+
+            - TCP -  custom implemented protocol in plain TCP - supply a socket address additionally or a random port
+            will be automatically used.  
+            - IPC - inter process communication - connection can be made from other processes running 
             locally within same computer. No client on the network will be able to contact the object using
-            this transport. INPROC - one main python process spawns several threads in one of which the `Thing`
-            the running. The object can be contacted by a client on another thread but neither from other processes 
+            this transport. Beginners may use this transport for learning and testing without worrying about
+            network security or technicalities of a sophisticated protocol like HTTP or MQTT. Also, use this transport 
+            if you wish to avoid configuring your firewall.  
+            - INPROC - one main python process spawns several threads in one of which the `Thing`
+            will be running. The object can be contacted by a client on another thread but not from other processes 
             or the network. One may use more than one form of transport.  All requests made will be anyway queued internally
             irrespective of origin. 
+
+            For multiple transports, supply a list of transports. For example: `[ZMQ_TRANSPORTS.TCP, ZMQ_TRANSPORTS.IPC]`,
+            `["TCP", "IPC"]` or `["IPC", "INPROC"]`.
         
-        **kwargs
-            tcp_socket_address: str, optional
-                socket_address for TCP access, for example: tcp://0.0.0.0:61234
-            context: zmq.asyncio.Context, optional
-                zmq context to be used. If not supplied, a new context is created.
-                For INPROC clients, you need to provide a context.
+        **kwargs:
+            - tcp_socket_address: `str`, optional,
+                socket address for TCP access, for example: tcp://0.0.0.0:61234
+            - context: `zmq.asyncio.Context`, optional,
+                ZMQ context object to be used for creating sockets. If not supplied, a new context is created.
+                For INPROC clients, you need to provide the same context used here.
         """
         from .rpc_server import prepare_rpc_server
-        prepare_rpc_server(transports=transports, **kwargs)
+        prepare_rpc_server(instance=self, transports=transports, **kwargs)
         self.rpc_server.run()
      
 
@@ -250,8 +261,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 **kwargs: typing.Dict[str, typing.Any]
             ) -> None:
         """
-        Quick-start `Thing` server by creating a default eventloop & servers. This 
-        method is fully blocking.
+        Quick-start to serve `Thing` over HTTP. This method is fully blocking.
 
         Parameters
         ----------
@@ -260,21 +270,22 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         address: str
             A convenience option to set IP address apart from 0.0.0.0 (which is default)
         ssl_context: ssl.SSLContext | None
-            use it for highly customized SSL context to provide encrypted communication. For certificate file and key file,
+            use it for customized SSL context to provide encrypted communication. For certificate file and key file,
             one may also use `certfile` and `keyfile` options.
         allowed_clients: typing.Iterable[str] | str | None
-            serves request and sets CORS only from these clients, other clients are rejected with 403. Unlike pure CORS
-            feature, the server resource is not even executed if the client is not an allowed client.
+            serves request and sets CORS only from these clients, other clients are rejected with 403. Uses remote IP
+            header value to achieve this. Unlike CORS, the server resource is not even executed if the client is not an allowed client. 
+            Note that the remote IP in a HTTP request is believable only from a trusted HTTP client, not a modified one.
         **kwargs: typing.Dict[str, typing.Any]
-            - certfile: str
+            - certfile: `str`,
                 alternative to SSL context, provide certificate file & key file to allow the server to create a SSL connection on its own
-            - keyfile: str
+            - keyfile: `str`,
                 alternative to SSL context, provide certificate file & key file to allow the server to create a SSL connection on its own
-            - property_handler: PropertyHandler
+            - property_handler: `BaseHandler` | `PropertyHandler`,
                 custom web request handler for property operations 
-            - action_handler: BaseHandler | ActionHandler
+            - action_handler: `BaseHandler` | `ActionHandler`,
                 custom web request handler for action operations
-            - event_handler: BaseHandler | EventHandler
+            - event_handler: `BaseHandler` | `EventHandler`,
                 custom event handler of your choice for handling events
         """
         # network_interface: str
@@ -297,12 +308,12 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     
     def run(self, servers: typing.Sequence[BaseProtocolServer]) -> None:
         """
-        Expose the object with the given servers. This method is blocking until exit() is called.
+        Expose the object with the given servers. This method is blocking until `exit()` is called.
         
         Parameters
         ----------
         servers: Sequence[BaseProtocolServer] 
-            List of ZMQServer, HTTPServer or any other server that is subclass of BaseProtocolServer.
+            list of instantiated servers to expose the object.
         """
         from ..protocols.http.server import HTTPServer        
         from ..protocols.zmq.server import ZMQServer
@@ -323,11 +334,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     @action()                                                                 
     def exit(self) -> None:
-        """
-        Exit the object without killing the eventloop that runs this object. If Thing was 
-        started using the run() method, the eventloop is also killed. This method can
-        only be called remotely.
-        """
+        """Stop serving the object. This method can only be called remotely"""
         if self.rpc_server is None:
             self.logger.debug("exit() called on a object that is not exposed yet.")
             return 
@@ -340,7 +347,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     @action()
     def ping(self) -> None:
-        """ping the Thing to see if it is alive. No timeout or exception must be raised on the client."""
+        """ping the `Thing` to see if it is alive. No timeout or exception must be raised on the client side."""
         pass 
 
     def __hash__(self) -> int:

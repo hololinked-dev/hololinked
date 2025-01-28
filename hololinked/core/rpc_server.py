@@ -57,6 +57,8 @@ class RPCServer(BaseZMQServer):
   
     Top level ZMQ RPC server used by `Thing` and `Eventloop`. 
 
+    [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
+
     Parameters
     ----------
     id: str
@@ -135,11 +137,16 @@ class RPCServer(BaseZMQServer):
         for instance in self.things.values():
             instance.rpc_server = self
             instance.event_publisher = self.event_publisher 
+            for name, action in instance.actions.descriptors.items():
+                if action.execution_info.iscoroutine and not action.execution_info.synchronous:
+                    self.schedulers_per_objekt[f'{instance.id}.{action.name}.invokeAction'] = AsyncScheduler
+                elif not action.execution_info.synchronous:
+                    self.schedulers_per_objekt[f'{instance.id}.{action.name}.invokeAction'] = ThreadedScheduler
             # instance._prepare_resources()
      
     
     schedulers: typing.Dict[str, "Scheduler"]
-    schedulers_per_objekt = typing.Dict[str, typing.Type["Scheduler"]]
+    schedulers_per_objekt: typing.Dict[str, typing.Type["Scheduler"]]
 
     def __post_init__(self):
         super().__post_init__()
@@ -187,7 +194,7 @@ class RPCServer(BaseZMQServer):
                         scheduler = self.schedulers_per_objekt[request_message.qualified_operation](self.things[request_message.thing_id], self)
                         scheduler.dispatch_operation(operation)
                     else:
-                        self.schedulers[request_message.thing_id].append(operation)
+                        self.schedulers[request_message.thing_id].append_operation(operation)
                 
                     # scheduler = Scheduler(self.things[request_message.thing_id], self, mode='async', one_shot=True)
                     # scheduler.dispatch_operation(operation)
@@ -215,7 +222,7 @@ class RPCServer(BaseZMQServer):
         while self._run and scheduler._run:
             # wait for message first
             if len(scheduler.queue) == 0:
-                await scheduler.wait_for_execution_queueing()
+                await scheduler.wait_for_operation_queueing()
                 # this means in next loop it wont be in this block as a message arrived  
                 continue
 
@@ -584,10 +591,13 @@ class RPCServer(BaseZMQServer):
    
 
 
+
 class Scheduler:
     """
     Scheduler class to schedule the operations of a thing either in queued mode, or a one-shot mode in either 
     async or threaded loops. 
+
+    [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
     """
 
     OperationRequest = typing.Tuple[str, str, str, SerializableData, PreserializedData, typing.Dict[str, typing.Any]]
@@ -597,21 +607,16 @@ class Scheduler:
         self.instance = instance # type: Thing
         self.rpc_server = rpc_server # type: RPCServer
         self.queue = deque() # type: typing.Deque[Scheduler.OperationRequest]
-        self._run = True
-        self._one_shot = False
-        self._last_operation_request = Undefined
-        self._last_operation_reply = Undefined
-        self._message_queued_event = asyncio.Event()
-        if mode == 'threaded':
-            self._operation_execution_ready_event = threading.Event()
-            self._operation_execution_complete_event = threading.Event()
-        elif mode == 'async':
-            self._operation_execution_ready_event = asyncio.Event()
-            self._operation_execution_complete_event = asyncio.Event()
-        else:
-            raise ValueError("mode can only be 'threaded' or 'async'")
+        self._run = True # type: bool 
+        self._one_shot = one_shot
+        self._last_operation_request = Undefined # type: Scheduler.OperationRequest
+        self._last_operation_reply = Undefined # type: Scheduler.OperationRequest
+        self._operation_queued_event = asyncio.Event()
         self.mode = mode 
 
+    _operation_execution_complete_event: asyncio.Event | threading.Event
+    _operation_execution_ready_event: asyncio.Event | threading.Event
+    
     def append(self, item: typing.Tuple[RequestMessage, asyncio.Event, asyncio.Task, AsyncZMQServer]) -> None:
         """
         append a request message to the queue after ticking the invokation timeout clock
@@ -623,11 +628,11 @@ class Scheduler:
             and originating server of the request
         """
         self.queue.append(item)
-        self._message_queued_event.set()
+        self._operation_queued_event.set()
 
-    async def wait_for_execution_queueing(self) -> None:
-        await self._message_queued_event.wait()
-        self._message_queued_event.clear()
+    async def wait_for_operation_queueing(self) -> None:
+        await self._operation_queued_event.wait()
+        self._operation_queued_event.clear()
 
     def pop_queue_FIFO(self) -> typing.Tuple[RequestMessage, asyncio.Event, asyncio.Task, AsyncZMQServer]:
         return self.queue.popleft()
@@ -675,17 +680,11 @@ class Scheduler:
         self._operation_execution_complete_event.clear()
 
     def dispatch_operation(self, operation: OperationRequest) -> None:
-        self.queue.append(operation)
-        eventloop = get_current_async_loop()
-        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
-        if self.mode == 'async': 
-            eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.run_thing_instance(self.instance, self)))
-        else:
-            threading.Thread(target=asyncio.run, args=(self.rpc_server.run_thing_instance(self.instance, self),)).start()
+        raise NotImplementedError("dispatch_operation method must be implemented in the subclass")
 
     def cleanup(self):
         self._run = False
-        self._message_queued_event.set()
+        self._operation_queued_event.set()
         self._operation_execution_ready_event.set()
         self._operation_execution_complete_event.set()
         self.queue.clear()
@@ -699,6 +698,49 @@ class Scheduler:
     @classmethod
     def format_reply_tuple(self, return_value: typing.Any) -> OperationReply:
         pass
+
+
+class QueuedScheduler(Scheduler):
+    """
+    Scheduler class to schedule the operations of a thing in a queued loop.
+    """
+    pass 
+
+class AsyncScheduler(Scheduler):
+    """
+    Scheduler class to schedule the operations of a thing in an async loop.
+    """
+    def __init__(self, instance: Thing, rpc_server: RPCServer, one_shot: bool = True) -> None:
+        super().__init__(instance, rpc_server, one_shot)
+        self._operation_execution_ready_event = asyncio.Event()
+        self._operation_execution_complete_event = asyncio.Event()
+
+    def dispatch_operation(self, operation):
+        self.queue.append(operation)
+        eventloop = get_current_async_loop()
+        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
+        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.run_thing_instance(self.instance, self)))
+       
+
+class ThreadedScheduler(Scheduler):
+    """
+    Scheduler class to schedule the operations of a thing in a threaded loop.
+    """
+
+    def __init__(self, instance: Thing, rpc_server: RPCServer, one_shot: bool = True) -> None:
+        super().__init__(instance, rpc_server, one_shot)
+        self._operation_execution_ready_event = threading.Event()
+        self._operation_execution_complete_event = threading.Event()
+        self._execution_thread = threading.Thread(
+                                            target=asyncio.run, 
+                                            args=(self.rpc_server.run_thing_instance(self.instance, self),)
+                                        ) 
+
+    def dispatch_operation(self, operation):
+        self.queue.append(operation)
+        eventloop = get_current_async_loop()
+        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
+        self._execution_thread.start()
     
 
 
