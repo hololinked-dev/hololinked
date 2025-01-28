@@ -733,6 +733,8 @@ class Propertized(Parameterized):
     Bae class providing additional functionality related to properties,
     like setting up a registry, allowing values to be set at `__init__()` etc. 
     It is not meant to be subclassed directly by the end-user.
+
+    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
     """
 
     # There is a word called Property+ize in english dictionary
@@ -757,6 +759,8 @@ class RemoteInvokable:
     """
     Base class providing additional functionality related to actions, 
     it is not meant to be subclassed directly by the end-user.
+
+    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
     """
     id : str
     
@@ -780,6 +784,8 @@ class EventSource:
     """
     Base class to add event functionality to an object, 
     it is not meant to be subclassed directly by the end-user.
+
+    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
     """
 
     id : str
