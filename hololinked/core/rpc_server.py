@@ -1,16 +1,13 @@
 import zmq
 import zmq.asyncio
 import sys 
-import os
 import warnings
 import asyncio
-import importlib
 import typing 
 import threading
 import logging
 import tracemalloc
 from collections import deque
-from uuid import uuid4
 
 
 from ..exceptions import *
@@ -20,9 +17,9 @@ from ..config import global_config
 from ..protocols.zmq.message import EMPTY_BYTE, ERROR, REPLY, PreserializedData, RequestMessage, SerializableData
 from ..protocols.zmq.brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
 from ..serializers import Serializers
-from .thing import Thing, ThingMeta
+from .thing import Thing
 from .property import Property
-from .properties import Boolean, TypedDict
+from .properties import TypedDict
 from .actions import BoundAction, action as remote_method
 from .logger import ListHandler
 
@@ -73,17 +70,10 @@ class RPCServer(BaseZMQServer):
             address of the TCP socket, if not given, a random port is chosen
     """
     
-    expose = Boolean(default=True, remote=False,
-                    doc="""set to False to use the object locally to avoid alloting network resources 
-                        of your computer for this object""")
-
-    things = TypedDict(key_type=(str,), item_type=(Thing,), bounds=(0,100), allow_None=True, default=None,
+    things = TypedDict(key_type=(str,), item_type=(Thing,), bounds=(0, 100), allow_None=True, default=None,
                     doc="list of Things which are being executed", remote=False) # type: typing.Dict[str, Thing]
     
-    threaded = Boolean(default=False, remote=False, 
-                    doc="set True to run each thing in its own thread")
-  
-
+   
     def __init__(self, *, 
                 id: str, 
                 things: typing.List[Thing],
@@ -102,7 +92,6 @@ class RPCServer(BaseZMQServer):
             log level of the event loop logger
         """
         super().__init__(id=id, **kwargs)
-        self.uninstantiated_things = dict()
         self.things = dict() 
         for thing in things:
             self.things[thing.id] = thing
@@ -116,7 +105,6 @@ class RPCServer(BaseZMQServer):
         self._terminate_context = context is None
         self.context = context or zmq.asyncio.Context()
         
-       
         self.req_rep_server = AsyncZMQServer(
                                 id=self.id, 
                                 context=self.context, 
@@ -126,6 +114,7 @@ class RPCServer(BaseZMQServer):
                             )        
         self.event_publisher = EventPublisher(
                                 id=f'{self.id}/event-publisher',
+                                # dont pass the context
                                 transport=transport,
                                 **kwargs
                             )        
@@ -133,19 +122,19 @@ class RPCServer(BaseZMQServer):
         self.schedulers = dict()
         self.schedulers_per_objekt = dict()
         
-        # message serializing deque
+        # setup scheduling requirements
         for instance in self.things.values():
             instance.rpc_server = self
             instance.event_publisher = self.event_publisher 
-            for name, action in instance.actions.descriptors.items():
+            for action in instance.actions.descriptors.values():
                 if action.execution_info.iscoroutine and not action.execution_info.synchronous:
                     self.schedulers_per_objekt[f'{instance.id}.{action.name}.invokeAction'] = AsyncScheduler
                 elif not action.execution_info.synchronous:
                     self.schedulers_per_objekt[f'{instance.id}.{action.name}.invokeAction'] = ThreadedScheduler
-            # instance._prepare_resources()
-     
+                # else QueuedScheduler which is default
+        
     
-    schedulers: typing.Dict[str, "Scheduler"]
+    schedulers: typing.Dict[str, "QueuedScheduler"]
     schedulers_per_objekt: typing.Dict[str, typing.Type["Scheduler"]]
 
     def __post_init__(self):
@@ -189,15 +178,16 @@ class RPCServer(BaseZMQServer):
                    
                     # check object level scheduling requirements and schedule the message
                     # append to messages list - message, event, timeout task, origin socket
-                    operation = (request_message, ready_to_process_event, timeout_task, server)
+                    job = (server, request_message, timeout_task, ready_to_process_event)
                     if request_message.qualified_operation in self.schedulers_per_objekt:
                         scheduler = self.schedulers_per_objekt[request_message.qualified_operation](self.things[request_message.thing_id], self)
-                        scheduler.dispatch_operation(operation)
                     else:
-                        self.schedulers[request_message.thing_id].append_operation(operation)
+                        scheduler = self.schedulers[request_message.thing_id]
+                    scheduler.dispatch_job(job)
+                        
                 
                     # scheduler = Scheduler(self.things[request_message.thing_id], self, mode='async', one_shot=True)
-                    # scheduler.dispatch_operation(operation)
+                    # scheduler.dispatch_job(operation)
                     # self.schedulers[request_message.id] = scheduler
                 except Exception as ex:
                     # handle invalid message
@@ -219,15 +209,15 @@ class RPCServer(BaseZMQServer):
         message tunneler between external sockets and interal inproc client
         """
         eventloop = get_current_async_loop()
-        while self._run and scheduler._run:
+        while self._run and scheduler.run:
             # wait for message first
-            if len(scheduler.queue) == 0:
+            if not scheduler.has_job:
                 await scheduler.wait_for_operation_queueing()
                 # this means in next loop it wont be in this block as a message arrived  
                 continue
 
             # retrieve from messages list - message, execution context, event, timeout task, origin socket
-            request_message, ready_to_process_event, timeout_task, origin_server = scheduler.pop_queue_FIFO()
+            origin_server, request_message, timeout_task, ready_to_process_event = scheduler.next_job
             server_execution_context = request_message.server_execution_context
             
             # handle invokation timeout
@@ -318,7 +308,7 @@ class RPCServer(BaseZMQServer):
         scheduler = scheduler or self.schedulers[instance.id]
         eventloop = get_current_async_loop()
         
-        while self._run and scheduler._run:
+        while self._run and scheduler.run:
             # print("starting to serve thing {}".format(instance.id))
             await scheduler.wait_for_operation(eventloop)
             # await scheduler.wait_for_operation()
@@ -538,17 +528,15 @@ class RPCServer(BaseZMQServer):
         """
         self.logger.info("starting server")
         for thing in self.things.values():
-            self.schedulers[thing.id] = Scheduler(thing, self, mode='threaded', one_shot=False) 
-        if not self.threaded:
-            _thing_executor = threading.Thread(target=self.run_things_executor, args=(list(self.things.values()),))
-            _thing_executor.start()
-        else: 
-            for thing in self.things.values():
-                _thing_executor = threading.Thread(target=self.run_things_executor, args=([thing],))
-                _thing_executor.start()
+            self.schedulers[thing.id] = QueuedScheduler(thing, self)       
+        threads = dict() # type: typing.Dict[int, threading.Thread]
+        for thing in self.things.values():
+            thread = threading.Thread(target=self.run_things_executor, args=([thing],))
+            thread.start()
+            threads[thread.ident] = thread
         self.run_external_message_listener()
-        if not self.threaded:
-            _thing_executor.join()       
+        for thread in threads.values():
+            thread.join()       
         self.logger.info("server stopped")
 
 
@@ -589,54 +577,32 @@ class RPCServer(BaseZMQServer):
     
 
    
-
-
-
+    
 class Scheduler:
     """
     Scheduler class to schedule the operations of a thing either in queued mode, or a one-shot mode in either 
     async or threaded loops. 
 
     [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
+    [UML Diagram subclasses](http://localhost:8000/UML/PDF/Scheduler.pdf)
     """
 
     OperationRequest = typing.Tuple[str, str, str, SerializableData, PreserializedData, typing.Dict[str, typing.Any]]
     OperationReply = typing.Tuple[SerializableData, PreserializedData, str]
-
-    def __init__(self, instance: Thing, rpc_server: RPCServer, mode: str = 'async', one_shot: bool = True) -> None:
-        self.instance = instance # type: Thing
-        self.rpc_server = rpc_server # type: RPCServer
-        self.queue = deque() # type: typing.Deque[Scheduler.OperationRequest]
-        self._run = True # type: bool 
-        self._one_shot = one_shot
-        self._last_operation_request = Undefined # type: Scheduler.OperationRequest
-        self._last_operation_reply = Undefined # type: Scheduler.OperationRequest
-        self._operation_queued_event = asyncio.Event()
-        self.mode = mode 
-
+    JobInvokationType = typing.Tuple[AsyncZMQServer, RequestMessage, asyncio.Task, asyncio.Event]
+    # [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
     _operation_execution_complete_event: asyncio.Event | threading.Event
     _operation_execution_ready_event: asyncio.Event | threading.Event
-    
-    def append(self, item: typing.Tuple[RequestMessage, asyncio.Event, asyncio.Task, AsyncZMQServer]) -> None:
-        """
-        append a request message to the queue after ticking the invokation timeout clock
-        
-        Parameters
-        ----------
-        item: Tuple[RequestMessage, asyncio.Event, asyncio.Task, AsyncZMQServer]
-            tuple of request message, event to indicate if request message can be executed, invokation timeout task 
-            and originating server of the request
-        """
-        self.queue.append(item)
-        self._operation_queued_event.set()
 
-    async def wait_for_operation_queueing(self) -> None:
-        await self._operation_queued_event.wait()
-        self._operation_queued_event.clear()
-
-    def pop_queue_FIFO(self) -> typing.Tuple[RequestMessage, asyncio.Event, asyncio.Task, AsyncZMQServer]:
-        return self.queue.popleft()
-    
+    def __init__(self, instance: Thing, rpc_server: RPCServer) -> None:
+        self.instance = instance # type: Thing
+        self.rpc_server = rpc_server # type: RPCServer
+        self.run = True # type: bool 
+        self._one_shot = False # type: bool
+        self._last_operation_request = Undefined # type: Scheduler.OperationRequest
+        self._last_operation_reply = Undefined # type: Scheduler.OperationRequest
+        self._operation_queued_event = asyncio.Event() # type: asyncio.Event
+      
     @property
     def last_operation_request(self) -> OperationRequest:
         return self._last_operation_request
@@ -646,7 +612,7 @@ class Scheduler:
         self._last_operation_request = value
         self._operation_execution_ready_event.set()
 
-    def reset_operation_request(self):
+    def reset_operation_request(self) -> None:
         self._last_operation_request = Undefined
 
     @property
@@ -659,10 +625,14 @@ class Scheduler:
         self._last_operation_reply = value
         self._operation_execution_complete_event.set()
         if self._one_shot:
-            self._run = False
+            self.run = False
 
-    def reset_operation_reply(self):
+    def reset_operation_reply(self) -> None:
         self._last_operation_reply = Undefined
+
+    async def wait_for_operation_queueing(self) -> None:
+        await self._operation_queued_event.wait()
+        self._operation_queued_event.clear()
 
     async def wait_for_operation(self, eventloop: asyncio.AbstractEventLoop | None) -> None:
         # assert isinstance(self._operation_execution_ready_event, threading.Event), "not a threaded scheduler"
@@ -679,16 +649,23 @@ class Scheduler:
             await self._operation_execution_complete_event.wait()
         self._operation_execution_complete_event.clear()
 
-    def dispatch_operation(self, operation: OperationRequest) -> None:
-        raise NotImplementedError("dispatch_operation method must be implemented in the subclass")
+    @property
+    def has_job(self) -> bool:
+        raise NotImplementedError("has_job method must be implemented in the subclass")
+    
+    @property
+    def next_job(self) -> JobInvokationType:
+        raise NotImplementedError("next_job method must be implemented in the subclass")
+
+    def dispatch_job(self, job: JobInvokationType) -> None:
+        raise NotImplementedError("dispatch_job method must be implemented in the subclass")
 
     def cleanup(self):
-        self._run = False
+        self.run = False
         self._operation_queued_event.set()
         self._operation_execution_ready_event.set()
         self._operation_execution_complete_event.set()
-        self.queue.clear()
-            
+        
     @classmethod
     def extract_operation_tuple_from_request(self, request_message: RequestMessage) -> OperationRequest:
         """thing execution info"""
@@ -700,26 +677,71 @@ class Scheduler:
         pass
 
 
+
 class QueuedScheduler(Scheduler):
     """
     Scheduler class to schedule the operations of a thing in a queued loop.
     """
-    pass 
+    def __init__(self, instance: Thing, rpc_server: RPCServer) -> None:
+        super().__init__(instance, rpc_server)
+        self.queue = deque()
+        self._one_shot = False
+        self._operation_execution_ready_event = threading.Event()
+        self._operation_execution_complete_event = threading.Event()
+
+    @property
+    def has_job(self) -> bool:
+        return len(self.queue) > 0
+
+    @property
+    def next_job(self) -> Scheduler.JobInvokationType:
+        return self.queue.popleft()
+    
+    def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
+        """
+        append a request message to the queue after ticking the invokation timeout clock
+        
+        Parameters
+        ----------
+        item: Tuple[RequestMessage, asyncio.Event, asyncio.Task, AsyncZMQServer]
+            tuple of request message, event to indicate if request message can be executed, invokation timeout task 
+            and originating server of the request
+        """
+        self.queue.append(job)
+        self._operation_queued_event.set()    
+    
+    def cleanup(self):
+        self.queue.clear()
+        return super().cleanup()
+
 
 class AsyncScheduler(Scheduler):
     """
     Scheduler class to schedule the operations of a thing in an async loop.
     """
-    def __init__(self, instance: Thing, rpc_server: RPCServer, one_shot: bool = True) -> None:
-        super().__init__(instance, rpc_server, one_shot)
+    def __init__(self, instance: Thing, rpc_server: RPCServer) -> None:
+        super().__init__(instance, rpc_server)
+        self._job = None
+        self._one_shot = True 
         self._operation_execution_ready_event = asyncio.Event()
         self._operation_execution_complete_event = asyncio.Event()
 
-    def dispatch_operation(self, operation):
-        self.queue.append(operation)
+    @property 
+    def has_job(self) -> bool:
+        return self._job is not None
+
+    @property
+    def next_job(self) -> Scheduler.JobInvokationType:
+        if self._job is None:
+            raise RuntimeError("No job to execute")
+        return self._job
+        
+    def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
+        self._job = job
         eventloop = get_current_async_loop()
         eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
         eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.run_thing_instance(self.instance, self)))
+        self._operation_queued_event.set()
        
 
 class ThreadedScheduler(Scheduler):
@@ -727,20 +749,35 @@ class ThreadedScheduler(Scheduler):
     Scheduler class to schedule the operations of a thing in a threaded loop.
     """
 
-    def __init__(self, instance: Thing, rpc_server: RPCServer, one_shot: bool = True) -> None:
-        super().__init__(instance, rpc_server, one_shot)
+    def __init__(self, instance: Thing, rpc_server: RPCServer) -> None:
+        super().__init__(instance, rpc_server)
+        self._job = None
+        self._execution_thread = None 
+        self._one_shot = True
         self._operation_execution_ready_event = threading.Event()
         self._operation_execution_complete_event = threading.Event()
+
+    @property 
+    def has_job(self) -> bool:
+        return self._job is not None
+    
+    @property
+    def next_job(self) -> Scheduler.JobInvokationType:
+        if self._job is None:
+            raise RuntimeError("No job to execute")
+        return self._job
+
+    def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
+        """"""
+        self._job = job
+        eventloop = get_current_async_loop()
+        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
         self._execution_thread = threading.Thread(
                                             target=asyncio.run, 
                                             args=(self.rpc_server.run_thing_instance(self.instance, self),)
                                         ) 
-
-    def dispatch_operation(self, operation):
-        self.queue.append(operation)
-        eventloop = get_current_async_loop()
-        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
         self._execution_thread.start()
+        self._operation_queued_event.set()
     
 
 
