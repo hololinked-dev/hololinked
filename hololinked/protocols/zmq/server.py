@@ -1,6 +1,7 @@
 import asyncio
 import typing
 import zmq
+import zmq.asyncio
 
 from .brokers import AsyncZMQServer
 from ...constants import ZMQ_TRANSPORTS
@@ -52,14 +53,14 @@ class ZMQServer(RPCServer):
         event_publisher_protocol = "IPC" if not event_publisher_protocol else event_publisher_protocol    
 
     
-    def run_external_message_listener(self) -> None:
+    def run_request_listener(self) -> None:
         eventloop = get_current_async_loop()
        
         if self.ipc_server is not None:
-            eventloop.call_soon(lambda : asyncio.create_task(self.recv_and_dispatch_requests(self.ipc_server)))
+            eventloop.call_soon(lambda : asyncio.create_task(self.recv_requests_and_dispatch_jobs(self.ipc_server)))
         if self.tcp_server is not None:
-            eventloop.call_soon(lambda : asyncio.create_task(self.recv_and_dispatch_requests(self.tcp_server)))
-        super().run_external_message_listener()
+            eventloop.call_soon(lambda : asyncio.create_task(self.recv_requests_and_dispatch_jobs(self.tcp_server)))
+        super().run_request_listener()
 
 
     def stop(self) -> None:

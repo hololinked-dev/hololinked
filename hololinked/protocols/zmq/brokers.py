@@ -478,7 +478,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                         raw_message = await socket.recv_multipart(zmq.NOBLOCK)
                     except zmq.Again:
                         break
-                    else:
+                    else:                        
                         request_message = RequestMessage(raw_message)
                         if not self.handled_default_message_types(request_message) and raw_message:
                             self.logger.debug(f"received message from client '{request_message.sender_id}' with msg-ID '{request_message.id}'")
