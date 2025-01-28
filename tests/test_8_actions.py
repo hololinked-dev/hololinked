@@ -397,12 +397,12 @@ class TestAction(TestCase):
         """Test class and instance level action access"""
         thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
         # class level
-        for name, action in self.thing_cls.actions.items():  
+        for name, action in self.thing_cls.actions.descriptors.items():  
             self.assertIsInstance(action, Action) 
         for name in replace_methods_with_actions._exposed_actions:
             self.assertTrue(name in self.thing_cls.actions)
         # instance level 
-        for name, action in thing.actions.items(): 
+        for name, action in thing.actions.values.items(): 
             self.assertIsInstance(action, BoundAction)
         for name in replace_methods_with_actions._exposed_actions:
             self.assertTrue(name in thing.actions)

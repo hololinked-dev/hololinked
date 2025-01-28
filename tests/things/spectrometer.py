@@ -165,7 +165,7 @@ class OceanOpticsSpectrometer(Thing):
         try:
             return self._trigger_mode
         except:
-            return self.properties["trigger_mode"].default 
+            return OceanOpticsSpectrometer.properties["trigger_mode"].default 
         
 
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
@@ -181,7 +181,7 @@ class OceanOpticsSpectrometer(Thing):
         try:
             return self._integration_time
         except:
-            return self.properties["integration_time"].default   
+            return OceanOpticsSpectrometer.properties["integration_time"].default   
     
     background_correction = Selector(objects=['AUTO', 'CUSTOM', None], default=None, allow_None=True, 
                         doc="set True for Seabreeze internal black level correction") # type: typing.Optional[str]
