@@ -48,23 +48,41 @@ RemoteObject = Thing # reading convenience
 
 class RPCServer(BaseZMQServer):
     """
-    The EventLoop class implements a infinite loop where zmq ROUTER sockets listen for messages. Each consumer of the 
-    event loop (an instance of Thing) listen on their own ROUTER socket and execute methods or allow read and write
-    of attributes upon receiving instructions. Socket listening is implemented in an async (asyncio) fashion. 
-  
-    Top level ZMQ RPC server used by `Thing` and `Eventloop`. 
+    The `RPCServer` implements a infinite loop where ZMQ sockets listen for messages, in any transport layer possible
+    (INPROC, IPC or TCP). Once requests are received, jobs are dispatched to the `Thing` instances which are being served, 
+    with timeouts or any other execution requirements (called execution context). Within the jobs, the requested
+    operation information is made available which is extracted and executed by a `Thing` instance. 
+    The results are then sent back to the client.
 
+    Jobs determine how to execute the operations on the `Thing` instance, whether in queued, async or threaded modes.
+    Queued mode is the default as it is assumed that multiple physical operations in the physical world is not 
+    always practical. Jobs also help the `Thing` instance to retrieve operation information from a request object. 
+    Operations information include `Thing` ID, the property, action or event to be executed (events are usually PUB-SUB 
+    and are largely handled by the `EventPublisher` directly), the payload and the execution contexts (like timeouts).
+
+    Default ZMQ transport layer is INPROC, but IPC or TCP can also be added simultaneously. The purpose of INPROC 
+    being default is that, the `RPCServer` is the only server implementing the operations directly on the `Thing` 
+    instances. All other protocols like HTTP, MQTT, CoAP etc. will be used to send requests to the `RPCServer` only 
+    and do not operate on the `Thing` instances. INPROC is the fastest and most efficient way to communicate between
+    multiple independently running loops, whether the loop belongs to a specific protocol or the `RPCServer` itself.
+    The same INPROC messaging contract is also used for IPC and TCP, thus eliminating the separate need to implement 
+    messaging contracts at different layers of communication.
+
+    Therefore, if a `Thing` instance is to be served by a well known protocol, say HTTP, the serves behaves like HTTP-RPC. 
+   
     [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
 
     Parameters
     ----------
     id: str
         `id` of the server
-    server_type: str
-        server type metadata
+    things: List[Thing]
+        list of `Thing` instances to be served
     context: Optional, zmq.asyncio.Context
         ZeroMQ async Context object to use. All sockets except those created by event publisher share this context. 
         Automatically created when None is supplied.
+    transport: ZMQ_TRANSPORTS
+        transport layer to be used for the server, default is INPROC
     **kwargs:
         tcp_socket_address: str
             address of the TCP socket, if not given, a random port is chosen
@@ -78,19 +96,8 @@ class RPCServer(BaseZMQServer):
                 id: str, 
                 things: typing.List[Thing],
                 context: zmq.asyncio.Context | None = None, 
-                transport: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.INPROC,
                 **kwargs
             ) -> None:
-        """
-        Parameters
-        ----------
-        id: str
-            instance name of the event loop
-        things: List[Thing]
-            things to be run/served
-        log_level: int
-            log level of the event loop logger
-        """
         super().__init__(id=id, **kwargs)
         self.things = dict() 
         for thing in things:
@@ -108,14 +115,14 @@ class RPCServer(BaseZMQServer):
         self.req_rep_server = AsyncZMQServer(
                                 id=self.id, 
                                 context=self.context, 
-                                transport=transport, 
+                                transport=ZMQ_TRANSPORTS.INPROC,
                                 poll_timeout=1000,
                                 **kwargs
                             )        
         self.event_publisher = EventPublisher(
                                 id=f'{self.id}/event-publisher',
                                 # dont pass the context
-                                transport=transport,
+                                transport=ZMQ_TRANSPORTS.INPROC,
                                 **kwargs
                             )        
         
@@ -132,7 +139,7 @@ class RPCServer(BaseZMQServer):
                 elif not action.execution_info.synchronous:
                     self.schedulers_per_objekt[f'{instance.id}.{action.name}.invokeAction'] = ThreadedScheduler
                 # else QueuedScheduler which is default
-        
+            # properties need not dealt yet, but may be in future
     
     schedulers: typing.Dict[str, "QueuedScheduler"]
     schedulers_per_objekt: typing.Dict[str, typing.Type["Scheduler"]]
@@ -142,18 +149,20 @@ class RPCServer(BaseZMQServer):
         self.logger.info("Server with name '{}' can be started using run().".format(self.id))   
         
         
-    async def recv_and_dispatch_requests(self, server: AsyncZMQServer) -> None:
+    async def recv_requests_and_dispatch_jobs(self, server: AsyncZMQServer) -> None:
         """
         Continuously keeps receiving messages from different clients and appends them to a deque to be processed 
         sequentially. Also handles messages that dont need to be queued like HANDSHAKE, EXIT, invokation timeouts etc.
         """
         eventloop = asyncio.get_event_loop()
-
         while self._run:
             try:
                 request_messages = await server.poll_requests() 
                 # when stop poll is set, this will exit with an empty list
             except BreakLoop:
+                break
+            except Exception as ex:
+                self.logger.error(f"exception occurred while polling for server '{server.id}' - {str(ex)}")
                 break
             
             for request_message in request_messages:
@@ -178,17 +187,13 @@ class RPCServer(BaseZMQServer):
                    
                     # check object level scheduling requirements and schedule the message
                     # append to messages list - message, event, timeout task, origin socket
-                    job = (server, request_message, timeout_task, ready_to_process_event)
+                    job = (server, request_message, timeout_task, ready_to_process_event) # type: Scheduler.JobInvokationType
                     if request_message.qualified_operation in self.schedulers_per_objekt:
                         scheduler = self.schedulers_per_objekt[request_message.qualified_operation](self.things[request_message.thing_id], self)
                     else:
                         scheduler = self.schedulers[request_message.thing_id]
                     scheduler.dispatch_job(job)
-                        
-                
-                    # scheduler = Scheduler(self.things[request_message.thing_id], self, mode='async', one_shot=True)
-                    # scheduler.dispatch_job(operation)
-                    # self.schedulers[request_message.id] = scheduler
+                    
                 except Exception as ex:
                     # handle invalid message
                     self.logger.error(f"exception occurred for message id '{request_message.id}' - {str(ex)}")
@@ -199,7 +204,6 @@ class RPCServer(BaseZMQServer):
                                                     )
                                                 )      
                     eventloop.call_soon(lambda: invalid_message_task)
-
         self.stop()
         self.logger.info(f"stopped polling for server '{server.id}' {server.socket_address.split(':')[0].upper()}")
 
@@ -212,10 +216,10 @@ class RPCServer(BaseZMQServer):
         while self._run and scheduler.run:
             # wait for message first
             if not scheduler.has_job:
-                await scheduler.wait_for_operation_queueing()
+                await scheduler.wait_for_job()
                 # this means in next loop it wont be in this block as a message arrived  
                 continue
-
+            
             # retrieve from messages list - message, execution context, event, timeout task, origin socket
             origin_server, request_message, timeout_task, ready_to_process_event = scheduler.next_job
             server_execution_context = request_message.server_execution_context
@@ -248,7 +252,7 @@ class RPCServer(BaseZMQServer):
                                                         timeout_type='execution'
                                                     )
                                                 )
-                eventloop.call_soon(lambda : execution_timeout_task)
+                eventloop.call_soon(lambda: execution_timeout_task)
 
             # always wait for reply from thing, since this loop is asyncio task (& in its own thread in RPC server), 
             # timeouts always reach client without truly blocking by the GIL. If reply does not arrive, all other requests
@@ -486,7 +490,7 @@ class RPCServer(BaseZMQServer):
             return True
 
 
-    def run_external_message_listener(self):
+    def run_request_listener(self):
         """
         Runs ZMQ's sockets which are visible to clients.
         This method is automatically called by `run()` method. 
@@ -498,7 +502,7 @@ class RPCServer(BaseZMQServer):
         existing_tasks = asyncio.all_tasks(eventloop)
         eventloop.run_until_complete(
             asyncio.gather(
-                self.recv_and_dispatch_requests(self.req_rep_server),
+                self.recv_requests_and_dispatch_jobs(self.req_rep_server),
                 *[self.tunnel_message_to_things(scheduler) for scheduler in self.schedulers.values()],
                 *existing_tasks
             )
@@ -534,7 +538,7 @@ class RPCServer(BaseZMQServer):
             thread = threading.Thread(target=self.run_things_executor, args=([thing],))
             thread.start()
             threads[thread.ident] = thread
-        self.run_external_message_listener()
+        self.run_request_listener()
         for thread in threads.values():
             thread.join()       
         self.logger.info("server stopped")
@@ -601,7 +605,7 @@ class Scheduler:
         self._one_shot = False # type: bool
         self._last_operation_request = Undefined # type: Scheduler.OperationRequest
         self._last_operation_reply = Undefined # type: Scheduler.OperationRequest
-        self._operation_queued_event = asyncio.Event() # type: asyncio.Event
+        self._job_queued_event = asyncio.Event() # type: asyncio.Event
       
     @property
     def last_operation_request(self) -> OperationRequest:
@@ -630,9 +634,9 @@ class Scheduler:
     def reset_operation_reply(self) -> None:
         self._last_operation_reply = Undefined
 
-    async def wait_for_operation_queueing(self) -> None:
-        await self._operation_queued_event.wait()
-        self._operation_queued_event.clear()
+    async def wait_for_job(self) -> None:
+        await self._job_queued_event.wait()
+        self._job_queued_event.clear()
 
     async def wait_for_operation(self, eventloop: asyncio.AbstractEventLoop | None) -> None:
         # assert isinstance(self._operation_execution_ready_event, threading.Event), "not a threaded scheduler"
@@ -662,7 +666,7 @@ class Scheduler:
 
     def cleanup(self):
         self.run = False
-        self._operation_queued_event.set()
+        self._job_queued_event.set()
         self._operation_execution_ready_event.set()
         self._operation_execution_complete_event.set()
         
@@ -708,7 +712,7 @@ class QueuedScheduler(Scheduler):
             and originating server of the request
         """
         self.queue.append(job)
-        self._operation_queued_event.set()    
+        self._job_queued_event.set()    
     
     def cleanup(self):
         self.queue.clear()
@@ -741,7 +745,7 @@ class AsyncScheduler(Scheduler):
         eventloop = get_current_async_loop()
         eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
         eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.run_thing_instance(self.instance, self)))
-        self._operation_queued_event.set()
+        self._job_queued_event.set()
        
 
 class ThreadedScheduler(Scheduler):
@@ -777,7 +781,7 @@ class ThreadedScheduler(Scheduler):
                                             args=(self.rpc_server.run_thing_instance(self.instance, self),)
                                         ) 
         self._execution_thread.start()
-        self._operation_queued_event.set()
+        self._job_queued_event.set()
     
 
 
@@ -800,7 +804,6 @@ def prepare_rpc_server(
             id=instance.id, 
             things=[instance],
             context=context, 
-            protocols=ZMQ_TRANSPORTS.INPROC, 
             logger=instance.logger
         )   
     else: 
@@ -809,7 +812,7 @@ def prepare_rpc_server(
             id=instance.id, 
             things=[instance],
             context=context, 
-            protocols=transports, 
+            transports=transports, 
             tcp_socket_address=kwargs.get('tcp_socket_address', None),
             logger=instance.logger
         )
