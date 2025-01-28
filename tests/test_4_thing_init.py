@@ -4,7 +4,7 @@ import warnings
 
 from hololinked.param import Parameter
 from hololinked.core import Thing, ThingMeta, Action, Event, Property
-from hololinked.core.meta import PropertyRegistry, ActionsRegistry, EventsRegistry
+from hololinked.core.meta import PropertiesRegistry, ActionsRegistry, EventsRegistry
 from hololinked.core.rpc_server import prepare_rpc_server
 from hololinked.core.state_machine import BoundFSM
 from hololinked.utils import get_default_logger 
@@ -53,10 +53,10 @@ class TestThing(TestCase):
         valid_ids = ["test_id", "A123", "valid_id-123", "another/valid-id"]
         invalid_ids = ["123_invalid", "invalid id", "invalid@id", ""]
         for valid_id in valid_ids:
-            thing.properties["id"].validate_and_adapt(valid_id)
+            thing.properties.descriptors["id"].validate_and_adapt(valid_id)
         for invalid_id in invalid_ids:
             with self.assertRaises(ValueError):
-                thing.properties["id"].validate_and_adapt(invalid_id)
+                thing.properties.descriptors["id"].validate_and_adapt(invalid_id)
 
 
     def test_2_logger(self):
@@ -167,7 +167,7 @@ class TestMetaclass(TestCase):
     def test_2_registry_creation(self):
         """test registry creation and access"""
         # registry attributes must be instances of their respective classes
-        self.assertIsInstance(Thing.properties, PropertyRegistry)
+        self.assertIsInstance(Thing.properties, PropertiesRegistry)
         self.assertIsInstance(Thing.actions, ActionsRegistry)
         self.assertIsInstance(Thing.events, EventsRegistry)
 
@@ -185,7 +185,7 @@ class TestMetaclass(TestCase):
         spectrometer = OceanOpticsSpectrometer(id="test_registry_creation_2", log_level=logging.WARN)
 
         # registry attributes must be instances of their respective classes also for instances
-        self.assertIsInstance(thing.properties, PropertyRegistry)
+        self.assertIsInstance(thing.properties, PropertiesRegistry)
         self.assertIsInstance(thing.actions, ActionsRegistry)
         self.assertIsInstance(thing.events, EventsRegistry)
 
@@ -453,12 +453,12 @@ class TestPropertiesRegistry(TestCase):
             self.assertFalse(value.db_commit) # in user given cases, this could be true, this is not strict requirement
 
         # descriptors can be cleared
-        self.assertTrue(hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertyRegistry.__name__.lower()}'))
+        self.assertTrue(hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}'))
         thing.properties.clear()
-        self.assertTrue(not hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertyRegistry.__name__.lower()}'))
+        self.assertTrue(not hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}'))
         thing.properties.clear()
         thing.properties.clear()
-        self.assertTrue(not hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertyRegistry.__name__.lower()}'))
+        self.assertTrue(not hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}'))
 
 
     def test_3_dunders(self):

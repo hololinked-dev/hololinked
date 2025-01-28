@@ -2,7 +2,7 @@ import threading
 import unittest
 import zmq.asyncio
 
-from hololinked.server.rpc_server import RPCServer
+from hololinked.core.rpc_server import RPCServer
 from hololinked.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient
 from hololinked.utils import get_current_async_loop
 
