@@ -119,7 +119,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
 
     def __post_init__(self):
-        from .rpc_server import RPCServer
+        from .zmq.rpc_server import RPCServer
         from .events import EventPublisher
         from .logger import RemoteAccessHandler
         # Type definitions
@@ -247,7 +247,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 ZMQ context object to be used for creating sockets. If not supplied, a new context is created.
                 For INPROC clients, you need to provide the same context used here.
         """
-        from .rpc_server import prepare_rpc_server
+        from .zmq.rpc_server import prepare_rpc_server
         prepare_rpc_server(instance=self, transports=transports, **kwargs)
         self.rpc_server.run()
      
@@ -317,7 +317,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         from ..protocols.http.server import HTTPServer        
         from ..protocols.zmq.server import ZMQServer
-        from .rpc_server import RPCServer, prepare_rpc_server
+        from .zmq.rpc_server import RPCServer, prepare_rpc_server
 
         rpc_server = None
         if not any(isinstance(server, (RPCServer, ZMQServer)) for server in servers):

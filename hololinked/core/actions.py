@@ -248,7 +248,7 @@ def action(
         execution_info_validator.create_task = kwargs.get('create_task', False)
         execution_info_validator.safe = kwargs.get('safe', False)
         execution_info_validator.idempotent = kwargs.get('idempotent', False)
-        execution_info_validator.synchronous = kwargs.get('synchronous', False)
+        execution_info_validator.synchronous = kwargs.get('synchronous', True)
 
         if isclassmethod(original):
             execution_info_validator.iscoroutine = has_async_def(obj)

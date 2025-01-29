@@ -21,7 +21,7 @@ from ....core.actions import Action
 from ....core.events import Event
 from ....core.thing import Thing, ThingMeta
 from ....td import ActionAffordance, EventAffordance, PropertyAffordance
-from ...zmq.brokers import  AsyncZMQClient, MessageMappedZMQClientPool
+from ....core.zmq.brokers import AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import ActionHandler, PropertyHandler, BaseHandler, EventHandler, ThingsHandler, StopHandler
 
 
