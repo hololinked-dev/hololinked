@@ -14,9 +14,11 @@ from .actions import Action
 
 class StateMachine:
     """
-    A container class for state machine related information. Each ``Thing`` class can only have one state machine  
-    instantiated in a reserved class-level attribute ``state_machine``. The ``state`` attribute defined at the ``Thing``
-    can be subscribed for state change events from this state machine. 
+    A finite state machine to constrain property and action execution. Each `Thing` class can only have one state machine
+    instantiated in a reserved class-level attribute named `state_machine`. Other instantiations are not respected. 
+    The `state` attribute defined as a `Thing`'s property reflects the current state of the state machine and
+    can be subscribed for state change events. When `state_machine` is accessed by a `Thing` instance, 
+    a `BoundFSM` object is returned.
     """
     initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str), 
                         doc="initial state of the machine") # type: typing.Union[Enum, str]
@@ -34,16 +36,17 @@ class StateMachine:
                         doc="internally computed, True if states, initial_states and the machine is valid")
     
     def __init__(self, 
-            states: typing.Union[EnumMeta, typing.List[str], typing.Tuple[str]], *, 
-            initial_state: typing.Union[StrEnum, str], push_state_change_event : bool = True,
-            on_enter: typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
-            on_exit: typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
-            **machine: typing.Dict[str, typing.Union[typing.Callable, Property]]
+            states: EnumMeta | typing.List[str] | typing.Tuple[str], *, 
+            initial_state: StrEnum | str, 
+            push_state_change_event : bool = True,
+            on_enter: typing.Dict[str, typing.List[typing.Callable] | typing.Callable] = None, 
+            on_exit: typing.Dict[str, typing.List[typing.Callable] | typing.Callable] = None, 
+            **machine: typing.Dict[str, typing.Callable | Property]
         ) -> None:
         """
         Parameters
         ----------
-        states: Enum
+        states: EnumMeta | List[str] | Tuple[str]
             enumeration of states 
         initial_state: str 
             initial state of machine 
@@ -118,6 +121,8 @@ class StateMachine:
                 raise StateMachineError("Given state {} not in allowed states ({})".format(state, self.states.__members__))
             
         # then the callbacks 
+        if self.on_enter is None:
+            self.on_enter = {}
         for state, objects in self.on_enter.items():
             if isinstance(objects, list):
                 self.on_enter[state] = tuple(objects) 
@@ -127,6 +132,8 @@ class StateMachine:
                 if not isinstance(obj, (FunctionType, MethodType)):
                     raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")
 
+        if self.on_exit is None:
+            self.on_exit = {}
         for state, objects in self.on_exit.items():
             if isinstance(objects, list):
                 self.on_exit[state] = tuple(objects) # type: ignore
@@ -166,6 +173,10 @@ class StateMachine:
 
         
 class BoundFSM:
+    """
+    A FSM bound to a `Thing` instance, returned when accessed as a instance attribute (`self.state_machine`).
+    There is no need to instantiate this class directly.
+    """
 
     def __init__(self, owner: Thing, state_machine: StateMachine) -> None:
         self.descriptor = state_machine
