@@ -1,8 +1,8 @@
 import asyncio
 import typing, multiprocessing, threading, logging, queue
 from hololinked.exceptions import BreakLoop
-from hololinked.protocols.zmq.brokers import AsyncZMQServer
-from hololinked.protocols.zmq.message import EXIT
+from hololinked.core.zmq.brokers import AsyncZMQServer
+from hololinked.core.zmq.message import EXIT
 from hololinked.core import ThingMeta, Thing
 from hololinked.utils import get_current_async_loop
 

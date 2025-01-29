@@ -12,9 +12,9 @@ from hololinked.core.dataklasses import ActionInfoValidator
 from hololinked.core.thing import Thing, action
 from hololinked.core.properties import Number, String, ClassSelector
 from hololinked.td.interaction_affordance import ActionAffordance
-from hololinked.protocols.zmq import SyncZMQClient
-from hololinked.protocols.zmq.message import EXIT, RequestMessage
-from hololinked.protocols.zmq.client import ZMQAction
+from hololinked.core.zmq import SyncZMQClient
+from hololinked.core.zmq.message import EXIT, RequestMessage
+from hololinked.core.zmq.client import ZMQAction
 from hololinked.schema_validators import JSONSchemaValidator
 try:
     from .utils import TestCase, TestRunner
@@ -300,7 +300,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.iscoroutine)
         self.assertFalse(remote_info.safe)  
         self.assertFalse(remote_info.idempotent)
-        self.assertFalse(remote_info.synchronous)
+        self.assertTrue(remote_info.synchronous)
 
         remote_info = self.thing_cls.action_echo_async.execution_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
@@ -311,7 +311,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.isparameterized)
         self.assertFalse(remote_info.safe)
         self.assertFalse(remote_info.idempotent)
-        self.assertFalse(remote_info.synchronous)
+        self.assertTrue(remote_info.synchronous)
 
         remote_info = self.thing_cls.action_echo_with_classmethod.execution_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
@@ -322,7 +322,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.isparameterized)
         self.assertFalse(remote_info.safe)
         self.assertFalse(remote_info.idempotent)
-        self.assertFalse(remote_info.synchronous)
+        self.assertTrue(remote_info.synchronous)
 
         remote_info = self.thing_cls.parameterized_action.execution_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
@@ -333,7 +333,7 @@ class TestAction(TestCase):
         self.assertTrue(remote_info.isparameterized)
         self.assertTrue(remote_info.safe)
         self.assertFalse(remote_info.idempotent)
-        self.assertFalse(remote_info.synchronous)
+        self.assertTrue(remote_info.synchronous)
 
         remote_info = self.thing_cls.parameterized_action_without_call.execution_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
@@ -344,7 +344,7 @@ class TestAction(TestCase):
         self.assertTrue(remote_info.isparameterized)
         self.assertFalse(remote_info.safe)
         self.assertTrue(remote_info.idempotent)
-        self.assertFalse(remote_info.synchronous)
+        self.assertTrue(remote_info.synchronous)
 
         remote_info = self.thing_cls.parameterized_action_async.execution_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
@@ -366,7 +366,7 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.isparameterized)
         self.assertFalse(remote_info.safe)
         self.assertFalse(remote_info.idempotent)
-        self.assertFalse(remote_info.synchronous)
+        self.assertTrue(remote_info.synchronous)
         self.assertIsInstance(remote_info.schema_validator, JSONSchemaValidator)
 
 
@@ -432,7 +432,7 @@ class TestAction(TestCase):
         affordance = thing.action_echo.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
         self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
         self.assertTrue(not hasattr(affordance, 'input')) # no input schema
         self.assertTrue(not hasattr(affordance, 'output')) # no output schema
@@ -442,7 +442,7 @@ class TestAction(TestCase):
         affordance = thing.action_echo_with_classmethod.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
         self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
         self.assertTrue(not hasattr(affordance, 'input')) # no input schema
         self.assertTrue(not hasattr(affordance, 'output')) # no output schema
@@ -452,7 +452,7 @@ class TestAction(TestCase):
         affordance = thing.action_echo_async.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
         self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
         self.assertTrue(not hasattr(affordance, 'input')) # no input schema
         self.assertTrue(not hasattr(affordance, 'output')) # no output schema
@@ -462,7 +462,7 @@ class TestAction(TestCase):
         affordance = thing.action_echo_async_with_classmethod.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
         self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
         self.assertTrue(not hasattr(affordance, 'input')) # no input schema
         self.assertTrue(not hasattr(affordance, 'output')) # no output schema
@@ -472,7 +472,7 @@ class TestAction(TestCase):
         affordance = thing.parameterized_action.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
         self.assertTrue(affordance.safe) # by default, not safe
         # self.assertIsInstance(affordance.input, dict)
         # self.assertIsInstance(affordance.output, dict)
@@ -484,7 +484,7 @@ class TestAction(TestCase):
         affordance = thing.parameterized_action_without_call.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(affordance.idempotent) # by default, not idempotent
-        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
         self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
         self.assertTrue(not hasattr(affordance, 'input')) # no input schema
         self.assertTrue(not hasattr(affordance, 'output')) # no output schema
@@ -504,7 +504,7 @@ class TestAction(TestCase):
         affordance = thing.json_schema_validated_action.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(not hasattr(affordance, 'synchronous')) # by default, not synchronous
+        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
         self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
         self.assertIsInstance(affordance.input, dict)
         self.assertIsInstance(affordance.output, dict)

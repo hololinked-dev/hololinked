@@ -1,7 +1,7 @@
 import unittest
 import zmq.asyncio
 
-from hololinked.protocols.zmq.brokers import BaseZMQ
+from hololinked.core.zmq.brokers import BaseZMQ
 from hololinked.constants import ZMQ_TRANSPORTS
 
 try:

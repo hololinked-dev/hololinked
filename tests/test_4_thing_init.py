@@ -5,7 +5,7 @@ import warnings
 from hololinked.param import Parameter
 from hololinked.core import Thing, ThingMeta, Action, Event, Property
 from hololinked.core.meta import PropertiesRegistry, ActionsRegistry, EventsRegistry
-from hololinked.core.rpc_server import prepare_rpc_server
+from hololinked.core.zmq.rpc_server import prepare_rpc_server
 from hololinked.core.state_machine import BoundFSM
 from hololinked.utils import get_default_logger 
 from hololinked.core.logger import RemoteAccessHandler

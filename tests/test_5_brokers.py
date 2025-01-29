@@ -2,15 +2,15 @@ import threading, asyncio
 import logging, multiprocessing, unittest
 
 from hololinked.constants import ResourceTypes
-from hololinked.protocols.zmq.message import (ERROR, EXIT, OPERATION, HANDSHAKE, REPLY, 
+from hololinked.core.zmq.message import (ERROR, EXIT, OPERATION, HANDSHAKE, REPLY, 
                                             PreserializedData, RequestHeader, RequestMessage, SerializableData) # client to server
-from hololinked.protocols.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, 
+from hololinked.core.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, 
                                             ResponseMessage, ResponseHeader) # server to client
-from hololinked.protocols.zmq.brokers import AsyncZMQServer, MessageMappedZMQClientPool, SyncZMQClient, AsyncZMQClient
+from hololinked.core.zmq.brokers import AsyncZMQServer, MessageMappedZMQClientPool, SyncZMQClient, AsyncZMQClient
 from hololinked.utils import get_current_async_loop, get_default_logger
 from hololinked.td import ActionAffordance
 # from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes
-from hololinked.protocols.zmq.client import ZMQAction, ZMQProperty
+from hololinked.core.zmq.client import ZMQAction, ZMQProperty
 
 
 try:
