@@ -146,7 +146,7 @@ class EventDispatcher:
         
 
 
-from ..protocols.zmq.brokers import EventPublisher
+from .zmq.brokers import EventPublisher
 
 __all__ = [
     Event.__name__,

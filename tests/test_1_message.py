@@ -1,9 +1,9 @@
 import unittest
 from uuid import UUID, uuid4
 
-from hololinked.protocols.zmq.message import (EXIT, OPERATION, HANDSHAKE, 
+from hololinked.core.zmq.message import (EXIT, OPERATION, HANDSHAKE, 
                                             PreserializedData, RequestHeader, RequestMessage, SerializableData) # client to server
-from hololinked.protocols.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, REPLY, ERROR,
+from hololinked.core.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, REPLY, ERROR,
                                             ResponseMessage, ResponseHeader) # server to client
 from hololinked.serializers.serializers import Serializers
 

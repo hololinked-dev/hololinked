@@ -7,7 +7,7 @@ from tornado.iostream import StreamClosedError
 
 from ....utils import *
 from ....config import global_config
-from ...zmq.brokers import AsyncEventConsumer, EventConsumer
+from ....core.zmq.brokers import AsyncEventConsumer, EventConsumer
 from ....constants import Operations
 from ....schema_validators import BaseSchemaValidator
 from ....td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
