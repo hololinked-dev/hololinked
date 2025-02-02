@@ -4,7 +4,7 @@ import jsonschema
 from enum import Enum
 from types import FunctionType, MethodType
 from inspect import iscoroutinefunction, getfullargspec
-from pydantic import BaseModel, RootModel, validate_call
+from pydantic import BaseModel, RootModel
 
 from ..param.parameterized import ParameterizedFunction
 from ..constants import JSON

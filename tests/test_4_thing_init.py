@@ -1,15 +1,16 @@
 import unittest
 import logging
-import warnings
 
+from hololinked.core.actions import BoundAction
+from hololinked.core.zmq.brokers import EventPublisher
 from hololinked.param import Parameter
 from hololinked.core import Thing, ThingMeta, Action, Event, Property
 from hololinked.core.meta import PropertiesRegistry, ActionsRegistry, EventsRegistry
-from hololinked.core.zmq.rpc_server import prepare_rpc_server
+from hololinked.core.zmq.rpc_server import RPCServer, prepare_rpc_server
 from hololinked.core.state_machine import BoundFSM
 from hololinked.utils import get_default_logger 
 from hololinked.core.logger import RemoteAccessHandler
-from hololinked.client import ObjectProxy
+
 try:
     from .things import OceanOpticsSpectrometer, start_thing_forked
     from .utils import TestCase, TestRunner
@@ -18,38 +19,47 @@ except ImportError:
     from utils import TestCase, TestRunner
 
 
+"""
+The tests in this file are for the initialization of the Thing class and its subclasses.
+1. Test Thing class 
+2. Test Thing subclass
+3. Test ThingMeta metaclass
+4. Test ActionRegistry class
+5. Test EventRegistry class
+6. Test PropertiesRegistry class
+"""
+
 
 
 class TestThing(TestCase):
-    """Test Thing class from hololinked.core.thing module."""
+    """Test Thing class which is the bread and butter of this package."""
+
+    @classmethod
+    def setUpClass(self):
+        super().setUpClass()
+        print(f"test Thing instantiation with {self.__name__}")
+        self.thing_cls = Thing
 
     """
     Test sequence is as follows:
-    1. Test id property of Thing class
-    2. Test logger of Thing class
-    3. Test state and state_machine of Thing class
-    4. Test composition
+    1. Test id requirements 
+    2. Test logger setup
+    3. Test state and state_machine setup
+    4. Test composition of subthings
     5. Test servers init
     6. Test thing model generation
     """
     
-    @classmethod
-    def setUpClass(self):
-        super().setUpClass()
-        print(f"test Thing __init__ with {self.__name__}")
-        self.thing_cls = Thing
-
-
     def test_1_id(self):
         """Test id property of Thing class"""
-        # instance name must be a string and cannot be changed after set
+        # req. 1. instance name must be a string and cannot be changed after set
         thing = self.thing_cls(id="test_id", log_level=logging.WARN)
         self.assertEqual(thing.id, "test_id")
         with self.assertRaises(ValueError):
             thing.id = "new_instance"
         with self.assertRaises(NotImplementedError):
             del thing.id
-        # regex is r'[A-Za-z]+[A-Za-z_0-9\-\/]*'
+        # req. 2. regex is r'[A-Za-z]+[A-Za-z_0-9\-\/]*', simple URI like
         valid_ids = ["test_id", "A123", "valid_id-123", "another/valid-id"]
         invalid_ids = ["123_invalid", "invalid id", "invalid@id", ""]
         for valid_id in valid_ids:
@@ -60,27 +70,36 @@ class TestThing(TestCase):
 
 
     def test_2_logger(self):
-        """Test logger of Thing class"""
-        # logger must have remote access handler if remote_accessible_logger is True
+        """Test logger setup"""
+        # req. 1. logger must have remote access handler if remote_accessible_logger is True
         logger = get_default_logger("test_logger", log_level=logging.WARN)
         thing = self.thing_cls(id="test_remote_accessible_logger", logger=logger, remote_accessible_logger=True)
         self.assertEqual(thing.logger, logger)
         self.assertTrue(any(isinstance(handler, RemoteAccessHandler) for handler in thing.logger.handlers))
-
         # Therefore also check the false condition
         logger = get_default_logger("test_logger_2", log_level=logging.WARN)
         thing = self.thing_cls(id="test_logger_without_remote_access", logger=logger, remote_accessible_logger=False)
         self.assertFalse(any(isinstance(handler, RemoteAccessHandler) for handler in thing.logger.handlers))
         # NOTE - logger is modifiable after instantiation 
-       
-        
+
+        # req. 2. logger is created automatically if not provided
+        thing = self.thing_cls(id="test_logger_auto_creation", log_level=logging.WARN)
+        self.assertIsNotNone(thing.logger)
+        self.assertFalse(any(isinstance(handler, RemoteAccessHandler) for handler in thing.logger.handlers)) 
+        self.assertNotEqual(thing.logger, logger) # not the above logger that we used. 
+        # remote accessible only when we ask for it
+        thing = self.thing_cls(id="test_logger_auto_creation_2", log_level=logging.WARN, remote_accessible_logger=True)
+        self.assertIsNotNone(thing.logger)
+        self.assertTrue(any(isinstance(handler, RemoteAccessHandler) for handler in thing.logger.handlers))
+        self.assertNotEqual(thing.logger, logger)
+
+
     def test_3_state(self):
-        """Test state and state_machine of Thing class"""
-        # state property must be None when no state machine is present
+        """Test state and state_machine setup"""
+        # req. 1. state property must be None when no state machine is present
         thing1 = self.thing_cls(id="test_no_state_machine", log_level=logging.WARN)
         self.assertIsNone(thing1.state)
         self.assertIsNone(thing1.state_machine)
-        # class level property state machine checked in the following test class 
         # detailed checks in another file
         
 
@@ -90,25 +109,33 @@ class TestThing(TestCase):
                             id="test_subthings", log_level=logging.WARN, 
                             remote_accessible_logger=True
                         )
-        # subthings must be a dictionary
+        # req. 1. subthings must be a dictionary
         self.assertIsInstance(thing.sub_things, dict)
-        self.assertEqual(len(thing.sub_things), 1)
-
+        self.assertEqual(len(thing.sub_things), 1) # logger 
+        # req. 2. subthings are always recomputed when accessed (at least thats the way it is right now), 
+        # so we can add new subthings anytime
         thing.another_thing = OceanOpticsSpectrometer(id="another_thing", log_level=logging.WARN)
         self.assertIsInstance(thing.sub_things, dict)
         self.assertEqual(len(thing.sub_things), 2)
-        for subthing in thing.sub_things.values():
+        # req. 3. subthings must be instances of Thing and have the parent as owner
+        for name, subthing in thing.sub_things.items():
             self.assertTrue(thing in subthing._owners)
+            self.assertIsInstance(subthing, Thing)
+            # req. 4. name of subthing must match name of the attribute
+            self.assertTrue(hasattr(thing, name))
 
 
     def test_5_servers_init(self):
-        # rpc_server and event_publisher must be None when not run()
+        """Test if servers can be initialized/instantiated"""
+        # req. 1. rpc_server and event_publisher must be None when not run()
         thing = self.thing_cls(id="test_servers_init", log_level=logging.ERROR)
         self.assertIsNone(thing.rpc_server)
         self.assertIsNone(thing.event_publisher)
+        # req. 2. rpc_server and event_publisher must be instances of their respective classes when run()
         prepare_rpc_server(thing, 'IPC')
-        self.assertIsNotNone(thing.rpc_server)
-        self.assertIsNotNone(thing.event_publisher)
+        self.assertIsInstance(thing.rpc_server, RPCServer)
+        self.assertIsInstance(thing.event_publisher, EventPublisher)
+        # exit to quit nicely
         thing.rpc_server.exit()
         thing.event_publisher.exit()
         
@@ -135,71 +162,93 @@ class TestOceanOpticsSpectrometer(TestThing):
         super().setUpClass()
         self.thing_cls = OceanOpticsSpectrometer
 
+    # check docs of the parent class for the test sequence
 
     def test_3_state(self):
+        """Test state and state_machine setup"""
         thing1 = self.thing_cls(id="test_state_machine", log_level=logging.WARN)
+        # req. 1. state and state machine must be present because we create this subclass with a state machine
         self.assertIsNotNone(thing1.state)
         self.assertIsInstance(thing1.state_machine, BoundFSM)
-
+        # req. 2. state and state machine must be different for different instances
         thing2 = self.thing_cls(id="test_state_machine_2", log_level=logging.WARN)
+        # first check if state machine exists
         self.assertIsNotNone(thing2.state)
         self.assertIsInstance(thing2.state_machine, BoundFSM)
-
+        # then check if they are different
         self.assertNotEqual(thing1.state_machine, thing2.state_machine)
-        self.assertEqual(thing1.state, thing2.state) # returns initial state so equal, not otherwise
+        # until state is set, initial state is equal
+        self.assertEqual(thing1.state, thing2.state) 
         self.assertEqual(thing1.state_machine.initial_state, thing2.state_machine.initial_state)
-        
+        # after state is set, they are different
         thing1.state_machine.set_state(thing1.states.ALARM)
-        self.assertNotEqual(thing1.state, thing2.state) # returns initial state
+        self.assertNotEqual(thing1.state, thing2.state) 
         self.assertNotEqual(thing1.state_machine, thing2.state_machine)
+        # initial state is still same
         self.assertEqual(thing1.state_machine.initial_state, thing2.state_machine.initial_state)
 
 
 
 class TestMetaclass(TestCase):
+    """Test ThingMeta metaclass which instantiates a Thing (sub-)class"""
+
+    @classmethod
+    def setUpClass(self):
+        super().setUpClass()
+        print(f"test ThingMeta with {self.__name__}")
+
+    """
+    Test sequence is as follows:
+    1. Test metaclass of Thing class
+    2. Test registry creation and access which is currently the main purpose of the metaclass
+    """
 
     def test_1_metaclass(self):
-        # metaclass must be ThingMeta
+        """test metaclass of Thing class"""
+        # req. 1 metaclass must be ThingMeta of any Thing class 
         self.assertEqual(Thing.__class__, ThingMeta)
         self.assertEqual(OceanOpticsSpectrometer.__class__, ThingMeta)
+        self.assertEqual(Thing.__class__, OceanOpticsSpectrometer.__class__)
         
 
     def test_2_registry_creation(self):
-        """test registry creation and access"""
-        # registry attributes must be instances of their respective classes
+        """test registry creation and access which is currently the main purpose of the metaclass"""
+        # req. 1. registry attributes must be instances of their respective classes
         self.assertIsInstance(Thing.properties, PropertiesRegistry)
         self.assertIsInstance(Thing.actions, ActionsRegistry)
         self.assertIsInstance(Thing.events, EventsRegistry)
 
-        # new registries are not created on the fly and are same between accesses 
+        # req. 2. new registries are not created on the fly and are same between accesses 
         self.assertEqual(Thing.properties, Thing.properties)
         self.assertEqual(Thing.actions, Thing.actions)
         self.assertEqual(Thing.events, Thing.events)
+        # This test is done as the implementation deviates from `param`
 
-        # different subclasses have different registries
+        # req. 3. different subclasses have different registries
         self.assertNotEqual(Thing.properties, OceanOpticsSpectrometer.properties)
         self.assertNotEqual(Thing.actions, OceanOpticsSpectrometer.actions)
         self.assertNotEqual(Thing.events, OceanOpticsSpectrometer.events)
 
+        # create instances for further tests
         thing = Thing(id="test_registry_creation", log_level=logging.WARN)
         spectrometer = OceanOpticsSpectrometer(id="test_registry_creation_2", log_level=logging.WARN)
 
-        # registry attributes must be instances of their respective classes also for instances
+        # req. 4. registry attributes must be instances of their respective classes also for instances
         self.assertIsInstance(thing.properties, PropertiesRegistry)
         self.assertIsInstance(thing.actions, ActionsRegistry)
         self.assertIsInstance(thing.events, EventsRegistry)
 
-        # registries are not created on the fly and are same between accesses also for instances
+        # req. 5. registries are not created on the fly and are same between accesses also for instances
         self.assertEqual(thing.properties, thing.properties)
         self.assertEqual(thing.actions, thing.actions)
         self.assertEqual(thing.events, thing.events)
 
-        # registries are not shared between instances
+        # req. 6. registries are not shared between instances
         self.assertNotEqual(thing.properties, spectrometer.properties)
         self.assertNotEqual(thing.actions, spectrometer.actions)
         self.assertNotEqual(thing.events, spectrometer.events)
 
-        # registries are not shared between instances and classes
+        # req. 7. registries are not shared between instances and their classes
         self.assertNotEqual(thing.properties, Thing.properties)
         self.assertNotEqual(thing.actions, Thing.actions)
         self.assertNotEqual(thing.events, Thing.events)
@@ -210,23 +259,41 @@ class TestMetaclass(TestCase):
 
 
 class TestActionRegistry(TestCase):
-    """Test ActionRegistry class from hololinked.core.meta module."""
+    """Test ActionRegistry class"""
+
+    @classmethod
+    def setUpClass(self):
+        super().setUpClass()
+        print(f"test ActionRegistry with {self.__name__}")
+        
+    """
+    Test action registry first because actions are the easiest to test.
+    1. Test owner attribute
+    2. Test descriptors access 
+    3. Test dunders
+    """
 
     def test_1_owner(self):
-        # owner attribute must be the class itself
+        """Test owner attribute of ActionRegistry"""
+
+        # req. 1. owner attribute must be the class itself when accessed as class attribute
         self.assertEqual(Thing.actions.owner, Thing)
         self.assertEqual(OceanOpticsSpectrometer.actions.owner, OceanOpticsSpectrometer)
+        # therefore owner instance must be None
         self.assertIsNone(Thing.actions.owner_inst)
         self.assertIsNone(OceanOpticsSpectrometer.actions.owner_inst)
 
-        # owner attribute must be the instance for instance registries
+        # create instances for further tests
         thing = Thing(id="test_action_registry_owner", log_level=logging.WARN)
         spectrometer = OceanOpticsSpectrometer(id="test_action_registry_owner", log_level=logging.WARN)
+
+        # req. 2. owner attribute must be the instance for instance registries (i.e. when accessed as instance attribute)
         self.assertEqual(thing.actions.owner, thing)
         self.assertEqual(spectrometer.actions.owner, spectrometer)
         self.assertEqual(thing.actions.owner_cls, Thing)
         self.assertEqual(spectrometer.actions.owner_cls, OceanOpticsSpectrometer)
 
+        # req. 3. descriptor_object must be Action
         self.assertEqual(Thing.actions.descriptor_object, Action)
         self.assertEqual(OceanOpticsSpectrometer.actions.descriptor_object, Action)
         self.assertEqual(thing.actions.descriptor_object, Action)
@@ -234,10 +301,13 @@ class TestActionRegistry(TestCase):
     
 
     def test_2_descriptors(self):
+        """Test descriptors access"""
+
+        # create instances for tests
         thing = Thing(id="test_action_registry_owner", log_level=logging.WARN)
         spectrometer = OceanOpticsSpectrometer(id="test_action_registry_owner", log_level=logging.WARN)
 
-        # descriptors are instances of Action
+        # req. 1. descriptors are instances of Action
         for name, value in Thing.actions.descriptors.items():
             self.assertIsInstance(value, Action)
             self.assertIsInstance(name, str)
@@ -247,40 +317,78 @@ class TestActionRegistry(TestCase):
         # subclass have more descriptors than parent class because our example Thing OceanOpticsSpectrometer 
         # has defined its own actions
         self.assertTrue(len(OceanOpticsSpectrometer.actions.descriptors) > len(Thing.actions.descriptors))
-        # either class level or instance level Action descriptors are same - not a strict requirement though
-        # one can always add instance level descriptors
+        # req. 2. either class level or instance level Action descriptors are same - not a strict requirement for different 
+        # use cases, one can always add instance level descriptors
         for name, value in thing.actions.descriptors.items():
             self.assertIsInstance(value, Action)
             self.assertIsInstance(name, str)
         for name, value in spectrometer.actions.descriptors.items():
             self.assertIsInstance(value, Action)
             self.assertIsInstance(name, str)
-        # because class level and instance level descriptors are same, they are equal
+        # req. 3. because class level and instance level descriptors are same, they are equal
         for (name, value), (name2, value2) in zip(Thing.actions.descriptors.items(), thing.actions.descriptors.items()):
             self.assertEqual(name, name2)
             self.assertEqual(value, value2)
         for (name, value), (name2, value2) in zip(OceanOpticsSpectrometer.actions.descriptors.items(), spectrometer.actions.descriptors.items()):
             self.assertEqual(name, name2)
             self.assertEqual(value, value2)
-        # descriptors can be cleared
+        # req. 4. descriptors can be cleared
         self.assertTrue(hasattr(thing.actions, f'_{thing.actions._qualified_prefix}_{ActionsRegistry.__name__.lower()}'))
         thing.actions.clear()
         self.assertTrue(not hasattr(thing.actions, f'_{thing.actions._qualified_prefix}_{ActionsRegistry.__name__.lower()}'))
+        # clearing again any number of times should not raise error
         thing.actions.clear()
         thing.actions.clear()
         self.assertTrue(not hasattr(thing.actions, f'_{thing.actions._qualified_prefix}_{ActionsRegistry.__name__.lower()}'))
 
 
     def test_3_dunders(self):
-    
-        # __getitem__ must return the descriptor object
+        """Test dunders of ActionRegistry"""
+
+        # req. 1. __getitem__ must return the descriptor object
         for name, value in Thing.actions.descriptors.items():
             self.assertEqual(Thing.actions[name], value)
-            # __contains__ must return True if the descriptor is present
+            # req. 2. __contains__ must return True if the descriptor is present
             self.assertIn(value, Thing.actions)
             self.assertIn(name, Thing.actions.descriptors.keys())
-    
-    
+      
+        # create instances for tests
+        thing = Thing(id="test_iter_dunder", log_level=logging.WARN)
+        spectrometer = OceanOpticsSpectrometer(id="test_iter_dunder", log_level=logging.WARN)
+
+        # req. 2. __iter__ must return an iterator over the descriptors dictionary
+        # which in turn iterates over the keys
+        self.assertTrue(all(isinstance(action_name, str) for action_name in Thing.actions))
+        self.assertTrue(all(isinstance(action_name, str) for action_name in OceanOpticsSpectrometer.actions))
+        # __iter__ can also be casted as other iterators like lists
+        thing_actions = list(thing.actions)
+        spectrometer_actions = list(spectrometer.actions)
+        self.assertIsInstance(thing_actions, list)
+        self.assertIsInstance(spectrometer_actions, list)
+        self.assertTrue(all(isinstance(action_name, str) for action_name in thing_actions))
+        self.assertTrue(all(isinstance(action_name, str) for action_name in spectrometer_actions))
+        
+        # req. 3. __len__ must return the number of descriptors
+        self.assertTrue(len(Thing.actions) == len(Thing.actions.descriptors))
+        self.assertTrue(len(OceanOpticsSpectrometer.actions) == len(OceanOpticsSpectrometer.actions.descriptors))
+        self.assertTrue(len(thing.actions) == len(thing.actions.descriptors))
+        self.assertTrue(len(spectrometer.actions) == len(spectrometer.actions.descriptors))
+        self.assertTrue(len(thing.actions) == len(Thing.actions))
+        self.assertTrue(len(spectrometer.actions) == len(OceanOpticsSpectrometer.actions))
+
+        # req. 5. registries have their unique hashes 
+        foodict = {Thing.actions: 1, OceanOpticsSpectrometer.actions: 2, thing.actions: 3, spectrometer.actions: 4}
+        self.assertEqual(foodict[Thing.actions], 1)
+        self.assertEqual(foodict[OceanOpticsSpectrometer.actions], 2)
+        self.assertEqual(foodict[thing.actions], 3)
+        self.assertEqual(foodict[spectrometer.actions], 4)
+        # not sure if this is really a useful feature or just plain stupid 
+        # The requirement was to be able to generate unique hashes for each registry like foodict[<some hash>] = Thing.actions
+
+        # __dir__ not yet tested   
+
+    def test_4_bound_actions(self):
+        """Test BoundAction class"""
 
 class TestEventRegistry(TestCase):
 
