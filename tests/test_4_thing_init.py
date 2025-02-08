@@ -1,21 +1,23 @@
+import typing
 import unittest
 import logging
 
 from hololinked.core.actions import BoundAction
+from hololinked.core.events import EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
-from hololinked.param import Parameter
 from hololinked.core import Thing, ThingMeta, Action, Event, Property
-from hololinked.core.meta import PropertiesRegistry, ActionsRegistry, EventsRegistry
+from hololinked.core.meta import DescriptorRegistry, PropertiesRegistry, ActionsRegistry, EventsRegistry
 from hololinked.core.zmq.rpc_server import RPCServer, prepare_rpc_server
+from hololinked.core.properties import Parameter
 from hololinked.core.state_machine import BoundFSM
 from hololinked.utils import get_default_logger 
 from hololinked.core.logger import RemoteAccessHandler
 
 try:
-    from .things import OceanOpticsSpectrometer, start_thing_forked
+    from .things import OceanOpticsSpectrometer
     from .utils import TestCase, TestRunner
 except ImportError:
-    from things import OceanOpticsSpectrometer, start_thing_forked
+    from things import OceanOpticsSpectrometer
     from utils import TestCase, TestRunner
 
 
@@ -256,16 +258,73 @@ class TestMetaclass(TestCase):
         self.assertNotEqual(spectrometer.actions, OceanOpticsSpectrometer.actions)
         self.assertNotEqual(spectrometer.events, OceanOpticsSpectrometer.events)
 
+# Uncomment the following for type hints while coding registry tests, 
+# comment it before testing
+# class Thing(Thing):
+#     class_registry: PropertiesRegistry | ActionsRegistry | EventsRegistry  
+#     instance_registry: PropertiesRegistry  | ActionsRegistry | EventsRegistry  | None 
+#     descriptor_object: type[Property | Action | Event]
+
+# class OceanOpticsSpectrometer(OceanOpticsSpectrometer):
+#     class_registry: PropertiesRegistry | ActionsRegistry | EventsRegistry 
+#     instance_registry: PropertiesRegistry  | ActionsRegistry | EventsRegistry  | None
+#     descriptor_object: type[Property | Action | Event]
 
 
-class TestActionRegistry(TestCase):
-    """Test ActionRegistry class"""
+class TestRegistry(TestCase):
+
+    # Read the commented section above before proceeding to this test
 
     @classmethod
     def setUpClass(self):
         super().setUpClass()
-        print(f"test ActionRegistry with {self.__name__}")
+        self.setUpRegistryObjects()
+        self.setUpRegistryAttributes()
+        print(f"test {self.registry_cls.__name__} with {self.__name__}")
         
+    @classmethod
+    def setUpRegistryObjects(self):
+        self.registry_cls = None # type: DescriptorRegistry | None 
+        self.registry_object = None # type: type[Property | Action | Event]
+
+    @property
+    def is_abstract_test_class(self):
+        if self.registry_cls is None:
+            print("registry_cls is None")
+        if self.registry_object is None:
+            print("registry_object is None")
+        return self.registry_cls is None or self.registry_object is None
+
+    @classmethod
+    def setUpRegistryAttributes(self):
+        if self.registry_cls is None or self.registry_object is None:
+            return 
+        
+        # create instances for further tests
+        self.thing = Thing(id=f"test_{self.registry_object.__name__}_registry", log_level=logging.WARN)
+        self.spectrometer = OceanOpticsSpectrometer(id=f"test_{self.registry_object.__name__}_registry", 
+                                            log_level=logging.WARN)
+        if self.registry_cls == ActionsRegistry:
+            Thing.class_registry = Thing.actions
+            OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.actions
+            self.thing.instance_registry = self.thing.actions
+            self.spectrometer.instance_registry = self.spectrometer.actions
+            self.bound_object = BoundAction	
+        elif self.registry_cls == PropertiesRegistry:
+            Thing.class_registry = Thing.properties
+            OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.properties
+            self.thing.instance_registry = self.thing.properties 
+            self.spectrometer.instance_registry = self.spectrometer.properties
+            self.bound_object = typing.Any
+        elif self.registry_cls == EventsRegistry:
+            Thing.class_registry = Thing.events
+            OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.events
+            self.thing.instance_registry = self.thing.events
+            self.spectrometer.instance_registry = self.spectrometer.events
+            self.bound_object = EventDispatcher
+        else:
+            raise NotImplementedError("This registry class is not implemented")
+
     """
     Test action registry first because actions are the easiest to test.
     1. Test owner attribute
@@ -275,328 +334,254 @@ class TestActionRegistry(TestCase):
 
     def test_1_owner(self):
         """Test owner attribute of ActionRegistry"""
-
+        if self.is_abstract_test_class:
+            return  
+    
         # req. 1. owner attribute must be the class itself when accessed as class attribute
-        self.assertEqual(Thing.actions.owner, Thing)
-        self.assertEqual(OceanOpticsSpectrometer.actions.owner, OceanOpticsSpectrometer)
+        self.assertEqual(Thing.class_registry.owner, Thing)
+        self.assertEqual(OceanOpticsSpectrometer.class_registry.owner, OceanOpticsSpectrometer)
         # therefore owner instance must be None
-        self.assertIsNone(Thing.actions.owner_inst)
-        self.assertIsNone(OceanOpticsSpectrometer.actions.owner_inst)
-
-        # create instances for further tests
-        thing = Thing(id="test_action_registry_owner", log_level=logging.WARN)
-        spectrometer = OceanOpticsSpectrometer(id="test_action_registry_owner", log_level=logging.WARN)
+        self.assertIsNone(Thing.class_registry.owner_inst)
+        self.assertIsNone(OceanOpticsSpectrometer.class_registry.owner_inst)
 
         # req. 2. owner attribute must be the instance for instance registries (i.e. when accessed as instance attribute)
-        self.assertEqual(thing.actions.owner, thing)
-        self.assertEqual(spectrometer.actions.owner, spectrometer)
-        self.assertEqual(thing.actions.owner_cls, Thing)
-        self.assertEqual(spectrometer.actions.owner_cls, OceanOpticsSpectrometer)
+        self.assertEqual(self.thing.instance_registry.owner, self.thing)
+        self.assertEqual(self.spectrometer.instance_registry.owner, self.spectrometer)
+        self.assertEqual(self.thing.instance_registry.owner_cls, Thing)
+        self.assertEqual(self.spectrometer.instance_registry.owner_cls, OceanOpticsSpectrometer)
 
         # req. 3. descriptor_object must be Action
-        self.assertEqual(Thing.actions.descriptor_object, Action)
-        self.assertEqual(OceanOpticsSpectrometer.actions.descriptor_object, Action)
-        self.assertEqual(thing.actions.descriptor_object, Action)
-        self.assertEqual(thing.actions.descriptor_object, Thing.actions.descriptor_object)
-    
+        self.assertEqual(Thing.class_registry.descriptor_object, self.registry_object)
+        self.assertEqual(OceanOpticsSpectrometer.class_registry.descriptor_object, self.registry_object)
+        self.assertEqual(self.thing.instance_registry.descriptor_object, self.registry_object)
+        self.assertEqual(self.thing.instance_registry.descriptor_object, Thing.class_registry.descriptor_object)
 
+  
     def test_2_descriptors(self):
         """Test descriptors access"""
-
-        # create instances for tests
-        thing = Thing(id="test_action_registry_owner", log_level=logging.WARN)
-        spectrometer = OceanOpticsSpectrometer(id="test_action_registry_owner", log_level=logging.WARN)
+        if self.is_abstract_test_class:
+            return  
 
         # req. 1. descriptors are instances of Action
-        for name, value in Thing.actions.descriptors.items():
-            self.assertIsInstance(value, Action)
+        for name, value in Thing.class_registry.descriptors.items():
+            self.assertIsInstance(value, self.registry_object)
             self.assertIsInstance(name, str)
-        for name, value in OceanOpticsSpectrometer.actions.descriptors.items():
-            self.assertIsInstance(value, Action)
+        for name, value in OceanOpticsSpectrometer.class_registry.descriptors.items():
+            self.assertIsInstance(value, self.registry_object)
             self.assertIsInstance(name, str)
         # subclass have more descriptors than parent class because our example Thing OceanOpticsSpectrometer 
         # has defined its own actions
-        self.assertTrue(len(OceanOpticsSpectrometer.actions.descriptors) > len(Thing.actions.descriptors))
+        self.assertTrue(len(OceanOpticsSpectrometer.class_registry.descriptors) > len(Thing.class_registry.descriptors))
         # req. 2. either class level or instance level Action descriptors are same - not a strict requirement for different 
         # use cases, one can always add instance level descriptors
-        for name, value in thing.actions.descriptors.items():
-            self.assertIsInstance(value, Action)
+        for name, value in self.thing.instance_registry.descriptors.items():
+            self.assertIsInstance(value, self.registry_object)
             self.assertIsInstance(name, str)
-        for name, value in spectrometer.actions.descriptors.items():
-            self.assertIsInstance(value, Action)
+        for name, value in self.spectrometer.instance_registry.descriptors.items():
+            self.assertIsInstance(value, self.registry_object)
             self.assertIsInstance(name, str)
         # req. 3. because class level and instance level descriptors are same, they are equal
-        for (name, value), (name2, value2) in zip(Thing.actions.descriptors.items(), thing.actions.descriptors.items()):
+        for (name, value), (name2, value2) in zip(Thing.class_registry.descriptors.items(), self.thing.instance_registry.descriptors.items()):
             self.assertEqual(name, name2)
             self.assertEqual(value, value2)
-        for (name, value), (name2, value2) in zip(OceanOpticsSpectrometer.actions.descriptors.items(), spectrometer.actions.descriptors.items()):
+        for (name, value), (name2, value2) in zip(OceanOpticsSpectrometer.class_registry.descriptors.items(), self.spectrometer.instance_registry.descriptors.items()):
             self.assertEqual(name, name2)
             self.assertEqual(value, value2)
         # req. 4. descriptors can be cleared
-        self.assertTrue(hasattr(thing.actions, f'_{thing.actions._qualified_prefix}_{ActionsRegistry.__name__.lower()}'))
-        thing.actions.clear()
-        self.assertTrue(not hasattr(thing.actions, f'_{thing.actions._qualified_prefix}_{ActionsRegistry.__name__.lower()}'))
+        self.assertTrue(hasattr(self.thing.instance_registry, f'_{self.thing.instance_registry._qualified_prefix}_{self.registry_cls.__name__.lower()}'))
+        self.thing.instance_registry.clear()
+        self.assertTrue(not hasattr(self.thing.instance_registry, f'_{self.thing.instance_registry._qualified_prefix}_{self.registry_cls.__name__.lower()}'))
         # clearing again any number of times should not raise error
-        thing.actions.clear()
-        thing.actions.clear()
-        self.assertTrue(not hasattr(thing.actions, f'_{thing.actions._qualified_prefix}_{ActionsRegistry.__name__.lower()}'))
+        self.thing.instance_registry.clear()
+        self.thing.instance_registry.clear()
+        self.assertTrue(not hasattr(self.thing.instance_registry, f'_{self.thing.instance_registry._qualified_prefix}_{self.registry_cls.__name__.lower()}'))
 
-
+    
     def test_3_dunders(self):
         """Test dunders of ActionRegistry"""
+        if self.is_abstract_test_class:
+            return
 
         # req. 1. __getitem__ must return the descriptor object
-        for name, value in Thing.actions.descriptors.items():
-            self.assertEqual(Thing.actions[name], value)
+        for name, value in Thing.class_registry.descriptors.items():
+            self.assertEqual(Thing.class_registry[name], value)
             # req. 2. __contains__ must return True if the descriptor is present
-            self.assertIn(value, Thing.actions)
-            self.assertIn(name, Thing.actions.descriptors.keys())
+            self.assertIn(value, Thing.class_registry)
+            self.assertIn(name, Thing.class_registry.descriptors.keys())
       
-        # create instances for tests
-        thing = Thing(id="test_iter_dunder", log_level=logging.WARN)
-        spectrometer = OceanOpticsSpectrometer(id="test_iter_dunder", log_level=logging.WARN)
-
         # req. 2. __iter__ must return an iterator over the descriptors dictionary
         # which in turn iterates over the keys
-        self.assertTrue(all(isinstance(action_name, str) for action_name in Thing.actions))
-        self.assertTrue(all(isinstance(action_name, str) for action_name in OceanOpticsSpectrometer.actions))
+        self.assertTrue(all(isinstance(descriptor_name, str) for descriptor_name in Thing.class_registry))
+        self.assertTrue(all(isinstance(descriptor_name, str) for descriptor_name in OceanOpticsSpectrometer.class_registry))
         # __iter__ can also be casted as other iterators like lists
-        thing_actions = list(thing.actions)
-        spectrometer_actions = list(spectrometer.actions)
-        self.assertIsInstance(thing_actions, list)
-        self.assertIsInstance(spectrometer_actions, list)
-        self.assertTrue(all(isinstance(action_name, str) for action_name in thing_actions))
-        self.assertTrue(all(isinstance(action_name, str) for action_name in spectrometer_actions))
+        thing_descriptors = list(self.thing.instance_registry)
+        spectrometer_descriptors = list(self.spectrometer.instance_registry)
+        self.assertIsInstance(thing_descriptors, list)
+        self.assertIsInstance(spectrometer_descriptors, list)
+        self.assertTrue(all(isinstance(descriptor_name, str) for descriptor_name in thing_descriptors))
+        self.assertTrue(all(isinstance(descriptor_name, str) for descriptor_name in spectrometer_descriptors))
         
         # req. 3. __len__ must return the number of descriptors
-        self.assertTrue(len(Thing.actions) == len(Thing.actions.descriptors))
-        self.assertTrue(len(OceanOpticsSpectrometer.actions) == len(OceanOpticsSpectrometer.actions.descriptors))
-        self.assertTrue(len(thing.actions) == len(thing.actions.descriptors))
-        self.assertTrue(len(spectrometer.actions) == len(spectrometer.actions.descriptors))
-        self.assertTrue(len(thing.actions) == len(Thing.actions))
-        self.assertTrue(len(spectrometer.actions) == len(OceanOpticsSpectrometer.actions))
+        self.assertTrue(len(Thing.class_registry) == len(Thing.class_registry.descriptors))
+        self.assertTrue(len(OceanOpticsSpectrometer.class_registry) == len(OceanOpticsSpectrometer.class_registry.descriptors))
+        self.assertTrue(len(self.thing.instance_registry) == len(self.thing.instance_registry.descriptors))
+        self.assertTrue(len(self.spectrometer.instance_registry) == len(self.spectrometer.instance_registry.descriptors))
+        self.assertTrue(len(self.thing.instance_registry) == len(Thing.class_registry))
+        self.assertTrue(len(self.spectrometer.instance_registry) == len(OceanOpticsSpectrometer.class_registry))
 
-        # req. 5. registries have their unique hashes 
-        foodict = {Thing.actions: 1, OceanOpticsSpectrometer.actions: 2, thing.actions: 3, spectrometer.actions: 4}
-        self.assertEqual(foodict[Thing.actions], 1)
-        self.assertEqual(foodict[OceanOpticsSpectrometer.actions], 2)
-        self.assertEqual(foodict[thing.actions], 3)
-        self.assertEqual(foodict[spectrometer.actions], 4)
-        # not sure if this is really a useful feature or just plain stupid 
+        # req. 4. registries have their unique hashes 
+        # NOTE - not sure if this is really a useful feature or just plain stupid 
         # The requirement was to be able to generate unique hashes for each registry like foodict[<some hash>] = Thing.actions
+        foodict = {Thing.class_registry: 1, OceanOpticsSpectrometer.class_registry: 2, self.thing.instance_registry: 3, self.spectrometer.instance_registry: 4}
+        self.assertEqual(foodict[Thing.class_registry], 1)
+        self.assertEqual(foodict[OceanOpticsSpectrometer.class_registry], 2)
+        self.assertEqual(foodict[self.thing.instance_registry], 3)
+        self.assertEqual(foodict[self.spectrometer.instance_registry], 4)
 
         # __dir__ not yet tested   
+        # __str__ will not be tested 
 
-    def test_4_bound_actions(self):
+    
+    def test_4_bound_objects(self):
         """Test BoundAction class"""
+        if self.is_abstract_test_class:
+            return
+        if self.registry_object not in [Property, Parameter, Action]:
+            return
 
-class TestEventRegistry(TestCase):
+        # req. 1. number of bound objects must be equal to number of descriptors
+        # for example, number of bound actions must be equal to number of actions
+        self.assertEqual(len(self.thing.instance_registry), len(self.thing.instance_registry.descriptors))
+        self.assertEqual(len(self.spectrometer.instance_registry), len(self.spectrometer.instance_registry.descriptors))
+
+        # req. 2. bound objects must be instances of bound instances
+        for name, value in self.thing.instance_registry.values.items():
+            if self.bound_object != typing.Any:
+                self.assertIsInstance(value, self.bound_object)
+            self.assertIsInstance(name, str)
+        for name, value in self.spectrometer.instance_registry.values.items():
+            if self.bound_object != typing.Any:
+                self.assertIsInstance(value, self.bound_object)
+            self.assertIsInstance(name, str)
+
+
+
+class TestActionRegistry(TestRegistry):
+    """Test ActionRegistry class"""
 
     @classmethod
-    def setUpClass(self):
-        super().setUpClass()
+    def setUpRegistryObjects(self):
+        self.registry_cls = ActionsRegistry
+        self.registry_object = Action
+        
+
+
+class TestEventRegistry(TestRegistry):
+
+    @classmethod
+    def setUpRegistryObjects(self):
+        self.registry_cls = EventsRegistry
+        self.registry_object = Event
        
-    def test_1_owner(self):
-        # owner attribute must be the class itself
-        self.assertEqual(Thing.events.owner, Thing)
-        self.assertEqual(OceanOpticsSpectrometer.events.owner, OceanOpticsSpectrometer)
-        self.assertIsNone(Thing.events.owner_inst)
-        self.assertIsNone(OceanOpticsSpectrometer.events.owner_inst)
 
-        # owner attribute must be the instance's class
-        thing = Thing(id="test_event_registry_owner", log_level=logging.WARN)
-        spectrometer = OceanOpticsSpectrometer(id="test_event_registry_owner", log_level=logging.WARN)
-        self.assertEqual(thing.events.owner, thing)
-        self.assertEqual(spectrometer.events.owner, spectrometer)
-        self.assertEqual(thing.events.owner_cls, Thing)
-        self.assertEqual(spectrometer.events.owner_cls, OceanOpticsSpectrometer)
+    def test_2_descriptors(self):
+        if self.is_abstract_test_class:
+            return
+        
+        super().test_2_descriptors()
 
-        self.assertEqual(Thing.events.descriptor_object, Event)
-        self.assertEqual(OceanOpticsSpectrometer.events.descriptor_object, Event)
-        self.assertEqual(thing.events.descriptor_object, Event)
-        self.assertEqual(thing.events.descriptor_object, Thing.events.descriptor_object)
+        # req. 5. observables and change events are also descriptors
+        for name, value in self.thing.events.observables.items():
+            self.assertIsInstance(value, Property)
+            self.assertIsInstance(name, str)
+        for name, value in self.thing.events.change_events.items():
+            self.assertIsInstance(value, Event)
+            self.assertIsInstance(name, str)
+        # req. 4. descriptors can be cleared
+        self.assertTrue(hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}'))
+        self.assertTrue(hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events'))
+        self.assertTrue(hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables'))
+        self.thing.events.clear()
+        self.assertTrue(not hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}'))
+        self.assertTrue(not hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events'))
+        self.assertTrue(not hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables'))
+        self.thing.events.clear()
+        self.thing.events.clear()
+        self.assertTrue(not hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}'))
+        self.assertTrue(not hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events'))
+        self.assertTrue(not hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables'))
+
+       
+
+class TestPropertiesRegistry(TestRegistry):
+
+    @classmethod
+    def setUpRegistryObjects(self):
+        self.registry_cls = PropertiesRegistry
+        self.registry_object = Parameter
 
 
     def test_2_descriptors(self):
+        if self.is_abstract_test_class:
+            return
+        
+        super().test_2_descriptors()
 
-        thing = Thing(id="test_event_registry_owner", log_level=logging.WARN)
-        spectrometer = OceanOpticsSpectrometer(id="test_event_registry_owner", log_level=logging.WARN)
-
-        # descriptors are instances of Event
-        for name, value in Thing.events.descriptors.items():
-            self.assertIsInstance(value, Event)
-            self.assertIsInstance(name, str)
-        for name, value in OceanOpticsSpectrometer.events.descriptors.items():
-            self.assertIsInstance(value, Event)
-            self.assertIsInstance(name, str)
-        # subclass have more descriptors than parent class because our example Thing OceanOpticsSpectrometer
-        # has defined its own events
-        self.assertTrue(len(OceanOpticsSpectrometer.events.descriptors) > len(Thing.events.descriptors))
-        # either class level or instance level Event descriptors are same - not a strict requirement though
-        for name, value in thing.events.descriptors.items():
-            self.assertIsInstance(value, Event)
-            self.assertIsInstance(name, str)
-        for name, value in spectrometer.events.descriptors.items():
-            self.assertIsInstance(value, Event)
-            self.assertIsInstance(name, str)
-        # because class level and instance level descriptors are same, they are equal
-        for (name, value), (name2, value2) in zip(Thing.events.descriptors.items(), thing.events.descriptors.items()):
-            self.assertEqual(name, name2)
-            self.assertEqual(value, value2)
-        for (name, value), (name2, value2) in zip(OceanOpticsSpectrometer.events.descriptors.items(), spectrometer.events.descriptors.items()):
-            self.assertEqual(name, name2)
-            self.assertEqual(value, value2)
-        # obserables and change events are also descriptors
-        for name, value in thing.events.observables.items():
+        # req. 5. parameters that are subclass of Property are usually remote objects
+        for name, value in self.thing.properties.remote_objects.items():
             self.assertIsInstance(value, Property)
             self.assertIsInstance(name, str)
-        for name, value in thing.events.change_events.items():
-            self.assertIsInstance(value, Event)
-            self.assertIsInstance(name, str)
-        # descriptors can be cleared
-        self.assertTrue(hasattr(thing.events, f'_{thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}'))
-        self.assertTrue(hasattr(thing.events, f'_{thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events'))
-        self.assertTrue(hasattr(thing.events, f'_{thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables'))
-        thing.events.clear()
-        self.assertTrue(not hasattr(thing.events, f'_{thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}'))
-        self.assertTrue(not hasattr(thing.events, f'_{thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events'))
-        self.assertTrue(not hasattr(thing.events, f'_{thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables'))
-        thing.events.clear()
-        thing.events.clear()
-        self.assertTrue(not hasattr(thing.events, f'_{thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}'))
-        self.assertTrue(not hasattr(thing.events, f'_{thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events'))
-        self.assertTrue(not hasattr(thing.events, f'_{thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables'))
-
-
-    def test_3_dunders(self):
-    
-        # __getitem__ must return the descriptor object
-        for name, value in Thing.events.descriptors.items():
-            self.assertEqual(Thing.events[name], value)
-            # __contains__ must return True if the descriptor is present
-            self.assertIn(value, Thing.events)
-            self.assertIn(name, Thing.events.descriptors.keys())
-       
-
-
-class TestPropertiesRegistry(TestCase):
-
-    def test_1_owner(self):
-        # owner attribute must be the class itself
-        self.assertEqual(Thing.properties.owner, Thing)
-        self.assertEqual(OceanOpticsSpectrometer.properties.owner, OceanOpticsSpectrometer)
-        self.assertIsNone(Thing.properties.owner_inst)
-        self.assertIsNone(OceanOpticsSpectrometer.properties.owner_inst)
-
-        # owner attribute must be the instance's class
-        thing = Thing(id="test_property_registry_owner", log_level=logging.WARN)
-        spectrometer = OceanOpticsSpectrometer(id="test_property_registry_owner", log_level=logging.WARN)
-        self.assertEqual(thing.properties.owner, thing)
-        self.assertEqual(spectrometer.properties.owner, spectrometer)
-        self.assertEqual(thing.properties.owner_cls, Thing)
-        self.assertEqual(spectrometer.properties.owner_cls, OceanOpticsSpectrometer)
-
-        self.assertEqual(Thing.properties.descriptor_object, Parameter)
-        self.assertEqual(OceanOpticsSpectrometer.properties.descriptor_object, Parameter)
-        self.assertEqual(thing.properties.descriptor_object, Parameter)
-        self.assertEqual(thing.properties.descriptor_object, Thing.properties.descriptor_object)
-
-
-    def test_2_descriptors(self):
-
-        thing = Thing(id="test_property_registry_owner", log_level=logging.WARN)
-        spectrometer = OceanOpticsSpectrometer(id="test_property_registry_owner", log_level=logging.WARN)
-
-        # descriptors are instances of Property
-        for name, value in Thing.properties.descriptors.items():
-            self.assertIsInstance(value, Parameter)
-            self.assertIsInstance(name, str)
-        for name, value in OceanOpticsSpectrometer.properties.descriptors.items():
-            self.assertIsInstance(value, Parameter)
-            self.assertIsInstance(name, str)
-        # subclass have more descriptors than parent class because our example Thing OceanOpticsSpectrometer
-        # has defined its own properties
-        self.assertTrue(len(OceanOpticsSpectrometer.properties.descriptors) > len(Thing.properties.descriptors))
-        # either class level or instance level Property descriptors are same - not a strict requirement though
-        for name, value in thing.properties.descriptors.items():
-            self.assertIsInstance(value, Parameter)
-            self.assertIsInstance(name, str)
-        for name, value in spectrometer.properties.descriptors.items():
-            self.assertIsInstance(value, Parameter)
-            self.assertIsInstance(name, str)
-        # parameters that are subclass of Property are usually remote objects
-        for name, value in thing.properties.remote_objects.items():
+        for name, value in self.spectrometer.properties.remote_objects.items():
             self.assertIsInstance(value, Property)
             self.assertIsInstance(name, str)
-        for name, value in spectrometer.properties.remote_objects.items():
-            self.assertIsInstance(value, Property)
-            self.assertIsInstance(name, str)
-        # because class level and instance level descriptors are same, they are equal
-        for (name, value), (name2, value2) in zip(Thing.properties.descriptors.items(), thing.properties.descriptors.items()):
-            self.assertEqual(name, name2)
-            self.assertEqual(value, value2)
-        for (name, value), (name2, value2) in zip(OceanOpticsSpectrometer.properties.descriptors.items(), spectrometer.properties.descriptors.items()):
-            self.assertEqual(name, name2)
-            self.assertEqual(value, value2)
-        # db_objects, db_init_objects, db_persisting_objects are also descriptors
-        for name, value in thing.properties.db_objects.items():
+        # req. 6. db_objects, db_init_objects, db_persisting_objects, db_commit_objects are also descriptors
+        for name, value in self.thing.properties.db_objects.items():
             self.assertIsInstance(value, Property)
             self.assertIsInstance(name, str)
             self.assertTrue(value.db_init or value.db_persist or value.db_commit)
-        for name, value in thing.properties.db_init_objects.items():
+        for name, value in self.thing.properties.db_init_objects.items():
             self.assertIsInstance(value, Property)
             self.assertIsInstance(name, str)
             self.assertTrue(value.db_init or value.db_persist)
             self.assertFalse(value.db_commit)
-        for name, value in thing.properties.db_commit_objects.items():
+        for name, value in self.thing.properties.db_commit_objects.items():
             self.assertIsInstance(value, Property)
             self.assertIsInstance(name, str)
             self.assertTrue(value.db_commit or value.db_persist)
             self.assertFalse(value.db_init)
-        for name, value in thing.properties.db_persisting_objects.items():
+        for name, value in self.thing.properties.db_persisting_objects.items():
             self.assertIsInstance(value, Property)
             self.assertIsInstance(name, str)
             self.assertTrue(value.db_persist)
             self.assertFalse(value.db_init) # in user given cases, this could be true, this is not strict requirement
             self.assertFalse(value.db_commit) # in user given cases, this could be true, this is not strict requirement
 
-        # descriptors can be cleared
-        self.assertTrue(hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}'))
-        thing.properties.clear()
-        self.assertTrue(not hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}'))
-        thing.properties.clear()
-        thing.properties.clear()
-        self.assertTrue(not hasattr(thing.properties, f'_{thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}'))
+        # req. 4. descriptors can be cleared
+        self.assertTrue(hasattr(self.thing.properties, f'_{self.thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}'))
+        self.thing.properties.clear()
+        self.assertTrue(not hasattr(self.thing.properties, f'_{self.thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}'))
+        self.thing.properties.clear()
+        self.thing.properties.clear()
+        self.assertTrue(not hasattr(self.thing.properties, f'_{self.thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}'))
 
 
-    def test_3_dunders(self):
+    def test_5_bulk_read_write(self):
+        """Test bulk read and write operations for properties"""
 
-        # __getitem__ must return the descriptor object
-        for name, value in Thing.properties.descriptors.items():
-            self.assertEqual(Thing.properties[name], value)
-            # __contains__ must return True if the descriptor is present
-            self.assertIn(value, Thing.properties)
-            self.assertIn(name, Thing.properties.descriptors.keys())
-
-
-    def test_4_bulk_read_write(self):
-
-        # thing = Thing(id="test_property_registry_owner", log_level=logging.WARN)
-        spectrometer = OceanOpticsSpectrometer(id="test_property_registry_owner", log_level=logging.WARN)
-
-        ## test read in bulk for readAllProperties
-        prop_values = spectrometer.properties.get()
+        # req. 1. test read in bulk for readAllProperties
+        prop_values = self.spectrometer.properties.get()
         # read value is a dictionary
         self.assertIsInstance(prop_values, dict)
         self.assertTrue(len(prop_values) > 0)	
         # all properties are read at instance level and get only reads remote objects
-        self.assertTrue(len(prop_values) == len(spectrometer.properties.remote_objects)) 
+        self.assertTrue(len(prop_values) == len(self.spectrometer.properties.remote_objects)) 
         # read values are not descriptors themselves
         for name, value in prop_values.items():
             self.assertIsInstance(name, str)
             self.assertNotIsInstance(value, Parameter) # descriptor has been read
-        # properties can be read with new names
-        prop_values = spectrometer.properties.get(integration_time='integrationTime', state='State', trigger_mode='triggerMode')
+        
+        # req. 2. properties can be read with new names
+        prop_values = self.spectrometer.properties.get(integration_time='integrationTime', state='State', trigger_mode='triggerMode')
         self.assertIsInstance(prop_values, dict)
         self.assertTrue(len(prop_values) == 3)
         for name, value in prop_values.items():
@@ -604,8 +589,8 @@ class TestPropertiesRegistry(TestCase):
             self.assertTrue(name in ['integrationTime', 'triggerMode', 'State'])
             self.assertNotIsInstance(value, Parameter)
         
-        # read in bulk for readMultipleProperties
-        prop_values = spectrometer.properties.get(names=['integration_time', 'trigger_mode', 'state', 'last_intensity'])
+        # req. 3. read in bulk for readMultipleProperties
+        prop_values = self.spectrometer.properties.get(names=['integration_time', 'trigger_mode', 'state', 'last_intensity'])
         # read value is a dictionary
         self.assertIsInstance(prop_values, dict)
         self.assertTrue(len(prop_values) == 4)
@@ -615,23 +600,23 @@ class TestPropertiesRegistry(TestCase):
             self.assertTrue(name in ['integration_time', 'trigger_mode', 'state', 'last_intensity'])
             self.assertNotIsInstance(value, Parameter)
 
-        # read a property that is not present raises AttributeError
+        # req. 4. read a property that is not present raises AttributeError
         with self.assertRaises(AttributeError) as ex:
-            prop_values = spectrometer.properties.get(names=['integration_time', 'trigger_mode', 'non_existent_property', 'last_intensity'])
+            prop_values = self.spectrometer.properties.get(names=['integration_time', 'trigger_mode', 'non_existent_property', 'last_intensity'])
         self.assertTrue("property non_existent_property does not exist" in str(ex.exception))
     
-        # write in bulk
-        prop_values = spectrometer.properties.get()
-        spectrometer.properties.set(
+        # req. 5. write in bulk
+        prop_values = self.spectrometer.properties.get()
+        self.spectrometer.properties.set(
             integration_time=10,
             trigger_mode=1            
         )
-        self.assertNotEqual(prop_values['integration_time'], spectrometer.integration_time)
-        self.assertNotEqual(prop_values['trigger_mode'], spectrometer.trigger_mode)
+        self.assertNotEqual(prop_values['integration_time'], self.spectrometer.integration_time)
+        self.assertNotEqual(prop_values['trigger_mode'], self.spectrometer.trigger_mode)
 
-        # writing a non existent property raises RuntimeError
+        # req. 6. writing a non existent property raises RuntimeError
         with self.assertRaises(RuntimeError) as ex:
-            spectrometer.properties.set(
+            self.spectrometer.properties.set(
                 integration_time=120,
                 trigger_mode=2,
                 non_existent_property=10
@@ -639,13 +624,14 @@ class TestPropertiesRegistry(TestCase):
         self.assertTrue("Some properties could not be set due to errors" in str(ex.exception))
         self.assertTrue("non_existent_property" in str(ex.exception.__notes__))
         # but those that exist will still be written
-        self.assertEqual(spectrometer.integration_time, 120)
-        self.assertEqual(spectrometer.trigger_mode, 2)
+        self.assertEqual(self.spectrometer.integration_time, 120)
+        self.assertEqual(self.spectrometer.trigger_mode, 2)
 
 
-    def test_5_db_properties(self):
+    def test_6_db_properties(self):
+        """Test db operations for properties"""
 
-        # db operations are supported only at instance level
+        # req. 1. db operations are supported only at instance level
         with self.assertRaises(AttributeError) as ex:
             Thing.properties.load_from_DB()
         self.assertTrue("database operations are only supported at instance level" in str(ex.exception)) 
@@ -653,7 +639,6 @@ class TestPropertiesRegistry(TestCase):
             Thing.properties.get_from_DB()
         self.assertTrue("database operations are only supported at instance level" in str(ex.exception))
 
-        # thing = Thing(id="test_property_registry_owner", log_level=logging.WARN)
 
 
 if __name__ == '__main__':

@@ -159,10 +159,11 @@ class DescriptorRegistry:
         Does not delete the descriptors themselves. Call this method once if new descriptors are added to the 
         class/instance dynamically in runtime.
         """
-        try:
-            delattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}')
-        except AttributeError:
-            pass
+        for name in ['', '_values']:
+            try:
+                delattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}{name}')    
+            except AttributeError:
+                pass
 
     def __getitem__(self, key: str) -> Property | Action | Event:
         """Returns the descriptor object for the given key."""
@@ -229,12 +230,15 @@ class DescriptorRegistry:
         """
         if self.owner_inst is None: 
             return self.descriptors
-            return self.descriptors
-        values = dict()
-        for name, value in self.descriptors.items():
-            values[name] = value.__get__(self.owner_inst, self.owner_cls)
-        return values
-
+        try:
+            return getattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_values')
+        except AttributeError:
+            values = dict()
+            for name, value in self.descriptors.items():
+                values[name] = value.__get__(self.owner_inst, self.owner_cls)
+            setattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_values', values)
+            return values
+       
     
 def supports_only_instance_access(
         error_msg: str = "This method is only supported at instance level"
@@ -290,7 +294,7 @@ class PropertiesRegistry(DescriptorRegistry):
                 doc=DescriptorRegistry.get_values.__doc__) # type: typing.Dict[str, Parameter | Property | typing.Any]
 
     @typing.overload
-    def __getitem__(self, key: str) -> Parameter:
+    def __getitem__(self, key: str) -> Property | Parameter:
         ... 
 
     def __getitem__(self, key: str) -> typing.Any:
@@ -298,7 +302,7 @@ class PropertiesRegistry(DescriptorRegistry):
             return self.descriptors[key].__get__(self.owner_inst, self.owner_cls)
         return self.descriptors[key]
     
-    def __contains__(self, value: str | Parameter) -> bool:
+    def __contains__(self, value: str | Property | Parameter) -> bool:
         return value in self.descriptors.values() or value in self.descriptors
     
     @property
