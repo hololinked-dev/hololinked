@@ -227,8 +227,8 @@ class NumberSchema(DataSchema):
     """
     minimum: Optional[int | float] = None
     maximum: Optional[int | float] = None
-    exclusiveMinimum: Optional[bool] = None 
-    exclusiveMaximum: Optional[bool] = None 
+    exclusiveMinimum: Optional[int | float] = None 
+    exclusiveMaximum: Optional[int | float] = None 
     multipleOf: Optional[int | float] = None
 
     def __init__(self):
@@ -432,7 +432,7 @@ class EnumSchema(OneOfSchema):
     https://www.w3.org/TR/wot-thing-description11/#dataschema
     """ 
     enum: Optional[list[Any]] = None
-    
+
     def __init__(self):
         super().__init__()
         
