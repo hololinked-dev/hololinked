@@ -1,9 +1,10 @@
 import typing 
-from dataclasses import dataclass, field
-from .base import Schema, JSON
+from pydantic import Field
+from .base import Schema 
+from ..constants import JSON
 
 
-@dataclass
+
 class ExpectedResponse(Schema):
     """
     Form property. 
@@ -15,21 +16,19 @@ class ExpectedResponse(Schema):
         super().__init__()
 
 
-@dataclass
 class AdditionalExpectedResponse(Schema):
     """
     Form field for additional responses which are different from the usual response.
     schema - https://www.w3.org/TR/wot-thing-description11/#additionalexpectedresponse
     """
-    success : bool = field(default=False)
-    contentType : str = field(default='application/json')
-    schema : typing.Optional[JSON] = field(default='exception')
+    success: bool = Field(default=False)
+    contentType: str = Field(default='application/json')
+    response_schema: typing.Optional[JSON] = Field(default='exception', alias='schema')
 
     def __init__(self):
         super().__init__()
 
 
-@dataclass
 class Form(Schema):
     """
     Form hypermedia.
