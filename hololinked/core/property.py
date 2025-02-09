@@ -238,11 +238,9 @@ class Property(Parameter):
         return self._execution_info_validator is not None
     
     def to_affordance(self, owner_inst) -> dict:
-        from hololinked.td import PropertyAffordance
-        affordance = PropertyAffordance()
-        affordance._build(self, owner_inst)
-        return affordance
-
+        from ..td import PropertyAffordance
+        return PropertyAffordance.generate(self, owner_inst)
+        
 
    
 try: 
