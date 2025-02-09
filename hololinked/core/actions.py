@@ -68,13 +68,10 @@ class Action:
         self._execution_info = value # type: ActionInfoValidator
     
     def to_affordance(self, owner_inst):
-        from hololinked.td import ActionAffordance
-        affordance = ActionAffordance()
-        affordance._build(self, owner_inst) 
-        return affordance
+        from ..td import ActionAffordance
+        return ActionAffordance.generate(self, owner_inst) 
+  
     
-
-
 class BoundAction:
 
     __slots__ = ['obj', 'execution_info', 'owner_inst', 'owner', 'bound_obj']
@@ -267,7 +264,7 @@ def action(
                     warnings.warn(
                         f"Could not infer input schema for {obj.__name__} due to {str(ex)}. "  +
                         "Considering filing a bug report if you think this should have worked correctly", 
-                        category=RuntimeError
+                        category=RuntimeWarning
                     ) 
         if global_config.validate_schemas and input_schema:
             if isinstance(input_schema, dict):

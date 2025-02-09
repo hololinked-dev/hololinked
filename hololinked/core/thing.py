@@ -9,7 +9,6 @@ from ..utils import *
 from ..exceptions import *
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
 from ..protocols.server import BaseProtocolServer
-from ..td.tm import ThingModel
 from .dataklasses import build_our_temp_TD
 from .properties import String, ClassSelector
 from .property import Property
@@ -167,7 +166,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         
 
     @action()
-    def get_thing_model(self, ignore_errors: bool = False) -> ThingModel:
+    def get_thing_model(self, ignore_errors: bool = False):
         """
         generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object. 
         The model is a JSON that describes the object's properties, actions, events and their metadata, without the 
@@ -188,12 +187,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable 
         #     value for node-wot to ignore validation or claim the accessed value for complaint with the schema.
         #     In other words, schema validation will always pass.  
+        from ..td.tm import ThingModel
         return ThingModel(
                         instance=self, 
                         ignore_errors=ignore_errors
                     ).produce()
     
-    thing_model = property(get_thing_model, doc=get_thing_model.__doc__) # type: ThingModel
+    thing_model = property(get_thing_model, doc=get_thing_model.__doc__) 
 
 
     @action()
