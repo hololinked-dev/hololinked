@@ -537,48 +537,6 @@ def get_return_type_from_signature(func: typing.Callable) -> RootModel:
     
 
 
-# def get_docstring(obj: Any, remove_summary=False) -> Optional[str]:
-#     """Return the docstring of an object
-
-#     If `remove_newlines` is `True` (default), newlines are removed from the string.
-#     If `remove_summary` is `True` (not default), and the docstring's second line
-#     is blank, the first two lines are removed.  If the docstring follows the
-#     convention of a one-line summary, a blank line, and a description, this will
-#     get just the description.
-
-#     If `remove_newlines` is `False`, the docstring is processed by
-#     `inspect.cleandoc()` to remove whitespace from the start of each line.
-
-#     :param obj: Any Python object
-#     :param remove_newlines: bool (Default value = True)
-#     :param remove_summary: bool (Default value = False)
-#     :returns: str: Object docstring
-
-#     """
-#     ds = obj.__doc__
-#     if not ds:
-#         return None
-#     if remove_summary:
-#         lines = ds.splitlines()
-#         if len(lines) > 2 and lines[1].strip() == "":
-#             ds = "\n".join(lines[2:])
-#     return inspect.cleandoc(ds)  # Strip spurious indentation/newlines
-
-
-# def get_summary(obj: Any) -> Optional[str]:
-#     """Return the first line of the dosctring of an object
-
-#     :param obj: Any Python object
-#     :returns: str: First line of object docstring
-
-#     """
-#     docs = get_docstring(obj)
-#     if docs:
-#         return docs.partition("\n")[0].strip()
-#     else:
-#         return None
-
-
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
