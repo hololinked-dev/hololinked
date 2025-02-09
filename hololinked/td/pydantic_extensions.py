@@ -29,47 +29,6 @@ class Type(Enum):
     null = "null"
 
 
-class DataSchema(BaseModel):
-
-    field_type: Optional[TypeDeclaration] = Field(None, alias="@type")
-    description: Optional[Description] = None
-    title: Optional[Title] = None
-    descriptions: Optional[Descriptions] = None
-    titles: Optional[Titles] = None
-    writeOnly: Optional[bool] = None
-    readOnly: Optional[bool] = None
-    oneOf: Optional[list[DataSchema]] = None
-    unit: Optional[str] = None
-    enum: Optional[list] = None
-    # enum was `Field(None, min_length=1, unique_items=True)` but this failed with
-    # generic models
-    format: Optional[str] = None
-    const: Optional[Any] = None
-    default: Optional[Any] = None
-    type: Optional[Type] = None
-    # The fields below should be empty unless type==Type.array
-    items: Optional[Union[DataSchema, List[DataSchema]]] = None
-    maxItems: Optional[int] = Field(None, ge=0)
-    minItems: Optional[int] = Field(None, ge=0)
-    # The fields below should be empty unless type==Type.number or Type.integer
-    minimum: Optional[Union[int, float]] = None
-    maximum: Optional[Union[int, float]] = None
-    exclusiveMinimum: Optional[Union[int, float]] = None
-    exclusiveMaximum: Optional[Union[int, float]] = None
-    multipleOf: Optional[Union[int, float]] = None
-    # The fields below should be empty unless type==Type.object
-    properties: Optional[Mapping[str, DataSchema]] = None
-    required: Optional[list[str]] = None
-    # The fields below should be empty unless type==Type.string
-    minLength: Optional[int] = None
-    maxLength: Optional[int] = None
-    pattern: Optional[str] = None
-    contentEncoding: Optional[str] = None
-    contentMediaType: Optional[str] = None
-
-    model_config = ConfigDict(extra="forbid")
-
-
 
 def is_a_reference(d: JSONSchema) -> bool:
     """Return True if a JSONSchema dict is a reference
@@ -238,44 +197,6 @@ def jsonschema_to_dataschema(
     return output
 
 
-def type_to_dataschema(t: Union[type, BaseModel], **kwargs) -> DataSchema:
-    """Convert a Python type to a Thing Description DataSchema
-
-    This makes use of pydantic's `schema_of` function to create a
-    json schema, then applies some fixes to make a DataSchema
-    as per the Thing Description (because Thing Description is
-    almost but not quite compatible with JSONSchema).
-
-    Additional keyword arguments are added to the DataSchema,
-    and will override the fields generated from the type that
-    is passed in. Typically you'll want to use this for the
-    `title` field.
-    """
-    if isinstance(t, BaseModel):
-        json_schema = t.model_json_schema()
-    else:
-        json_schema = TypeAdapter(t).json_schema()
-    schema_dict = jsonschema_to_dataschema(json_schema)
-    # Definitions of referenced ($ref) schemas are put in a
-    # key called "definitions" or "$defs" by pydantic. We should delete this.
-    # TODO: find a cleaner way to do this
-    # This shouldn't be a severe problem: we will fail with a
-    # validation error if other junk is left in the schema.
-    for k in ["definitions", "$defs"]:
-        if k in schema_dict:
-            del schema_dict[k]
-    schema_dict.update(kwargs)
-    try:
-        return DataSchema(**schema_dict)
-    except ValidationError as ve:
-        print(
-            "Error while constructing DataSchema from the "
-            "following dictionary:\n"
-            + JSONSerializer().dumps(schema_dict, indent=2)
-            + "Before conversion, the JSONSchema was:\n"
-            + JSONSerializer().dumps(json_schema, indent=2)
-        )
-        raise ve
     
 
 class GenerateJsonSchemaWithoutDefaultTitles(GenerateJsonSchema):

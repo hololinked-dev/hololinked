@@ -1,29 +1,39 @@
+import typing
+from dataclasses import dataclass
 
-# @dataclass
-# class ThingDescription(Schema):
-#     """
-#     generate Thing Description schema of W3 Web of Things standard. 
-#     Refer standard - https://www.w3.org/TR/wot-thing-description11
-#     Refer schema - https://www.w3.org/TR/wot-thing-description11/#thing
-#     """
-#     context : typing.Union[typing.List[str], str, typing.Dict[str, str]] 
-#     type : typing.Optional[typing.Union[str, typing.List[str]]]
-#     id : str 
-#     title : str 
-#     description : str 
-#     version : typing.Optional[VersionInfo]
-#     created : typing.Optional[str] 
-#     modified : typing.Optional[str]
-#     support : typing.Optional[str] 
-#     base : typing.Optional[str] 
-#     properties : typing.List[DataSchema]
-#     actions : typing.List[ActionAffordance]
-#     events : typing.List[EventAffordance]
-#     links : typing.Optional[typing.List[Link]] 
-#     forms : typing.Optional[typing.List[Form]]
-#     security : typing.Union[str, typing.List[str]]
-#     securityDefinitions : SecurityScheme
-#     schemaDefinitions : typing.Optional[typing.List[DataSchema]]
+from .base import *
+from .data_schema import *
+from .forms import *
+from .security_definitions import *
+from .metadata import *
+from .interaction_affordance import *
+
+
+@dataclass
+class ThingDescription(Schema):
+    """
+    generate Thing Description of W3C Web of Things standard. 
+    Refer standard - https://www.w3.org/TR/wot-thing-description11
+    Refer schema - https://www.w3.org/TR/wot-thing-description11/#thing
+    """
+    context: typing.List[str] | str | typing.Dict[str, str] = "https://www.w3.org/2022/wot/td/v1.1"
+    type: typing.Optional[typing.Union[str, typing.List[str]]]
+    id : str 
+    title : str 
+    description : str 
+    version : typing.Optional[VersionInfo]
+    created : typing.Optional[str] 
+    modified : typing.Optional[str]
+    support : typing.Optional[str] 
+    base : typing.Optional[str] 
+    properties : typing.List[DataSchema]
+    actions : typing.List[ActionAffordance]
+    events : typing.List[EventAffordance]
+    links : typing.Optional[typing.List[Link]] 
+    forms : typing.Optional[typing.List[Form]]
+    security : typing.Union[str, typing.List[str]]
+    securityDefinitions : SecurityScheme
+    schemaDefinitions : typing.Optional[typing.List[DataSchema]]
     
 #     skip_properties = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',
 #                     'events', 'thing_description', 'GUI', 'object_info' ]
@@ -41,14 +51,14 @@
 #         self.allow_loose_schema = allow_loose_schema
 #         self.ignore_errors = ignore_errors
 
-#     def produce(self) -> JSON: 
-#         self.context = "https://www.w3.org/2022/wot/td/v1.1"
-#         self.id = f"{self.authority}/{self.instance.id}"
-#         self.title = self.instance.__class__.__name__ 
-#         self.description = Schema.format_doc(self.instance.__doc__) if self.instance.__doc__ else "no class doc provided" 
-#         self.properties = dict()
-#         self.actions = dict()
-#         self.events = dict()
+    def produce(self) -> JSON: 
+
+        self.id = self.instance.id
+        self.title = self.instance.__class__.__name__ 
+        self.description = Schema.format_doc(self.instance.__doc__) if self.instance.__doc__ else "no class doc provided" 
+        self.properties = dict()
+        self.actions = dict()
+        self.events = dict()
 #         self.forms = NotImplemented
 #         self.links = NotImplemented
         
