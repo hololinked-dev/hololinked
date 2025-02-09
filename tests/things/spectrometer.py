@@ -11,7 +11,7 @@ from hololinked.core.properties import (String, Integer, Number, List, Boolean,
                                     Selector, ClassSelector, TypedList)
 from hololinked.core.state_machine import StateMachine
 from hololinked.serializers import JSONSerializer
-from hololinked.td import JSONSchema
+from hololinked.schema_validators import JSONSchema
 from hololinked.protocols.http import HTTPServer
 
 
@@ -132,7 +132,8 @@ class OceanOpticsSpectrometer(Thing):
                 fget=lambda self: self._model if self.state_machine.current_state != self.states.DISCONNECTED else None
                 ) # type: str
     
-    wavelengths = List(default=None, allow_None=True, item_type=(float, int), readonly=True,
+    wavelengths = List(default=[], item_type=(float, int), readonly=True, allow_None=False, 
+                    # this is only for testing, be careful
                     doc="wavelength bins of measurement",
                     fget=lambda self: self._wavelengths if self.state_machine.current_state != self.states.DISCONNECTED else None,
                 ) # type: typing.List[typing.Union[float, int]]

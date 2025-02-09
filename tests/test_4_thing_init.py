@@ -258,6 +258,9 @@ class TestMetaclass(TestCase):
         self.assertNotEqual(spectrometer.actions, OceanOpticsSpectrometer.actions)
         self.assertNotEqual(spectrometer.events, OceanOpticsSpectrometer.events)
 
+
+
+
 # Uncomment the following for type hints while coding registry tests, 
 # comment it before testing
 # class Thing(Thing):
@@ -269,7 +272,6 @@ class TestMetaclass(TestCase):
 #     class_registry: PropertiesRegistry | ActionsRegistry | EventsRegistry 
 #     instance_registry: PropertiesRegistry  | ActionsRegistry | EventsRegistry  | None
 #     descriptor_object: type[Property | Action | Event]
-
 
 class TestRegistry(TestCase):
 
@@ -333,7 +335,7 @@ class TestRegistry(TestCase):
     """
 
     def test_1_owner(self):
-        """Test owner attribute of ActionRegistry"""
+        """Test owner attribute of DescriptorRegistry"""
         if self.is_abstract_test_class:
             return  
     
@@ -350,7 +352,7 @@ class TestRegistry(TestCase):
         self.assertEqual(self.thing.instance_registry.owner_cls, Thing)
         self.assertEqual(self.spectrometer.instance_registry.owner_cls, OceanOpticsSpectrometer)
 
-        # req. 3. descriptor_object must be Action
+        # req. 3. descriptor_object must be defined correctly and is a class
         self.assertEqual(Thing.class_registry.descriptor_object, self.registry_object)
         self.assertEqual(OceanOpticsSpectrometer.class_registry.descriptor_object, self.registry_object)
         self.assertEqual(self.thing.instance_registry.descriptor_object, self.registry_object)
@@ -362,7 +364,7 @@ class TestRegistry(TestCase):
         if self.is_abstract_test_class:
             return  
 
-        # req. 1. descriptors are instances of Action
+        # req. 1. descriptors are instances of the descriptor object - Property | Action | Event
         for name, value in Thing.class_registry.descriptors.items():
             self.assertIsInstance(value, self.registry_object)
             self.assertIsInstance(name, str)
@@ -370,9 +372,9 @@ class TestRegistry(TestCase):
             self.assertIsInstance(value, self.registry_object)
             self.assertIsInstance(name, str)
         # subclass have more descriptors than parent class because our example Thing OceanOpticsSpectrometer 
-        # has defined its own actions
+        # has defined its own actions, properties and events
         self.assertTrue(len(OceanOpticsSpectrometer.class_registry.descriptors) > len(Thing.class_registry.descriptors))
-        # req. 2. either class level or instance level Action descriptors are same - not a strict requirement for different 
+        # req. 2. either class level or instance level descriptors are same - not a strict requirement for different 
         # use cases, one can always add instance level descriptors
         for name, value in self.thing.instance_registry.descriptors.items():
             self.assertIsInstance(value, self.registry_object)
@@ -398,7 +400,7 @@ class TestRegistry(TestCase):
 
     
     def test_3_dunders(self):
-        """Test dunders of ActionRegistry"""
+        """Test dunders of DescriptorRegistry"""
         if self.is_abstract_test_class:
             return
 
@@ -443,7 +445,7 @@ class TestRegistry(TestCase):
 
     
     def test_4_bound_objects(self):
-        """Test BoundAction class"""
+        """Test bound objects returned from descriptor access"""
         if self.is_abstract_test_class:
             return
         if self.registry_object not in [Property, Parameter, Action]:
@@ -465,7 +467,6 @@ class TestRegistry(TestCase):
             self.assertIsInstance(name, str)
 
 
-
 class TestActionRegistry(TestRegistry):
     """Test ActionRegistry class"""
 
@@ -474,7 +475,6 @@ class TestActionRegistry(TestRegistry):
         self.registry_cls = ActionsRegistry
         self.registry_object = Action
         
-
 
 class TestEventRegistry(TestRegistry):
 
@@ -511,7 +511,6 @@ class TestEventRegistry(TestRegistry):
         self.assertTrue(not hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events'))
         self.assertTrue(not hasattr(self.thing.events, f'_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables'))
 
-       
 
 class TestPropertiesRegistry(TestRegistry):
 
@@ -651,4 +650,76 @@ if __name__ == '__main__':
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestEventRegistry))
     runner = TestRunner()
     runner.run(suite)
+
    
+"""
+# Summary of tests and requirements:
+
+TestThing class:
+1. Test id requirements:
+    - Instance name must be a string and cannot be changed after set.
+    - Valid and invalid IDs based on regex (r'[A-Za-z]+[A-Za-z_0-9\-\/]*').
+2. Test logger setup:
+    - Logger must have remote access handler if remote_accessible_logger is True.
+    - Logger is created automatically if not provided.
+3. Test state and state_machine setup:
+    - State property must be None when no state machine is present.
+4. Test composition of subthings:
+    - Subthings must be a dictionary.
+    - Subthings are recomputed when accessed.
+    - Subthings must be instances of Thing and have the parent as owner.
+    - Name of subthing must match name of the attribute.
+5. Test servers init:
+    - rpc_server and event_publisher must be None when not run().
+    - rpc_server and event_publisher must be instances of their respective classes when run().
+6. Test thing model generation:
+    - Basic test to ensure nothing is fundamentally wrong.
+
+TestOceanOpticsSpectrometer class:
+1. Test state and state_machine setup:
+    - State and state machine must be present because subclass has a state machine.
+    - State and state machine must be different for different instances.
+
+TestMetaclass class:
+1. Test metaclass of Thing class:
+    - Metaclass must be ThingMeta for any Thing class.
+2. Test registry creation and access:
+    - Registry attributes must be instances of their respective classes.
+    - New registries are not created on the fly and are same between accesses.
+    - Different subclasses have different registries.
+    - Registry attributes must be instances of their respective classes also for instances.
+    - Registries are not created on the fly and are same between accesses also for instances.
+    - Registries are not shared between instances.
+    - Registries are not shared between instances and their classes.
+
+TestRegistry class:
+1. Test owner attribute:
+    - Owner attribute must be the class itself when accessed as class attribute.
+    - Owner attribute must be the instance for instance registries.
+    - Descriptor_object must be defined correctly and is a class.
+2. Test descriptors access:
+    - Descriptors are instances of the descriptor object.
+    - Class level or instance level descriptors are same.
+    - Descriptors can be cleared.
+3. Test dunders:
+    - __getitem__ must return the descriptor object.
+    - __contains__ must return True if the descriptor is present.
+    - __iter__ must return an iterator over the descriptors dictionary.
+    - __len__ must return the number of descriptors.
+    - Registries have their unique hashes.
+4. Test bound objects:
+    - Number of bound objects must be equal to number of descriptors.
+    - Bound objects must be instances of bound instances.
+
+TestActionRegistry class:
+- Inherits tests from TestRegistry.
+
+TestEventRegistry class:
+- Inherits tests from TestRegistry.
+- Observables and change events are also descriptors.
+
+TestPropertiesRegistry class:
+- Inherits tests from TestRegistry.
+- Parameters that are subclass of Property are usually remote objects.
+- DB operations are supported only at instance level.
+"""

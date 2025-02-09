@@ -5,8 +5,13 @@ from enum import StrEnum, IntEnum, Enum
 
 
 # types
-JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
+JSONSerializable = typing.Union[
+    str, int, float, bool, None, 
+    typing.Dict[str, typing.Any], 
+    typing.List
+]
 JSON = typing.Dict[str, JSONSerializable]
+
 byte_types = (bytes, bytearray, memoryview)
 
 # decorator constants 
