@@ -17,10 +17,10 @@ from ..core.thing import Thing, ThingMeta
 
 class InteractionAffordance(Schema):
     """
-    implements schema common to all interaction affordances. 
+    Implements schema information common to all interaction affordances. 
     
     [Specification Definitions](https://www.w3.org/TR/wot-thing-description11/#interactionaffordance) <br>
-    [UML Diagram]() <br>
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/InteractionAffordance.pdf) <br>
     [Supported Fields]() <br>
     """
     title: Optional[str] = None 
@@ -50,7 +50,7 @@ class InteractionAffordance(Schema):
     def owner(self) -> Thing:
         """Owning `Thing` instance of the interaction affordance"""
         if self._owner is None:
-            raise ValueError("owner is not set for this interaction affordance")
+            raise AttributeError("owner is not set for this interaction affordance")
         return self._owner
     
     @owner.setter
@@ -61,18 +61,18 @@ class InteractionAffordance(Schema):
         if not isinstance(value, Thing):
             raise TypeError(f"owner must be instance of Thing, given type {type(value)}")
         self._owner = value
-        self._thing_cls = value.__class__.__name__
+        self._thing_cls = value.__class__
         self._thing_id = value.id
 
     @property
     def objekt(self) -> Property | Action | Event: 
         """Object instance of the interaction affordance - `Property`, `Action` or `Event`"""
         if self._objekt is None:
-            raise ValueError("objekt is not set for this interaction affordance")
+            raise AttributeError("objekt is not set for this interaction affordance")
         return self._objekt
     
     @objekt.setter
-    def objekt(self, value):
+    def objekt(self, value: Property | Action | Event) -> None:
         """Set the object instance of the interaction affordance - `Property`, `Action` or `Event`"""
         if self._objekt is not None:
             raise ValueError(f"object is already set for this {self.what.name.lower()} affordance, " + 
@@ -82,7 +82,10 @@ class InteractionAffordance(Schema):
             (self.__class__.__name__.startswith("Action") and isinstance(value, Action)) or
             (self.__class__.__name__.startswith("Event") and isinstance(value, Event))
         ):
-            raise TypeError(f"objekt must be instance of Property, Action or Event, given type {type(value)}")
+            if not isinstance(value, (Property, Action, Event)):
+                raise TypeError(f"objekt must be instance of Property, Action or Event, given type {type(value)}")
+            raise ValueError(f"provide only corresponding object for {self.__class__.__name__}, " +
+                                f"given object {value.__class__.__name__}")
         self._objekt = value
         self._name = value.name
     
@@ -90,26 +93,26 @@ class InteractionAffordance(Schema):
     def name(self) -> str:
         """Name of the interaction affordance used as key in the TD"""
         if self._name is None:
-            raise ValueError("name is not set for this interaction affordance")
+            raise AttributeError("name is not set for this interaction affordance")
         return self._name
     
     @property
     def thing_id(self) -> str:
         """ID of the `Thing` instance owning the interaction affordance"""
         if self._thing_id is None:
-            raise ValueError("thing_id is not set for this interaction affordance")
+            raise AttributeError("thing_id is not set for this interaction affordance")
         return self._thing_id
     
     @property
     def thing_cls(self) -> ThingMeta:
-        """Class name of the `Thing` instance owning the interaction affordance"""
+        """`Thing` class owning the interaction affordance"""
         if self._thing_cls is None:
-            raise ValueError("thing_cls is not set for this interaction affordance")
+            raise AttributeError("thing_cls is not set for this interaction affordance")
         return self._thing_cls
     
     def build(self, interaction: Property | Action | Event, owner: Thing) -> None:
         """
-        build the schema for the specific interaction affordance
+        populate the fields of the schema for the specific interaction affordance
 
         Parameters
         ----------
@@ -122,7 +125,7 @@ class InteractionAffordance(Schema):
     
     def build_forms(self, protocol: str, authority: str) -> None:
         """
-        build the forms for the specific interaction affordance
+        build the forms for the specific protocol for each szupported operation
         
         Parameters
         ----------
@@ -143,7 +146,12 @@ class InteractionAffordance(Schema):
             operation for which the form is to be retrieved
         default: typing.Any, optional
             default value to return if form is not found, by default None. 
-            One can make use of a sensible default value for one's logic.        
+            One can make use of a sensible default value for one's logic.  
+
+        Returns
+        -------
+        Dict[str, typing.Any]
+            JSON representation of the form      
         """
         if not hasattr(self, 'forms'):
             return default
@@ -158,7 +166,7 @@ class InteractionAffordance(Schema):
                 owner: Thing
             ) -> typing.Union["PropertyAffordance", "ActionAffordance", "EventAffordance"]:
         """
-        build the schema for the specific interaction affordance and return it in the container object. 
+        build the schema for the specific interaction affordance within the container object. 
         Use the `json()` method to get the JSON representation of the schema.
 
         Parameters
@@ -185,6 +193,10 @@ class InteractionAffordance(Schema):
             name of the interaction affordance used as key in the TD
         TD: JSON
             Thing Description JSON dictionary
+
+        Returns
+        -------
+        typing.Union[PropertyAffordance, ActionAffordance, EventAffordance]
         """
         raise NotImplementedError("from_TD must be implemented in subclass of InteractionAffordance")
     
@@ -204,7 +216,7 @@ class InteractionAffordance(Schema):
 
     def __str__(self):
         if self.thing_cls:
-            return f"{self.__class__.__name__}({self.thing_cls}({self.thing_id}).{self.name})"
+            return f"{self.__class__.__name__}({self.thing_cls.__name__}({self.thing_id}).{self.name})"
         return f"{self.__class__.__name__}({self.name} of {self.thing_id})"
     
     def __eq__(self, value):
@@ -216,10 +228,11 @@ class InteractionAffordance(Schema):
    
 class PropertyAffordance(InteractionAffordance, DataSchema):
     """
-    creates property affordance schema from `property` descriptor object.
+    Implements property affordance schema from `Property` descriptor object.
 
-    [schema](https://www.w3.org/TR/wot-thing-description11/#propertyaffordance)
-    [UML Diagram]()
+    [Schema](https://www.w3.org/TR/wot-thing-description11/#propertyaffordance) <br>
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/InteractionAffordance.pdf) <br>
+    [Supported Fields]() <br>
     """
     observable: Optional[bool] = None
 
@@ -277,14 +290,15 @@ class ActionAffordance(InteractionAffordance):
     """
     creates action affordance schema from actions (or methods).
 
-    [schema](https://www.w3.org/TR/wot-thing-description11/#actionaffordance)
-    [UML Diagram]()
+    [Schema](https://www.w3.org/TR/wot-thing-description11/#actionaffordance) <br>
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/InteractionAffordance.pdf) <br>
+    [Supported Fields]() <br>
     """
-    input: JSON
-    output: JSON
-    safe: bool
-    idempotent: bool 
-    synchronous: bool 
+    input: JSON = None
+    output: JSON = None
+    safe: bool = None
+    idempotent: bool = None 
+    synchronous: bool = None 
 
     def __init__(self, action: typing.Callable | None = None):
         super().__init__()
@@ -362,14 +376,19 @@ class EventAffordance(InteractionAffordance):
     """
     creates event affordance schema from events.
 
-    [schema](https://www.w3.org/TR/wot-thing-description11/#eventaffordance)
-    [UML Diagram]()
+    [Schema](https://www.w3.org/TR/wot-thing-description11/#eventaffordance) <br>
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/InteractionAffordance.pdf) <br>
+    [Supported Fields]() <br>
     """
-    subscription : str
-    data : JSON
+    subscription: str = None
+    data: JSON = None
     
     def __init__(self):
         super().__init__()
+
+    @property 
+    def what(self):
+        return ResourceTypes.EVENT
     
     def build(self, event, owner, authority : str) -> None:
         self.title = event.label or event._obj_name 
