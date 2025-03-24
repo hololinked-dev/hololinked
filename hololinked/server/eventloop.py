@@ -325,6 +325,8 @@ class EventLoop(RemoteObject):
                             instance.state_machine.current_state in resource.state):
                 # Note that because we actually find the resource within __prepare_instance__, its already bound
                 # and we dont have to separately bind it. 
+                if arguments is None:
+                    arguments = dict()
                 args = arguments.pop('__args__', tuple())
                 if len(args) == 0 and resource.schema_validator is not None:
                     resource.schema_validator.validate(arguments)
