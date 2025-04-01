@@ -367,6 +367,9 @@ class Parameter(metaclass=ParameterMetaclass):
         class's value (default).
         """        
         if self.class_member:
+            if self.fget is not None:
+                 # For class properties, bind the getter to the class
+                 return self.fget.__get__(None, objtype)(objtype)
             return objtype.__dict__.get(self._internal_name, self.default)
         if obj is None:
             return self 
@@ -418,7 +421,11 @@ class Parameter(metaclass=ParameterMetaclass):
 
         # The following needs to be optimised, probably through lambda functions?
         if self.fset is not None:
-            self.fset(obj, value) 
+            if self.class_member:
+                # For class properties, bind the setter to the class
+                self.fset.__get__(None, obj)(obj, value)
+            else:
+                self.fset(obj, value) 
         else: 
             obj.__dict__[self._internal_name] = value
         
@@ -453,6 +460,9 @@ class Parameter(metaclass=ParameterMetaclass):
 
     def __delete__(self, obj : typing.Union['Parameterized', typing.Any]) -> None:
         if self.fdel is not None:
+            if self.class_member:
+                # For class properties, bind the deletor to the class
+                return self.fdel.__get__(None, obj)(obj)
             return self.fdel(obj)
         raise NotImplementedError("Parameter deletion not implemented.")
             
@@ -1795,7 +1805,12 @@ class ParameterizedMetaclass(type):
                 #     parameter = copy.copy(parameter)
                 #     parameter.owner = mcs
                 #     type.__setattr__(mcs, attribute_name, parameter)
-                mcs.__dict__[attribute_name].__set__(mcs, value)
+                if parameter.class_member:
+                    # For class member properties, use the descriptor protocol
+                    parameter.__set__(None, value)
+                else:
+                    mcs.__dict__[attribute_name].__set__(mcs, value)
+                
                 return
                 # set with None should not supported as with mcs it supports 
                 # class attributes which can be validated
