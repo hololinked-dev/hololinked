@@ -1809,7 +1809,7 @@ class ParameterizedMetaclass(type):
                     # For class member properties, use the descriptor protocol
                     parameter.__set__(None, value)
                 else:
-                    mcs.__dict__[attribute_name].__set__(mcs, value)
+                    parameter.__set__(mcs, value)
                 
                 return
                 # set with None should not supported as with mcs it supports 
