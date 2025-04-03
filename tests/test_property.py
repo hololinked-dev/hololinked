@@ -359,6 +359,14 @@ class TestClassProperty(TestCase):
         instance = TestClassPropertyThing(instance_name='test3')
         with self.assertRaises(ValueError):
             instance.managed_class_prop = -20
+        
+        # Test that instance-level access reflects class value
+        self.assertEqual(instance.managed_class_prop, 50)
+
+        # Test that instance-level changes affects class value
+        instance.managed_class_prop = 100
+        self.assertEqual(TestClassPropertyThing.managed_class_prop, 100)
+        self.assertEqual(instance.managed_class_prop, 100)
 
     def test_3_readonly_class_property(self):
         """Test read-only class property behavior"""
@@ -390,6 +398,7 @@ class TestClassProperty(TestCase):
         # Test deletion
         del TestClassPropertyThing.deletable_class_prop
         self.assertEqual(TestClassPropertyThing.deletable_class_prop, 100)  # Should return to default
+        self.assertEqual(instance.deletable_class_prop, 100)
         
         # Test instance-level deletion
         instance = TestClassPropertyThing(instance_name='test5')

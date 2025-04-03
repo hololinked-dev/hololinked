@@ -511,14 +511,14 @@ class Parameter(metaclass=ParameterMetaclass):
         Register a getter method by using this as a decorator.
         """
         self.fget = func 
-        return self
+        return func
 
     def setter(self, func : typing.Callable) -> typing.Callable: 
         """
         Register a setter method by using this as a decorator. Getters are mandatory if setter is defined.
         """
         self.fset = func
-        return self
+        return func
     
     def deleter(self, func : typing.Callable) -> typing.Callable: 
         """
