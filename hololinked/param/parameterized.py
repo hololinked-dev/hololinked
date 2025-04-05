@@ -354,7 +354,7 @@ class Parameter(metaclass=ParameterMetaclass):
                 self.default = self.validate_and_adapt(self.default)
  
     def __get__(self, obj : typing.Union['Parameterized', typing.Any], 
-                        objtype : typing.Union['ParameterizedMetaclass', typing.Any]) -> typing.Any: # pylint: disable-msg=W0613
+                    objtype : typing.Union['ParameterizedMetaclass', typing.Any]) -> typing.Any: # pylint: disable-msg=W0613
         """
         Return the value for this Parameter.
 
@@ -367,8 +367,13 @@ class Parameter(metaclass=ParameterMetaclass):
         class's value (default).
         """        
         if self.class_member:
-            return objtype.__dict__.get(self._internal_name, self.default)
-        if obj is None:
+            if self.fget is not None:
+                # self.fdef.__get__(None, objtype) is the same as self.fdel 
+                return self.fget(objtype)
+            return getattr(objtype, self._internal_name, self.default)
+        if obj is None: 
+            # this is a precedence why __get__ should be called with None for class_member
+            # therefore class_member logic above is handled in that way
             return self 
         if self.fget is not None:     
             return self.fget(obj) 
@@ -404,23 +409,30 @@ class Parameter(metaclass=ParameterMetaclass):
             raise_ValueError("Read-only parameter cannot be set/modified.", self)
         
         value = self.validate_and_adapt(value)
-
-        obj = obj if not self.class_member else self.owner
-
+        
+        if self.class_member and obj is not self.owner: # safety check
+            obj = self.owner
+    
         old = NotImplemented
         if self.constant:
             old = None
-            if (obj.__dict__.get(self._internal_name, NotImplemented) != NotImplemented) or self.default is not None: 
+            if (getattr(obj, self._internal_name, NotImplemented) != NotImplemented) or self.default is not None: 
                 # Dont even entertain any type of setting, even if its the same value
                 raise_ValueError("Constant parameter cannot be modified.", self)
         else:
-            old = obj.__dict__.get(self._internal_name, self.default)
+            old = getattr(obj, self._internal_name, self.default)
 
         # The following needs to be optimised, probably through lambda functions?
         if self.fset is not None:
+            # for class_member, self.fset.__get__(None, obj) is same as self.fset
             self.fset(obj, value) 
         else: 
-            obj.__dict__[self._internal_name] = value
+            if self.class_member:
+                # For class properties, store the value in the class's __dict__ using setattr 
+                # as mapping proxy does not allow setting values directly
+                setattr(obj, self._internal_name, value)
+            else:
+                obj.__dict__[self._internal_name] = value
         
         self._post_value_set(obj, value) 
 
@@ -453,7 +465,13 @@ class Parameter(metaclass=ParameterMetaclass):
 
     def __delete__(self, obj : typing.Union['Parameterized', typing.Any]) -> None:
         if self.fdel is not None:
-            return self.fdel(obj)
+            if self.class_member:
+                # For class properties, bind the deletor to the class,
+                # especially when this method is called as del instance.parameter_name
+                # which will make obj take the value of the instance.
+                return self.fdel(self.owner)
+            elif obj is not self.owner:
+                return self.fdel(obj)
         raise NotImplementedError("Parameter deletion not implemented.")
             
     def validate_and_adapt(self, value : typing.Any) -> typing.Any:
@@ -1444,6 +1462,7 @@ class EventDispatcher:
         changed for a Parameter of type Event, setting it to True so
         that it is clear which Event parameter has been triggered.
         """
+        raise NotImplementedError(wrap_error_text("""Triggering of events is not supported due to incomplete logic."""))
         trigger_params = [p for p in self_.self_or_cls.param
                           if hasattr(self_.self_or_cls.param[p], '_autotrigger_value')]
         triggers = {p:self_.self_or_cls.param[p]._autotrigger_value
@@ -1787,19 +1806,50 @@ class ParameterizedMetaclass(type):
         # class attribute of this class - if not, parameter is None.
         if attribute_name != '_param_container' and attribute_name != '__%s_params__' % mcs.__name__:
             parameter = mcs.parameters.descriptors.get(attribute_name, None)
-            # checking isinstance(value, Parameter) will not work for ClassSelector 
-            # and besides value is anyway validated. On the downside, this does not allow
-            # altering of parameter instances if class already of the parameter with attribute_name
             if parameter: # and not isinstance(value, Parameter): 
-                # if owning_class != mcs:
-                #     parameter = copy.copy(parameter)
-                #     parameter.owner = mcs
-                #     type.__setattr__(mcs, attribute_name, parameter)
-                mcs.__dict__[attribute_name].__set__(mcs, value)
+                parameter.__set__(mcs, value)
                 return
-                # set with None should not supported as with mcs it supports 
-                # class attributes which can be validated
-        type.__setattr__(mcs, attribute_name, value)
+        return type.__setattr__(mcs, attribute_name, value)
+
+    def __getattr__(mcs, attribute_name : str) -> typing.Any:
+        """
+        Implements 'self.attribute_name' in a way that also supports Parameters.
+
+        If there is a Parameter descriptor named attribute_name, it will be
+        retrieved using the descriptor protocol.
+        """
+        if attribute_name != '_param_container' and attribute_name != '__%s_params__' % mcs.__name__:
+            parameter = mcs.parameters.descriptors.get(attribute_name, None)
+            if parameter and parameter.class_member:
+                return parameter.__get__(None, mcs)
+        return type.__getattr__(mcs, attribute_name)
+
+    def __delattr__(mcs, attribute_name : str) -> None:
+        """
+        Implements 'del self.attribute_name' in a way that also supports Parameters.
+
+        If there is a Parameter descriptor named attribute_name, it will be deleted
+        from the class. This is different from setting the parameter value to None,
+        as it completely removes the parameter from the class.
+        """
+        if attribute_name != '_param_container' and attribute_name != '__%s_params__' % mcs.__name__:
+            parameter = mcs.parameters.descriptors.get(attribute_name, None)
+            if parameter:
+                # Delete the parameter from the descriptors dictionary
+                try:
+                    parameter.__delete__(mcs)
+                    return
+                except NotImplementedError: # raised by __delete__ if fset is not defined
+                    del mcs.parameters.descriptors[attribute_name]
+                    # Delete the parameter from the instance parameters dictionary
+                    try:
+                        delattr(mcs, '__%s_params__' % mcs.__name__)
+                    except AttributeError:
+                        pass
+                    # After deleting the parameter from our own reference, 
+                    # we also delete it from the class, so dont return but pass the call
+                    # to type.__delattr__
+        return type.__delattr__(mcs, attribute_name)
             
 
    

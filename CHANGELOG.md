@@ -25,6 +25,11 @@ This release will contain a lot of new features and improvements so that a versi
 Not finalised:
 - cookie auth & its specification in TD (cookie auth branch)
 
+## [v0.2.10] - 2025-04-05
+
+- bug fixes to support `class_member` properties to work with `fget`, `fset` and `fdel` methods. While using custom `fget`, `fset` and `fdel` methods for `class_member`s,
+the class will be passed as the first argument. 
+
 ## [v0.2.9] - 2025-03-25
 
 - bug fix to execute action when payload is explicitly null in a HTTP request. Whether action takes a payload or not, there was an error which caused the execution to be rejected. 
