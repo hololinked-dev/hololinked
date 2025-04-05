@@ -283,11 +283,11 @@ class TestClassPropertyThing(Thing):
     managed_class_prop = Number(class_member=True)
     
     @managed_class_prop.getter
-    def managed_class_prop(cls):
+    def get_managed_class_prop(cls):
         return getattr(cls, '_managed_value', 0)
     
     @managed_class_prop.setter
-    def managed_class_prop(cls, value):
+    def set_managed_class_prop(cls, value):
         if value < 0:
             raise ValueError("Value must be non-negative")
         cls._managed_value = value
@@ -296,22 +296,22 @@ class TestClassPropertyThing(Thing):
     readonly_class_prop = String(class_member=True, readonly=True)
     
     @readonly_class_prop.getter
-    def readonly_class_prop(cls):
+    def get_readonly_class_prop(cls):
         return "read-only-value"
     
     # Deletable class property
     deletable_class_prop = Number(class_member=True, default=100)
     
     @deletable_class_prop.getter
-    def deletable_class_prop(cls):
+    def get_deletable_class_prop(cls):
         return getattr(cls, '_deletable_value', 100)
     
     @deletable_class_prop.setter
-    def deletable_class_prop(cls, value):
+    def set_deletable_class_prop(cls, value):
         cls._deletable_value = value
         
     @deletable_class_prop.deleter
-    def deletable_class_prop(cls):
+    def del_deletable_class_prop(cls):
         if hasattr(cls, '_deletable_value'):
             del cls._deletable_value
 
@@ -345,7 +345,7 @@ class TestClassProperty(TestCase):
         self.assertEqual(TestClassPropertyThing.managed_class_prop, 0)
         
         # Test valid value assignment
-        TestClassPropertyThing.managed_class_prop = 50
+        TestClassPropertyThing.managed_class_prop= 50
         self.assertEqual(TestClassPropertyThing.managed_class_prop, 50)
         
         # Test validation in setter
@@ -371,7 +371,7 @@ class TestClassProperty(TestCase):
     def test_3_readonly_class_property(self):
         """Test read-only class property behavior"""
         # Test reading the value
-        self.assertEqual(TestClassPropertyThing.readonly_class_prop, "read-only-value")
+        self.assertEqual(TestClassPropertyThing.get_readonly_class_prop, "read-only-value")
         
         # Test that setting raises an error at class level
         with self.assertRaises(ValueError):
