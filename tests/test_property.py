@@ -371,7 +371,7 @@ class TestClassProperty(TestCase):
     def test_3_readonly_class_property(self):
         """Test read-only class property behavior"""
         # Test reading the value
-        self.assertEqual(TestClassPropertyThing.get_readonly_class_prop, "read-only-value")
+        self.assertEqual(TestClassPropertyThing.readonly_class_prop, "read-only-value")
         
         # Test that setting raises an error at class level
         with self.assertRaises(ValueError):
