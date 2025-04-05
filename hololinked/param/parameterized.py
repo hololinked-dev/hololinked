@@ -409,8 +409,10 @@ class Parameter(metaclass=ParameterMetaclass):
             raise_ValueError("Read-only parameter cannot be set/modified.", self)
         
         value = self.validate_and_adapt(value)
-        
-        if self.class_member and obj is not self.owner: # safety check
+
+        if not self.class_member and obj is self.owner:
+            raise AttributeError("Cannot set instance parameter on class")        
+        if self.class_member and obj is not self.owner:
             obj = self.owner
     
         old = NotImplemented
@@ -1807,8 +1809,13 @@ class ParameterizedMetaclass(type):
         if attribute_name != '_param_container' and attribute_name != '__%s_params__' % mcs.__name__:
             parameter = mcs.parameters.descriptors.get(attribute_name, None)
             if parameter: # and not isinstance(value, Parameter): 
-                parameter.__set__(mcs, value)
-                return
+                try:
+                    parameter.__set__(mcs, value)
+                    return
+                except AttributeError as ex:
+                    # raised for class attribute 
+                    if not str(ex).startswith("Cannot set instance parameter on class"):
+                        raise ex from None
         return type.__setattr__(mcs, attribute_name, value)
 
     def __getattr__(mcs, attribute_name : str) -> typing.Any:
