@@ -367,7 +367,10 @@ class Parameter(metaclass=ParameterMetaclass):
         class's value (default).
         """        
         if self.class_member:
-            return objtype.__dict__.get(self._internal_name, self.default)
+            if self.fget is not None:
+                # For class properties, bind the getter to the class
+                return self.fget.__get__(None, objtype)(objtype)
+            return getattr(objtype, self._internal_name, self.default)
         if obj is None:
             return self 
         if self.fget is not None:     
@@ -410,17 +413,25 @@ class Parameter(metaclass=ParameterMetaclass):
         old = NotImplemented
         if self.constant:
             old = None
-            if (obj.__dict__.get(self._internal_name, NotImplemented) != NotImplemented) or self.default is not None: 
+            if (getattr(obj, self._internal_name, NotImplemented) != NotImplemented) or self.default is not None: 
                 # Dont even entertain any type of setting, even if its the same value
                 raise_ValueError("Constant parameter cannot be modified.", self)
         else:
-            old = obj.__dict__.get(self._internal_name, self.default)
+            old = getattr(obj, self._internal_name, self.default)
 
         # The following needs to be optimised, probably through lambda functions?
         if self.fset is not None:
-            self.fset(obj, value) 
+            if self.class_member:
+                # For class properties, bind the setter to the class
+                self.fset.__get__(None, obj)(obj, value)
+            else:
+                 self.fset(obj, value) 
         else: 
-            obj.__dict__[self._internal_name] = value
+            if self.class_member:
+                # For class properties, store the value in the class's __dict__ using setattr
+                setattr(obj, self._internal_name, value)
+            else:
+                obj.__dict__[self._internal_name] = value
         
         self._post_value_set(obj, value) 
 
@@ -453,6 +464,9 @@ class Parameter(metaclass=ParameterMetaclass):
 
     def __delete__(self, obj : typing.Union['Parameterized', typing.Any]) -> None:
         if self.fdel is not None:
+            if self.class_member:
+                # For class properties, bind the deletor to the class
+                return self.fdel.__get__(None, obj)(obj)
             return self.fdel(obj)
         raise NotImplementedError("Parameter deletion not implemented.")
             
@@ -1795,11 +1809,52 @@ class ParameterizedMetaclass(type):
                 #     parameter = copy.copy(parameter)
                 #     parameter.owner = mcs
                 #     type.__setattr__(mcs, attribute_name, parameter)
-                mcs.__dict__[attribute_name].__set__(mcs, value)
+                if parameter.class_member:
+                    # For class member properties, use the descriptor protocol
+                    parameter.__set__(None, value)
+                else:
+                    parameter.__set__(mcs, value)
                 return
                 # set with None should not supported as with mcs it supports 
                 # class attributes which can be validated
         type.__setattr__(mcs, attribute_name, value)
+
+    def __getattr__(mcs, attribute_name : str) -> typing.Any:
+        """
+        Implements 'self.attribute_name' in a way that also supports Parameters.
+
+        If there is a Parameter descriptor named attribute_name, it will be
+        retrieved using the descriptor protocol.
+        """
+        if attribute_name != '_param_container' and attribute_name != '__%s_params__' % mcs.__name__:
+            parameter = mcs.parameters.descriptors.get(attribute_name, None)
+            if parameter and parameter.class_member:
+                return parameter.__get__(None, mcs)
+        raise AttributeError(f"type object '{mcs.__name__}' has no attribute '{attribute_name}'")
+
+    def __delattr__(mcs, attribute_name : str) -> None:
+        """
+        Implements 'del self.attribute_name' in a way that also supports Parameters.
+
+        If there is a Parameter descriptor named attribute_name, it will be deleted
+        from the class. This is different from setting the parameter value to None,
+        as it completely removes the parameter from the class.
+        """
+        if attribute_name != '_param_container' and attribute_name != '__%s_params__' % mcs.__name__:
+            parameter = mcs.parameters.descriptors.get(attribute_name, None)
+            if parameter:
+                # Delete the parameter from the descriptors dictionary
+                try:
+                    del mcs.parameters.descriptors[attribute_name]
+                except KeyError:
+                    pass
+                # Clear the cached parameters dictionary
+                try:
+                    delattr(mcs, '__%s_params__' % mcs.__name__)
+                except AttributeError:
+                    pass
+                return
+        type.__delattr__(mcs, attribute_name)
             
 
    
