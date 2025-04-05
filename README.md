@@ -307,8 +307,9 @@ Here one can see the use of `instance_name` and why it turns up in the URL path.
 
 ##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.  
 
-- [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
-- [helper GUI](https://github.com/VigneshVSV/thing-control-panel) - view & interact with your object's actions, properties and events. 
+- [example repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
+- [helper GUI](https://github.com/hololinked-dev/thing-control-panel) - view & interact with your object's actions, properties and events. 
+- [live example](https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td) - an example of an oscilloscope available for live test
  
 See a list of currently supported possibilities while using this package [below](#currently-supported). 
 
@@ -337,13 +338,12 @@ If there are errors in generation of Thing Description
  
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
-### Currently being worked
+### Contributing
 
-- unit tests coverage
-- separation of HTTP protocol specification like URL path and HTTP verbs from the API of properties, actions and events and move their customization completely to the HTTP server 
-- serve multiple things with the same server (unfortunately due to a small oversight it is currently somewhat difficult for end user to serve multiple things with the same server, although its possible. This will be fixed.)
-- improving accuracy of Thing Descriptions 
-- cookie credentials for authentication - as a workaround until credentials are supported, use `allowed_clients` argument on HTTP server which restricts access based on remote IP supplied with the HTTP headers. This wont still help you in public networks or modified/non-standard HTTP clients.
+See [organization info](https://github.com/hololinked-dev) for details regarding contributing to this package. There is:
+- discord group - [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) 
+- [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and 
+- [project planning](https://github.com/orgs/hololinked-dev/projects/4)  to discuss activities around this repository. 
 
 
 
