@@ -275,6 +275,8 @@ class TestProperty(TestCase):
             self.thing_client.pydantic_simple_prop = '5str'
         self.assertTrue("validation error for 'int'" in str(ex.exception))
 
+
+
 class TestClassPropertyThing(Thing):
     # Simple class property with default value
     simple_class_prop = Number(class_member=True, default=42)
@@ -319,7 +321,7 @@ class TestClassPropertyThing(Thing):
 class TestClassProperty(TestCase):
     
     def setUp(self):
-        self.thing = TestClassPropertyThing(instance_name='test-class-property')
+        self.thing = TestClassPropertyThing(instance_name='test-class-property', log_level=logging.WARN)
 
     def test_1_simple_class_property(self):
         """Test basic class property functionality"""
@@ -329,8 +331,8 @@ class TestClassProperty(TestCase):
         self.assertEqual(TestClassPropertyThing.simple_class_prop, 100)
         
         # Test that instance-level access reflects class value
-        instance1 = TestClassPropertyThing(instance_name='test1')
-        instance2 = TestClassPropertyThing(instance_name='test2')
+        instance1 = TestClassPropertyThing(instance_name='test1', log_level=logging.WARN)
+        instance2 = TestClassPropertyThing(instance_name='test2', log_level=logging.WARN)
         self.assertEqual(instance1.simple_class_prop, 100)
         self.assertEqual(instance2.simple_class_prop, 100)
         
@@ -356,7 +358,7 @@ class TestClassProperty(TestCase):
         self.assertEqual(TestClassPropertyThing.managed_class_prop, 50)
         
         # Test instance-level validation
-        instance = TestClassPropertyThing(instance_name='test3')
+        instance = TestClassPropertyThing(instance_name='test3', log_level=logging.WARN)
         with self.assertRaises(ValueError):
             instance.managed_class_prop = -20
         
@@ -378,7 +380,7 @@ class TestClassProperty(TestCase):
             TestClassPropertyThing.readonly_class_prop = "new-value"
             
         # Test that setting raises an error at instance level
-        instance = TestClassPropertyThing(instance_name='test4')
+        instance = TestClassPropertyThing(instance_name='test4', log_level=logging.WARN)
         with self.assertRaises(ValueError):
             instance.readonly_class_prop = "new-value"
             
@@ -396,12 +398,12 @@ class TestClassProperty(TestCase):
         self.assertEqual(TestClassPropertyThing.deletable_class_prop, 150)
         
         # Test deletion
+        instance = TestClassPropertyThing(instance_name='test5', log_level=logging.WARN)
         del TestClassPropertyThing.deletable_class_prop
         self.assertEqual(TestClassPropertyThing.deletable_class_prop, 100)  # Should return to default
         self.assertEqual(instance.deletable_class_prop, 100)
         
         # Test instance-level deletion
-        instance = TestClassPropertyThing(instance_name='test5')
         instance.deletable_class_prop = 200
         self.assertEqual(TestClassPropertyThing.deletable_class_prop, 200)
         del instance.deletable_class_prop
