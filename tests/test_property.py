@@ -317,12 +317,24 @@ class TestClassPropertyThing(Thing):
         if hasattr(cls, '_deletable_value'):
             del cls._deletable_value
 
+    not_a_class_prop = Number(class_member=False, default=43)
+
+    @not_a_class_prop.getter
+    def get_not_a_class_prop(self):
+        return getattr(self, '_not_a_class_value', 43)
+    
+    @not_a_class_prop.setter
+    def set_not_a_class_prop(self, value):
+        self._not_a_class_value = value
+
+    @not_a_class_prop.deleter
+    def del_not_a_class_prop(self):
+        if hasattr(self, '_not_a_class_value'):
+            del self._not_a_class_value
+
 
 class TestClassProperty(TestCase):
     
-    def setUp(self):
-        self.thing = TestClassPropertyThing(instance_name='test-class-property', log_level=logging.WARN)
-
     def test_1_simple_class_property(self):
         """Test basic class property functionality"""
         # Test class-level access
@@ -408,6 +420,28 @@ class TestClassProperty(TestCase):
         self.assertEqual(TestClassPropertyThing.deletable_class_prop, 200)
         del instance.deletable_class_prop
         self.assertEqual(TestClassPropertyThing.deletable_class_prop, 100)  # Should return to default
+
+    def test_5_descriptor_access(self):
+        """Test descriptor access for class properties"""
+        # Test direct access through descriptor
+        instance = TestClassPropertyThing(instance_name='test6', log_level=logging.WARN)
+        self.assertIsInstance(TestClassPropertyThing.not_a_class_prop, Number)
+        self.assertEqual(instance.not_a_class_prop, 43)
+        instance.not_a_class_prop = 50
+        self.assertEqual(instance.not_a_class_prop, 50)
+
+        del instance.not_a_class_prop
+        # deleter deletes only an internal instance variable
+        self.assertTrue(hasattr(TestClassPropertyThing, 'not_a_class_prop')) 
+        self.assertEqual(instance.not_a_class_prop, 43)
+
+        del TestClassPropertyThing.not_a_class_prop
+        # descriptor itself is deleted
+        self.assertFalse(hasattr(TestClassPropertyThing, 'not_a_class_prop'))
+        self.assertFalse(hasattr(instance, 'not_a_class_prop'))
+        with self.assertRaises(AttributeError):
+            instance.not_a_class_prop
+        
 
 
 if __name__ == '__main__':

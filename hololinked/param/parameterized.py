@@ -470,7 +470,8 @@ class Parameter(metaclass=ParameterMetaclass):
                 # especially when this method is called as del instance.parameter_name
                 # which will make obj take the value of the instance.
                 return self.fdel(self.owner)
-            return self.fdel(obj)
+            elif obj is not self.owner:
+                return self.fdel(obj)
         raise NotImplementedError("Parameter deletion not implemented.")
             
     def validate_and_adapt(self, value : typing.Any) -> typing.Any:
@@ -1837,6 +1838,7 @@ class ParameterizedMetaclass(type):
                 # Delete the parameter from the descriptors dictionary
                 try:
                     parameter.__delete__(mcs)
+                    return
                 except NotImplementedError: # raised by __delete__ if fset is not defined
                     del mcs.parameters.descriptors[attribute_name]
                     # Delete the parameter from the instance parameters dictionary
@@ -1844,7 +1846,9 @@ class ParameterizedMetaclass(type):
                         delattr(mcs, '__%s_params__' % mcs.__name__)
                     except AttributeError:
                         pass
-                return
+                    # After deleting the parameter from our own reference, 
+                    # we also delete it from the class, so dont return but pass the call
+                    # to type.__delattr__
         return type.__delattr__(mcs, attribute_name)
             
 
