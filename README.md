@@ -307,9 +307,9 @@ Here one can see the use of `instance_name` and why it turns up in the URL path.
 
 ##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.  
 
-- [example repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
+- [examples repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/hololinked-dev/thing-control-panel) - view & interact with your object's actions, properties and events. 
-- [live example](https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td) - an example of an oscilloscope available for live test
+- [live demo](https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td) - an example of an oscilloscope available for live test
  
 See a list of currently supported possibilities while using this package [below](#currently-supported). 
 
@@ -344,6 +344,3 @@ See [organization info](https://github.com/hololinked-dev) for details regarding
 - discord group - [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) 
 - [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and 
 - [project planning](https://github.com/orgs/hololinked-dev/projects/4)  to discuss activities around this repository. 
-
-
-
