@@ -358,7 +358,7 @@ See [organization info](https://github.com/hololinked-dev) for details regarding
 
 #### Development with UV
 
-This project supports [uv](https://docs.astral.sh/uv/), a fast Python package installer and resolver. Here's how to set up your development environment using uv:
+This project uses [uv](https://docs.astral.sh/uv/), a fast Python package installer and resolver. Here's how to set up your development environment using uv:
 
 ##### Setup Development Environment
 
@@ -386,16 +386,4 @@ To run the tests with uv:
 uv pip install coverage
 uv run --active coverage run -m unittest discover -s tests -p 'test_*.py'
 uv run --active coverage report -m
-```
-
-##### Using the Lock File
-
-To ensure reproducible environments, we provide a lock file:
-
-```bash
-# Generate a lock file for your dependencies
-uv lock
-
-# Install from the lock file
-uv pip sync
 ```
