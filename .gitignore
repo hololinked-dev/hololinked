@@ -176,5 +176,4 @@ cython_debug/
 
 # UV related files
 .uv/
-uv.lock
 venv/
