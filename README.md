@@ -13,6 +13,9 @@ For those that understand, this package is a ZMQ/HTTP-RPC.
 <br>
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked)
 [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked)
+<br>
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841)
+[![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) 
 
 ### To Install
 
@@ -341,6 +344,6 @@ Again, please check examples or the code for explanations. Documentation is bein
 ### Contributing
 
 See [organization info](https://github.com/hololinked-dev) for details regarding contributing to this package. There is:
-- discord group - [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) 
+- [discord group](https://discord.com/invite/kEz87zqQXh)
 - [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and 
 - [project planning](https://github.com/orgs/hololinked-dev/projects/4)  to discuss activities around this repository. 
