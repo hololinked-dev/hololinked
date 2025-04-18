@@ -338,7 +338,74 @@ If there are errors in generation of Thing Description
   - run direct ZMQ-TCP server without HTTP details
   - serve multiple objects with the same HTTP server, run HTTP Server & python object in separate processes or the same process
  
-Again, please check examples or the code for explanations. Documentation is being activety improved. 
+Again, please check examples or the code for explanations. Documentation is being actively improved. 
+
+### Consuming Thing Descriptions using Node-WoT
+
+`hololinked` servers expose Thing Descriptions (TDs) which are compatible with Web of Things clients like [Node-WoT](https://github.com/eclipse-thingweb/node-wot). A TD is automatically generated and can be fetched from:
+
+```
+http://localhost:8000/<thing-name>/resources/wot-td
+http://localhost:8000/<thing-name>/resources/wot-td?ignore_errors=true
+```
+
+Example TD for a device instance named `spectrometer`:
+
+```
+http://localhost:8000/spectrometer/resources/wot-td
+```
+
+Consume this TD in a Node.js script using Node-WoT:
+
+```js
+const { Servient } = require("@node-wot/core");
+const HttpClientFactory = require("@node-wot/binding-http").HttpClientFactory;
+
+const servient = new Servient();
+servient.addClientFactory(new HttpClientFactory());
+
+servient.start().then((WoT) => {
+  fetch("http://localhost:8000/spectrometer/resources/wot-td")
+    .then((res) => res.json())
+    .then((td) => WoT.consume(td))
+    .then((thing) => {
+      thing.readProperty("integration_time").then(console.log);
+    });
+});
+
+```
+This works with both http:// and https:// URLs. If you're using HTTPS, just make sure the server certificate is valid or trusted by the client.
+
+After consuming the TD, you can:
+
+<details>
+<summary>Read Property</summary>
+thing.readProperty("integration_time").then(value => {
+  console.log("Integration Time:", value);
+});
+</details>
+<details> <summary>Write Property</summary>
+thing.writeProperty("integration_time", 2000).then(() => {
+  console.log("Integration Time updated");
+});
+</details>
+<details>
+<summary>Invoke Action</summary>
+thing.invokeAction("connect", { serial_number: "S14155" }).then(() => {
+  console.log("Device connected");
+});
+</details>
+<details>
+<summary>Subscribe to Event</summary>
+thing.subscribeEvent("intensity_measurement_event", (data) => {
+  console.log("Received event:", data);
+});
+</details>
+
+> Based on verified examples from the [hololinked examples repository](https://github.com/hololinked-dev/examples/tree/main/client-examples/node-wot)  
+> and the [ThingWeb node-wot project](https://github.com/eclipse-thingweb/node-wot).
+
+In React, these calls can be placed inside `useEffect` and the client passed via `useContext`. 
 
 ### Contributing
 
