@@ -27,7 +27,7 @@ class DataSchema(Schema):
     const: Optional[bool] = None
     default: Optional[Any] = None 
     readOnly: Optional[bool] = None
-    writeOnly: Optional[bool] = None # write only are to be considered actions with no return value
+    writeOnly: Optional[bool] = None # write only can be considered as actions with no return value, so not used in this repository
     format: Optional[str] = None
     unit: Optional[str] = None
     type: Optional[str] = None
@@ -53,8 +53,8 @@ class DataSchema(Schema):
             self.description = Schema.format_doc(property.doc)
             if self.title == self.description:
                 del self.title
-            if property.label is not None:
-                self.title = property.label
+                if property.label is not None:
+                    self.title = property.label
         if property.metadata and property.metadata.get("unit", None) is not None:
             self.unit = property.metadata["unit"]
         if property.allow_None:
