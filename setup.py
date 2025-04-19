@@ -16,10 +16,13 @@ setuptools.setup(
     url="https://hololinked.readthedocs.io/en/latest/index.html",
     packages=[
         'hololinked',
-        'hololinked.server',
-        'hololinked.rpc',
+        'hololinked.core',
+        'hololinked.param',
         'hololinked.client',
-        'hololinked.param'    
+        'hololinked.protocols',
+        'hololinked.schema_validators',
+        'hololinked.serializers',
+        'hololinked.td',
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
