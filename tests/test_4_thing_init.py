@@ -41,6 +41,7 @@ class TestThing(TestCase):
         super().setUpClass()
         print(f"test Thing instantiation with {self.__name__}")
         self.thing_cls = Thing
+        # using a variable called thing_cls because same tests are repeated for different thing class
 
     """
     Test sequence is as follows:
@@ -262,7 +263,7 @@ class TestMetaclass(TestCase):
 
 
 # Uncomment the following for type hints while coding registry tests, 
-# comment it before testing
+# comment it before testing, otherwise tests will fail due to overriding Thing object
 # class Thing(Thing):
 #     class_registry: PropertiesRegistry | ActionsRegistry | EventsRegistry  
 #     instance_registry: PropertiesRegistry  | ActionsRegistry | EventsRegistry  | None 
@@ -291,10 +292,10 @@ class TestRegistry(TestCase):
 
     @property
     def is_abstract_test_class(self):
-        if self.registry_cls is None:
-            print("registry_cls is None")
-        if self.registry_object is None:
-            print("registry_object is None")
+        # if self.registry_cls is None:
+        #     print("registry_cls is None")
+        # if self.registry_object is None:
+        #     print("registry_object is None")
         return self.registry_cls is None or self.registry_object is None
 
     @classmethod
@@ -304,8 +305,10 @@ class TestRegistry(TestCase):
         
         # create instances for further tests
         self.thing = Thing(id=f"test_{self.registry_object.__name__}_registry", log_level=logging.WARN)
-        self.spectrometer = OceanOpticsSpectrometer(id=f"test_{self.registry_object.__name__}_registry", 
-                                            log_level=logging.WARN)
+        self.spectrometer = OceanOpticsSpectrometer(
+                                            id=f"test_{self.registry_object.__name__}_registry", 
+                                            log_level=logging.WARN
+                                        )
         if self.registry_cls == ActionsRegistry:
             Thing.class_registry = Thing.actions
             OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.actions
@@ -338,7 +341,7 @@ class TestRegistry(TestCase):
         """Test owner attribute of DescriptorRegistry"""
         if self.is_abstract_test_class:
             return  
-    
+        # See comment above TestRegistry class to enable type definitions
         # req. 1. owner attribute must be the class itself when accessed as class attribute
         self.assertEqual(Thing.class_registry.owner, Thing)
         self.assertEqual(OceanOpticsSpectrometer.class_registry.owner, OceanOpticsSpectrometer)
@@ -449,6 +452,7 @@ class TestRegistry(TestCase):
         if self.is_abstract_test_class:
             return
         if self.registry_object not in [Property, Parameter, Action]:
+            # Events work a little differently, may need to be tested separately or refactored to same implementation
             return
 
         # req. 1. number of bound objects must be equal to number of descriptors
