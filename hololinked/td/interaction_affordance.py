@@ -3,12 +3,14 @@ import typing
 from typing import ClassVar, Optional
 from pydantic import ConfigDict
 
+
 from .base import Schema
 from .data_schema import DataSchema
 from .forms import Form
+from .utils import get_summary
 from ..constants import JSON, Operations, ResourceTypes
 from ..core.property import Property
-from ..core.actions import Action
+from ..core.actions import Action, BoundAction
 from ..core.events import Event
 from ..core.thing import Thing, ThingMeta
 
@@ -121,7 +123,7 @@ class InteractionAffordance(Schema):
         owner: Thing
             owner of the interaction affordance        
         """
-        raise NotImplementedError("_build must be implemented in subclass of InteractionAffordance")
+        raise NotImplementedError("build must be implemented in subclass of InteractionAffordance")
     
     def build_forms(self, protocol: str, authority: str) -> None:
         """
@@ -134,7 +136,7 @@ class InteractionAffordance(Schema):
         authority: str
             authority of the interaction
         """
-        raise NotImplementedError("_build_forms must be implemented in subclass of InteractionAffordance")
+        raise NotImplementedError("build_forms must be implemented in subclass of InteractionAffordance")
     
     def retrieve_form(self, op: str, default: typing.Any = None) -> JSON:
         """
@@ -169,6 +171,9 @@ class InteractionAffordance(Schema):
         build the schema for the specific interaction affordance within the container object. 
         Use the `json()` method to get the JSON representation of the schema.
 
+        Note that this method is different from build() method as its supposed to be used as a classmethod.
+        Internally calls build(), however some additional steps are included. 
+
         Parameters
         ----------
         interaction: Property | Action | Event
@@ -192,7 +197,7 @@ class InteractionAffordance(Schema):
         name: str
             name of the interaction affordance used as key in the TD
         TD: JSON
-            Thing Description JSON dictionary
+            Thing Description JSON dictionary (the entire one, not just the fragment of the affordance)
 
         Returns
         -------
@@ -232,13 +237,13 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
 
     [Schema](https://www.w3.org/TR/wot-thing-description11/#propertyaffordance) <br>
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/InteractionAffordance.pdf) <br>
-    [Supported Fields]() <br>
     """
+    # [Supported Fields]() <br>
     observable: Optional[bool] = None
 
     def __init__(self):
         super().__init__()
-
+      
     @property
     def what(self) -> Enum:
         return ResourceTypes.PROPERTY
@@ -249,41 +254,41 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         if property._observable:
             self.observable = property._observable
     
-    def build_forms(self, authority: str) -> None:
-        property = self.objekt
-        self.forms = []
-        for index, method in enumerate(property._remote_info.http_method):
-            form = Form()
-            # index is the order for http methods for (get, set, delete), generally (GET, PUT, DELETE)
-            if (index == 1 and property.readonly) or index >= 2:
-                continue # delete property is not a part of WoT, we also mostly never use it, so ignore.
-            elif index == 0:
-                form.op = 'readproperty'
-            elif index == 1:
-                form.op = 'writeproperty'
-            form.href = f"{authority}{self.owner._qualified_id}{property._remote_info.URL_path}"
-            form.htv_methodName = method.upper()
-            form.contentType = "application/json"
-            self.forms.append(form.asdict())
+    # def build_forms(self, authority: str) -> None:
+        # property = self.objekt
+        # self.forms = []
+        # for index, method in enumerate(property._remote_info.http_method):
+        #     form = Form()
+        #     # index is the order for http methods for (get, set, delete), generally (GET, PUT, DELETE)
+        #     if (index == 1 and property.readonly) or index >= 2:
+        #         continue # delete property is not a part of WoT, we also mostly never use it, so ignore.
+        #     elif index == 0:
+        #         form.op = 'readproperty'
+        #     elif index == 1:
+        #         form.op = 'writeproperty'
+        #     form.href = f"{authority}{self.owner._qualified_id}{property._remote_info.URL_path}"
+        #     form.htv_methodName = method.upper()
+        #     form.contentType = "application/json"
+        #     self.forms.append(form.asdict())
 
-        if property._observable:
-            self.observable = property._observable
-            form = Form()
-            form.op = 'observeproperty'
-            form.href = f"{authority}{owner._full_URL_path_prefix}{property._observable_event_descriptor.URL_path}"
-            form.htv_methodName = "GET"
-            form.subprotocol = "sse"
-            form.contentType = "text/plain"
-            self.forms.append(form.asdict())
+        # if property._observable:
+        #     self.observable = property._observable
+        #     form = Form()
+        #     form.op = 'observeproperty'
+        #     form.href = f"{authority}{owner._full_URL_path_prefix}{property._observable_event_descriptor.URL_path}"
+        #     form.htv_methodName = "GET"
+        #     form.subprotocol = "sse"
+        #     form.contentType = "text/plain"
+        #     self.forms.append(form.asdict())
 
     @classmethod
     def generate(cls, property, owner):
         assert isinstance(property, Property), f"property must be instance of Property, given type {type(property)}"
-        schema = PropertyAffordance()
-        schema.owner = owner      
-        schema.objekt = property
-        schema.build()       
-        return schema
+        affordance = PropertyAffordance()
+        affordance.owner = owner      
+        affordance.objekt = property
+        affordance.build()       
+        return affordance
 
  
 class ActionAffordance(InteractionAffordance):
@@ -292,60 +297,57 @@ class ActionAffordance(InteractionAffordance):
 
     [Schema](https://www.w3.org/TR/wot-thing-description11/#actionaffordance) <br>
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/InteractionAffordance.pdf) <br>
-    [Supported Fields]() <br>
     """
+    # [Supported Fields]() <br>
     input: JSON = None
     output: JSON = None
     safe: bool = None
     idempotent: bool = None 
     synchronous: bool = None 
 
-    def __init__(self, action: typing.Callable | None = None):
+    def __init__(self):
         super().__init__()
-        self.action = action 
-
+ 
     @property 
     def what(self):
         return ResourceTypes.ACTION
            
-    def build(self, action, owner) -> None:
-        self.action = action
-        self.owner = owner
-        self.title = self.action.name
-        if self.action.__doc__:
+    def build(self) -> None:
+        action = self.objekt
+        assert isinstance(action, Action) # type definition
+        if action.__doc__:
+            self.title = get_summary(action.__doc__)
             self.description = self.format_doc(action.__doc__)
-        if self.action.execution_info.argument_schema:
-            self.input = self.action.execution_info.argument_schema 
-        if self.action.execution_info.return_value_schema: 
-            self.output = self.action.execution_info.return_value_schema 
-        if (not (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
-                owner.state_machine.has_object(self.action)) and 
-                self.action.execution_info.idempotent):
-            self.idempotent = self.action.execution_info.idempotent
-        if self.action.execution_info.synchronous:
-            self.synchronous = self.action.execution_info.synchronous
-        if self.action.execution_info.safe:
-            self.safe = self.action.execution_info.safe 
+        if action.execution_info.argument_schema:
+            self.input = action.execution_info.argument_schema 
+        if action.execution_info.return_value_schema: 
+            self.output = action.execution_info.return_value_schema 
+        if (not (hasattr(self.owner, 'state_machine') and self.owner.state_machine is not None and 
+                self.owner.state_machine.contains_object(action)) and action.execution_info.idempotent):
+            self.idempotent = action.execution_info.idempotent
+        if action.execution_info.synchronous:
+            self.synchronous = action.execution_info.synchronous
+        if action.execution_info.safe:
+            self.safe = action.execution_info.safe 
 
-    def build_forms(self, protocol: str, authority : str, **protocol_metadata) -> None:
-        self.forms = []
-        for method in self.action.execution_info_validator.http_method:
-            form = Form()
-            form.op = 'invokeaction'
-            form.href = f'{authority}/{self.owner.id}/{protocol_metadata.get("path", "")}/{self.action.name}'
-            form.htv_methodName = method.upper()
-            form.contentType = 'application/json'
-            # form.additionalResponses = [AdditionalExpectedResponse().asdict()]
-            self.forms.append(form.asdict())
+    # def build_forms(self, protocol: str, authority : str, **protocol_metadata) -> None:
+    #     self.forms = []
+    #     for method in action.execution_info_validator.http_method:
+    #         form = Form()
+    #         form.op = 'invokeaction'
+    #         form.href = f'{authority}/{self.owner.id}/{protocol_metadata.get("path", "")}/{action.name}'
+    #         form.htv_methodName = method.upper()
+    #         form.contentType = 'application/json'
+    #         # form.additionalResponses = [AdditionalExpectedResponse().asdict()]
+    #         self.forms.append(form.asdict())
     
     @classmethod
-    def generate(cls, action : typing.Callable, owner, **kwargs) -> JSON:
-        affordance = ActionAffordance(action=action)
+    def generate(cls, action: Action, owner, **kwargs) -> JSON:
+        affordance = ActionAffordance()
         affordance.owner = owner
-        affordance._build(owner=owner) 
-        if kwargs.get('protocol', None) and kwargs.get('authority', None):
-            affordance._build_forms(protocol=kwargs['protocol'], authority=kwargs['authority'])
-        return affordance.asdict()
+        affordance.objekt = action
+        affordance.build()
+        return affordance
 
     @classmethod
     def from_TD(self, name: str, TD: JSON) -> "ActionAffordance":
@@ -378,8 +380,8 @@ class EventAffordance(InteractionAffordance):
 
     [Schema](https://www.w3.org/TR/wot-thing-description11/#eventaffordance) <br>
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/InteractionAffordance.pdf) <br>
-    [Supported Fields]() <br>
     """
+    # [Supported Fields]() <br>
     subscription: str = None
     data: JSON = None
     
@@ -390,26 +392,32 @@ class EventAffordance(InteractionAffordance):
     def what(self):
         return ResourceTypes.EVENT
     
-    def build(self, event, owner, authority : str) -> None:
-        self.title = event.label or event._obj_name 
-        if event.doc:
-            self.description = self.format_doc(event.doc)
+    def build(self) -> None:
+        event = self.objekt
+        assert isinstance(event, Event) # type definition
+        if event.__doc__:
+            self.title = get_summary(event.__doc__) 
+            self.description = self.format_doc(event.__doc__)
         if event.schema:
             self.data = event.schema
 
-        form = Form()
-        form.op = "subscribeevent"
-        form.href = f"{authority}{owner._full_URL_path_prefix}{event.URL_path}"
-        form.htv_methodName = "GET"
-        form.contentType = "text/plain"
-        form.subprotocol = "sse"
-        self.forms = [form.asdict()]
+
+    # def build_forms(self, protocol, authority):
+        # form = Form()
+        # form.op = "subscribeevent"
+        # form.href = f"{authority}{owner._full_URL_path_prefix}{event.URL_path}"
+        # form.htv_methodName = "GET"
+        # form.contentType = "text/plain"
+        # form.subprotocol = "sse"
+        # self.forms = [form.asdict()]
 
     @classmethod
     def generate_schema(cls, event, owner, authority : str) -> JSON:
-        schema = EventAffordance()
-        schema.build(event=event, owner=owner, authority=authority)
-        return schema.asdict()
+        affordance = EventAffordance()
+        affordance.owner = owner
+        affordance.objekt = event
+        affordance.build()
+        return affordance
     
 
 # @dataclass(**__dataclass_kwargs)
