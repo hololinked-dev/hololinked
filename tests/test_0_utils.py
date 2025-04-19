@@ -26,8 +26,8 @@ class TestUtils(TestCase):
         1. Create model from function signature
         2. Check model annotations
         3. Check model fields length 
-        4. Check model config
-        5. Validate correct usage
+        4. Check model config (pydantic's model_config)
+        5. Validation with correction and wrong invokation of function 
         6. Always check exception strings for ValueError
         7. Use ValidationError if pydantic is supposed to raise the Error
         """
@@ -60,6 +60,7 @@ class TestUtils(TestCase):
         self.assertEqual(len(model.model_fields), 2)
         self.assertEqual(model.model_config['extra'], 'forbid')
         ##### validate correct usage
+        # For all the following cases, see block comment below the test case for details
         # 1. correct usage with keyword arguments
         pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2})
         # 2. incorrect argument types with keyword arguments
@@ -262,7 +263,7 @@ class TestUtils(TestCase):
         with self.assertRaises(ValidationError):
             pydantic_validate_args_kwargs(model, kwargs={'a': 1})
         # 4. too many keyword arguments
-        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3, 'd': 4}) # OK 
+        pydantic_validate_args_kwargs(model, kwargs={'a': 1, 'b': 2, 'c': 3, 'd': 4}) # OK, not an error
         # 5. correct positional arguments
         pydantic_validate_args_kwargs(model, args=(1, 2))
         # 6. incorrect argument types with positional arguments
@@ -319,7 +320,7 @@ class TestUtils(TestCase):
         with self.assertRaises(ValidationError):
             pydantic_validate_args_kwargs(model, kwargs={'a': 1})
         # 4. too many keyword arguments
-        # OK 
+        # OK, not an error
         # 5. correct positional arguments
         pydantic_validate_args_kwargs(model, args=(1, 2))
         # 6. incorrect argument types with positional arguments
@@ -353,14 +354,14 @@ class TestUtils(TestCase):
         # any extra keyword argument is allowed so long it is of type int
 
 
-        # both the following are not allowed in python
+        # both the following are not allowed in python - its also illogical
         # def func_with_double_args(*args1, *args2):
         #     """syntax error"""
         #     return 
         # def func_with_double_kwargs(**kwargs1, **kwargs2):
         #     """syntax error"""
         #     return
-
+        
         ####################
         ##### create model from function signature
         # 6. func_with_args(*args):
@@ -376,7 +377,7 @@ class TestUtils(TestCase):
         pydantic_validate_args_kwargs(model)
         pydantic_validate_args_kwargs(model, args=(dict()))
         # 2. incorrect argument types
-        # Cant do 
+        # OK, since args is a tuple of any type
         # 3. missing keyword arguments
         # OK, since args is a tuple
         # 4. too many keyword arguments
@@ -418,7 +419,7 @@ class TestUtils(TestCase):
         self.assertEqual(len(model.model_fields), 1)
         self.assertEqual(model.model_config['extra'], 'forbid')
         # 1. correct usage with keyword arguments
-        # not possible 
+        # not possible, since args is a tuple
         # 2. incorrect argument types with keyword arguments
         # keyword arguments are not allowed
         # 3. missing keyword arguments
@@ -426,6 +427,7 @@ class TestUtils(TestCase):
         # 4. too many keyword arguments
         with self.assertRaises(ValueError):
             pydantic_validate_args_kwargs(model, kwargs={'a' : 1})
+        self.assertTrue(str(ex.exception).startswith("Unexpected keyword arguments"))
         # 5. correct usage with positional arguments
         pydantic_validate_args_kwargs(model)
         pydantic_validate_args_kwargs(model, args=(1, 2))
@@ -444,18 +446,24 @@ class TestUtils(TestCase):
         # OK, since args is a list and not keywords, no multiple values
         # 11. incorrect usage with both positional and keyword arguments
         # not possible
-    
+
+
+        #####################
+        ##### create model from function signature
+        # 8. func_with_args_and_kwargs(*args, **kwargs):
         def func_with_args_and_kwargs(*args, **kwargs):
             return sum(args) + sum(kwargs.values())
+        # check model for empty annotations
         model = get_input_model_from_signature(func_with_args_and_kwargs, model_for_empty_annotations=True)
         self.assertTrue(issubklass(model, BaseModel))
+        # no model
+        model = get_input_model_from_signature(func_with_args_and_kwargs)
+        self.assertTrue(model is None)
         self.assertEqual(model.model_fields['args'].annotation, typing.Tuple)
         self.assertEqual(model.model_fields['kwargs'].annotation, typing.Dict[str, typing.Any])
         self.assertEqual(len(model.model_fields), 2)
         self.assertEqual(model.model_config['extra'], 'forbid')
 
-        model = get_input_model_from_signature(func_with_args_and_kwargs)
-        self.assertTrue(model is None)
 
         def func_with_annotated_args_and_kwargs(*args: typing.List[int], **kwargs: typing.Dict[str, int]):
             return sum(args) + sum(kwargs.values())
@@ -467,8 +475,7 @@ class TestUtils(TestCase):
         self.assertEqual(model.model_config['extra'], 'forbid')
 
 
-    def test_2_json_schema_function_signature_validation(self):
-        pass
+   
 
     
 

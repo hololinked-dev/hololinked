@@ -2,8 +2,9 @@ import threading
 import unittest
 
 
-
 class TestResult(unittest.TextTestResult):
+    """Custom test result class to format the output of test results."""
+
     def addSuccess(self, test):
         super().addSuccess(test)
         self.stream.write(f' {test} ✔')
@@ -19,11 +20,14 @@ class TestResult(unittest.TextTestResult):
         self.stream.write(f' {test} ❌ Error')
         self.stream.flush()
 
+
 class TestRunner(unittest.TextTestRunner):
+    """Custom test runner class to use the custom test result class."""
     resultclass = TestResult
 
 
 class TestCase(unittest.TestCase):
+    """Custom test case class to print some extra spaces and info about test carried out"""
 
     @classmethod
     def setUpClass(self):
