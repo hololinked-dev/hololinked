@@ -431,84 +431,82 @@ class TestAction(TestCase):
         assert isinstance(thing.action_echo, BoundAction) # type definition
         affordance = thing.action_echo.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
-        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
-        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
-        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
-        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
-        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+        self.assertIsNone(affordance.idempotent) # by default, not idempotent
+        self.assertTrue(affordance.synchronous) # by default, not synchronous
+        self.assertIsNone(affordance.safe) # by default, not safe
+        self.assertIsNone(affordance.input) # no input schema
+        self.assertIsNone(affordance.output) # no output schema
+        self.assertIsNone(affordance.description) # no doc
         
         assert isinstance(thing.action_echo_with_classmethod, BoundAction) # type definition
         affordance = thing.action_echo_with_classmethod.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
-        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
-        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
-        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
-        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
-        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+        self.assertIsNone(affordance.idempotent) # by default, not idempotent
+        self.assertTrue(affordance.synchronous) # by default, synchronous
+        self.assertIsNone(affordance.safe) # by default, not safe
+        self.assertIsNone(affordance.input) # no input schema
+        self.assertIsNone(affordance.output) # no output schema
+        self.assertIsNone(affordance.description) # no doc
 
         assert isinstance(thing.action_echo_async, BoundAction) # type definition
         affordance = thing.action_echo_async.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
-        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
-        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
-        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
-        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
-        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+        self.assertIsNone(affordance.idempotent) # by default, not idempotent
+        self.assertTrue(affordance.synchronous) # by default, synchronous
+        self.assertIsNone(affordance.safe) # by default, not safe
+        self.assertIsNone(affordance.input) # no input schema
+        self.assertIsNone(affordance.output) # no output schema
+        self.assertIsNone(affordance.description) # no doc
 
         assert isinstance(thing.action_echo_async_with_classmethod, BoundAction) # type definition
         affordance = thing.action_echo_async_with_classmethod.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
-        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
-        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
-        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
-        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
-        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+        self.assertIsNone(affordance.idempotent) # by default, not idempotent
+        self.assertTrue(affordance.synchronous) # by default, synchronous
+        self.assertIsNone(affordance.safe) # by default, not safe
+        self.assertIsNone(affordance.input) # no input schema
+        self.assertIsNone(affordance.output) # no output schema
+        self.assertIsNone(affordance.description) # no doc
 
         assert isinstance(thing.parameterized_action, BoundAction) # type definition
         affordance = thing.parameterized_action.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
-        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
-        self.assertTrue(affordance.safe) # by default, not safe
-        # self.assertIsInstance(affordance.input, dict)
-        # self.assertIsInstance(affordance.output, dict)
-        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
-        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
-        self.assertTrue(not hasattr(affordance, 'description')) # no doc
-
+        self.assertIsNone(affordance.idempotent)
+        self.assertTrue(affordance.synchronous)
+        self.assertTrue(affordance.safe)
+        self.assertIsNone(affordance.input)
+        self.assertIsNone(affordance.output)
+        self.assertIsNone(affordance.description)
+        
         assert isinstance(thing.parameterized_action_without_call, BoundAction) # type definition
         affordance = thing.parameterized_action_without_call.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
         self.assertTrue(affordance.idempotent) # by default, not idempotent
-        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
-        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
-        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
-        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
-        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+        self.assertTrue(affordance.synchronous) # by default, synchronous
+        self.assertIsNone(affordance.safe) # by default, not safe
+        self.assertIsNone(affordance.input) # no input schema
+        self.assertIsNone(affordance.output) # no output schema
+        self.assertIsNone(affordance.description) # no doc
 
         assert isinstance(thing.parameterized_action_async, BoundAction) # type definition
         affordance = thing.parameterized_action_async.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
-        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
+        self.assertIsNone(affordance.idempotent) # by default, not idempotent
         self.assertTrue(affordance.synchronous) # by default, not synchronous
-        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
-        self.assertTrue(not hasattr(affordance, 'input')) # no input schema
-        self.assertTrue(not hasattr(affordance, 'output')) # no output schema
-        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+        self.assertIsNone(affordance.safe) # by default, not safe
+        self.assertIsNone(affordance.input) # no input schema
+        self.assertIsNone(affordance.output) # no output schema
+        self.assertIsNone(affordance.description) # no doc
 
         assert isinstance(thing.json_schema_validated_action, BoundAction) # type definition
         affordance = thing.json_schema_validated_action.to_affordance()
         self.assertIsInstance(affordance, ActionAffordance)
-        self.assertTrue(not hasattr(affordance, 'idempotent')) # by default, not idempotent
-        self.assertTrue(hasattr(affordance, 'synchronous')) # by default, not synchronous
-        self.assertTrue(not hasattr(affordance, 'safe')) # by default, not safe
+        self.assertIsNone(affordance.idempotent) # by default, not idempotent
+        self.assertTrue(affordance.synchronous) # by default, not synchronous
+        self.assertIsNone(affordance.safe) # by default, not safe
         self.assertIsInstance(affordance.input, dict)
         self.assertIsInstance(affordance.output, dict)
-        self.assertTrue(not hasattr(affordance, 'description')) # no doc
+        self.assertIsNone(affordance.description) # no doc
 
         
     def test_7_exposed_actions(self):

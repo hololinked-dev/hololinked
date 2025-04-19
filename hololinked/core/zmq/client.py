@@ -96,7 +96,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                             operation=Operations.invokeAction,
                                             payload=SerializableData(
                                                 value=kwargs, 
-                                                content_type=self._resource.get_invokation_form('zmq', {}).get(
+                                                content_type=self._resource.retrieve_form('invokeAction', {}).get(
                                                                                 'contentType', 'application/json') 
                                             ),
                                             server_execution_context=dict(
@@ -122,7 +122,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                     operation=Operations.invokeAction,
                                     payload=SerializableData(
                                         value=kwargs, 
-                                        content_type=self._resource.get_invokation_form('zmq', {}).get(
+                                        content_type=self._resource.retrieve_form('invokeAction', {}).get(
                                                                         'contentType', 'application/json') 
                                     ), 
                                     server_execution_context=dict(
@@ -144,7 +144,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                     operation=Operations.invokeAction,
                                     payload=SerializableData(
                                         value=kwargs, 
-                                        content_type=self._resource.get_invokation_form('zmq', {}).get(
+                                        content_type=self._resource.retrieve_form('invokeAction', {}).get(
                                                                         'contentType', 'application/json')
                                     ),
                                     server_execution_context=dict(
@@ -170,7 +170,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                                 operation=Operations.invokeAction,
                                                 payload=SerializableData(
                                                     value=kwargs, 
-                                                    content_type=self._resource.get_invokation_form('zmq', {}).get(
+                                                    content_type=self._resource.retrieve_form('invokeAction', {}).get(
                                                                         'contentType', 'application/json')
                                                 ),
                                                 server_execution_context=dict(
