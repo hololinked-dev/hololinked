@@ -45,8 +45,8 @@ class Action:
         if instance is None and not self._execution_info.isclassmethod:
             return self
         if self._execution_info.iscoroutine:
-            return BoundAsyncAction(self.obj, self._execution_info, instance, owner)
-        return BoundSyncAction(self.obj, self._execution_info, instance, owner)
+            return BoundAsyncAction(self.obj, self, instance, owner)
+        return BoundSyncAction(self.obj, self, instance, owner)
     
     def __call__(self, *args, **kwargs):
         raise NotImplementedError(f"Cannot invoke unbound action {self.name} of {self.owner.__name__}." + 
@@ -74,14 +74,15 @@ class Action:
     
 class BoundAction:
 
-    __slots__ = ['obj', 'execution_info', 'owner_inst', 'owner', 'bound_obj']
+    __slots__ = ['obj', 'execution_info', 'descriptor', 'owner_inst', 'owner', 'bound_obj']
 
-    def __init__(self, obj: FunctionType, execution_info: ActionInfoValidator, owner_inst, owner) -> None:
+    def __init__(self, obj: FunctionType, descriptor: Action, owner_inst, owner) -> None:
         self.obj = obj
-        self.execution_info = execution_info
+        self.descriptor = descriptor
+        self.execution_info = descriptor._execution_info
         self.owner = owner
         self.owner_inst = owner_inst
-        self.bound_obj = owner if execution_info.isclassmethod else owner_inst
+        self.bound_obj = owner if self.execution_info.isclassmethod else owner_inst
 
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
@@ -142,7 +143,7 @@ class BoundAction:
         return super().__getattribute__(name)
 
     def to_affordance(self):
-        return Action.to_affordance(self, self.owner_inst or self.owner)
+        return Action.to_affordance(self.descriptor, self.owner_inst or self.owner)
 
         
 class BoundSyncAction(BoundAction):  
