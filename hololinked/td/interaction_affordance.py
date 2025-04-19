@@ -155,7 +155,7 @@ class InteractionAffordance(Schema):
         Dict[str, typing.Any]
             JSON representation of the form      
         """
-        if not hasattr(self, 'forms'):
+        if self.forms is None:
             return default
         for form in self.forms:
             if form.op == op:
@@ -315,9 +315,9 @@ class ActionAffordance(InteractionAffordance):
     def build(self) -> None:
         action = self.objekt
         assert isinstance(action, Action) # type definition
-        if action.__doc__:
-            self.title = get_summary(action.__doc__)
-            self.description = self.format_doc(action.__doc__)
+        if action.obj.__doc__:
+            self.title = get_summary(action.obj.__doc__)
+            self.description = self.format_doc(action.obj.__doc__)
         if action.execution_info.argument_schema:
             self.input = action.execution_info.argument_schema 
         if action.execution_info.return_value_schema: 
@@ -342,7 +342,7 @@ class ActionAffordance(InteractionAffordance):
     #         self.forms.append(form.asdict())
     
     @classmethod
-    def generate(cls, action: Action, owner, **kwargs) -> JSON:
+    def generate(cls, action: Action, owner, **kwargs) -> "ActionAffordance":
         affordance = ActionAffordance()
         affordance.owner = owner
         affordance.objekt = action
