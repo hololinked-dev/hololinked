@@ -347,7 +347,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     @action()
     def ping(self) -> None:
-        """ping the `Thing` to see if it is alive. No timeout or exception must be raised on the client side."""
+        """
+        ping the `Thing` to see if it is alive. Ping successful when action succeeds with no return value and 
+        no timeout or exception raised on the client side.
+        """
         pass 
 
     def __hash__(self) -> int:

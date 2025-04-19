@@ -326,7 +326,6 @@ class MappableSingleton(Singleton):
     def __contains__(self, key) -> bool:
         return hasattr(self, key)
 
-    
 
 def get_input_model_from_signature(
     func: typing.Callable,
@@ -337,27 +336,18 @@ def get_input_model_from_signature(
     """
     Create a pydantic model for a function's signature.
 
-    This is deliberately quite a lot more basic than
-    `pydantic.decorator.ValidatedFunction` because it is designed
-    to handle JSON input. That means that we don't want positional
-    arguments, unless there's exactly one (in which case we have a
-    single value, not an object, and this may or may not be supported).
-
-    This will fail for position-only arguments, though that may change
-    in the future.
-
     Parameters
     ----------
-    func : Callable
+    func: Callable
         The function for which to create the pydantic model.
-    remove_first_positional_arg : bool, optional
+    remove_first_positional_arg: bool, optional
         Remove the first argument from the model (this is appropriate for methods, 
         as the first argument, self, is baked in when it's called, but is present 
         in the signature).
-    ignore : Sequence[str], optional
+    ignore: Sequence[str], optional
         Ignore arguments that have the specified name. This is useful for e.g. 
         dependencies that are injected by LabThings.
-    model_for_empty_annotations : bool, optional
+    model_for_empty_annotations: bool, optional
         If True, create a model even if there are no annotations.
 
     Returns
