@@ -32,6 +32,11 @@ Or, clone the repository (main branch for latest codebase) and install `pip inst
 
 For next-release code base, see [main-next-release](https://github.com/hololinked-dev/hololinked/tree/main-next-release) branch. Out of the many improvements, an attempt to align better with Web of Things is being made, along with a layer of protocol agnosticim. 
 
+### Main Next-Release
+
+This branch is the main branch for the next release. The current release is 0.2 and the next release is 0.3.
+Not all features may work, but unit tests need to pass while merging.
+
 ### Usage/Quickstart
 
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software.
