@@ -283,6 +283,8 @@ class TestRegistry(TestCase):
         super().setUpClass()
         self.setUpRegistryObjects()
         self.setUpRegistryAttributes()
+        if self.is_abstract_test_class:
+            return
         print(f"test {self.registry_cls.__name__} with {self.__name__}")
         
     @classmethod
@@ -644,7 +646,7 @@ class TestPropertiesRegistry(TestRegistry):
 
 
 
-if __name__ == '__main__':
+def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThing))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestOceanOpticsSpectrometer))
@@ -652,8 +654,11 @@ if __name__ == '__main__':
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestActionRegistry))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestPropertiesRegistry))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestEventRegistry))
+    return suite
+
+if __name__ == '__main__':
     runner = TestRunner()
-    runner.run(suite)
+    runner.run(load_tests())
 
    
 """
