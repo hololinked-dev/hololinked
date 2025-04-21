@@ -453,12 +453,12 @@ class TestUtils(TestCase):
         # 8. func_with_args_and_kwargs(*args, **kwargs):
         def func_with_args_and_kwargs(*args, **kwargs):
             return sum(args) + sum(kwargs.values())
-        # check model for empty annotations
-        model = get_input_model_from_signature(func_with_args_and_kwargs, model_for_empty_annotations=True)
-        self.assertTrue(issubklass(model, BaseModel))
         # no model
         model = get_input_model_from_signature(func_with_args_and_kwargs)
         self.assertTrue(model is None)
+        # check model for empty annotations
+        model = get_input_model_from_signature(func_with_args_and_kwargs, model_for_empty_annotations=True)
+        self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields['args'].annotation, typing.Tuple)
         self.assertEqual(model.model_fields['kwargs'].annotation, typing.Dict[str, typing.Any])
         self.assertEqual(len(model.model_fields), 2)
@@ -476,8 +476,5 @@ class TestUtils(TestCase):
 
 
    
-
-    
-
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())
