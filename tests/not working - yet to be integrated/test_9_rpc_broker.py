@@ -3,14 +3,14 @@ import unittest
 import zmq.asyncio
 
 from hololinked.core.zmq.rpc_server import RPCServer
-from hololinked.protocols.zmq.brokers import AsyncZMQClient, SyncZMQClient
+from hololinked.core.zmq.brokers import AsyncZMQClient, SyncZMQClient
 from hololinked.utils import get_current_async_loop
 
 try:
-    from .test_5_brokers import ActionMixin
+    from .test_8_brokers import ActionMixin
     from .utils import TestRunner
 except ImportError:
-    from tests.test_5_brokers import ActionMixin
+    from tests.test_8_brokers import ActionMixin
     from utils import TestRunner
 
 
