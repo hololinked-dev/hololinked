@@ -68,13 +68,13 @@ class ObjectProxy:
         self._noblock_messages = dict()
         self._schema_validator = kwargs.get('schema_validator', None)
         self.id = id
+        self.identity = f"{id}|{uuid.uuid4()}"
         self.logger = kwargs.pop('logger', logging.Logger(self.identity, 
                                     level=kwargs.get('log_level', logging.INFO)))
         
 
         self.invokation_timeout = invokation_timeout
         self.execution_timeout = kwargs.get("execution_timeout", None)
-        self.identity = f"{id}|{uuid.uuid4()}"
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
