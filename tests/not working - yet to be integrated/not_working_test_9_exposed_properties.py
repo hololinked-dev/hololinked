@@ -92,8 +92,7 @@ class TestProperty(TestCase):
     def setUpClass(self):
         print("test property")
         self.thing_cls = TestThing
-        start_thing_forked(self.thing_cls, id='test-property',
-                                    log_level=logging.WARN)
+        start_thing_forked(self.thing_cls, id='test-property', log_level=logging.WARN)
         self.thing_client = ObjectProxy('test-property') # type: TestThing
 
     @classmethod
