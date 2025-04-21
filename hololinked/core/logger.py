@@ -88,8 +88,8 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
             len_critical: int
                 length of critical logs, default maxlen/5
         """
-        logging.Handler.__init__(self)
         RemoteObject.__init__(self, id=id, **kwargs)
+        logging.Handler.__init__(self)
         self.set_maxlen(maxlen, **kwargs)
         self.stream_interval = stream_interval
         self.diff_logs = []
