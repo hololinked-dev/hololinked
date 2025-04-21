@@ -354,7 +354,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         pass 
 
     def __hash__(self) -> int:
-        return hash(inspect.getfile(self.__class__) + self.__class__.__name__ + self.id)
+        filename = inspect.getfile(self.__class__)
+        if filename is not None:
+            return hash(filename + self.__class__.__name__ + self.id)
+        return hash(self.__class__.__name__ + self.id)
         # i.e. unique to a computer 
     
     def __eq__(self, other) -> bool:
