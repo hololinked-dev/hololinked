@@ -21,6 +21,7 @@ from .properties import String, ClassSelector, Selector, TypedKeyMappingsConstra
 from .zmq_message_brokers import RPCServer, ServerTypes, EventPublisher
 from .state_machine import StateMachine
 from .events import Event
+from .json_storage import ThingJsonStorage
 
 
 
@@ -165,7 +166,13 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 schema validator class for JSON schema validation, not supported by ZMQ clients. 
             db_config_file: str, optional
                 if not using a default database, supply a JSON configuration file to create a connection. Check documentaion
-                of ``hololinked.server.database``.  
+                of ``hololinked.server.database``.
+            use_json_file: bool, Default False
+                if True, a JSON file will be used as the property storage instead of a database. This value can also be
+                set as a class attribute.
+            json_filename: str, optional
+                If using JSON storage, this filename is used to persist property values. If not provided, a default filename
+                is generated based on the instance name.
 
         """
         if instance_name.startswith('/'):
@@ -197,8 +204,14 @@ class Thing(Parameterized, metaclass=ThingMeta):
                     remote_access=kwargs.get('logger_remote_access', self.__class__.logger_remote_access if hasattr(
                                                                 self.__class__, 'logger_remote_access') else False)
                 )
-        self._prepare_state_machine()  
-        self._prepare_DB(kwargs.get('use_default_db', False), kwargs.get('db_config_file', None))   
+        self._prepare_state_machine()
+
+        # choose storage type, if use_json_file is True - use JSON storage, else - use database
+        if kwargs.get('use_json_file',
+                      self.__class__.use_json_file if hasattr(self.__class__, 'use_json_file') else False):
+            self._prepare_json_storage(filename=kwargs.get('json_filename', f"{instance_name}.json"))
+        else:
+            self._prepare_DB(kwargs.get('use_default_db', False), kwargs.get('db_config_file', None))
 
 
     def __post_init__(self):
@@ -260,6 +273,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 "current Thing class/subclass. You might be reusing an instance name of another subclass ", 
                 "and did not remove the old data from database. Please clean the database using database tools to ", 
                 "start fresh.")
+
+    def _prepare_json_storage(self, filename: str = None):
+        if not filename:
+            filename = f"{self.instance_name}.json"
+        self.db_engine = ThingJsonStorage(filename=filename, instance=self)
 
 
     @object_info.getter
