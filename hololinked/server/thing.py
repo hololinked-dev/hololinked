@@ -1,6 +1,7 @@
-import logging 
+import logging
 import inspect
 import os
+import re
 import ssl
 import typing
 import warnings
@@ -35,13 +36,13 @@ class ThingMeta(ParameterizedMetaclass):
     are also loaded from database at this time. One can overload ``__post_init__()`` for any operations that rely on properties
     values loaded from database.
     """
-    
+
     @classmethod
     def __prepare__(cls, name, bases):
         return TypedKeyMappingsConstrainedDict({},
             type_mapping = dict(
                 state_machine = (StateMachine, type(None)),
-                instance_name = String, 
+                instance_name = String,
                 log_level = Selector,
                 logger = ClassSelector,
                 logfile = String,
@@ -53,13 +54,13 @@ class ThingMeta(ParameterizedMetaclass):
 
     def __new__(cls, __name, __bases, __dict : TypedKeyMappingsConstrainedDict):
         return super().__new__(cls, __name, __bases, __dict._inner)
-    
+
     def __call__(mcls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
 
         instance.__post_init__()
         return instance
-    
+
     def _create_param_container(mcs, mcs_members : dict) -> None:
         """
         creates ``ClassProperties`` instead of ``param``'s own ``Parameters`` 
@@ -84,18 +85,18 @@ class Thing(Parameterized, metaclass=ThingMeta):
     """
 
     __server_type__ = ServerTypes.THING # not a server, this needs to be removed.
-   
+
     # local properties
     instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
                         doc="""Unique string identifier of the instance. This value is used for many operations,
                         for example - creating zmq socket address, tables in databases, and to identify the instance 
                         in the HTTP Server - (http(s)://{domain and sub domain}/{instance name}). 
                         If creating a big system, instance names are recommended to be unique.""") # type: str
-    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False, 
+    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False,
                         doc="""logging.Logger instance to print log messages. Default 
                             logger with a IO-stream handler and network accessible handler is created 
                             if none supplied.""") # type: logging.Logger
-    zmq_serializer = ClassSelector(class_=(BaseSerializer, str), 
+    zmq_serializer = ClassSelector(class_=(BaseSerializer, str),
                         allow_None=True, default='json', remote=False,
                         doc="""Serializer used for exchanging messages with python RPC clients. Subclass the base serializer 
                         or one of the available serializers to implement your own serialization requirements; or, register 
@@ -105,31 +106,31 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         doc="""Serializer used for exchanging messages with a HTTP clients,
                             subclass JSONSerializer to implement your own JSON serialization requirements; or, 
                             register type replacements. Other types of serializers are currently not allowed for HTTP clients.""") # type: JSONSerializer
-    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True, 
+    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True,
                         remote=False, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
-    
+
     # remote properties
-    state = String(default=None, allow_None=True, URL_path='/state', readonly=True, observable=True, 
-                fget=lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
+    state = String(default=None, allow_None=True, URL_path='/state', readonly=True, observable=True,
+                fget=lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
-    httpserver_resources = Property(readonly=True, URL_path='/resources/http-server', 
-                        doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer.HTTPServer``)", 
+    httpserver_resources = Property(readonly=True, URL_path='/resources/http-server',
+                        doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer.HTTPServer``)",
                         fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, HTTPResource]
-    zmq_resources = Property(readonly=True, URL_path='/resources/zmq-object-proxy', 
-                        doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
+    zmq_resources = Property(readonly=True, URL_path='/resources/zmq-object-proxy',
+                        doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.",
                         fget=lambda self: self._zmq_resources) # type: typing.Dict[str, ZMQResource]
-    gui_resources = Property(readonly=True, URL_path='/resources/portal-app', 
+    gui_resources = Property(readonly=True, URL_path='/resources/portal-app',
                         doc="""object's data read by hololinked-portal GUI client, similar to http_resources but differs 
                         in details.""",
                         fget=lambda self: build_our_temp_TD(self)) # type: typing.Dict[str, typing.Any]
     GUI = Property(default=None, allow_None=True, URL_path='/resources/web-gui', fget = lambda self : self._gui,
-                        doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool")     
+                        doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool")
     object_info = Property(doc="contains information about this object like the class name, script location etc.",
                         URL_path='/object-info') # type: ThingInformation
-    
 
-    def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
+
+    def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None,
                 serializer : typing.Optional[JSONSerializer] = None, **kwargs) -> None:
         """
         Parameters
@@ -178,7 +179,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         if instance_name.startswith('/'):
             instance_name = instance_name[1:]
         # Type definitions
-        self._owner : typing.Optional[Thing] = None 
+        self._owner : typing.Optional[Thing] = None
         self._internal_fixed_attributes : typing.List[str]
         self._full_URL_path_prefix : str
         self._gui = None # filler for a future feature
@@ -195,11 +196,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
                                                                     zmq_serializer=zmq_serializer,
                                                                     http_serializer=http_serializer
                                                                 )
-        super().__init__(instance_name=instance_name, logger=logger, 
+        super().__init__(instance_name=instance_name, logger=logger,
                         zmq_serializer=zmq_serializer, http_serializer=http_serializer, **kwargs)
 
         self._prepare_logger(
-                    log_level=kwargs.get('log_level', None), 
+                    log_level=kwargs.get('log_level', None),
                     log_file=kwargs.get('log_file', None),
                     remote_access=kwargs.get('logger_remote_access', self.__class__.logger_remote_access if hasattr(
                                                                 self.__class__, 'logger_remote_access') else False)
@@ -209,7 +210,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         # choose storage type, if use_json_file is True - use JSON storage, else - use database
         if kwargs.get('use_json_file',
                       self.__class__.use_json_file if hasattr(self.__class__, 'use_json_file') else False):
-            self._prepare_json_storage(filename=kwargs.get('json_filename', f"{instance_name}.json"))
+            self._prepare_json_storage(filename=kwargs.get('json_filename', f"{self._prepare_json_filename()}"))
         else:
             self._prepare_DB(kwargs.get('use_default_db', False), kwargs.get('db_config_file', None))
 
@@ -232,22 +233,22 @@ class Thing(Parameterized, metaclass=ThingMeta):
     def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = False):
         from .logger import RemoteAccessHandler
         if self.logger is None:
-            self.logger = get_default_logger(self.instance_name, 
-                                    logging.INFO if not log_level else log_level, 
+            self.logger = get_default_logger(self.instance_name,
+                                    logging.INFO if not log_level else log_level,
                                     None if not log_file else log_file)
         if remote_access:
             if not any(isinstance(handler, RemoteAccessHandler) for handler in self.logger.handlers):
-                self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger', 
-                                                    maxlen=500, emit_interval=1, logger=self.logger) 
+                self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger',
+                                                    maxlen=500, emit_interval=1, logger=self.logger)
                                                     # thing has its own logger so we dont recreate one for
                                                     # remote access handler
                 self.logger.addHandler(self._remote_access_loghandler)
-        
+
         if not isinstance(self, logging.Logger):
             for handler in self.logger.handlers:
                 # if remote access is True or not, if a default handler is found make a variable for it anyway
                 if isinstance(handler, RemoteAccessHandler):
-                    self._remote_access_loghandler = handler        
+                    self._remote_access_loghandler = handler
 
 
     def _prepare_state_machine(self):
@@ -255,53 +256,66 @@ class Thing(Parameterized, metaclass=ThingMeta):
             self.state_machine._prepare(self)
             self.logger.debug("setup state machine")
 
-    
+
     def _prepare_DB(self, default_db : bool = False, config_file : str = None):
-        if not default_db and not config_file: 
+        if not default_db and not config_file:
             self.object_info
-            return 
-        # 1. create engine 
-        self.db_engine = ThingDB(instance=self, config_file=None if default_db else config_file, 
-                                    serializer=self.zmq_serializer) # type: ThingDB 
+            return
+        # 1. create engine
+        self.db_engine = ThingDB(instance=self, config_file=None if default_db else config_file,
+                                    serializer=self.zmq_serializer) # type: ThingDB
         # 2. create an object metadata to be used by different types of clients
         object_info = self.db_engine.fetch_own_info()
         if object_info is not None:
             self._object_info = object_info
         # 3. enter properties to DB if not already present 
         if self.object_info.class_name != self.__class__.__name__:
-            raise ValueError("Fetched instance name and class name from database not matching with the ", 
-                "current Thing class/subclass. You might be reusing an instance name of another subclass ", 
-                "and did not remove the old data from database. Please clean the database using database tools to ", 
+            raise ValueError("Fetched instance name and class name from database not matching with the ",
+                "current Thing class/subclass. You might be reusing an instance name of another subclass ",
+                "and did not remove the old data from database. Please clean the database using database tools to ",
                 "start fresh.")
 
     def _prepare_json_storage(self, filename: str = None):
         if not filename:
-            filename = f"{self.instance_name}.json"
+            filename = f"{self._prepare_json_filename()}"
         self.db_engine = ThingJsonStorage(filename=filename, instance=self)
+
+    def _prepare_json_filename(self):
+        class_name = self.__class__.__name__
+
+        # Remove invalid characters from the instance name
+        safe_instance_name = re.sub(r'[<>:"/\\|?*\x00-\x1F]+', '_', self.instance_name)
+        # Collapse consecutive underscores into one
+        safe_instance_name = re.sub(r'_+', '_', safe_instance_name)
+        # Remove leading and trailing underscores
+        safe_instance_name = safe_instance_name.strip('_')
+
+        filename = f"{class_name}-{safe_instance_name or '_'}.json"
+        return filename
 
 
     @object_info.getter
     def _get_object_info(self):
         if not hasattr(self, '_object_info'):
             self._object_info = ThingInformation(
-                    instance_name  = self.instance_name, 
+                    instance_name  = self.instance_name,
                     class_name     = self.__class__.__name__,
                     script         = os.path.dirname(os.path.abspath(inspect.getfile(self.__class__))),
-                    http_server    = "USER_MANAGED", 
-                    kwargs         = "USER_MANAGED",  
-                    eventloop_instance_name = "USER_MANAGED", 
-                    level          = "USER_MANAGED", 
+                    http_server    = "USER_MANAGED",
+                    kwargs         = "USER_MANAGED",
+                    eventloop_instance_name = "USER_MANAGED",
+                    level          = "USER_MANAGED",
                     level_type     = "USER_MANAGED"
-                )  
+                )
         return self._object_info
-    
+
     @object_info.setter
     def _set_object_info(self, value):
-        self._object_info = ThingInformation(**value)  
+        self._object_info = ThingInformation(**value)
         for name, thing in inspect._getmembers(self, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
             thing._object_info.http_server = self._object_info.http_server
-           
-    
+
+
     @property
     def properties(self) -> ClassProperties:
         """container for the property descriptors of the object."""
@@ -314,7 +328,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         skip_props = ["httpserver_resources", "zmq_resources", "gui_resources", "GUI", "object_info"]
         for prop_name in skip_props:
             if prop_name in kwargs:
-                raise RuntimeError("GUI, httpserver resources, RPC resources , object info etc. cannot be queried" + 
+                raise RuntimeError("GUI, httpserver resources, RPC resources , object info etc. cannot be queried" +
                                   " using multiple property fetch.")
         data = {}
         if len(kwargs) == 0:
@@ -340,9 +354,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
             for rename, requested_prop in kwargs.items():
                 if not isinstance(self.properties[requested_prop], Property) or self.properties[requested_prop]._remote_info is None:
                     raise AttributeError("this property is not remote accessible")
-                data[rename] = self.properties[requested_prop].__get__(self, type(self))                   
-        return data 
-    
+                data[rename] = self.properties[requested_prop].__get__(self, type(self))
+        return data
+
     @action(URL_path='/properties', http_method=[HTTP_METHODS.PUT, HTTP_METHODS.PATCH])
     def _set_properties(self, **values : typing.Dict[str, typing.Any]) -> None:
         """ 
@@ -363,12 +377,12 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 errors += f'{name} : {str(ex)}\n'
                 produced_error = True
         if produced_error:
-            ex = RuntimeError("Some properties could not be set due to errors. " + 
+            ex = RuntimeError("Some properties could not be set due to errors. " +
                             "Check exception notes or server logs for more information.")
             ex.__notes__ = errors
             raise ex from None
 
-    @action(URL_path='/properties/db', http_method=HTTP_METHODS.GET)     
+    @action(URL_path='/properties/db', http_method=HTTP_METHODS.GET)
     def _get_properties_in_db(self) -> typing.Dict[str, JSONSerializable]:
         """
         get all properties in the database
@@ -414,27 +428,27 @@ class Thing(Parameterized, metaclass=ThingMeta):
         event publishing PUB socket owning object, valid only after 
         ``run()`` is called, otherwise raises AttributeError.
         """
-        return self._event_publisher 
-                   
+        return self._event_publisher
+
     @event_publisher.setter
     def event_publisher(self, value : EventPublisher) -> None:
         if self._event_publisher is not None:
             if value is not self._event_publisher:
                 raise AttributeError("Can set event publisher only once")
-            
+
         def recusively_set_event_publisher(obj : Thing, publisher : EventPublisher) -> None:
             for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
                 assert isinstance(evt, Event), "object is not an event"
                 # above is type definition
-                e = evt.__get__(obj, type(obj)) 
-                e.publisher = publisher 
+                e = evt.__get__(obj, type(obj))
+                e.publisher = publisher
                 e._remote_info.socket_address = publisher.socket_address
                 self.logger.info(f"registered event '{evt.friendly_name}' serving at PUB socket with address : {publisher.socket_address}")
             for name, subobj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
                 if name == '_owner':
-                    continue 
+                    continue
                 recusively_set_event_publisher(subobj, publisher)
-            obj._event_publisher = publisher            
+            obj._event_publisher = publisher
 
         recusively_set_event_publisher(self, value)
 
@@ -459,20 +473,20 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 except Exception as ex:
                     self.logger.error(f"could not set attribute {db_prop} due to error {str(ex)}")
 
-        
+
     @action(URL_path='/resources/postman-collection', http_method=HTTP_METHODS.GET)
     def get_postman_collection(self, domain_prefix : str = None):
         """
         organised postman collection for this object
         """
         from .api_platforms import postman_collection
-        return postman_collection.build(instance=self, 
+        return postman_collection.build(instance=self,
                     domain_prefix=domain_prefix if domain_prefix is not None else self._object_info.http_server)
-    
+
 
     @action(URL_path='/resources/wot-td', http_method=HTTP_METHODS.GET)
-    def get_thing_description(self, authority : typing.Optional[str] = None, ignore_errors : bool = False): 
-                            # allow_loose_schema : typing.Optional[bool] = False): 
+    def get_thing_description(self, authority : typing.Optional[str] = None, ignore_errors : bool = False):
+                            # allow_loose_schema : typing.Optional[bool] = False):
         """
         generate thing description schema of Web of Things https://www.w3.org/TR/wot-thing-description11/.
         one can use the node-wot as a client for the object with the generated schema 
@@ -500,10 +514,10 @@ class Thing(Parameterized, metaclass=ThingMeta):
         #     In other words, schema validation will always pass.  
         from .td import ThingDescription
         return ThingDescription(instance=self, authority=authority or self._object_info.http_server,
-                                    allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)   
+                                    allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)
 
 
-    @action(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
+    @action(URL_path='/exit', http_method=HTTP_METHODS.POST)
     def exit(self) -> None:
         """
         Exit the object without killing the eventloop that runs this object. If Thing was 
@@ -511,23 +525,23 @@ class Thing(Parameterized, metaclass=ThingMeta):
         only be called remotely.
         """
         if self.rpc_server is None:
-            return 
+            return
         if self._owner is None:
             self.rpc_server.stop_polling()
             raise BreakInnerLoop # stops the inner loop of the object
         else:
             warnings.warn("call exit on the top object, composed objects cannot exit the loop.", RuntimeWarning)
-    
+
     @action()
     def ping(self) -> None:
         """ping the Thing to see if it is alive"""
-        pass 
+        pass
 
-    def run(self, 
-            zmq_protocols : typing.Union[typing.Sequence[ZMQ_PROTOCOLS], 
-                                         ZMQ_PROTOCOLS] = ZMQ_PROTOCOLS.IPC, 
+    def run(self,
+            zmq_protocols : typing.Union[typing.Sequence[ZMQ_PROTOCOLS],
+                                         ZMQ_PROTOCOLS] = ZMQ_PROTOCOLS.IPC,
             # expose_eventloop : bool = False,
-            **kwargs 
+            **kwargs
         ) -> None:
         """
         Quick-start ``Thing`` server by creating a default eventloop & ZMQ servers. This 
@@ -563,28 +577,28 @@ class Thing(Parameterized, metaclass=ThingMeta):
         context = context or zmq.asyncio.Context()
 
         self.rpc_server = RPCServer(
-                                instance_name=self.instance_name, 
-                                server_type=self.__server_type__.value, 
-                                context=context, 
-                                protocols=zmq_protocols, 
-                                zmq_serializer=self.zmq_serializer, 
-                                http_serializer=self.http_serializer, 
+                                instance_name=self.instance_name,
+                                server_type=self.__server_type__.value,
+                                context=context,
+                                protocols=zmq_protocols,
+                                zmq_serializer=self.zmq_serializer,
+                                http_serializer=self.http_serializer,
                                 tcp_socket_address=kwargs.get('tcp_socket_address', None),
                                 logger=self.logger
-                            ) 
+                            )
         self.message_broker = self.rpc_server.inner_inproc_server
-        self.event_publisher = self.rpc_server.event_publisher 
+        self.event_publisher = self.rpc_server.event_publisher
 
         from .eventloop import EventLoop
         self.event_loop = EventLoop(
-                    instance_name=f'{self.instance_name}/eventloop', 
-                    things=[self], 
+                    instance_name=f'{self.instance_name}/eventloop',
+                    things=[self],
                     logger=self.logger,
-                    zmq_serializer=self.zmq_serializer, 
-                    http_serializer=self.http_serializer, 
+                    zmq_serializer=self.zmq_serializer,
+                    http_serializer=self.http_serializer,
                     expose=False, # expose_eventloop
                 )
-        
+
         if kwargs.get('http_server', None):
             from .HTTPServer import HTTPServer
             httpserver = kwargs.pop('http_server')
@@ -597,11 +611,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self.event_loop.run()
 
 
-    def run_with_http_server(self, port : int = 8080, address : str = '0.0.0.0', 
-                # host : str = None, 
-                allowed_clients : typing.Union[str, typing.Iterable[str]] = None,   
-                ssl_context : ssl.SSLContext = None, # protocol_version : int = 1, 
-                # network_interface : str = 'Ethernet', 
+    def run_with_http_server(self, port : int = 8080, address : str = '0.0.0.0',
+                # host : str = None,
+                allowed_clients : typing.Union[str, typing.Iterable[str]] = None,
+                ssl_context : ssl.SSLContext = None, # protocol_version : int = 1,
+                # network_interface : str = 'Ethernet',
                 **kwargs):
         """
         Quick-start ``Thing`` server by creating a default eventloop & servers. This 
@@ -633,17 +647,17 @@ class Thing(Parameterized, metaclass=ThingMeta):
         #     send the network interface name to retrieve the IP. If a DNS server is present, you may leave this field
         # host: str
         #     Host Server to subscribe to coordinate starting sequence of things & web GUI
-        
+
         from .HTTPServer import HTTPServer
-        
+
         http_server = HTTPServer(
-            [self.instance_name], logger=self.logger, serializer=self.http_serializer, 
+            [self.instance_name], logger=self.logger, serializer=self.http_serializer,
             port=port, address=address, ssl_context=ssl_context,
             allowed_clients=allowed_clients, schema_validator=self.schema_validator,
             # network_interface=network_interface, 
             **kwargs,
         )
-        
+
         self.run(
             zmq_protocols=ZMQ_PROTOCOLS.INPROC,
             http_server=http_server,
@@ -652,6 +666,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
         http_server.tornado_instance.stop()
 
-       
+
 
 

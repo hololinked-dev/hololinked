@@ -1,5 +1,4 @@
 import os
-import json
 import threading
 from .serializers import JSONSerializer
 from typing import Any, Dict, List, Optional, Union
