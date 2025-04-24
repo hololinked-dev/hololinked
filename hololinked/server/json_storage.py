@@ -1,16 +1,18 @@
 import os
 import json
 import threading
+from .serializers import JSONSerializer
 from typing import Any, Dict, List, Optional, Union
 from .property import Property
 from ..param import Parameterized
 
 
 class ThingJsonStorage:
-    def __init__(self, filename: str, instance: Parameterized):
+    def __init__(self, filename: str, instance: Parameterized, serializer: Optional[Any]=None):
         self.filename = filename
         self.thing_instance = instance
         self.instance_name = instance.instance_name
+        self._serializer = serializer or JSONSerializer()
         self._lock = threading.RLock()
         self._data = self._load()
 
@@ -18,14 +20,18 @@ class ThingJsonStorage:
         if not os.path.exists(self.filename) or os.path.getsize(self.filename) == 0:
             return {}
         try:
-            with open(self.filename, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            with open(self.filename, 'rb') as f:
+                raw_bytes = f.read()
+                if not raw_bytes:
+                    return {}
+                return self._serializer.loads(raw_bytes)
         except Exception:
             return {}
 
     def _save(self):
-        with open(self.filename, 'w', encoding='utf-8') as f:
-            json.dump(self._data, f, indent=2)
+        raw_bytes = self._serializer.dumps(self._data)
+        with open(self.filename, 'wb') as f:
+            f.write(raw_bytes)
 
     def get_property(self, property: Union[str, Property]) -> Any:
         name = property if isinstance(property, str) else property.name
@@ -65,7 +71,7 @@ class ThingJsonStorage:
                 if name not in existing_props:
                     self._data[name] = getattr(self.thing_instance, new_prop.name)
                     missing_props.append(name)
-                self._save()
+            self._save()
         if get_missing_property_names:
             return missing_props
 
