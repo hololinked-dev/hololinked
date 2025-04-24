@@ -8,6 +8,20 @@ from ..param import Parameterized
 
 
 class ThingJsonStorage:
+    """
+    JSON-based storage engine composed within ``Thing``. Carries out property operations such as storing and
+    retrieving values from a plain JSON file.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the JSON file to use for storage.
+    instance : Parameterized
+        The ``Thing`` instance which uses this storage. Required to read default property values when
+        creating missing properties.
+    serializer : JSONSerializer, optional
+        Serializer used for encoding and decoding JSON data. Defaults to an instance of ``JSONSerializer``.
+    """
     def __init__(self, filename: str, instance: Parameterized, serializer: Optional[Any]=None):
         self.filename = filename
         self.thing_instance = instance
@@ -17,6 +31,14 @@ class ThingJsonStorage:
         self._data = self._load()
 
     def _load(self) -> Dict[str, Any]:
+        """
+        Load and decode data from the JSON file.
+
+        Returns
+        -------
+        value: dict
+        A dictionary of all stored properties. Empty if the file does not exist or cannot be decoded.
+        """
         if not os.path.exists(self.filename) or os.path.getsize(self.filename) == 0:
             return {}
         try:
@@ -29,11 +51,27 @@ class ThingJsonStorage:
             return {}
 
     def _save(self):
+        """
+        Encode and write data to the JSON file.
+        """
         raw_bytes = self._serializer.dumps(self._data)
         with open(self.filename, 'wb') as f:
             f.write(raw_bytes)
 
     def get_property(self, property: Union[str, Property]) -> Any:
+        """
+        Fetch a single property.
+
+        Parameters
+        ----------
+        property: str | Property
+            string name or descriptor object
+
+        Returns
+        -------
+        value: Any
+            property value
+        """
         name = property if isinstance(property, str) else property.name
         if name not in self._data:
             raise KeyError(f"property {name} not found in JSON storage")
@@ -41,17 +79,48 @@ class ThingJsonStorage:
             return self._data[name]
 
     def set_property(self, property: Union[str, Property], value: Any) -> None:
+        """
+        change the value of an already existing property.
+
+        Parameters
+        ----------
+        property: str | Property
+            string name or descriptor object
+        value: Any
+            value of the property
+        """
         name = property if isinstance(property, str) else property.name
         with self._lock:
             self._data[name] = value
             self._save()
 
     def get_properties(self, properties: Dict[Union[str, Property], Any]) -> Dict[str, Any]:
+        """
+        get multiple properties at once.
+
+        Parameters
+        ----------
+        properties: List[str | Property]
+            string names or the descriptor of the properties as a list
+
+        Returns
+        -------
+        value: Dict[str, Any]
+            property names and values as items
+        """
         names = [key if isinstance(key, str) else key.name for key in properties.keys()]
         with self._lock:
             return {name: self._data.get(name) for name in names}
 
     def set_properties(self, properties: Dict[Union[str, Property], Any]) -> None:
+        """
+        change the values of already existing few properties at once
+
+        Parameters
+        ----------
+        properties: Dict[str | Property, Any]
+            string names or the descriptor of the property and any value as dictionary pairs
+        """
         with self._lock:
             for obj, value in properties.items():
                 name = obj if isinstance(obj, str) else obj.name
@@ -59,11 +128,27 @@ class ThingJsonStorage:
             self._save()
 
     def get_all_properties(self) -> Dict[str, Any]:
+        """
+        read all properties of the ``Thing`` instance.
+        """
         with self._lock:
             return dict(self._data)
 
     def create_missing_properties(self, properties: Dict[str, Property],
                                   get_missing_property_names: bool = False) -> Optional[List[str]]:
+        """
+        create any and all missing properties of ``Thing`` instance
+
+        Parameters
+        ----------
+        properties: Dict[str, Property]
+            descriptors of the properties
+
+        Returns
+        -------
+        missing_props: List[str]
+            list of missing properties if get_missing_property_names is True
+        """
         missing_props = []
         with self._lock:
             existing_props = self.get_all_properties()
