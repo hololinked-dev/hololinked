@@ -114,9 +114,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         prepare_object_FSM(self)
         prepare_object_database(self, kwargs.get('use_default_db', False), kwargs.get('db_config_file', None))   
        
-        # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
-
-
+        
     def __post_init__(self):
         from .zmq.rpc_server import RPCServer
         from .events import EventPublisher

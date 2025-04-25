@@ -480,6 +480,20 @@ def prepare_object_database(instance, default_db : bool = False, config_file : s
             "and did not remove the old data from database. Please clean the database using database tools to ", 
             "start fresh.")
     instance.load_properties_from_DB()
+
+    # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
+
+    # choose storage type, if use_json_file is True - use JSON storage, else - use database
+    if kwargs.get('use_json_file',
+                    self.__class__.use_json_file if hasattr(self.__class__, 'use_json_file') else False):
+        self._prepare_json_storage(filename=kwargs.get('json_filename', f"{get_a_filename_from_instance(self, 'json')}"))
+    else:
+        self._prepare_DB(kwargs.get('use_default_db', False), kwargs.get('db_config_file', None))
+
+    def _prepare_json_storage(self, filename: str = None):
+        if not filename:
+            filename = f"{get_a_filename_from_instance(self, 'json')}"
+        self.db_engine = ThingJsonStorage(filename=filename, instance=self)
   
 __all__ = [
     BaseAsyncDB.__name__,
