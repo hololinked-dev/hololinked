@@ -1,7 +1,6 @@
 import typing, inspect
 from dataclasses import dataclass, field
 
-from hololinked.server.eventloop import EventLoop
 
 
 from .constants import JSON, JSONSerializable
@@ -12,6 +11,7 @@ from .properties import *
 from .property import Property
 from .thing import Thing
 from .state_machine import StateMachine
+from .eventloop import EventLoop
 
 
 

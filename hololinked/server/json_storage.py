@@ -1,7 +1,7 @@
 import os
 import threading
-from .serializers import JSONSerializer
 from typing import Any, Dict, List, Optional, Union
+from .serializers import JSONSerializer
 from .property import Property
 from ..param import Parameterized
 

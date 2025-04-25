@@ -16,7 +16,7 @@ from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .exceptions import BreakInnerLoop
 from .action import action
 from .dataklasses import HTTPResource, ZMQResource, build_our_temp_TD, get_organised_resources
-from .utils import get_default_logger, getattr_without_descriptor_read
+from .utils import get_a_filename_from_instance, get_default_logger, getattr_without_descriptor_read
 from .property import Property, ClassProperties
 from .properties import String, ClassSelector, Selector, TypedKeyMappingsConstrainedDict
 from .zmq_message_brokers import RPCServer, ServerTypes, EventPublisher
@@ -210,7 +210,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         # choose storage type, if use_json_file is True - use JSON storage, else - use database
         if kwargs.get('use_json_file',
                       self.__class__.use_json_file if hasattr(self.__class__, 'use_json_file') else False):
-            self._prepare_json_storage(filename=kwargs.get('json_filename', f"{self._prepare_json_filename()}"))
+            self._prepare_json_storage(filename=kwargs.get('json_filename', f"{get_a_filename_from_instance(self, 'json')}"))
         else:
             self._prepare_DB(kwargs.get('use_default_db', False), kwargs.get('db_config_file', None))
 
@@ -277,23 +277,10 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
     def _prepare_json_storage(self, filename: str = None):
         if not filename:
-            filename = f"{self._prepare_json_filename()}"
+            filename = f"{get_a_filename_from_instance(self, 'json')}"
         self.db_engine = ThingJsonStorage(filename=filename, instance=self)
 
-    def _prepare_json_filename(self):
-        class_name = self.__class__.__name__
-
-        # Remove invalid characters from the instance name
-        safe_instance_name = re.sub(r'[<>:"/\\|?*\x00-\x1F]+', '_', self.instance_name)
-        # Collapse consecutive underscores into one
-        safe_instance_name = re.sub(r'_+', '_', safe_instance_name)
-        # Remove leading and trailing underscores
-        safe_instance_name = safe_instance_name.strip('_')
-
-        filename = f"{class_name}-{safe_instance_name or '_'}.json"
-        return filename
-
-
+ 
     @object_info.getter
     def _get_object_info(self):
         if not hasattr(self, '_object_info'):
