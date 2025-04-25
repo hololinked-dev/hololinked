@@ -1,4 +1,5 @@
 import logging, unittest, time, os
+import tempfile
 import pydantic_core
 from pydantic import BaseModel
 from hololinked.client import ObjectProxy
@@ -274,6 +275,50 @@ class TestProperty(TestCase):
         with self.assertRaises(Exception) as ex:
             self.thing_client.pydantic_simple_prop = '5str'
         self.assertTrue("validation error for 'int'" in str(ex.exception))
+
+
+    def test_7_json_db_operations(self):
+        with tempfile.NamedTemporaryFile(delete=False) as tf:
+            filename = tf.name
+
+        # test db commit property
+        thing = TestThing(instance_name="test-db-operations", use_json_file=True,
+                          json_filename=filename, log_level=logging.WARN)
+        self.assertEqual(thing.db_commit_number_prop, 0)
+        thing.db_commit_number_prop = 100
+        self.assertEqual(thing.db_commit_number_prop, 100)
+        self.assertEqual(thing.db_engine.get_property('db_commit_number_prop'), 100)
+
+        # test db persist property
+        self.assertEqual(thing.db_persist_selector_prop, 'a')
+        thing.db_persist_selector_prop = 'c'
+        self.assertEqual(thing.db_persist_selector_prop, 'c')
+        self.assertEqual(thing.db_engine.get_property('db_persist_selector_prop'), 'c')
+
+        # test db init property
+        self.assertEqual(thing.db_init_int_prop, 1)
+        thing.db_init_int_prop = 50
+        self.assertEqual(thing.db_init_int_prop, 50)
+        self.assertNotEqual(thing.db_engine.get_property('db_init_int_prop'), 50)
+        self.assertEqual(thing.db_engine.get_property('db_init_int_prop'), TestThing.db_init_int_prop.default)
+        del thing
+
+        # delete thing and reload from database
+        thing = TestThing(instance_name="test-db-operations", use_json_file=True,
+                          json_filename=filename, log_level=logging.WARN)
+        self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
+        self.assertEqual(thing.db_persist_selector_prop, 'c')
+        self.assertNotEqual(thing.db_commit_number_prop, 100)
+        self.assertEqual(thing.db_commit_number_prop, TestThing.db_commit_number_prop.default)
+
+        # check db init prop with a different value in database apart from default
+        thing.db_engine.set_property('db_init_int_prop', 101)
+        del thing
+        thing = TestThing(instance_name="test-db-operations", use_json_file=True,
+                          json_filename=filename, log_level=logging.WARN)
+        self.assertEqual(thing.db_init_int_prop, 101)
+
+        os.remove(filename)
 
 
 
