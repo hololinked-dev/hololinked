@@ -658,7 +658,7 @@ def load_tests(loader, tests, pattern):
 
 if __name__ == '__main__':
     runner = TestRunner()
-    runner.run(load_tests())
+    runner.run(load_tests(unittest.TestLoader(), None, None))
 
    
 """
