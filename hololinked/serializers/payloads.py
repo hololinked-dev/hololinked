@@ -46,4 +46,4 @@ class PreserializedData:
     The content type may indicate the serializer used.
     """
     value: bytes
-    content_type: str
+    content_type: str = 'unknown'

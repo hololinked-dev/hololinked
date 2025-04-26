@@ -8,8 +8,7 @@ from hololinked.core.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR,
                                             ResponseMessage, ResponseHeader) # server to client
 from hololinked.core.zmq.brokers import AsyncZMQServer, MessageMappedZMQClientPool, SyncZMQClient, AsyncZMQClient
 from hololinked.utils import get_current_async_loop, get_default_logger
-from hololinked.td import ActionAffordance
-# from hololinked.server.constants import ZMQ_PROTOCOLS, ResourceTypes, ServerTypes
+from hololinked.td import ActionAffordance, PropertyAffordance
 from hololinked.core.zmq.client import ZMQAction, ZMQProperty
 
 
@@ -44,23 +43,16 @@ class TestBrokerMixin(MessageValidatorMixin):
 
     @classmethod
     def setUpClient(self):
-        self.client = SyncZMQClient(
-                                id=self.client_id,
-                                server_id=self.server_id, 
-                                logger=self.logger,
-                                handshake=False
-                            )
-        
-    
+        self.sync_client = None 
+        self.async_client = None
+
     @classmethod
     def setUpThing(self):
         self.thing = TestThing(
                             id=self.thing_id,
                             logger=self.logger
                         )
-
-        
-
+       
     @classmethod
     def startServer(self):
         self._server_thread = threading.Thread(
@@ -70,7 +62,6 @@ class TestBrokerMixin(MessageValidatorMixin):
                                         )
         self._server_thread.start()
 
-   
     @classmethod
     def setUpClass(self):
         super().setUpClass()
@@ -89,50 +80,76 @@ class ActionMixin(TestBrokerMixin):
 
     @classmethod
     def setUpActions(self):
-        self.echo_action = ZMQAction(
-                                sync_client=None,
-                                resource=ActionAffordance.from_TD('echo_action', test_thing_TD),
+        self.test_echo = ZMQAction(
+                                resource=ActionAffordance.from_TD('test_echo', test_thing_TD),
+                                sync_client=self.sync_client,
+                                async_client=self.async_client, 
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
-                                async_client=self.client, 
                                 schema_validator=None
                             )
     
         self.get_serialized_data_action = ZMQAction(
-                                sync_client=None,
                                 resource=ActionAffordance.from_TD('get_serialized_data', test_thing_TD),
+                                sync_client=self.sync_client,
+                                async_client=self.async_client, 
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
-                                async_client=self.client, 
                                 schema_validator=None
                             )
         
         self.sleep_action = ZMQAction(
-                                sync_client=None,
                                 resource=ActionAffordance.from_TD('sleep', test_thing_TD),
+                                sync_client=self.sync_client,
+                                async_client=self.async_client, 
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
-                                async_client=self.client, 
                                 schema_validator=None
                             )
 
         self.get_mixed_content_data_action = ZMQAction(
-                        sync_client=None,
                         resource= ActionAffordance.from_TD('get_mixed_content_data', test_thing_TD),
+                        sync_client=self.sync_client,
+                        async_client=self.async_client, 
                         invokation_timeout=5, 
                         execution_timeout=5, 
-                        async_client=self.client, 
                         schema_validator=None
                     )
-   
+    
+    @classmethod
+    def setUpProperties(self):
+        self.test_prop = ZMQProperty(
+                                resource=PropertyAffordance.from_TD('test_property', test_thing_TD),
+                                sync_client=self.sync_client,
+                                async_client=self.async_client, 
+                                invokation_timeout=5, 
+                                execution_timeout=5, 
+                                schema_validator=None
+                            )
+        
+        
+
 
 
 class TestAsyncZMQServer(ActionMixin):
 
     @classmethod
+    def setUpClient(self):
+        super().setUpClient()
+        self.sync_client = SyncZMQClient(
+                                id=self.client_id,
+                                server_id=self.server_id, 
+                                logger=self.logger,
+                                handshake=False
+                            )
+        self.client = self.sync_client
+        
+
+    @classmethod
     def setUpClass(self):
         super().setUpClass()
         self.setUpActions()
+        self.setUpProperties()
         print(f"test ZMQ RPC Server {self.__name__}")
 
     
@@ -253,15 +270,14 @@ class TestAsyncZMQServer(ActionMixin):
         been received by the server.
         """
         self._test_action_call_abstraction()
-        # self._test_property_abstraction()
+        self._test_property_abstraction()
 
 
     def _test_action_call_abstraction(self):
         """
         Higher level action object should be able to send messages to server
         """
-        self.echo_action._zmq_client = self.client
-        self.echo_action.oneway() # because we dont have a thing running
+        self.test_echo.oneway() # because we dont have a thing running
         self.client.handshake() # force a response from server so that last_server_message is set
         # self.check_client_message(self.last_server_message) # last message received by server which is the client message
 
@@ -270,15 +286,16 @@ class TestAsyncZMQServer(ActionMixin):
         """
         Higher level property object should be able to send messages to server
         """
-        resource_info = ZMQResource(what=ResourceTypes.PROPERTY, class_name='TestThing', instance_name='test-thing',
-                    obj_name='test_prop', qualname='TestThing.test_prop', doc="a random property",
-                    request_as_argument=False)
-        property_abstractor = _Property(sync_client=self.client_message_broker, resource_info=resource_info,
-                    invokation_timeout=5, execution_timeout=5, async_client=None)
-        property_abstractor.oneway_set(5) # because we dont have a thing running
-        self.client_message_broker.handshake() # force a response from server so that last_server_message is set
-        self.check_client_message(self.last_server_message) # last message received by server which is the client message
-
+        # resource_info = ZMQResource(what=ResourceTypes.PROPERTY, class_name='TestThing', instance_name='test-thing',
+        #             obj_name='test_prop', qualname='TestThing.test_prop', doc="a random property",
+        #             request_as_argument=False)
+        # property_abstractor = _Property(sync_client=self.client_message_broker, resource_info=resource_info,
+        #             invokation_timeout=5, execution_timeout=5, async_client=None)
+        self.test_prop.oneway_set(5) # because we dont have a thing running
+        self.client.handshake() # force a response from server so that last_server_message is set
+        
+        #  property_abstractor.oneway_set(5) # because we dont have a thing running
+        # self.check_client_message(self.last_server_message) # last message received by server which is the client message
 
 
     def test_5_exit(self):
@@ -309,13 +326,21 @@ class TestAsyncZMQClient(TestBrokerMixin):
 
     @classmethod
     def setUpClient(self):
-        self.client = AsyncZMQClient(
-                                    id=self.client_id,
-                                    server_id=self.server_id, 
-                                    logger=self.logger,
-                                    handshake=False
-                                )
-        
+        self.async_client = AsyncZMQClient(
+                                id=self.client_id,
+                                server_id=self.server_id, 
+                                logger=self.logger,
+                                handshake=False
+                            )
+        self.client = self.async_client
+
+    @classmethod
+    def setUpClass(self):
+        super().setUpClass()
+        # self.setUpActions()
+        self.client = self.async_client
+        print(f"test ZMQ Client {self.__name__}")
+   
 
     def test_1_handshake_complete(self):
         """

@@ -13,6 +13,7 @@ from ..core.property import Property
 from ..core.actions import Action, BoundAction
 from ..core.events import Event
 from ..core.thing import Thing, ThingMeta
+from pydantic import BaseModel
 
 
 
@@ -289,6 +290,17 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         affordance.objekt = property
         affordance.build()       
         return affordance
+    
+    @classmethod
+    def from_TD(self, name: str, TD: JSON) -> "PropertyAffordance":
+        prop = TD["properties"][name] # type: typing.Dict[str, JSON]
+        property_affordance = PropertyAffordance()
+        for field in PropertyAffordance.model_fields:
+            if field in prop:
+                setattr(property_affordance, field, prop[field])
+        property_affordance._name = name
+        property_affordance._thing_id = TD["id"]
+        return property_affordance
 
  
 class ActionAffordance(InteractionAffordance):

@@ -45,8 +45,8 @@ test_thing_TD = {
             'title' : 'get_transports',
             'description' : 'returns available transports'
         },
-        'echo_action': {
-            'title' : 'echo_action',
+        'test_echo': {
+            'title' : 'test_echo',
             'description' : 'returns value as it is to the client'
         },
         'get_serialized_data': {
