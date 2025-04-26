@@ -154,6 +154,11 @@ class TestSerializer(TestCase):
         self.assertEqual(Serializers.default, Serializers.json) # because we know its JSON
 
 
+    @classmethod
+    def tearDownClass(self):
+        Serializers.reset()
+        return super().tearDownClass()
+
 
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())

@@ -2,8 +2,9 @@ import threading
 import unittest
 import zmq.asyncio
 
-from hololinked.core.zmq.rpc_server import RPCServer
 from hololinked.core.zmq.brokers import AsyncZMQClient, SyncZMQClient
+from hololinked.core.zmq.rpc_server import RPCServer
+from hololinked.protocols.zmq.server import ZMQServer
 from hololinked.utils import get_current_async_loop
 
 try:
@@ -136,8 +137,6 @@ class TestInprocRPCServer(ActionMixin):
        
         
 
-from hololinked.protocols.zmq.server import ZMQServer
-
 class TestRPCServer(TestInprocRPCServer):
 
     @classmethod
@@ -232,6 +231,5 @@ class TestRPCServer(TestInprocRPCServer):
 
 
 
-    
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())
