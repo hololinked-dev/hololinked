@@ -281,7 +281,7 @@ class TestProperty(TestCase):
             filename = tf.name
 
         # test db commit property
-        thing = TestThing(instance_name="test-db-operations", use_json_file=True,
+        thing = TestThing(id="test-db-operations", use_json_file=True,
                           json_filename=filename, log_level=logging.WARN)
         self.assertEqual(thing.db_commit_number_prop, 0)
         thing.db_commit_number_prop = 100
@@ -303,7 +303,7 @@ class TestProperty(TestCase):
         del thing
 
         # delete thing and reload from database
-        thing = TestThing(instance_name="test-db-operations", use_json_file=True,
+        thing = TestThing(id="test-db-operations", use_json_file=True,
                           json_filename=filename, log_level=logging.WARN)
         self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
         self.assertEqual(thing.db_persist_selector_prop, 'c')
@@ -313,7 +313,7 @@ class TestProperty(TestCase):
         # check db init prop with a different value in database apart from default
         thing.db_engine.set_property('db_init_int_prop', 101)
         del thing
-        thing = TestThing(instance_name="test-db-operations", use_json_file=True,
+        thing = TestThing(id="test-db-operations", use_json_file=True,
                           json_filename=filename, log_level=logging.WARN)
         self.assertEqual(thing.db_init_int_prop, 101)
 
@@ -387,8 +387,8 @@ class TestClassProperty(TestCase):
         self.assertEqual(TestClassPropertyThing.simple_class_prop, 100)
         
         # Test that instance-level access reflects class value
-        instance1 = TestClassPropertyThing(instance_name='test1', log_level=logging.WARN)
-        instance2 = TestClassPropertyThing(instance_name='test2', log_level=logging.WARN)
+        instance1 = TestClassPropertyThing(id='test1', log_level=logging.WARN)
+        instance2 = TestClassPropertyThing(id='test2', log_level=logging.WARN)
         self.assertEqual(instance1.simple_class_prop, 100)
         self.assertEqual(instance2.simple_class_prop, 100)
         
@@ -414,7 +414,7 @@ class TestClassProperty(TestCase):
         self.assertEqual(TestClassPropertyThing.managed_class_prop, 50)
         
         # Test instance-level validation
-        instance = TestClassPropertyThing(instance_name='test3', log_level=logging.WARN)
+        instance = TestClassPropertyThing(id='test3', log_level=logging.WARN)
         with self.assertRaises(ValueError):
             instance.managed_class_prop = -20
         
@@ -436,7 +436,7 @@ class TestClassProperty(TestCase):
             TestClassPropertyThing.readonly_class_prop = "new-value"
             
         # Test that setting raises an error at instance level
-        instance = TestClassPropertyThing(instance_name='test4', log_level=logging.WARN)
+        instance = TestClassPropertyThing(id='test4', log_level=logging.WARN)
         with self.assertRaises(ValueError):
             instance.readonly_class_prop = "new-value"
             
@@ -454,7 +454,7 @@ class TestClassProperty(TestCase):
         self.assertEqual(TestClassPropertyThing.deletable_class_prop, 150)
         
         # Test deletion
-        instance = TestClassPropertyThing(instance_name='test5', log_level=logging.WARN)
+        instance = TestClassPropertyThing(id='test5', log_level=logging.WARN)
         del TestClassPropertyThing.deletable_class_prop
         self.assertEqual(TestClassPropertyThing.deletable_class_prop, 100)  # Should return to default
         self.assertEqual(instance.deletable_class_prop, 100)
@@ -468,7 +468,7 @@ class TestClassProperty(TestCase):
     def test_5_descriptor_access(self):
         """Test descriptor access for class properties"""
         # Test direct access through descriptor
-        instance = TestClassPropertyThing(instance_name='test6', log_level=logging.WARN)
+        instance = TestClassPropertyThing(id='test6', log_level=logging.WARN)
         self.assertIsInstance(TestClassPropertyThing.not_a_class_prop, Number)
         self.assertEqual(instance.not_a_class_prop, 43)
         instance.not_a_class_prop = 50
