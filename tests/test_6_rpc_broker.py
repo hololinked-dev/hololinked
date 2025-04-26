@@ -7,10 +7,10 @@ from hololinked.core.zmq.brokers import AsyncZMQClient, SyncZMQClient
 from hololinked.utils import get_current_async_loop
 
 try:
-    from .test_8_brokers import ActionMixin
+    from .test_5_brokers import ActionMixin
     from .utils import TestRunner
 except ImportError:
-    from tests.test_8_brokers import ActionMixin
+    from test_5_brokers import ActionMixin
     from utils import TestRunner
 
 
@@ -38,6 +38,8 @@ class TestInprocRPCServer(ActionMixin):
                                 handshake=False,
                                 transport='INPROC'
                             )
+        self.sync_client = None 
+        self.async_client = self.client
         
 
     @classmethod
@@ -68,8 +70,8 @@ class TestInprocRPCServer(ActionMixin):
 
     def test_3_invoke_action(self):
         async def async_call():
-            await self.echo_action.async_call('value')
-            return self.echo_action.last_return_value
+            await self.test_echo.async_call('value')
+            return self.test_echo.last_return_value
         result = get_current_async_loop().run_until_complete(async_call())
         self.assertEqual(result, 'value')
         self.client.handshake() 
@@ -92,15 +94,15 @@ class TestInprocRPCServer(ActionMixin):
 
     def test_5_thing_execution_context(self):
         
-        old_thing_execution_context = self.echo_action._thing_execution_context
-        self.echo_action._thing_execution_context = dict(fetch_execution_logs=True)
-        get_current_async_loop().run_until_complete(self.echo_action.async_call('value'))
-        self.assertIsInstance(self.echo_action.last_return_value, dict)
-        self.assertFalse(self.echo_action.last_return_value == 'value')
-        self.assertTrue('execution_logs' in self.echo_action.last_return_value.keys() and 
-                    'return_value' in self.echo_action.last_return_value.keys())
-        self.assertTrue(len(self.echo_action.last_return_value) == 2)
-        self.echo_action._thing_execution_context = old_thing_execution_context
+        old_thing_execution_context = self.test_echo._thing_execution_context
+        self.test_echo._thing_execution_context = dict(fetch_execution_logs=True)
+        get_current_async_loop().run_until_complete(self.test_echo.async_call('value'))
+        self.assertIsInstance(self.test_echo.last_return_value, dict)
+        self.assertFalse(self.test_echo.last_return_value == 'value')
+        self.assertTrue('execution_logs' in self.test_echo.last_return_value.keys() and 
+                    'return_value' in self.test_echo.last_return_value.keys())
+        self.assertTrue(len(self.test_echo.last_return_value) == 2)
+        self.test_echo._thing_execution_context = old_thing_execution_context
 
 
     def test_6_server_execution_context(self):
@@ -174,7 +176,7 @@ class TestRPCServer(TestInprocRPCServer):
     @classmethod
     def setUpActions(self):
         super().setUpActions()
-        self.echo_action._zmq_client = self.ipc_client
+        self.test_echo._zmq_client = self.ipc_client
         self.get_serialized_data_action._zmq_client = self.ipc_client
         self.get_mixed_content_data_action._zmq_client = self.ipc_client
         self.sleep_action._zmq_client = self.ipc_client
@@ -195,12 +197,12 @@ class TestRPCServer(TestInprocRPCServer):
 
     def test_3_invoke_action(self):
         super().test_3_invoke_action()
-        old_client = self.echo_action._zmq_client
+        old_client = self.test_echo._zmq_client
         for client in [self.tcp_client, self.ipc_client]:
-            self.echo_action._zmq_client = client
-            return_value = self.echo_action('ipc_value')
+            self.test_echo._zmq_client = client
+            return_value = self.test_echo('ipc_value')
             self.assertEqual(return_value, 'ipc_value')
-        self.echo_action._zmq_client = old_client
+        self.test_echo._zmq_client = old_client
 
     def test_4_return_binary_value(self):
         super().test_4_return_binary_value()
@@ -219,12 +221,12 @@ class TestRPCServer(TestInprocRPCServer):
         # test oneway action
         old_client = self.sleep_action._zmq_client
         for client in [self.tcp_client, self.ipc_client]:
-            self.echo_action._zmq_client = client
-            self.echo_action('ipc_value_2')
-            self.assertEqual(self.echo_action.last_return_value, 'ipc_value_2')
-            self.echo_action.oneway('ipc_value_3')
-            self.assertEqual(self.echo_action.last_return_value, 'ipc_value_2')
-            return_value = self.echo_action('ipc_value_4')
+            self.test_echo._zmq_client = client
+            self.test_echo('ipc_value_2')
+            self.assertEqual(self.test_echo.last_return_value, 'ipc_value_2')
+            self.test_echo.oneway('ipc_value_3')
+            self.assertEqual(self.test_echo.last_return_value, 'ipc_value_2')
+            return_value = self.test_echo('ipc_value_4')
             self.assertEqual(return_value, 'ipc_value_4')        
         self.sleep_action._zmq_client = old_client
 
