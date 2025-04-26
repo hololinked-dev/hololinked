@@ -217,7 +217,11 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                                 thing_id=self._resource.thing_id, 
                                                 objekt=self._resource.name,
                                                 operation=Operations.writeProperty,
-                                                payload=SerializableData(value, content_type=self.write_property_form['contentType']),
+                                                payload=SerializableData(
+                                                    value=value, 
+                                                    content_type=self._resource.retrieve_form('writeProperty', {}).get(
+                                                                                    'contentType', 'application/json')
+                                                ),
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout,
                                                     execution_timeout=self._execution_timeout
@@ -246,7 +250,11 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                                         thing_id=self._resource.thing_id,
                                                         objekt=self._resource.name,
                                                         operation=Operations.writeProperty,
-                                                        payload=SerializableData(value, content_type=self.write_property_form['contentType']),
+                                                        payload=SerializableData(
+                                                            value=value, 
+                                                            content_type=self._resource.retrieve_form('writeProperty', {}).get(
+                                                                                            'contentType', 'application/json')
+                                                        ),
                                                         server_execution_context=dict(
                                                             invokation_timeout=self._invokation_timeout, 
                                                             execution_timeout=self._execution_timeout
@@ -274,7 +282,11 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                         thing_id=self._resource.thing_id,
                                         objekt=self._resource.name,
                                         operation=Operations.writeProperty,
-                                        payload=SerializableData(value, content_type=self.write_property_form['contentType']),
+                                        payload=SerializableData(
+                                            value=value, 
+                                            content_type=self._resource.retrieve_form('writeProperty', {}).get(
+                                                                            'contentType', 'application/json')
+                                        ),
                                         server_execution_context=dict(
                                             invokation_timeout=self._invokation_timeout, 
                                             execution_timeout=self._execution_timeout
@@ -300,7 +312,11 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                     thing_id=self._resource.thing_id,
                                     objekt=self._resource.name,
                                     operation=Operations.writeProperty,
-                                    payload=SerializableData(value, content_type=self.write_property_form['contentType']),
+                                    payload=SerializableData(
+                                        value=value, 
+                                        content_type=self._resource.retrieve_form('writeProperty', {}).get(
+                                                                        'contentType', 'application/json')
+                                    ),
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
                                         execution_timeout=self._execution_timeout,
