@@ -508,8 +508,73 @@ class TestAction(TestCase):
         self.assertIsInstance(affordance.output, dict)
         self.assertIsNone(affordance.description) # no doc
 
+
+    def test_7_exposed_actions(self):
+        """Test if actions can be invoked by a client"""
+        start_thing_forked(
+            thing_cls=self.thing_cls, 
+            id='test-action', 
+            done_queue=self.done_queue,
+            log_level=logging.ERROR+10, 
+            prerun_callback=replace_methods_with_actions,
+        )
+        thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
+        self.client.handshake()
+
+        # thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
+        assert isinstance(thing.action_echo, BoundAction) # type definition
+        action_echo = ZMQAction(
+            resource=thing.action_echo.to_affordance(),
+            sync_client=self.client
+        )
+        self.assertEqual(action_echo(1), 1)
         
-    def test_7_schema_validation(self):
+        assert isinstance(thing.action_echo_with_classmethod, BoundAction) # type definition
+        action_echo_with_classmethod = ZMQAction(
+            resource=thing.action_echo_with_classmethod.to_affordance(),
+            sync_client=self.client
+        )
+        self.assertEqual(action_echo_with_classmethod(2), 2)
+
+        assert isinstance(thing.action_echo_async, BoundAction) # type definition
+        action_echo_async = ZMQAction(
+            resource=thing.action_echo_async.to_affordance(),
+            sync_client=self.client
+        )
+        self.assertEqual(action_echo_async("string"), "string")
+
+        assert isinstance(thing.action_echo_async_with_classmethod, BoundAction) # type definition
+        action_echo_async_with_classmethod = ZMQAction(
+            resource=thing.action_echo_async_with_classmethod.to_affordance(),
+            sync_client=self.client
+        )
+        self.assertEqual(action_echo_async_with_classmethod([1, 2]), [1, 2])
+
+        assert isinstance(thing.parameterized_action, BoundAction) # type definition
+        parameterized_action = ZMQAction(
+            resource=thing.parameterized_action.to_affordance(),
+            sync_client=self.client
+        )
+        self.assertEqual(parameterized_action(arg1=1, arg2='hello', arg3=5), ['test-action', 1, 'hello', 5])
+
+        assert isinstance(thing.parameterized_action_async, BoundAction) # type definition
+        parameterized_action_async = ZMQAction(
+            resource=thing.parameterized_action_async.to_affordance(),
+            sync_client=self.client
+        )
+        self.assertEqual(parameterized_action_async(arg1=2.5, arg2='hello', arg3='foo'), ['test-action', 2.5, 'hello', 'foo'])
+
+        assert isinstance(thing.parameterized_action_without_call, BoundAction) # type definition
+        parameterized_action_without_call = ZMQAction(
+            resource=thing.parameterized_action_without_call.to_affordance(),
+            sync_client=self.client
+        )
+        with self.assertRaises(NotImplementedError) as ex:
+            parameterized_action_without_call(arg1=2, arg2='hello', arg3=5)
+        self.assertTrue(str(ex.exception).startswith("Subclasses must implement __call__"))
+
+        
+    def test_8_schema_validation(self):
         """Test if schema validation is working correctly"""
         self._test_8_json_schema_validation()
         self._test_8_pydantic_validation()
@@ -548,7 +613,7 @@ class TestAction(TestCase):
         self.assertEqual(return_value, {'val1': 1, 'val3': {'field': 'value'}})
         jsonschema.Draft7Validator(action_affordance.output).validate(return_value)
 
-    
+
     def _test_8_pydantic_validation(self):
 
         thing = self.thing_cls(id='test-action', log_level=logging.ERROR)
@@ -614,61 +679,77 @@ class TestAction(TestCase):
 
 
 
-def replace_methods_with_actions(thing_cls):
-    thing_cls.action_echo = action()(thing_cls.action_echo)
-    thing_cls.action_echo.__set_name__(thing_cls, 'action_echo')
-    # classmethod can be decorated with action   
-    thing_cls.action_echo_with_classmethod = action()(thing_cls.action_echo_with_classmethod)   
-    # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+def replace_methods_with_actions(thing_cls: TestThing):
+    exposed_actions = []
+    if not isinstance(thing_cls.action_echo, (Action, BoundAction)):
+        thing_cls.action_echo = action()(thing_cls.action_echo)
+        thing_cls.action_echo.__set_name__(thing_cls, 'action_echo')
+    exposed_actions.append('action_echo')
 
-    # async methods can be decorated with action       
-    thing_cls.action_echo_async = action()(thing_cls.action_echo_async)
-    thing_cls.action_echo_async.__set_name__(thing_cls, 'action_echo_async')
-    # async classmethods can be decorated with action    
-    thing_cls.action_echo_async_with_classmethod = action()(thing_cls.action_echo_async_with_classmethod)
-    # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+    if not isinstance(thing_cls.action_echo_with_classmethod, (Action, BoundAction)):
+        # classmethod can be decorated with action   
+        thing_cls.action_echo_with_classmethod = action()(thing_cls.action_echo_with_classmethod)   
+        # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+    exposed_actions.append('action_echo_with_classmethod')
 
-    # parameterized function can be decorated with action
-    thing_cls.parameterized_action = action(safe=True)(thing_cls.parameterized_action)
-    thing_cls.parameterized_action.__set_name__(thing_cls, 'parameterized_action')  
+    if not isinstance(thing_cls.action_echo_async, (Action, BoundAction)):
+        # async methods can be decorated with action       
+        thing_cls.action_echo_async = action()(thing_cls.action_echo_async)
+        thing_cls.action_echo_async.__set_name__(thing_cls, 'action_echo_async')
+    exposed_actions.append('action_echo_async')
+    
+    if not isinstance(thing_cls.action_echo_async_with_classmethod, (Action, BoundAction)):
+        # async classmethods can be decorated with action    
+        thing_cls.action_echo_async_with_classmethod = action()(thing_cls.action_echo_async_with_classmethod)
+        # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+    exposed_actions.append('action_echo_async_with_classmethod')
 
-    thing_cls.parameterized_action_without_call = action(idempotent=True)(thing_cls.parameterized_action_without_call)
-    thing_cls.parameterized_action_without_call.__set_name__(thing_cls, 'parameterized_action_without_call')
+    if not isinstance(thing_cls.parameterized_action, (Action, BoundAction)):
+        # parameterized function can be decorated with action
+        thing_cls.parameterized_action = action(safe=True)(thing_cls.parameterized_action)
+        thing_cls.parameterized_action.__set_name__(thing_cls, 'parameterized_action')  
+    exposed_actions.append('parameterized_action')
 
-    thing_cls.parameterized_action_async = action(synchronous=True)(thing_cls.parameterized_action_async)
-    thing_cls.parameterized_action_async.__set_name__(thing_cls, 'parameterized_action_async')
+    if not isinstance(thing_cls.parameterized_action_without_call, (Action, BoundAction)):
+        thing_cls.parameterized_action_without_call = action(idempotent=True)(thing_cls.parameterized_action_without_call)
+        thing_cls.parameterized_action_without_call.__set_name__(thing_cls, 'parameterized_action_without_call')
+    exposed_actions.append('parameterized_action_without_call')
 
-    # schema validated actions
-    thing_cls.json_schema_validated_action = action(
-        input_schema={
-            'type': 'object',
-            'properties': {
-                'val1': {'type': 'integer'},
-                'val2': {'type': 'string'},
-                'val3': {'type': 'object'},
-                'val4': {'type': 'array'}
+    if not isinstance(thing_cls.parameterized_action_async, (Action, BoundAction)):
+        thing_cls.parameterized_action_async = action(synchronous=True)(thing_cls.parameterized_action_async)
+        thing_cls.parameterized_action_async.__set_name__(thing_cls, 'parameterized_action_async')
+    exposed_actions.append('parameterized_action_async')
+
+    if not isinstance(thing_cls.json_schema_validated_action, (Action, BoundAction)):
+        # schema validated actions
+        thing_cls.json_schema_validated_action = action(
+            input_schema={
+                'type': 'object',
+                'properties': {
+                    'val1': {'type': 'integer'},
+                    'val2': {'type': 'string'},
+                    'val3': {'type': 'object'},
+                    'val4': {'type': 'array'}
+                }
+            },
+            output_schema={
+                'type': 'object',
+                'properties': {
+                    'val1': {'type': 'integer'},
+                    'val3': {'type': 'object'}
+                }
             }
-        },
-        output_schema={
-            'type': 'object',
-            'properties': {
-                'val1': {'type': 'integer'},
-                'val3': {'type': 'object'}
-            }
-        }
-    )(thing_cls.json_schema_validated_action)
-    thing_cls.json_schema_validated_action.__set_name__(thing_cls, 'json_schema_validated_action')
+        )(thing_cls.json_schema_validated_action)
+        thing_cls.json_schema_validated_action.__set_name__(thing_cls, 'json_schema_validated_action')
+    exposed_actions.append('json_schema_validated_action')
 
-    thing_cls.pydantic_validated_action = action()(thing_cls.pydantic_validated_action)
-    thing_cls.pydantic_validated_action.__set_name__(thing_cls, 'pydantic_validated_action')
+    if not isinstance(thing_cls.pydantic_validated_action, (Action, BoundAction)):
+        thing_cls.pydantic_validated_action = action()(thing_cls.pydantic_validated_action)
+        thing_cls.pydantic_validated_action.__set_name__(thing_cls, 'pydantic_validated_action')
+    exposed_actions.append('pydantic_validated_action')
 
-
-    replace_methods_with_actions._exposed_actions = [
-                                    'action_echo', 'action_echo_with_classmethod', 'action_echo_async',
-                                    'action_echo_async_with_classmethod', 'parameterized_action', 'parameterized_action_without_call',
-                                    'parameterized_action_async', 'json_schema_validated_action'
-                                ]
-
+    replace_methods_with_actions._exposed_actions = exposed_actions
+   
 
 
 if __name__ == '__main__':
