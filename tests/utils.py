@@ -42,7 +42,11 @@ class TestCase(unittest.TestCase):
 
 
 
-def print_lingering_threads(exclude_daemon=True):
+def print_lingering_threads(exclude_daemon: bool = True):
+    """
+    debugging helper function that prints the names and IDs of all alive threads, 
+    excluding daemon threads if specified.
+    """
     alive_threads = threading.enumerate()
     if exclude_daemon:
         alive_threads = [t for t in alive_threads if not t.daemon]
