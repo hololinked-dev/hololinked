@@ -532,6 +532,17 @@ class Serializers(metaclass=MappableSingleton):
         """
         cls.object_serializer_map[thing_id] = serializer
 
+    @classmethod
+    def reset(cls) -> None:
+        """
+        Reset the serializer registry. This is useful for testing purposes to clear the registry and start fresh.
+        """
+        cls.object_content_type_map.clear()
+        cls.object_serializer_map.clear()
+        cls.protocol_serializer_map.clear()
+        cls.default = cls.json
+       
+
     
     
 __all__ = [
