@@ -197,6 +197,8 @@ def isclassmethod(method) -> bool:
     https://stackoverflow.com/questions/19227724/check-if-a-function-uses-classmethod
     
     """
+    if isinstance(method, classmethod):
+        return True
     bound_to = getattr(method, '__self__', None)
     if not isinstance(bound_to, type):
         # must be bound to a class
@@ -272,7 +274,6 @@ def get_a_filename_from_instance(thing: type, extension: str = 'json') -> str:
     filename = f"{class_name}-{safe_instance_name or '_'}.{extension}"
     return filename
   
-
 
 def get_current_async_loop():
     """
@@ -391,11 +392,11 @@ def get_input_model_from_signature(
     # If there are no fields, we don't want to return a model
     if len(fields) == 0:
         return None
-    
+     
     model = create_model(  # type: ignore[call-overload]
         f"{func.__name__}_input",
-        model_config=ConfigDict(extra="forbid", strict=True),
         **fields,
+        __config__=ConfigDict(extra="forbid", strict=True)
     )
     return model 
 

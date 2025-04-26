@@ -228,10 +228,11 @@ def action(
         if isclassmethod(obj):
             obj = obj.__func__
         if isinstance(obj, (Action, BoundAction)):
+            if obj.execution_info.isclassmethod:
+                raise RuntimeError(f"cannot wrap a classmethod as action once again, please skip")
             warnings.warn(f"{obj.name} is already wrapped as an action, wrapping it again with newer settings.",
                         category=UserWarning)
             obj = obj.obj
-            original = obj
         if obj.__name__.startswith('__'):
             raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")
         execution_info_validator = ActionInfoValidator() 
