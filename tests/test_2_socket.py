@@ -31,6 +31,7 @@ class TestSocket(TestCase):
         self.assertTrue(socket.socket_type == zmq.ROUTER)
         self.assertTrue(socket_address.startswith('ipc://'))
         self.assertTrue(socket_address.endswith('.ipc'))
+        socket.close()
 
 
     def test_2_context_options(self):
@@ -45,6 +46,7 @@ class TestSocket(TestCase):
                             )
         self.assertTrue(isinstance(socket, zmq.Socket))
         self.assertTrue(not isinstance(socket, zmq.asyncio.Socket))
+        socket.close()
 
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
@@ -53,6 +55,7 @@ class TestSocket(TestCase):
                             )       
         self.assertTrue(isinstance(socket, zmq.Socket))
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
+        socket.close()
 
 
     def test_3_transport_options(self):
@@ -67,6 +70,7 @@ class TestSocket(TestCase):
         for sock_addr in [socket_address, socket.getsockopt_string(zmq.LAST_ENDPOINT)]:
             self.assertTrue(sock_addr.startswith('tcp://'))
             self.assertTrue(sock_addr.endswith(':5555'))
+        socket.close()
 
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
@@ -78,6 +82,7 @@ class TestSocket(TestCase):
         self.assertEqual(socket_address, socket.getsockopt_string(zmq.LAST_ENDPOINT))
         self.assertTrue(socket_address.startswith('ipc://'))
         self.assertTrue(socket_address.endswith('.ipc'))
+        socket.close()
 
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
@@ -88,6 +93,7 @@ class TestSocket(TestCase):
         self.assertEqual(socket_address, socket.getsockopt_string(zmq.LAST_ENDPOINT))
         self.assertTrue(socket_address.startswith('inproc://'))
         self.assertTrue(socket_address.endswith('test-server'))
+        socket.close()
 
         # Specify transport as enum and do the same tests
         socket, socket_address = BaseZMQ.get_socket(
@@ -98,7 +104,8 @@ class TestSocket(TestCase):
                                     )
         self.assertTrue(socket_address.startswith('inproc://'))
         self.assertTrue(socket_address.endswith('test-server'))
-        
+        socket.close()
+
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
                                         node_type='server',
@@ -107,6 +114,7 @@ class TestSocket(TestCase):
                                     )
         self.assertTrue(socket_address.startswith('ipc://'))
         self.assertTrue(socket_address.endswith('.ipc'))
+        socket.close()
 
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
@@ -117,6 +125,7 @@ class TestSocket(TestCase):
                                     )
         self.assertTrue(socket_address.startswith('tcp://'))
         self.assertTrue(socket_address.endswith(':5556'))
+        socket.close()
 
         # check that other transport options raise error
         self.assertRaises(NotImplementedError, lambda: BaseZMQ.get_socket(
@@ -129,76 +138,86 @@ class TestSocket(TestCase):
         
     def test_4_socket_options(self):
         """check that socket options are as expected"""
+        context = zmq.asyncio.Context()
+
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
-                                context=zmq.asyncio.Context(),
+                                context=context,
                                 socket_type=zmq.ROUTER
                             )
         self.assertTrue(socket.socket_type == zmq.ROUTER)
         self.assertTrue(socket.getsockopt_string(zmq.IDENTITY) == 'test-server')
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
+        socket.close()
 
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
-                                context=zmq.asyncio.Context(),
+                                context=context,
                                 socket_type=zmq.DEALER
                             )
         self.assertTrue(socket.socket_type == zmq.DEALER)
         self.assertTrue(socket.getsockopt_string(zmq.IDENTITY) == 'test-server')
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
+        socket.close()
 
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
-                                context=zmq.asyncio.Context(),
+                                context=context,
                                 socket_type=zmq.PUB
                             )
         self.assertTrue(socket.socket_type == zmq.PUB)
         self.assertTrue(socket.getsockopt_string(zmq.IDENTITY) == 'test-server')
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
+        socket.close()
 
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
-                                context=zmq.asyncio.Context(),
+                                context=context,
                                 socket_type=zmq.SUB
                             )
         self.assertTrue(socket.socket_type == zmq.SUB)
         self.assertTrue(socket.getsockopt_string(zmq.IDENTITY) == 'test-server')
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
+        socket.close()
 
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
-                                context=zmq.asyncio.Context(),
+                                context=context,
                                 socket_type=zmq.PAIR
                             )
         self.assertTrue(socket.socket_type == zmq.PAIR)
         self.assertTrue(socket.getsockopt_string(zmq.IDENTITY) == 'test-server')
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
-        
+        socket.close()
+
+        zmq.asyncio.Context()
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
-                                context=zmq.asyncio.Context(),
+                                context=context,
                                 socket_type=zmq.PUSH
                             )
         self.assertTrue(socket.socket_type == zmq.PUSH)
         self.assertTrue(socket.getsockopt_string(zmq.IDENTITY) == 'test-server')
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
-
+        socket.close()
+        
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
-                                context=zmq.asyncio.Context(),
+                                context=context,
                                 socket_type=zmq.PULL
                             )
         self.assertTrue(socket.socket_type == zmq.PULL)
         self.assertTrue(socket.getsockopt_string(zmq.IDENTITY) == 'test-server')
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
-
+        socket.close()
+        context.term()
 
 
 if __name__ == '__main__':

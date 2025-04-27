@@ -7,13 +7,14 @@ import asyncio
 import logging
 import typing
 from uuid import uuid4
+from zmq.utils.monitor import parse_monitor_message
 
 from ...utils import *
 from ...config import global_config
-from ...constants import ZMQ_TRANSPORTS, get_socket_type_name
+from ...constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS, get_socket_type_name
 from ...serializers.serializers import JSONSerializer
 from ...exceptions import BreakLoop
-from .message import (EMPTY_BYTE, EXIT, HANDSHAKE, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
+from .message import (EMPTY_BYTE, ERROR, EXIT, HANDSHAKE, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
         RequestMessage, ResponseMessage, SerializableData, PreserializedData, SerializableNone, PreserializedEmptyByte,
         ServerExecutionContext, ThingExecutionContext, default_server_execution_context, default_thing_execution_context)
 
@@ -33,6 +34,9 @@ class BaseZMQ:
             logger = get_default_logger('{}|{}'.format(self.__class__.__name__, self.id), 
                                                 kwargs.get('log_level', logging.INFO))
         self.logger = logger
+        self.context = None # type: zmq.Context | zmq.asyncio.Context
+        self.socket = None # type: zmq.Socket | None
+        self.socket_address = None # type: str | None
 
 
     def exit(self) -> None:
@@ -234,7 +238,7 @@ class BaseZMQServer(BaseZMQ):
                 f" - implement _handle_invalid_message in {self.__class__} to handle invalid messages.")
             
 
-    def handle_timeout(self, request_message: RequestMessage) -> None:
+    def handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> None:
         """
         Pass timeout message to the client when the operation could not be executed within specified timeouts
 
@@ -248,9 +252,9 @@ class BaseZMQServer(BaseZMQ):
         -------
         None
         """
-        run_callable_somehow(self._handle_timeout(request_message))
+        run_callable_somehow(self._handle_timeout(request_message, timeout_type=timeout_type))
 
-    def _handle_timeout(self, request_message: RequestMessage) -> None:
+    def _handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> None:
         raise NotImplementedError("timeouts cannot be handled ",
                 f"- implement _handle_timeout in {self.__class__} to handle timeout.")
     
@@ -551,7 +555,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                             ) -> None:
         response_message = ResponseMessage.craft_with_message_type(
                                                             request_message=request_message,
-                                                            message_type=logging.ERROR,
+                                                            message_type=ERROR,
                                                             payload=SerializableData(exception, content_type='application/json')
                                                         )
         await self.socket.send_multipart(response_message.byte_array)    
@@ -809,6 +813,33 @@ class BaseZMQClient(BaseZMQ):
         except Exception as ex:
             self.logger.warning("could not properly terminate context or attempted to terminate an already terminated context" +
                             "'{}'. Exception message: {}".format(self.id, str(ex)))
+            
+    
+    def handled_default_message_types(self, response_message: RequestMessage) -> bool:
+        """
+        Handle default cases for the client. This method is called when the message type is not recognized 
+        or the message is not a valid message. 
+
+        Parameters
+        ----------
+        response_message: List[bytes]
+            the client message which could not executed within the specified timeout. timeout value is 
+            generally specified within the execution context values.
+        
+        Returns
+        -------
+        None
+        """
+        if len(response_message.byte_array) == 2: # socket monitor message, not our message
+            try: 
+                if ZMQ_EVENT_MAP[parse_monitor_message(response_message.byte_array)['event']] == SERVER_DISCONNECTED:
+                    raise ConnectionAbortedError(f"server disconnected for {self.id}")
+                return True # True should simply continue polling
+            except RuntimeError as ex:
+                raise RuntimeError(f'message received from monitor socket cannot be deserialized for {self.id}') from None
+        if response_message.type == HANDSHAKE:
+            return True
+        return False
 
 
 
@@ -1002,7 +1033,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                         self.logger.info(f"client '{self.id}' handshook with server '{self.server_id}'")
                         break
                     else:
-                        raise ConnectionAbortedError(f"Handshake cannot be done with '{self.server_id}'." + 
+                        raise ConnectionAbortedError(f"Handshake cannot be done with '{self.server_id}'. " + 
                                                     "Another message arrived before handshake complete.")
             else:
                 self.logger.info('got no response for handshake')
@@ -1206,8 +1237,6 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                     self.logger.debug(f"received response with msg-id {response_message.id}")
                     return response_message
             
-            
-
     async def async_execute(self, 
                         thing_id: str, 
                         objekt: str, 
@@ -1418,8 +1447,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             for socket, _ in sockets:
                 while True:
                     try:
-                        raw_response = await socket.recv_multipart(zmq.NOBLOCK)
-                        response_message = ResponseMessage(raw_response)                          
+                        raw_response = await socket.recv_multipart(zmq.NOBLOCK)              
                     except zmq.Again:
                         # errors in handle_message should reach the client. 
                         break
@@ -1432,24 +1460,21 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                                     " Unregistering from poller temporarily until server comes back.")
                                 break
                     else:
+                        response_message = ResponseMessage(raw_response)        
+                        if self.handled_default_message_types(response_message):
+                            continue             
                         message_id = response_message.id
                         self.logger.debug(f"received response from server '{response_message.sender_id}' with msg-ID '{message_id}'")
                         if message_id in self.cancelled_messages:
                             self.cancelled_messages.remove(message_id)
                             self.logger.debug(f"msg-ID '{message_id}' cancelled")
                             continue
+                        self.message_map[message_id] = response_message
                         event = self.events_map.get(message_id, None) 
-                        final_data = response_message.body
-                        # if len(response_message.pre_encoded_payload ) > 0 and response_message.payload:
-                        #     final_data = tuple(response_message.body)
-                        # elif len(response_message.pre_encoded_payload) > 0:
-                        #     final_data = response_message.pre_encoded_payload
-                        # else:
-                        #     final_data = response_message.payload
                         if event:
                             event.set()
                         else:    
-                            invalid_event_task = asyncio.create_task(self._resolve_response(message_id, final_data))
+                            invalid_event_task = asyncio.create_task(self._resolve_response(message_id, response_message.body))
                             event_loop.call_soon(lambda: invalid_event_task)
 
 
