@@ -7,7 +7,7 @@ long_description = (Path(__file__).parent/"README.md").read_text()
 
 setuptools.setup(
     name="hololinked",
-    version="0.2.11",
+    version="0.3.1",
     author="Vignesh Vaidyanathan",
     author_email="vignesh.vaidyanathan@hololinked.dev",
     description="A ZMQ-based Object Oriented RPC tool-kit for instrument control/data acquisition or controlling generic python objects.",
@@ -16,10 +16,13 @@ setuptools.setup(
     url="https://hololinked.readthedocs.io/en/latest/index.html",
     packages=[
         'hololinked',
-        'hololinked.server',
-        'hololinked.rpc',
+        'hololinked.core',
+        'hololinked.param',
         'hololinked.client',
-        'hololinked.param'    
+        'hololinked.protocols',
+        'hololinked.schema_validators',
+        'hololinked.serializers',
+        'hololinked.td',
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

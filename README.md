@@ -24,6 +24,11 @@ From conda -  `conda install -c conda-forge hololinked`
 
 Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env ``hololinked.yml`` can also help to setup all dependencies. 
 
+### Main Next-Release
+
+This branch is the main branch for the next release. The current release is 0.2 and the next release is 0.3.
+Not all features may work, but unit tests need to pass while merging.
+
 ### Usage/Quickstart
 
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. 
@@ -62,7 +67,7 @@ class OceanOpticsSpectrometer(Thing):
 #### Instantiating properties
 
 Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc. 
-or one may define one's own. To create properties:
+or one may define one's own using [pydantic or JSON schema](). To create properties:
 
 ```python
 
