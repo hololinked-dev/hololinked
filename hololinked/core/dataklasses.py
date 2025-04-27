@@ -31,8 +31,6 @@ class RemoteResourceInfoValidator:
         the name of the object which will be supplied to the ``ObjectProxy`` class to populate
         its own namespace. For HTTP clients, HTTP method and URL path is important and for 
         object proxies clients, the obj_name is important. 
-    iscoroutine : bool, default False 
-        whether the callable should be awaited
     isaction : bool, default False 
         True for a method or function or callable
     isproperty : bool, default False
@@ -49,11 +47,9 @@ class RemoteResourceInfoValidator:
     isproperty = Boolean(default=False,
                     doc="True for a property") # type: bool
     
-    def __init__(self, **kwargs) -> None:
-        """   
-        No full-scale checks for unknown keyword arguments as the class 
-        is used by the developer, so please try to be error-proof
-        """
+    def __init__(self, **kwargs) -> None: 
+        # No full-scale checks for unknown keyword arguments as the class 
+        # is used by the developer, so please try to be error-proof
         for key, value in kwargs.items(): 
             setattr(self, key, value)
     

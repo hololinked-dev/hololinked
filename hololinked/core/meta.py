@@ -293,15 +293,9 @@ class PropertiesRegistry(DescriptorRegistry):
     values = property(DescriptorRegistry.get_values,
                 doc=DescriptorRegistry.get_values.__doc__) # type: typing.Dict[str, Parameter | Property | typing.Any]
 
-    @typing.overload
     def __getitem__(self, key: str) -> Property | Parameter:
-        ... 
-
-    def __getitem__(self, key: str) -> typing.Any:
-        if self.owner_inst is not None:
-            return self.descriptors[key].__get__(self.owner_inst, self.owner_cls)
         return self.descriptors[key]
-    
+        
     def __contains__(self, value: str | Property | Parameter) -> bool:
         return value in self.descriptors.values() or value in self.descriptors
     

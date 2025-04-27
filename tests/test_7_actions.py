@@ -14,14 +14,14 @@ from hololinked.core.properties import Number, String, ClassSelector
 from hololinked.td.interaction_affordance import ActionAffordance
 from hololinked.core.zmq import SyncZMQClient
 from hololinked.core.zmq.message import EXIT, RequestMessage
-from hololinked.core.zmq.client import ZMQAction
+from hololinked.client.zmq.consumed_interactions import ZMQAction
 from hololinked.schema_validators import JSONSchemaValidator
 try:
     from .utils import TestCase, TestRunner
-    from .things import start_thing_forked 
+    from .things import run_thing_with_zmq_server_forked 
 except ImportError:
     from utils import TestCase, TestRunner
-    from things import start_thing_forked 
+    from things import run_thing_with_zmq_server_forked 
 
 
 
@@ -511,11 +511,11 @@ class TestAction(TestCase):
 
     def test_7_exposed_actions(self):
         """Test if actions can be invoked by a client"""
-        start_thing_forked(
+        run_thing_with_zmq_server_forked(
             thing_cls=self.thing_cls, 
             id='test-action', 
-            done_queue=self.done_queue,
             log_level=logging.ERROR+10, 
+            done_queue=self.done_queue,
             prerun_callback=replace_methods_with_actions,
         )
         thing = self.thing_cls(id='test-action', log_level=logging.ERROR)

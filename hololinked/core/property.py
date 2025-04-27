@@ -127,14 +127,16 @@ class Property(Parameter):
         self.fcomparator = fcomparator
         self.metadata = metadata
         self._observable = observable
-        self._observable_event_descriptor = None # typing.Optional[Event]
+        self._observable_event_descriptor = None # type: typing.Optional[Event]
         self._execution_info_validator = None
-        self.execution_info = None # type: typing.Optional[RemoteResource]
+        self.execution_info = None  # typing.Optional[RemoteResource]
         if remote:
             self._execution_info_validator = RemoteResourceInfoValidator(
                 state=state,
-                isproperty=True
+                isproperty=True,
+                obj=self
             )
+            self.execution_info = self._execution_info_validator
         self.model = None
         self.validator = None
         if model:
@@ -148,6 +150,8 @@ class Property(Parameter):
 
     def __set_name__(self, owner: typing.Any, attrib_name: str) -> None:
         super().__set_name__(owner, attrib_name)
+        if self._execution_info_validator:
+            self._execution_info_validator.obj_name = attrib_name
         if self._observable:
             self._old_value_internal_name = f'{self._internal_name}_old_value'
             _observable_event_name = f'{self.name}_change_event'  

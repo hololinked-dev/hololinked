@@ -814,7 +814,7 @@ def prepare_rpc_server(
             logger=instance.logger
         )   
     else: 
-        from ...protocols.zmq.server import ZMQServer
+        from ...server.zmq import ZMQServer
         ZMQServer(
             id=instance.id, 
             things=[instance],
