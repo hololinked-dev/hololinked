@@ -9,7 +9,7 @@ from hololinked.core.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR,
 from hololinked.core.zmq.brokers import AsyncZMQServer, MessageMappedZMQClientPool, SyncZMQClient, AsyncZMQClient
 from hololinked.utils import get_current_async_loop, get_default_logger
 from hololinked.td import ActionAffordance, PropertyAffordance
-from hololinked.core.zmq.client import ZMQAction, ZMQProperty
+from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty
 
 
 try:

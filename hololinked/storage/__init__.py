@@ -3,6 +3,8 @@ from .database import prepare_object_database
 from .json_storage import ThingJsonStorage
 from ..utils import get_a_filename_from_instance
 
+
+
 def prepare_object_storage(instance, **kwargs):
     
     if kwargs.get('use_json_file', instance.__class__.use_json_file if hasattr(instance.__class__, 'use_json_file') else False):
