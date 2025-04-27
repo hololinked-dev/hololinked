@@ -14,7 +14,7 @@ from ..constants import JSONSerializable
 from ..config import global_config
 from ..utils import pep8_to_dashed_name
 from ..serializers.serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
-from .property import Property
+from ..core.property import Property
 
 
 
@@ -468,7 +468,7 @@ def prepare_object_database(instance, default_db : bool = False, config_file : s
         return 
     # 1. create engine 
     instance.db_engine = ThingDB(instance=instance, config_file=None if default_db else config_file, 
-                                serializer=instance.zmq_serializer) # type: ThingDB 
+                                serializer=instance.zmq_serializer) 
     # 2. create an object metadata to be used by different types of clients
     object_info = instance.db_engine.fetch_own_info()
     if object_info is not None:
@@ -480,7 +480,12 @@ def prepare_object_database(instance, default_db : bool = False, config_file : s
             "and did not remove the old data from database. Please clean the database using database tools to ", 
             "start fresh.")
     instance.load_properties_from_DB()
-  
+
+
+
+
+
+
 __all__ = [
     BaseAsyncDB.__name__,
     BaseSyncDB.__name__,

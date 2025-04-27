@@ -1,8 +1,8 @@
 import os
 import threading
 from typing import Any, Dict, List, Optional, Union
-from .serializers import JSONSerializer
-from .property import Property
+from ..serializers import JSONSerializer
+from ..core.property import Property
 from ..param import Parameterized
 
 
@@ -21,10 +21,10 @@ class ThingJsonStorage:
     serializer : JSONSerializer, optional
         Serializer used for encoding and decoding JSON data. Defaults to an instance of ``JSONSerializer``.
     """
-    def __init__(self, filename: str, instance: Parameterized, serializer: Optional[Any]=None):
+    def __init__(self, filename: str, instance: Parameterized, serializer: Optional[Any] = None):
         self.filename = filename
         self.thing_instance = instance
-        self.instance_name = instance.instance_name
+        self.id = instance.id
         self._serializer = serializer or JSONSerializer()
         self._lock = threading.RLock()
         self._data = self._load()

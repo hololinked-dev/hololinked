@@ -87,7 +87,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 any database credentials. `use_default_db` value can also be set as a class attribute.
             - db_config_file: `str`, optional.
                 if not using a default database, supply a JSON configuration file to create a database connection. Check documentaion
-                of `hololinked.core.database`.  
+                of `hololinked.core.database`.
+            - use_json_file: bool, Default False
+                if True, a JSON file will be used as the property storage instead of a database. This value can also be
+                set as a class attribute.
+            - json_filename: str, optional
+                If using JSON storage, this filename is used to persist property values. If not provided, a default filename
+                is generated based on the instance name.
         """          
         Propertized.__init__(self, id=id, logger=logger, **kwargs)
         RemoteInvokable.__init__(self)
@@ -100,7 +106,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
        
         from .logger import prepare_object_logger
         from .state_machine import prepare_object_FSM
-        from .database import prepare_object_database
+        from ..storage import prepare_object_storage
+
         prepare_object_logger(
             instance=self,
             log_level=kwargs.get('log_level', None), 
@@ -112,7 +119,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                                 )
         )   
         prepare_object_FSM(self)
-        prepare_object_database(self, kwargs.get('use_default_db', False), kwargs.get('db_config_file', None))   
+        prepare_object_storage(self, **kwargs) # use_default_db, db_config_file, use_json_file, json_filename
+         # choose storage type, if use_json_file is True - use JSON storage, else - use database
+       
        
         # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
 
@@ -121,9 +130,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from .zmq.rpc_server import RPCServer
         from .events import EventPublisher
         from .logger import RemoteAccessHandler
+        from ..storage.database import prepare_object_database, ThingDB
         # Type definitions
         self.rpc_server = None # type: typing.Optional[RPCServer]
         self.event_publisher = None # type: typing.Optional[EventPublisher] 
+        self.db_engine: typing.Optional[ThingDB]
         self._owners = None if not hasattr(self, '_owners') else self._owners # type: typing.Optional[typing.List[Thing]]
         self._remote_access_loghandler: typing.Optional[RemoteAccessHandler] 
         self._internal_fixed_attributes: typing.List[str]

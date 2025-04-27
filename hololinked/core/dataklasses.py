@@ -3,9 +3,7 @@ The following is a list of all dataclasses used to store information on the expo
 resources on the network. These classese are generally not for consumption by the package-end-user. 
 """
 import typing
-import platform
 import warnings
-import inspect
 from enum import Enum
 from dataclasses import dataclass, fields
 from types import FunctionType, MethodType
