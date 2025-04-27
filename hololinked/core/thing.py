@@ -8,7 +8,7 @@ from ..constants import JSON, ZMQ_TRANSPORTS
 from ..utils import *
 from ..exceptions import *
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
-from ..protocols.server import BaseProtocolServer
+from ..server.server import BaseProtocolServer
 from .dataklasses import build_our_temp_TD
 from .properties import String, ClassSelector
 from .property import Property

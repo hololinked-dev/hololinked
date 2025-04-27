@@ -12,7 +12,7 @@ from hololinked.core.properties import (String, Integer, Number, List, Boolean,
 from hololinked.core.state_machine import StateMachine
 from hololinked.serializers import JSONSerializer
 from hololinked.schema_validators import JSONSchema
-from hololinked.protocols.http import HTTPServer
+from hololinked.server.http import HTTPServer
 
 
 @dataclass 

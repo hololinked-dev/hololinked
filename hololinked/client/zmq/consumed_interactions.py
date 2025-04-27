@@ -9,13 +9,13 @@ from ...serializers import BaseSerializer, Serializers
 from ...serializers.payloads import SerializableData, PreserializedData
 from ...td import PropertyAffordance, ActionAffordance, EventAffordance
 from ...client.abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
-from .message import ResponseMessage
-from .message import EMPTY_BYTE, REPLY, TIMEOUT, ERROR, INVALID_MESSAGE
-from .brokers import SyncZMQClient, AsyncZMQClient, EventConsumer
+from ...core.zmq.message import ResponseMessage
+from ...core.zmq.message import EMPTY_BYTE, REPLY, TIMEOUT, ERROR, INVALID_MESSAGE
+from ...core.zmq.brokers import SyncZMQClient, AsyncZMQClient, EventConsumer
+
 
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
-
 
 
 class ZMQConsumedAffordanceMixin:
@@ -45,12 +45,10 @@ class ZMQConsumedAffordanceMixin:
     
 
 
-
 class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
     
     __slots__ = ['_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout',
-                '_schema_validator', '_last_return_value', 
-                '_thing_execution_context' 
+                '_schema_validator', '_last_return_value', '_thing_execution_context' 
                 ]
     # method call abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
@@ -65,6 +63,8 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
         """
         Parameters
         ----------
+        resource: ActionAffordance
+            dataclass object representing the action
         sync_client: SyncZMQClient
             synchronous ZMQ client
         async_zmq_client: AsyncZMQClient
@@ -83,9 +83,6 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                 doc="cached return value of the last call to the method")
     
     def __call__(self, *args, **kwargs) -> typing.Any:
-        """
-        execute method/action on server
-        """
         if len(args) > 0: 
             kwargs["__args__"] = args
         elif self._schema_validator:
@@ -108,10 +105,6 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
     
     def oneway(self, *args, **kwargs) -> None:
-        """
-        only issues the method call to the server and does not wait for reply,
-        neither does the server reply to this call.  
-        """
         if len(args) > 0: 
             kwargs["__args__"] = args
         elif self._schema_validator:
@@ -126,10 +119,10 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                                                         'contentType', 'application/json') 
                                     ), 
                                     server_execution_context=dict(
-                                            invokation_timeout=self._invokation_timeout, 
-                                            execution_timeout=self._execution_timeout,
-                                            oneway=True
-                                        ),
+                                        invokation_timeout=self._invokation_timeout, 
+                                        execution_timeout=self._execution_timeout,
+                                        oneway=True
+                                    ),
                                     thing_execution_context=self._thing_execution_context
                                 )
 
@@ -171,7 +164,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                                 payload=SerializableData(
                                                     value=kwargs, 
                                                     content_type=self._resource.retrieve_form('invokeAction', {}).get(
-                                                                        'contentType', 'application/json')
+                                                                                'contentType', 'application/json')
                                                 ),
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout, 
@@ -183,14 +176,10 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
 
 
     
-    
-
-
 class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
 
     __slots__ = ['_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout', 
-                '_schema_validator', '_last_return_value', 
-                '_thing_execution_context'
+                '_schema_validator', '_last_return_value', '_thing_execution_context'
                 ]   
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
@@ -201,6 +190,16 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                 async_client: AsyncZMQClient | None = None,
                 **kwargs    
             ) -> None:
+        """
+        Parameters
+        ----------
+        resource: PropertyAffordance
+            dataclass object representing the property
+        sync_client: SyncZMQClient
+            synchronous ZMQ client
+        async_client: AsyncZMQClient
+            asynchronous ZMQ client for async calls
+        """
         super().__init__(resource, **kwargs)
         self._zmq_client = sync_client
         self._async_zmq_client = async_client
@@ -315,7 +314,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                     payload=SerializableData(
                                         value=value, 
                                         content_type=self._resource.retrieve_form('writeProperty', {}).get(
-                                                                        'contentType', 'application/json')
+                                                                            'contentType', 'application/json')
                                     ),
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
