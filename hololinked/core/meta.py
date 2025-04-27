@@ -547,8 +547,10 @@ class PropertiesRegistry(DescriptorRegistry):
         final_list = {}
         for name, prop in props.items():
             try:
-                serializer = Serializers.for_object(self.owner_inst.id, self.owner_cls.__name__, name)
-                final_list[name] = serializer.loads(prop)
+                # serializer = Serializers.for_object(self.owner_inst.id, self.owner_cls.__name__, name)
+                # if name in self.db_commit_objects:
+                #     continue
+                final_list[name] = prop
             except Exception as ex:
                 self.owner_inst.logger.error(
                     f"could not deserialize property {name} due to error - {str(ex)}, skipping this property"
@@ -568,8 +570,8 @@ class PropertiesRegistry(DescriptorRegistry):
                                                                     get_missing_property_names=True
                                                                 )
         # 4. read db_init and db_persist objects
-        with edit_constant_parameters(self):
-            for db_prop, value in self.get_from_DB():
+        with edit_constant_parameters(self.owner_inst):
+            for db_prop, value in self.get_from_DB().items():
                 try:
                     if db_prop not in missing_properties:
                         setattr(self.owner_inst, db_prop, value) # type: ignore

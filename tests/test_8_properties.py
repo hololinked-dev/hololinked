@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from hololinked.client import ObjectProxy
 from hololinked.core import action, Thing, Property
 from hololinked.core.properties import Number, String, Selector, List, Integer
-from hololinked.core.database import BaseDB
+from hololinked.storage.database import BaseDB
 try:
     from .utils import TestCase, TestRunner
     from .things import start_thing_forked
@@ -82,6 +82,65 @@ class TestThing(Thing):
         print(f'db_init_int_prop: {self.db_init_int_prop}')
         print(f'db_persist_selctor_prop: {self.db_persist_selector_prop}')
         print(f'non_remote_number_prop: {self.non_remote_number_prop}')
+
+
+
+# class TestProperty(TestCase):
+
+#     @classmethod
+#     def setUpClass(self):
+#         print("test property")
+#         self.thing_cls = TestThing
+#         # start_thing_forked(self.thing_cls, id='test-property', log_level=logging.WARN)
+#         # self.thing_client = ObjectProxy('test-property') # type: TestThing
+
+#     @classmethod
+#     def tearDownClass(self):
+#         print("tear down test property")
+#         # self.thing_client.exit()
+
+#     def test_7_json_db_operations(self):
+#         with tempfile.NamedTemporaryFile(delete=False) as tf:
+#             filename = tf.name
+
+#         # test db commit property
+#         thing = TestThing(id="test-db-operations", use_json_file=True,
+#                           json_filename=filename, log_level=logging.WARN)
+#         self.assertEqual(thing.db_commit_number_prop, 0)
+#         thing.db_commit_number_prop = 100
+#         self.assertEqual(thing.db_commit_number_prop, 100)
+#         self.assertEqual(thing.db_engine.get_property('db_commit_number_prop'), 100)
+
+#         # test db persist property
+#         self.assertEqual(thing.db_persist_selector_prop, 'a')
+#         thing.db_persist_selector_prop = 'c'
+#         self.assertEqual(thing.db_persist_selector_prop, 'c')
+#         self.assertEqual(thing.db_engine.get_property('db_persist_selector_prop'), 'c')
+
+#         # test db init property
+#         self.assertEqual(thing.db_init_int_prop, 1)
+#         thing.db_init_int_prop = 50
+#         self.assertEqual(thing.db_init_int_prop, 50)
+#         self.assertNotEqual(thing.db_engine.get_property('db_init_int_prop'), 50)
+#         self.assertEqual(thing.db_engine.get_property('db_init_int_prop'), TestThing.db_init_int_prop.default)
+#         del thing
+
+#         # delete thing and reload from database
+#         thing = TestThing(id="test-db-operations", use_json_file=True,
+#                           json_filename=filename, log_level=logging.WARN)
+#         self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
+#         self.assertEqual(thing.db_persist_selector_prop, 'c')
+#         self.assertNotEqual(thing.db_commit_number_prop, 100)
+#         self.assertEqual(thing.db_commit_number_prop, TestThing.db_commit_number_prop.default)
+
+#         # check db init prop with a different value in database apart from default
+#         thing.db_engine.set_property('db_init_int_prop', 101)
+#         del thing
+#         thing = TestThing(id="test-db-operations", use_json_file=True,
+#                           json_filename=filename, log_level=logging.WARN)
+#         self.assertEqual(thing.db_init_int_prop, 101)
+
+#         os.remove(filename)
 
 
 
