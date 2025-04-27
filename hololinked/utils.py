@@ -265,13 +265,13 @@ def get_a_filename_from_instance(thing: type, extension: str = 'json') -> str:
     class_name = thing.__class__.__name__
 
     # Remove invalid characters from the instance name
-    safe_instance_name = re.sub(r'[<>:"/\\|?*\x00-\x1F]+', '_', thing.instance_name)
+    safe_id = re.sub(r'[<>:"/\\|?*\x00-\x1F]+', '_', thing.id)
     # Collapse consecutive underscores into one
-    safe_instance_name = re.sub(r'_+', '_', safe_instance_name)
+    safe_id = re.sub(r'_+', '_', safe_id)
     # Remove leading and trailing underscores
-    safe_instance_name = safe_instance_name.strip('_')
+    safe_id = safe_id.strip('_')
 
-    filename = f"{class_name}-{safe_instance_name or '_'}.{extension}"
+    filename = f"{class_name}-{safe_id or '_'}.{extension}"
     return filename
   
 

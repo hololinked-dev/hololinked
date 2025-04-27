@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from hololinked.client import ObjectProxy
 from hololinked.core import action, Thing, Property
 from hololinked.core.properties import Number, String, Selector, List, Integer
-from hololinked.core.database import BaseDB
+from hololinked.storage.database import BaseDB
 try:
     from .utils import TestCase, TestRunner
     from .things import start_thing_forked
