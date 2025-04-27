@@ -563,44 +563,44 @@ class TestMessageMappedClientPool(TestBrokerMixin):
         )
 
 
-    # def test_3_verify_polling(self):
-    #     """
-    #     Test if polling may be stopped and started again
-    #     """
-    #     async def verify_poll_stopped(self: "TestMessageMappedClientPool") -> None:
-    #         await self.client.poll_responses()
-    #         self.client.poll_timeout = 1000
-    #         await self.client.poll_responses()
-    #         self.done_queue.put(True)
+    def test_3_verify_polling(self):
+        """
+        Test if polling may be stopped and started again
+        """
+        async def verify_poll_stopped(self: "TestMessageMappedClientPool") -> None:
+            await self.client.poll_responses()
+            self.client.poll_timeout = 1000
+            await self.client.poll_responses()
+            self.done_queue.put(True)
 
-    #     async def stop_poll(self: "TestMessageMappedClientPool") -> None:
-    #         await asyncio.sleep(0.1)
-    #         self.client.stop_polling()
-    #         await asyncio.sleep(0.1)
-    #         self.client.stop_polling()
-    #     # When the above two functions running, 
-    #     # we dont send a message as the thread is also running
-    #     get_current_async_loop().run_until_complete(
-    #         asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)])
-    #     )	
+        async def stop_poll(self: "TestMessageMappedClientPool") -> None:
+            await asyncio.sleep(0.1)
+            self.client.stop_polling()
+            await asyncio.sleep(0.1)
+            self.client.stop_polling()
+        # When the above two functions running, 
+        # we dont send a message as the thread is also running
+        get_current_async_loop().run_until_complete(
+            asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)])
+        )	
 
-    #     self.assertTrue(self.done_queue.get())
-    #     self.assertEqual(self.client.poll_timeout, 1000)
+        self.assertTrue(self.done_queue.get())
+        self.assertEqual(self.client.poll_timeout, 1000)
 
 
-    # def test_4_exit(self):
-    #     """
-    #     Test if exit reaches to server
-    #     """
-    #     # EXIT = b'EXIT' # 7 - exit the server
-    #     request_message = RequestMessage.craft_with_message_type(
-    #                                                         receiver_id=self.server_id,
-    #                                                         sender_id=self.client_id,
-    #                                                         message_type=EXIT
-    #                                                     )
-    #     self.client.async_send_request(request_message.byte_array)
-    #     self.assertTrue(self.done_queue.get())
-    #     self._server_thread.join()
+    def test_4_exit(self):
+        """
+        Test if exit reaches to server
+        """
+        # EXIT = b'EXIT' # 7 - exit the server
+        request_message = RequestMessage.craft_with_message_type(
+                                                            receiver_id=self.server_id,
+                                                            sender_id=self.client_id,
+                                                            message_type=EXIT
+                                                        )
+        self.client[self.client_id].socket.send_multipart(request_message.byte_array)
+        self.assertTrue(self.done_queue.get())
+        self._server_thread.join()
 
 
 if __name__ == '__main__':
