@@ -24,6 +24,8 @@ From conda -  `conda install -c conda-forge hololinked`
 
 Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env ``hololinked.yml`` can also help to setup all dependencies. 
 
+For next-release code base, see [main-next-release](https://github.com/hololinked-dev/hololinked/tree/main-next-release) branch. 
+
 ### Usage/Quickstart
 
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. 
