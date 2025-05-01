@@ -147,5 +147,6 @@ def run_zmq_server(server: AsyncZMQServer, owner, done_queue: multiprocessing.Qu
             except BreakLoop:
                 break
     event_loop.run_until_complete(run())
+    event_loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(event_loop)))
     if done_queue:
         done_queue.put(True)
