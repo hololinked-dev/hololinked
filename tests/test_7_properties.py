@@ -176,12 +176,6 @@ class TestProperty(TestCase):
 #         os.remove(filename)
 
 
-
-
-   
-        
-
-
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())
   

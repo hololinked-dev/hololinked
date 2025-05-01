@@ -104,6 +104,33 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                         )
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
     
+    async def async_call(self, *args, **kwargs) -> typing.Any:
+        """
+        async execute method on server
+        """
+        if not self._async_zmq_client:
+            raise RuntimeError("async calls not possible as async_mixin was not set True at __init__()")
+        if len(args) > 0: 
+            kwargs["__args__"] = args
+        elif self._schema_validator:
+            self._schema_validator.validate(kwargs)
+        self._last_zmq_response = await self._async_zmq_client.async_execute(
+                                                thing_id=self._resource.thing_id,
+                                                objekt=self._resource.name,
+                                                operation=Operations.invokeAction,
+                                                payload=SerializableData(
+                                                    value=kwargs, 
+                                                    content_type=self._resource.retrieve_form('invokeAction', {}).get(
+                                                                                'contentType', 'application/json')
+                                                ),
+                                                server_execution_context=dict(
+                                                    invokation_timeout=self._invokation_timeout, 
+                                                    execution_timeout=self._execution_timeout,
+                                                ),
+                                                thing_execution_context=self._thing_execution_context
+                                            )
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
+    
     def oneway(self, *args, **kwargs) -> None:
         if len(args) > 0: 
             kwargs["__args__"] = args
@@ -147,32 +174,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                     thing_execution_context=self._thing_execution_context    
                                 )
      
-    async def async_call(self, *args, **kwargs) -> typing.Any:
-        """
-        async execute method on server
-        """
-        if not self._async_zmq_client:
-            raise RuntimeError("async calls not possible as async_mixin was not set True at __init__()")
-        if len(args) > 0: 
-            kwargs["__args__"] = args
-        elif self._schema_validator:
-            self._schema_validator.validate(kwargs)
-        self._last_zmq_response = await self._async_zmq_client.async_execute(
-                                                thing_id=self._resource.thing_id,
-                                                objekt=self._resource.name,
-                                                operation=Operations.invokeAction,
-                                                payload=SerializableData(
-                                                    value=kwargs, 
-                                                    content_type=self._resource.retrieve_form('invokeAction', {}).get(
-                                                                                'contentType', 'application/json')
-                                                ),
-                                                server_execution_context=dict(
-                                                    invokation_timeout=self._invokation_timeout, 
-                                                    execution_timeout=self._execution_timeout,
-                                                ),
-                                                thing_execution_context=self._thing_execution_context
-                                            )
-        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
+   
 
 
     
