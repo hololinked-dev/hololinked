@@ -1,28 +1,23 @@
 import threading, asyncio
 import logging, multiprocessing, unittest
 
-from hololinked.constants import ResourceTypes
 from hololinked.core.zmq.message import (ERROR, EXIT, OPERATION, HANDSHAKE, REPLY, 
-                                            PreserializedData, RequestHeader, RequestMessage, SerializableData) # client to server
+                                PreserializedData, RequestHeader, RequestMessage, SerializableData) # client to server
 from hololinked.core.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, 
-                                            ResponseMessage, ResponseHeader) # server to client
+                                ResponseMessage, ResponseHeader) # server to client
 from hololinked.core.zmq.brokers import AsyncZMQServer, MessageMappedZMQClientPool, SyncZMQClient, AsyncZMQClient
 from hololinked.utils import get_current_async_loop, get_default_logger
-from hololinked.td import ActionAffordance, PropertyAffordance
-from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty
-
 
 try:
     from .utils import TestRunner
     from .test_1_message import MessageValidatorMixin
     from .things.starter import run_zmq_server
-    from .things import TestThing, test_thing_TD
+    from .things import TestThing
 except ImportError:
     from utils import TestRunner
     from test_1_message import MessageValidatorMixin
     from things.starter import run_zmq_server
-    from things import TestThing, test_thing_TD
-
+    from things import TestThing
 
 
 
@@ -32,9 +27,9 @@ class TestBrokerMixin(MessageValidatorMixin):
     @classmethod
     def setUpServer(self):
         self.server = AsyncZMQServer(
-                                    id=self.server_id,
-                                    logger=self.logger
-                                )
+                                id=self.server_id,
+                                logger=self.logger
+                            )
     """
     Base class: BaseZMQ, BaseAsyncZMQ, BaseSyncZMQ
     Servers: BaseZMQServer, AsyncZMQServer, ZMQServerPool
@@ -76,60 +71,7 @@ class TestBrokerMixin(MessageValidatorMixin):
 
 
 
-class ActionMixin(TestBrokerMixin):
-
-    @classmethod
-    def setUpActions(self):
-        self.test_echo = ZMQAction(
-                                resource=ActionAffordance.from_TD('test_echo', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client, 
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                schema_validator=None
-                            )
-    
-        self.get_serialized_data_action = ZMQAction(
-                                resource=ActionAffordance.from_TD('get_serialized_data', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client, 
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                schema_validator=None
-                            )
-        
-        self.sleep_action = ZMQAction(
-                                resource=ActionAffordance.from_TD('sleep', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client, 
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                schema_validator=None
-                            )
-
-        self.get_mixed_content_data_action = ZMQAction(
-                        resource= ActionAffordance.from_TD('get_mixed_content_data', test_thing_TD),
-                        sync_client=self.sync_client,
-                        async_client=self.async_client, 
-                        invokation_timeout=5, 
-                        execution_timeout=5, 
-                        schema_validator=None
-                    )
-    
-    @classmethod
-    def setUpProperties(self):
-        self.test_prop = ZMQProperty(
-                                resource=PropertyAffordance.from_TD('test_property', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client, 
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                schema_validator=None
-                            )
-        
-        
-
-class TestAsyncZMQServer(ActionMixin):
+class TestBasicServerAndClient(TestBrokerMixin):
 
     @classmethod
     def setUpClient(self):
@@ -143,14 +85,6 @@ class TestAsyncZMQServer(ActionMixin):
         self.client = self.sync_client
         
 
-    @classmethod
-    def setUpClass(self):
-        super().setUpClass()
-        self.setUpActions()
-        self.setUpProperties()
-        print(f"test ZMQ RPC Server {self.__name__}")
-
-    
     def test_1_handshake_complete(self):
         """
         Test handshake so that client can connect to server. Once client connects to server,
@@ -238,18 +172,20 @@ class TestAsyncZMQServer(ActionMixin):
         self.assertEqual(msg.type, ERROR)
         self.validate_response_message(msg)
 
+        self.client.handshake()
+
 
     def test_3_verify_polling(self):
         """
         Test if polling may be stopped and started again
         """
-        async def verify_poll_stopped(self: "TestAsyncZMQServer") -> None:
+        async def verify_poll_stopped(self: TestBasicServerAndClient) -> None:
             await self.server.poll_requests()
             self.server.poll_timeout = 1000
             await self.server.poll_requests()
             self.done_queue.put(True)
 
-        async def stop_poll(self: "TestAsyncZMQServer") -> None:
+        async def stop_poll(self: TestBasicServerAndClient) -> None:
             await asyncio.sleep(0.1)
             self.server.stop_polling()
             await asyncio.sleep(0.1)
@@ -262,38 +198,10 @@ class TestAsyncZMQServer(ActionMixin):
 
         self.assertTrue(self.done_queue.get())
         self.assertEqual(self.server.poll_timeout, 1000)        
+        self.client.handshake()
 
 
-    def test_4_abstractions(self):
-        """
-        Once message types are checked, operations need to be checked. But exeuction of operations on the server 
-        are implemeneted by event loop so that we skip that here. We check abstractions of message type and operation to a 
-        higher level object, and said higher level object should send the message and message should have 
-        been received by the server.
-        """
-        self._test_action_call_abstraction()
-        self._test_property_abstraction()
-
-
-    def _test_action_call_abstraction(self):
-        """
-        Higher level action object should be able to send messages to server
-        """
-        self.test_echo.oneway() # because we dont have a thing running
-        self.client.handshake() # force a response from server so that last_server_message is set
-        # self.check_client_message(self.last_server_message) # last message received by server which is the client message
-
-
-    def _test_property_abstraction(self):
-        """
-        Higher level property object should be able to send messages to server
-        """
-        self.test_prop.oneway_set(5) # because we dont have a thing running
-        self.client.handshake() # force a response from server so that last_server_message is set
-        # self.check_client_message(self.last_server_message) # last message received by server which is the client message
-
-
-    def test_5_exit(self):
+    def test_4_exit(self):
         """
         Test if exit reaches to server
         """
@@ -306,14 +214,22 @@ class TestAsyncZMQServer(ActionMixin):
         self.client.socket.send_multipart(request_message.byte_array)
         self.assertTrue(self.done_queue.get())
         self._server_thread.join()        
+        
 
+    # def test_5_server_disconnected(self):
+      
+    #     self.server.exit() # exit causes the server socket to send a ZMQ builtin termination message to the client
+    #     # we need to complete all the tasks before we can exit other some loosely hanging tasks (which will anyway complete 
+    #     # before the script quits) has invalid sockets because of the exit
 
-    def test_5_pending(self):
-        pass 
-        # SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' # socket died - zmq's builtin event
-        # # peer to peer
+    #     # SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' # socket died - zmq's builtin event
+    #     with self.assertRaises(ConnectionAbortedError) as ex:
+    #         self.client.recv_response(message_id=b'not-necessary')
+    #     self.assertTrue(str(ex.exception).startswith(f"server disconnected for {self.client_id}")) 
+        
+        # peer to peer
         # INTERRUPT = b'INTERRUPT' # interrupt a socket while polling 
-        # # first test the length 
+        # first test the length 
 
 
 
@@ -332,10 +248,8 @@ class TestAsyncZMQClient(TestBrokerMixin):
     @classmethod
     def setUpClass(self):
         super().setUpClass()
-        # self.setUpActions()
         self.client = self.async_client
-        print(f"test ZMQ Client {self.__name__}")
-   
+
 
     def test_1_handshake_complete(self):
         """
@@ -430,9 +344,9 @@ class TestAsyncZMQClient(TestBrokerMixin):
                 handle_message_types_client()
             ])
         )
+        
 
-
-    def test_4_exit(self):
+    def test_3_exit(self):
         """
         Test if exit reaches to server
         """
@@ -445,8 +359,8 @@ class TestAsyncZMQClient(TestBrokerMixin):
         self.client.socket.send_multipart(request_message.byte_array)
         self.assertTrue(self.done_queue.get())
         self._server_thread.join()
+        
     	
-
 
 class TestMessageMappedClientPool(TestBrokerMixin):
 
@@ -489,16 +403,7 @@ class TestMessageMappedClientPool(TestBrokerMixin):
                                                         operation='readProperty'
                                                     )
         
-        async def handle_message_types_server():
-            # server to client
-            # REPLY = b'REPLY' # 4 - response for operation
-            # TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
-            # EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
-            # INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
-            pass 
-           
-            
-        async def handle_message_types_client():
+        async def handle_message_types():
             """
             message types
             both directions
@@ -557,11 +462,10 @@ class TestMessageMappedClientPool(TestBrokerMixin):
         # exit checked separately at the end
         get_current_async_loop().run_until_complete(
             asyncio.gather(*[
-                handle_message_types_server(), 
-                handle_message_types_client()
+                handle_message_types()
             ])
         )
-
+        
 
     def test_3_verify_polling(self):
         """
@@ -583,10 +487,9 @@ class TestMessageMappedClientPool(TestBrokerMixin):
         get_current_async_loop().run_until_complete(
             asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)])
         )	
-
         self.assertTrue(self.done_queue.get())
         self.assertEqual(self.client.poll_timeout, 1000)
-
+        
 
     def test_4_exit(self):
         """
@@ -601,6 +504,7 @@ class TestMessageMappedClientPool(TestBrokerMixin):
         self.client[self.client_id].socket.send_multipart(request_message.byte_array)
         self.assertTrue(self.done_queue.get())
         self._server_thread.join()
+        
 
 
 if __name__ == '__main__':

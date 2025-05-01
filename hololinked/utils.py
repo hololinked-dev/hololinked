@@ -126,11 +126,7 @@ def run_callable_somehow(method : typing.Union[typing.Callable, typing.Coroutine
     """
     if not (asyncio.iscoroutinefunction(method) or asyncio.iscoroutine(method)):
         return method()
-    try:
-        eventloop = asyncio.get_event_loop()
-    except RuntimeError:
-        eventloop = asyncio.new_event_loop()
-        asyncio.set_event_loop(eventloop)
+    eventloop = get_current_async_loop()
     if asyncio.iscoroutinefunction(method):
         coro = method()
     else:

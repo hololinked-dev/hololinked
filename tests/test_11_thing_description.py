@@ -217,6 +217,18 @@ class TestDataSchema(TestCase):
     #     pass 
 
 
+    # def test_6_thing_model_generation(self):
+    #     pass
+        # basic test only to make sure nothing is fundamentally wrong
+        # thing = self.thing_cls(id="test_servers_init", log_level=logging.WARN)
+        # self.assertIsInstance(thing.get_thing_description(), dict)
+        # self.assertIsInstance(thing.get_our_temp_thing_description(), dict)
+     
+        # start_thing_forked(self.thing_cls, id='test-gui-resource-generation', log_level=logging.WARN)
+        # thing_client = ObjectProxy('test-gui-resource-generation')
+        # self.assertIsInstance(thing_client.get_our_temp_thing_description(), dict)
+        # thing_client.exit()
+
 
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())

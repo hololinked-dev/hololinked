@@ -14,9 +14,9 @@ from ...config import global_config
 from ...constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS, get_socket_type_name
 from ...serializers.serializers import JSONSerializer
 from ...exceptions import BreakLoop
-from .message import (EMPTY_BYTE, ERROR, EXIT, HANDSHAKE, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
-        RequestMessage, ResponseMessage, SerializableData, PreserializedData, SerializableNone, PreserializedEmptyByte,
-        ServerExecutionContext, ThingExecutionContext, default_server_execution_context, default_thing_execution_context)
+from .message import (EMPTY_BYTE, ERROR, EXIT, HANDSHAKE, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED, TIMEOUT, 
+        EventMessage, RequestMessage, ResponseMessage, SerializableData, PreserializedData, ServerExecutionContext, ThingExecutionContext, 
+        SerializableNone, PreserializedEmptyByte, default_server_execution_context, default_thing_execution_context)
 
 
    
@@ -193,7 +193,9 @@ class BaseSyncZMQ(BaseZMQ):
 
 
 class BaseZMQServer(BaseZMQ):
-   
+    """
+    Base class for all ZMQ servers irrespective of sync and async.
+    """
    
     def handshake(self, request_message: RequestMessage) -> None:
         """
@@ -491,6 +493,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                 break
         return messages
     
+
     def stop_polling(self) -> None:
         """
         stop polling and unblock ``poll_messages()`` method
@@ -583,7 +586,6 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                             f" context '{self.id}'. Exception message: {str(ex)}")
     
    
-
 
 class ZMQServerPool(BaseZMQServer):
     """
@@ -730,7 +732,6 @@ class ZMQServerPool(BaseZMQServer):
             self.logger.warning("could not properly terminate context or attempted to terminate an already terminated context " +
                             f" Exception message: {str(ex)}")
 
-    
     
     
 class BaseZMQClient(BaseZMQ):
@@ -958,6 +959,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                 except zmq.Again:
                     pass 
             if response_message: 
+                if self.handled_default_message_types(response_message):
+                    continue
                 if message_id != response_message.id:
                     self._response_cache[message_id] = response_message
                     self.logger.debug("cached response with msg-id {}".format(response_message.id))
@@ -1129,7 +1132,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                         break
                     else:
                         raise ConnectionAbortedError(f"Handshake cannot be done with server '{self.server_id}'." + 
-                                                    " Another message arrived before handshake complete.")
+                                                    f" Another message arrived before handshake complete - {response_message.type}")
             else:
                 self.logger.info('got no response for handshake')
         self._handshake_event.set()
@@ -1431,7 +1434,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         to call this method before awaiting ``handshake_complete()``.
         """
         for client in self.pool.values():
-            run_callable_somehow(client._handshake(timeout))
+            client.handshake(timeout)
 
 
     async def poll_responses(self) -> None:

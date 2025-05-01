@@ -97,21 +97,21 @@ class TestSerializer(TestCase):
 
     def test_3_registration_for_objects(self):
         """i.e. test if a new serializer can be registered for a specific property, action or event"""
-        Serializers.register_content_type_for_object(TestThing.test_property, 'application/octet-stream')
-        Serializers.register_content_type_for_object(TestThing.test_echo, 'x-msgpack')
+        Serializers.register_content_type_for_object(TestThing.base_property, 'application/octet-stream')
+        Serializers.register_content_type_for_object(TestThing.action_echo, 'x-msgpack')
         Serializers.register_content_type_for_object(TestThing.test_event, 'application/yaml')
         
-        self.assertEqual(Serializers.for_object(None, 'TestThing', 'test_echo'), Serializers.msgpack)
-        self.assertEqual(Serializers.for_object(None, 'TestThing', 'test_property'), Serializers.pickle)
+        self.assertEqual(Serializers.for_object(None, 'TestThing', 'action_echo'), Serializers.msgpack)
+        self.assertEqual(Serializers.for_object(None, 'TestThing', 'base_property'), Serializers.pickle)
         self.assertEqual(Serializers.for_object(None, 'TestThing', 'test_event'), Serializers.yaml)
         self.assertEqual(Serializers.for_object(None, 'TestThing', 'test_unknown_property'), Serializers.default)
         
             
     def test_4_registration_for_objects_by_name(self):
         
-        Serializers.register_content_type_for_object_per_thing_instance('test_thing', 'test_property', 
+        Serializers.register_content_type_for_object_per_thing_instance('test_thing', 'base_property', 
                                                             'application/yaml')
-        self.assertIsInstance(Serializers.for_object('test_thing', None, 'test_property'), 
+        self.assertIsInstance(Serializers.for_object('test_thing', None, 'base_property'), 
                                     self.YAMLSerializer)
         
    
@@ -119,12 +119,12 @@ class TestSerializer(TestCase):
         """test the dictionary where all serializers are stored"""
         # depends on test 3
         self.assertIn('test_thing', Serializers.object_content_type_map)
-        self.assertIn('test_property', Serializers.object_content_type_map['test_thing'])
-        self.assertEqual(Serializers.object_content_type_map['test_thing']['test_property'], 
+        self.assertIn('base_property', Serializers.object_content_type_map['test_thing'])
+        self.assertEqual(Serializers.object_content_type_map['test_thing']['base_property'], 
                                                             'application/yaml')
        
-        self.assertIn('test_echo', Serializers.object_content_type_map['TestThing'])
-        self.assertEqual(Serializers.object_content_type_map['TestThing']['test_echo'],
+        self.assertIn('action_echo', Serializers.object_content_type_map['TestThing'])
+        self.assertEqual(Serializers.object_content_type_map['TestThing']['action_echo'],
                                                             'x-msgpack')
         self.assertIn('test_event', Serializers.object_content_type_map['TestThing'])
         self.assertEqual(Serializers.object_content_type_map['TestThing']['test_event'],
@@ -133,11 +133,11 @@ class TestSerializer(TestCase):
 
     def test_6_retrieval(self):
         # added in previous tests
-        self.assertIsInstance(Serializers.for_object('test_thing', None, 'test_property'), self.YAMLSerializer)
+        self.assertIsInstance(Serializers.for_object('test_thing', None, 'base_property'), self.YAMLSerializer)
         # unknown object should retrieve the default serializer
         self.assertEqual(Serializers.for_object('test_thing', None, 'test_unknown_property'), Serializers.default)  
         # unknown thing should retrieve the default serializer
-        self.assertEqual(Serializers.for_object('test_unknown_thing', None, 'test_property'), Serializers.default)
+        self.assertEqual(Serializers.for_object('test_unknown_thing', None, 'base_property'), Serializers.default)
 
 
     def test_7_set_default(self):

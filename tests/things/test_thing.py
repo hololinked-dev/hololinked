@@ -1,8 +1,14 @@
-import time
-from hololinked.core import Thing, action, Property, Event
-from hololinked.core.properties import Number, String, Selector, List, Integer
+import asyncio
+import time, logging, unittest, os
+import typing
 from pydantic import BaseModel
 
+from hololinked.core import Thing, action, Property, Event
+from hololinked.core.properties import Number, String, Selector, List, Integer, ClassSelector
+from hololinked.core.actions import Action, BoundAction, BoundSyncAction, BoundAsyncAction
+from hololinked.param import ParameterizedFunction
+from hololinked.core.dataklasses import ActionInfoValidator
+from hololinked.utils import isclassmethod
 
 
 class TestThing(Thing):
@@ -19,8 +25,77 @@ class TestThing(Thing):
         return transports
 
     @action()
-    def test_echo(self, value):
+    def action_echo(self, value):
         return value
+    
+    @classmethod
+    def action_echo_with_classmethod(self, value):
+        return value
+    
+    async def action_echo_async(self, value):
+        await asyncio.sleep(0.1)
+        return value
+    
+    @classmethod
+    async def action_echo_async_with_classmethod(self, value):
+        await asyncio.sleep(0.1)
+        return value
+    
+    class parameterized_action(ParameterizedFunction):
+
+        arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
+                    doc='arg1 description')
+        arg2 = String(default='hello', doc='arg2 description', regex='[a-z]+')
+        arg3 = ClassSelector(class_=(int, float, str),
+                            default=5, doc='arg3 description')
+
+        def __call__(self, instance, arg1, arg2, arg3):
+            return instance.id, arg1, arg2, arg3
+
+    class parameterized_action_without_call(ParameterizedFunction):
+
+        arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
+                    doc='arg1 description')
+        arg2 = String(default='hello', doc='arg2 description', regex='[a-z]+')
+        arg3 = ClassSelector(class_=(int, float, str),
+                            default=5, doc='arg3 description')
+
+    class parameterized_action_async(ParameterizedFunction):
+            
+        arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
+                    doc='arg1 description')
+        arg2 = String(default='hello', doc='arg2 description', regex='[a-z]+')
+        arg3 = ClassSelector(class_=(int, float, str),
+                            default=5, doc='arg3 description')
+
+        async def __call__(self, instance, arg1, arg2, arg3):
+            await asyncio.sleep(0.1)
+            return instance.id, arg1, arg2, arg3
+
+    def __internal__(self, value):
+        return value
+
+    def incorrectly_decorated_method(self, value):
+        return value
+    
+    def not_an_action(self, value):
+        return value
+    
+    async def not_an_async_action(self, value):
+        await asyncio.sleep(0.1)
+        return value
+    
+    def json_schema_validated_action(self, val1: int, val2: str, val3: dict, val4: list):
+        return {
+            'val1': val1,
+            'val3': val3           
+        }
+    
+    def pydantic_validated_action(self, val1: int, val2: str, val3: dict, val4: list) -> typing.Dict[str, typing.Union[int, dict]]:
+        return {
+            'val2': val2,
+            'val4': val4           
+        }
     
     @action()
     def get_serialized_data(self):
@@ -35,13 +110,10 @@ class TestThing(Thing):
         time.sleep(10)
 
 
-    test_property = Property(default=None, doc='test property', allow_None=True)
-
-    test_event = Event(friendly_name='test-event', doc='test event')
-
-
-    number_prop = Number(doc="A fully editable number property")
-
+    base_property = Property(default=None, allow_None=True,
+                            doc='a base Property class')
+    number_prop = Number(doc="A fully editable number property", 
+                        default=1)
     string_prop = String(default='hello', regex='^[a-z]+',
                         doc="A string property with a regex constraint to check value errors")
     int_prop = Integer(default=5, step=2, bounds=(0, 100),
@@ -67,7 +139,6 @@ class TestThing(Thing):
         bar : int
         foo_bar : float
 
-
     pydantic_prop = Property(default=None, allow_None=True, model=PydanticProp, 
                         doc="A property with a pydantic model to check RW")
 
@@ -83,7 +154,6 @@ class TestThing(Thing):
 
     json_schema_prop = Property(default=None, allow_None=True, model=schema, 
                         doc="A property with a json schema to check RW")
-
 
     @observable_readonly_prop.getter
     def get_observable_readonly_prop(self):
@@ -160,7 +230,83 @@ class TestThing(Thing):
     def del_not_a_class_prop(self):
         if hasattr(self, '_not_a_class_value'):
             del self._not_a_class_value
-   
+            
+    
+    test_event = Event(friendly_name='test-event', doc='test event')
+
+
+
+def replace_methods_with_actions(thing_cls: typing.Type[TestThing]) -> None:
+    exposed_actions = []
+    if not isinstance(thing_cls.action_echo, (Action, BoundAction)):
+        thing_cls.action_echo = action()(thing_cls.action_echo)
+        thing_cls.action_echo.__set_name__(thing_cls, 'action_echo')
+    exposed_actions.append('action_echo')
+
+    if not isinstance(thing_cls.action_echo_with_classmethod, (Action, BoundAction)):
+        # classmethod can be decorated with action   
+        thing_cls.action_echo_with_classmethod = action()(thing_cls.action_echo_with_classmethod)   
+        # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+    exposed_actions.append('action_echo_with_classmethod')
+
+    if not isinstance(thing_cls.action_echo_async, (Action, BoundAction)):
+        # async methods can be decorated with action       
+        thing_cls.action_echo_async = action()(thing_cls.action_echo_async)
+        thing_cls.action_echo_async.__set_name__(thing_cls, 'action_echo_async')
+    exposed_actions.append('action_echo_async')
+    
+    if not isinstance(thing_cls.action_echo_async_with_classmethod, (Action, BoundAction)):
+        # async classmethods can be decorated with action    
+        thing_cls.action_echo_async_with_classmethod = action()(thing_cls.action_echo_async_with_classmethod)
+        # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+    exposed_actions.append('action_echo_async_with_classmethod')
+
+    if not isinstance(thing_cls.parameterized_action, (Action, BoundAction)):
+        # parameterized function can be decorated with action
+        thing_cls.parameterized_action = action(safe=True)(thing_cls.parameterized_action)
+        thing_cls.parameterized_action.__set_name__(thing_cls, 'parameterized_action')  
+    exposed_actions.append('parameterized_action')
+
+    if not isinstance(thing_cls.parameterized_action_without_call, (Action, BoundAction)):
+        thing_cls.parameterized_action_without_call = action(idempotent=True)(thing_cls.parameterized_action_without_call)
+        thing_cls.parameterized_action_without_call.__set_name__(thing_cls, 'parameterized_action_without_call')
+    exposed_actions.append('parameterized_action_without_call')
+
+    if not isinstance(thing_cls.parameterized_action_async, (Action, BoundAction)):
+        thing_cls.parameterized_action_async = action(synchronous=True)(thing_cls.parameterized_action_async)
+        thing_cls.parameterized_action_async.__set_name__(thing_cls, 'parameterized_action_async')
+    exposed_actions.append('parameterized_action_async')
+
+    if not isinstance(thing_cls.json_schema_validated_action, (Action, BoundAction)):
+        # schema validated actions
+        thing_cls.json_schema_validated_action = action(
+            input_schema={
+                'type': 'object',
+                'properties': {
+                    'val1': {'type': 'integer'},
+                    'val2': {'type': 'string'},
+                    'val3': {'type': 'object'},
+                    'val4': {'type': 'array'}
+                }
+            },
+            output_schema={
+                'type': 'object',
+                'properties': {
+                    'val1': {'type': 'integer'},
+                    'val3': {'type': 'object'}
+                }
+            }
+        )(thing_cls.json_schema_validated_action)
+        thing_cls.json_schema_validated_action.__set_name__(thing_cls, 'json_schema_validated_action')
+    exposed_actions.append('json_schema_validated_action')
+
+    if not isinstance(thing_cls.pydantic_validated_action, (Action, BoundAction)):
+        thing_cls.pydantic_validated_action = action()(thing_cls.pydantic_validated_action)
+        thing_cls.pydantic_validated_action.__set_name__(thing_cls, 'pydantic_validated_action')
+    exposed_actions.append('pydantic_validated_action')
+
+    replace_methods_with_actions._exposed_actions = exposed_actions
+
 
 
 test_thing_TD = {
@@ -171,8 +317,8 @@ test_thing_TD = {
             'title' : 'get_transports',
             'description' : 'returns available transports'
         },
-        'test_echo': {
-            'title' : 'test_echo',
+        'action_echo': {
+            'title' : 'action_echo',
             'description' : 'returns value as it is to the client'
         },
         'get_serialized_data': {
@@ -189,8 +335,8 @@ test_thing_TD = {
         }
     },
     'properties' : {
-        'test_property': {
-            'title' : 'test_property',
+        'base_property': {
+            'title' : 'base_property',
             'description' : 'test property',
             'default' : None
         },

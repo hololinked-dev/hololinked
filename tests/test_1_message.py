@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 from hololinked.core.zmq.message import (EXIT, OPERATION, HANDSHAKE, 
                             PreserializedData,  SerializableData, RequestHeader, RequestMessage) # client to server
 from hololinked.core.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, REPLY, ERROR,
-                                            ResponseMessage, ResponseHeader) # server to client
+                            ResponseMessage, ResponseHeader) # server to client
 from hololinked.serializers.serializers import Serializers
 
 try:

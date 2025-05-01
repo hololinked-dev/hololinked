@@ -33,7 +33,7 @@ The tests in this file are for the initialization of the Thing class and its sub
 
 
 
-class TestThing(TestCase):
+class TestThingInit(TestCase):
     """Test Thing class which is the bread and butter of this package."""
 
     @classmethod
@@ -143,21 +143,8 @@ class TestThing(TestCase):
         thing.event_publisher.exit()
         
 
-    def test_6_thing_model_generation(self):
-        pass
-        # basic test only to make sure nothing is fundamentally wrong
-        # thing = self.thing_cls(id="test_servers_init", log_level=logging.WARN)
-        # self.assertIsInstance(thing.get_thing_description(), dict)
-        # self.assertIsInstance(thing.get_our_temp_thing_description(), dict)
-     
-        # start_thing_forked(self.thing_cls, id='test-gui-resource-generation', log_level=logging.WARN)
-        # thing_client = ObjectProxy('test-gui-resource-generation')
-        # self.assertIsInstance(thing_client.get_our_temp_thing_description(), dict)
-        # thing_client.exit()
-
-
-
-class TestOceanOpticsSpectrometer(TestThing):
+    
+class TestOceanOpticsSpectrometer(TestThingInit):
     """test Thing subclass example"""
 
     @classmethod
@@ -648,7 +635,7 @@ class TestPropertiesRegistry(TestRegistry):
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThing))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingInit))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestOceanOpticsSpectrometer))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestMetaclass))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestActionRegistry))
