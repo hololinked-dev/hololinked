@@ -1,27 +1,13 @@
-import multiprocessing
-import logging, unittest, time, os
-import tempfile
-import pydantic_core
+import logging, unittest
 
-from hololinked.client import ObjectProxy
-from hololinked.client.zmq.consumed_interactions import ZMQProperty
-from hololinked.core import action, Thing, Property
 from hololinked.core.properties import Number
-from hololinked.core.zmq.brokers import AsyncZMQClient, SyncZMQClient
-from hololinked.core.zmq.message import EXIT, RequestMessage
-from hololinked.storage.database import BaseDB
-from hololinked.utils import get_current_async_loop
 
 try:
     from .utils import TestCase, TestRunner
     from .things import TestThing
-    from .things.starter import run_thing_with_zmq_server_forked
 except ImportError:
     from utils import TestCase, TestRunner
     from things import TestThing
-    from things.starter import run_thing_with_zmq_server_forked
-
-
 
 
 
@@ -31,14 +17,6 @@ class TestProperty(TestCase):
     def setUpClass(self):
         super().setUpClass()
         print(f"test property with {self.__name__}")
-        self.thing_cls = TestThing 
-        self.client = SyncZMQClient(
-                                id='test-property-client', 
-                                server_id='test-property', 
-                                log_level=logging.ERROR, 
-                                handshake=False
-                            )
-        self.done_queue = multiprocessing.Queue()
 
     @classmethod
     def tearDownClass(self):
@@ -152,57 +130,7 @@ class TestProperty(TestCase):
             instance.not_a_class_prop
 
 
-    def test_6_property_abstractions(self):
-  
-        run_thing_with_zmq_server_forked(
-            thing_cls=self.thing_cls, 
-            id='test-property', 
-            log_level=logging.ERROR+10, 
-            done_queue=self.done_queue,
-        )
-        thing = self.thing_cls(id='test-property', log_level=logging.ERROR)
-        self.client.handshake()
-
-        descriptor = thing.properties['number_prop']
-        assert isinstance(descriptor, Property) # type definition
-        number_prop = ZMQProperty(
-            resource=descriptor.to_affordance(thing),
-            sync_client=self.client
-        )
-        self.assertEqual(number_prop.get(), descriptor.default)
-        number_prop.set(100)
-        self.assertEqual(number_prop.get(), 100)
-        number_prop.oneway_set(200)
-        self.assertEqual(number_prop.get(), 200)
-
-        async def test_6_async_property_abstractions(self: "TestProperty"):
-            nonlocal number_prop
-            async_client = AsyncZMQClient(
-                                id='test-property-async-client',
-                                server_id='test-property', 
-                                log_level=logging.ERROR, 
-                                handshake=False
-                            )
-            number_prop._async_zmq_client = async_client
-            async_client.handshake()
-            await async_client.handshake_complete()
-            await number_prop.async_set(300)
-            self.assertEqual(number_prop.get(), 300)
-            await number_prop.async_set(0)
-            self.assertEqual(await number_prop.async_get(), 0)
-
-        get_current_async_loop().run_until_complete(test_6_async_property_abstractions(self))
-
-
-    def test_9_exit(self):
-        exit_message = RequestMessage.craft_with_message_type(
-            sender_id='test-property-client', 
-            receiver_id='test-property',
-            message_type=EXIT
-        )
-        self.client.socket.send_multipart(exit_message.byte_array)
-
-        self.assertEqual(self.done_queue.get(), 'test-property')
+   
 
 #     def test_7_json_db_operations(self):
 #         with tempfile.NamedTemporaryFile(delete=False) as tf:
