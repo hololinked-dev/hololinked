@@ -507,5 +507,13 @@ class TestMessageMappedClientPool(TestBrokerMixin):
         
 
 
+def load_tests(loader, tests, pattern):
+    suite = unittest.TestSuite()
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestBasicServerAndClient))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestAsyncZMQClient))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestMessageMappedClientPool))
+    return suite
+
 if __name__ == '__main__':
-    unittest.main(testRunner=TestRunner())
+    runner = TestRunner()
+    runner.run(load_tests(unittest.TestLoader(), None, None))

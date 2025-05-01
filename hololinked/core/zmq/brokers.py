@@ -91,8 +91,13 @@ class BaseZMQ:
         RuntimeError
             if transport is TCP and a socket connect from client side is requested but a socket address is not supplied
         """
-       
-        socket = context.socket(socket_type)
+        if kwargs.get('socket_class', None) is not None:
+            socket_class = kwargs.get('socket_class')
+            if not issubclass(socket_class, zmq.Socket):
+                raise TypeError("socket_class must be a subclass of zmq.Socket")
+            socket = context.socket(socket_type, socket_class=socket_class)
+        else:
+            socket = context.socket(socket_type)
         socket.setsockopt_string(zmq.IDENTITY, id)
         socket_address = kwargs.get('socket_address', None)
         bind = node_type == 'server'
@@ -179,14 +184,17 @@ class BaseSyncZMQ(BaseZMQ):
         Overloads ``create_socket()`` to create, bind/connect a synchronous socket. A synchronous context is created 
         if none is supplied. 
         """
+        socket_class = None
         if context: 
             if not isinstance(context, zmq.Context):
                 raise TypeError("sync ZMQ message broker accepts only sync ZMQ context. supplied type {}".format(type(context)))
             if isinstance(context, zmq.asyncio.Context):
-                raise TypeError("sync ZMQ message broker accepts only sync ZMQ context. supplied type {}".format(type(context)))
+                # create sync socket when async context is supplied for sync brokers.
+                # especially useful for INPROC sync client where teh context needs to be shared and the server is async. 
+                socket_class = zmq.Socket
         self.context = context or zmq.Context()
         self.socket, self.socket_address = BaseZMQ.get_socket(id=id, node_type=node_type, context=self.context, 
-                                                transport=transport, socket_type=socket_type, **kwargs)
+                                                transport=transport, socket_type=socket_type, socket_class=socket_class, **kwargs)
         self.logger.info("created socket {} with address {} & identity {} and {}".format(get_socket_type_name(socket_type), 
                                                         self.socket_address, id, "bound" if node_type == 'server' else "connected"))
       

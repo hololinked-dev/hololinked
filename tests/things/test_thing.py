@@ -26,6 +26,7 @@ class TestThing(Thing):
 
     @action()
     def action_echo(self, value):
+        # print("action_echo called with value: ", value)
         return value
     
     @classmethod
@@ -133,7 +134,6 @@ class TestThing(Thing):
     non_remote_number_prop = Number(default=5, remote=False,
                         doc="A non remote number property to check non-availability on client")
     
-
     class PydanticProp(BaseModel):
         foo : str
         bar : int
@@ -162,26 +162,14 @@ class TestThing(Thing):
         self._observable_readonly_prop += 1
         return self._observable_readonly_prop
 
-
-    @action()
-    def print_props(self):
-        print(f'number_prop: {self.number_prop}')
-        print(f'string_prop: {self.string_prop}')
-        print(f'int_prop: {self.int_prop}')
-        print(f'selector_prop: {self.selector_prop}')
-        print(f'observable_list_prop: {self.observable_list_prop}')
-        print(f'observable_readonly_prop: {self.observable_readonly_prop}')
-        print(f'db_commit_number_prop: {self.db_commit_number_prop}')
-        print(f'db_init_int_prop: {self.db_init_int_prop}')
-        print(f'db_persist_selctor_prop: {self.db_persist_selector_prop}')
-        print(f'non_remote_number_prop: {self.non_remote_number_prop}')
-
     
     # Simple class property with default value
-    simple_class_prop = Number(class_member=True, default=42)
+    simple_class_prop = Number(class_member=True, default=42, 
+                            doc='simple class property with default value')
     
     # Class property with custom getter/setter
-    managed_class_prop = Number(class_member=True)
+    managed_class_prop = Number(class_member=True, 
+                            doc='class property with custom getter/setter')
     
     @managed_class_prop.getter
     def get_managed_class_prop(cls):
@@ -194,14 +182,16 @@ class TestThing(Thing):
         cls._managed_value = value
         
     # Read-only class property
-    readonly_class_prop = String(class_member=True, readonly=True)
+    readonly_class_prop = String(class_member=True, readonly=True,
+                                doc='read-only class property')
     
     @readonly_class_prop.getter
     def get_readonly_class_prop(cls):
         return "read-only-value"
     
     # Deletable class property
-    deletable_class_prop = Number(class_member=True, default=100)
+    deletable_class_prop = Number(class_member=True, default=100,
+                                doc='deletable class property with custom deleter')
     
     @deletable_class_prop.getter
     def get_deletable_class_prop(cls):
@@ -216,7 +206,8 @@ class TestThing(Thing):
         if hasattr(cls, '_deletable_value'):
             del cls._deletable_value
 
-    not_a_class_prop = Number(class_member=False, default=43)
+    not_a_class_prop = Number(class_member=False, default=43,
+                            doc="test property with class_member=False")
 
     @not_a_class_prop.getter
     def get_not_a_class_prop(self):
@@ -230,7 +221,20 @@ class TestThing(Thing):
     def del_not_a_class_prop(self):
         if hasattr(self, '_not_a_class_value'):
             del self._not_a_class_value
-            
+    
+    @action()
+    def print_props(self):
+        print(f'number_prop: {self.number_prop}')
+        print(f'string_prop: {self.string_prop}')
+        print(f'int_prop: {self.int_prop}')
+        print(f'selector_prop: {self.selector_prop}')
+        print(f'observable_list_prop: {self.observable_list_prop}')
+        print(f'observable_readonly_prop: {self.observable_readonly_prop}')
+        print(f'db_commit_number_prop: {self.db_commit_number_prop}')
+        print(f'db_init_int_prop: {self.db_init_int_prop}')
+        print(f'db_persist_selctor_prop: {self.db_persist_selector_prop}')
+        print(f'non_remote_number_prop: {self.non_remote_number_prop}')
+
     
     test_event = Event(friendly_name='test-event', doc='test event')
 

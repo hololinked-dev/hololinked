@@ -12,7 +12,7 @@ from hololinked.core.zmq.rpc_server import RPCServer
 from hololinked.server.zmq import ZMQServer
 from hololinked.utils import get_current_async_loop
 from hololinked.td import ActionAffordance, PropertyAffordance
-from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty
+from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty, ZMQConsumedAffordanceMixin
 
 try:
     from .test_5_brokers import TestBrokerMixin
@@ -104,7 +104,7 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
 
     @classmethod
     def setUpClient(self):
-        self.client = AsyncZMQClient(
+        self.async_client = AsyncZMQClient(
                                 id=self.client_id,
                                 server_id=self.server_id, 
                                 logger=self.logger,
@@ -112,8 +112,16 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
                                 handshake=False,
                                 transport='INPROC'
                             )
-        self.sync_client = None 
-        self.async_client = self.client
+        self.sync_client = SyncZMQClient(
+                                id=self.client_id+'-sync',
+                                server_id=self.server_id,
+                                logger=self.logger,
+                                context=self.context,
+                                handshake=False,
+                                transport='INPROC'
+                            ) 
+        self.client = self.async_client
+    
         
     @classmethod
     def startServer(self):
@@ -140,11 +148,23 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
 
 
     def test_3_invoke_action(self):
-        async def async_call():
+        """"Test if action can be invoked by a client"""
+        noblock_msg_id = None
+        async def test_callers():
+            nonlocal noblock_msg_id
             await self.action_echo.async_call('value')
+            self.action_echo.oneway(5)
+            noblock_msg_id = self.action_echo.noblock(10)
             return self.action_echo.last_return_value
-        result = get_current_async_loop().run_until_complete(async_call())
+        result = get_current_async_loop().run_until_complete(test_callers())
         self.assertEqual(result, 'value')
+
+        # test the responses for no block call
+        response = self.action_echo._zmq_client.recv_response(noblock_msg_id)
+        self.action_echo._last_zmq_response = response
+        self.assertEqual( self.action_echo.last_return_value, 10)
+
+        # complete with a handshake
         self.client.handshake() 
 
 
@@ -164,7 +184,7 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
 
 
     def test_5_thing_execution_context(self):
-        
+        """Test if thing execution context is used correctly"""
         old_thing_execution_context = self.action_echo._thing_execution_context
         self.action_echo._thing_execution_context = dict(fetch_execution_logs=True)
         get_current_async_loop().run_until_complete(self.action_echo.async_call('value'))
@@ -179,7 +199,7 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
 
 
     def test_6_server_execution_context(self):
-       
+        """Test if server execution context is used correctly"""
         async def test_execution_timeout():
             try:
                 await self.sleep_action.async_call()
@@ -271,8 +291,7 @@ class TestRPCServer(TestInprocRPCServer):
         old_client = self.action_echo._zmq_client
         for client in [self.tcp_client, self.ipc_client]:
             self.action_echo._zmq_client = client
-            return_value = self.action_echo('ipc_value')
-            self.assertEqual(return_value, 'ipc_value')
+            self.assertEqual(self.action_echo('ipc_value'), 'ipc_value')
         self.action_echo._zmq_client = old_client
 
     def test_4_return_binary_value(self):
@@ -300,50 +319,6 @@ class TestRPCServer(TestInprocRPCServer):
             return_value = self.action_echo('ipc_value_4')
             self.assertEqual(return_value, 'ipc_value_4')        
         self.sleep_action._zmq_client = old_client
-
-    # def test_4_abstractions(self):
-    #     """
-    #     Once message types are checked, operations need to be checked. But exeuction of operations on the server 
-    #     are implemeneted by event loop so that we skip that here. We check abstractions of message type and operation to a 
-    #     higher level object, and said higher level object should send the message and message should have 
-    #     been received by the server.
-    #     """
-    #     self._test_action_call_abstraction()
-    #     self._test_property_abstraction()
-
-
-    # def _test_action_call_abstraction(self):
-    #     """
-    #     Higher level action object should be able to send messages to server
-    #     """
-    #     test_echo = ZMQAction(
-    #                         resource=ActionAffordance.from_TD('test_echo', test_thing_TD),
-    #                         sync_client=self.sync_client,
-    #                         async_client=self.async_client, 
-    #                         invokation_timeout=5, 
-    #                         execution_timeout=5, 
-    #                         schema_validator=None
-    #                     )
-    #     test_echo.oneway() # because we dont have a thing running
-    #     self.client.handshake() # force a response from server so that last_server_message is set
-    #     # self.check_client_message(self.last_server_message) # last message received by server which is the client message
-
-
-    # def _test_property_abstraction(self):
-    #     """
-    #     Higher level property object should be able to send messages to server
-    #     """
-    #     test_prop = ZMQProperty(
-    #                         resource=PropertyAffordance.from_TD('test_property', test_thing_TD),
-    #                         sync_client=self.sync_client,
-    #                         async_client=self.async_client, 
-    #                         invokation_timeout=5, 
-    #                         execution_timeout=5, 
-    #                         schema_validator=None
-    #                     )
-    #     test_prop.oneway_set(5) # because we dont have a thing running
-    #     self.client.handshake() # force a response from server so that last_server_message is set
-    #     # self.check_client_message(self.last_server_message) # last message received by server which is the client message
 
 
 
