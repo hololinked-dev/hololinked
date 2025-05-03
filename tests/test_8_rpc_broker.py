@@ -1,8 +1,10 @@
+import asyncio
 import threading
 import unittest
 import zmq.asyncio
 import jsonschema
 import logging
+import random
 
 from hololinked.core.actions import BoundAction
 from hololinked.core.property import Property
@@ -24,6 +26,7 @@ except ImportError:
     from test_6_actions import replace_methods_with_actions
     from utils import TestRunner
     from things import run_thing_with_zmq_server_forked, test_thing_TD, TestThing
+
 
 
 
@@ -145,27 +148,90 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
 
     def test_2_handshake(self):
         self.client.handshake()
+        async def async_handshake():
+            self.async_client.handshake()
+            await self.async_client.handshake_complete()
+        get_current_async_loop().run_until_complete(async_handshake()) 
 
 
-    def test_3_invoke_action(self):
+    def test_3_action_abstractions(self):
         """"Test if action can be invoked by a client"""
-        noblock_msg_id = None
-        async def test_callers():
-            nonlocal noblock_msg_id
+        
+        async def test_basic_callers():
+            """Test if action can be invoked by a client in basic request/response way, oneway and no block"""
+            nonlocal self
             await self.action_echo.async_call('value')
             self.action_echo.oneway(5)
             noblock_msg_id = self.action_echo.noblock(10)
-            return self.action_echo.last_return_value
-        result = get_current_async_loop().run_until_complete(test_callers())
-        self.assertEqual(result, 'value')
+            self.assertEqual(self.action_echo.last_return_value, 'value')
+            # test the responses for no block call, so read the socket - but, this is usually abstracte in a higher level API
+            response = self.action_echo._zmq_client.recv_response(noblock_msg_id)
+            self.action_echo._last_zmq_response = response
+            self.assertEqual(self.action_echo.last_return_value, 10)
+            self.assertEqual(self.action_echo(2), 2)
 
-        # test the responses for no block call
-        response = self.action_echo._zmq_client.recv_response(noblock_msg_id)
-        self.action_echo._last_zmq_response = response
-        self.assertEqual( self.action_echo.last_return_value, 10)
-
-        # complete with a handshake
+        get_current_async_loop().run_until_complete(test_basic_callers())
         self.client.handshake() 
+
+        async def test_callers_thorough():
+            # Generate 20 random JSON serializable data structures
+            nonlocal self
+            data_structures = [
+                {"key": "value"},
+                [1, 2, 3], "string", 42, 3.14, True, None,
+                {"nested": {"key": "value"}},
+                [{"list": "of"}, {"dicts": "here"}],
+                {"complex": {"nested": {"list": [1, 2, 3]}, "mixed": [1, "two", 3.0, None]}},
+                {"array": [1, 2, 3]}
+            ]
+
+            msg_ids = []
+            last_call_type = None
+            # Randomize calls to self.action_echo
+            for index, data in enumerate(data_structures):
+                msg_ids.append(None)
+                call_type = random.choice(["async_call", "plain_call", "oneway", "noblock"])
+                if call_type == "async_call":
+                    result = await self.action_echo.async_call(data)
+                    self.assertEqual(result, data)
+                elif call_type == "plain_call":
+                    result = self.action_echo(data)
+                    self.assertEqual(result, data)
+                elif call_type == "oneway":
+                    self.action_echo.oneway(data)
+                    self.assertNotEqual(data, self.action_echo.last_return_value)
+                elif call_type == "noblock":
+                    msg_ids[index] = self.action_echo.noblock(data)
+                    # noblock_expected_last_response = data
+                    self.assertNotEqual(data, self.action_echo.last_return_value)
+                # print("last_call_type", last_call_type, "call_type", call_type, "data", data)
+                if last_call_type == "noblock":
+                    response = self.action_echo._zmq_client.recv_response(msg_ids[index-1])
+                    self.action_echo._last_zmq_response = response
+                    self.assertEqual(self.action_echo.last_return_value, data_structures[index-1])
+                    
+                last_call_type = call_type
+
+        get_current_async_loop().run_until_complete(test_callers_thorough())
+        self.client.handshake() 
+
+
+    def test_4_property_abstractions(self):
+        """Test if property can be invoked by a client"""
+        self.test_prop.set(100)
+        self.assertEqual(self.test_prop.get(), 100)
+        self.test_prop.oneway_set(200)
+        self.assertEqual(self.test_prop.get(), 200)
+
+        async def test_async_property_abstractions():
+            nonlocal self
+            await self.test_prop.async_set(300)
+            self.assertEqual(self.test_prop.get(), 300)
+            await self.test_prop.async_set(0)
+            self.assertEqual(await self.test_prop.async_get(), 0)
+
+        get_current_async_loop().run_until_complete(test_async_property_abstractions())
+        self.client.handshake()
 
 
     def test_4_return_binary_value(self):
@@ -286,8 +352,8 @@ class TestRPCServer(TestInprocRPCServer):
         self.tcp_client.handshake()
 
 
-    def test_3_invoke_action(self):
-        super().test_3_invoke_action()
+    def test_3_action_abstractions(self):
+        super().test_3_action_abstractions()
         old_client = self.action_echo._zmq_client
         for client in [self.tcp_client, self.ipc_client]:
             self.action_echo._zmq_client = client

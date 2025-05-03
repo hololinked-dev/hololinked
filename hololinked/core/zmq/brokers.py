@@ -194,7 +194,8 @@ class BaseSyncZMQ(BaseZMQ):
                 socket_class = zmq.Socket
         self.context = context or zmq.Context()
         self.socket, self.socket_address = BaseZMQ.get_socket(id=id, node_type=node_type, context=self.context, 
-                                                transport=transport, socket_type=socket_type, socket_class=socket_class, **kwargs)
+                                                transport=transport, socket_type=socket_type, socket_class=socket_class, 
+                                                **kwargs)
         self.logger.info("created socket {} with address {} & identity {} and {}".format(get_socket_type_name(socket_type), 
                                                         self.socket_address, id, "bound" if node_type == 'server' else "connected"))
       
@@ -970,7 +971,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                 if self.handled_default_message_types(response_message):
                     continue
                 if message_id != response_message.id:
-                    self._response_cache[message_id] = response_message
+                    self._response_cache[response_message.id] = response_message
                     self.logger.debug("cached response with msg-id {}".format(response_message.id))
                 else:
                     self.logger.debug("received response with msg-id {}".format(response_message.id))
