@@ -201,23 +201,7 @@ class ConsumedThingProperty:
             id of the request or message (UUID4 as string)
         """
         raise NotImplementedError("implement property noblock get per protocol")
-    
-    def noblock_set(self, value: typing.Any) -> str:
-        """
-        Set property value without blocking, i.e. collect aknowledgement later as the method returns immediately
         
-        Parameters
-        ----------
-        value: typing.Any
-            value to set
-
-        Returns
-        -------
-        str
-            id of the request or message (UUID4 as string)
-        """
-        raise NotImplementedError("implement property noblock set per protocol")
-    
     def oneway_set(self, value: typing.Any) -> None:
         """
         Set property value without waiting for acknowledgement. The server also does not send any reply.
