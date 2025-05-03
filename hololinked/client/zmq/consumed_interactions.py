@@ -21,7 +21,7 @@ __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 class ZMQConsumedAffordanceMixin:
 
     __slots__ = ['_resource', '_schema_validator', '__name__', '__qualname__', '__doc__',
-                '_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout',
+                '_sync_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout',
                 '_thing_execution_context', '_last_zmq_response' ]  # __slots__ dont support multiple inheritance
 
     def __init__(self, 
@@ -30,7 +30,7 @@ class ZMQConsumedAffordanceMixin:
                 **kwargs
                 # schema_validator: typing.Type[BaseSchemaValidator] | None = None
             ) -> None:
-        self._zmq_client = sync_client
+        self._sync_zmq_client = sync_client
         self._async_zmq_client = async_client
         self._invokation_timeout = kwargs.get('invokation_timeout', 5)
         self._execution_timeout = kwargs.get('execution_timeout', 5)
@@ -96,7 +96,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        self._last_zmq_response = self._zmq_client.execute(
+        self._last_zmq_response = self._sync_zmq_client.execute(
                                             thing_id=self._resource.thing_id,
                                             objekt=self._resource.name,
                                             operation=Operations.invokeAction,
@@ -142,7 +142,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        self._zmq_client.send_request(
+        self._sync_zmq_client.send_request(
                                     thing_id=self._resource.thing_id, 
                                     objekt=self._resource.name,
                                     operation=Operations.invokeAction,
@@ -164,7 +164,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        return self._zmq_client.send_request(
+        return self._sync_zmq_client.send_request(
                                     thing_id=self._resource.thing_id, 
                                     objekt=self._resource.name,
                                     operation=Operations.invokeAction,
@@ -211,7 +211,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                 doc="cached return value of the last call to the method")
 
     def set(self, value: typing.Any) -> None:
-        self._last_zmq_response = self._zmq_client.execute(
+        self._last_zmq_response = self._sync_zmq_client.execute(
                                                 thing_id=self._resource.thing_id, 
                                                 objekt=self._resource.name,
                                                 operation=Operations.writeProperty,
@@ -229,7 +229,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
         ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
      
     def get(self) -> typing.Any:
-        self._last_zmq_response = self._zmq_client.execute(
+        self._last_zmq_response = self._sync_zmq_client.execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
                                                 operation=Operations.readProperty,
@@ -276,7 +276,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, True) 
         
     def oneway_set(self, value: typing.Any) -> None:
-        self._zmq_client.send_request(
+        self._sync_zmq_client.send_request(
                                     thing_id=self._resource.thing_id,
                                     objekt=self._resource.name,
                                     operation=Operations.writeProperty,
@@ -293,7 +293,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                 )
         
     def noblock_get(self) -> None:
-        return self._zmq_client.send_request(
+        return self._sync_zmq_client.send_request(
                                             thing_id=self._resource.thing_id,
                                             objekt=self._resource.name,
                                             operation=Operations.readProperty,
@@ -309,7 +309,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
 class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     
     __slots__ = ['__name__', '__qualname__', '__doc__', 
-                '_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
+                '_sync_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
                 '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger',
                 '_deserialize']
 
@@ -324,7 +324,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                 **kwargs
             ) -> None:
         super().__init__(resource=resource, logger=logger, **kwargs)
-        self._zmq_client = sync_client      
+        self._sync_zmq_client = sync_client      
         self._serializer = serializer
 
 

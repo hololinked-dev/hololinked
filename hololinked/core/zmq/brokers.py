@@ -888,7 +888,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         super().__init__(id=id, server_id=server_id, **kwargs)
         self.create_socket(id=id, 
                         node_type='client', 
-                        socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('tcp_socket_address', None),
+                        socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('socket_address', None),
                         context=context, 
                         transport=transport, 
                         **kwargs
@@ -1242,6 +1242,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                 except zmq.Again:
                     pass 
             if response_message: 
+                if self.handled_default_message_types(response_message):
+                    continue
                 if message_id != response_message.id:
                     self._response_cache[response_message.id] = response_message
                     self.logger.debug("cached response with msg-id {}".format(response_message.id))

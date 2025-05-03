@@ -110,6 +110,7 @@ class TestThing(Thing):
     def sleep(self):
         time.sleep(10)
 
+    #----------- Properties --------------
 
     base_property = Property(default=None, allow_None=True,
                             doc='a base Property class')
@@ -133,6 +134,23 @@ class TestThing(Thing):
                         doc="A selector property to check persistence to db on write operations")
     non_remote_number_prop = Number(default=5, remote=False,
                         doc="A non remote number property to check non-availability on client")
+    sleeping_prop = Number(default=0, observable=True, readonly=True,
+                        doc="A property that sleeps for 10 seconds on read operations")
+    
+    @sleeping_prop.getter
+    def get_sleeping_prop(self):
+        time.sleep(10)
+        try:
+            return self._sleeping_prop
+        except AttributeError:
+            return 42
+    
+    @sleeping_prop.setter
+    def set_sleeping_prop(self, value):
+        self._sleeping_prop = value
+    
+    
+    #----------- Pydantic and JSON schema properties --------------
     
     class PydanticProp(BaseModel):
         foo : str
@@ -162,14 +180,13 @@ class TestThing(Thing):
         self._observable_readonly_prop += 1
         return self._observable_readonly_prop
 
-    
-    # Simple class property with default value
+    #----------- Class properties --------------
+
     simple_class_prop = Number(class_member=True, default=42, 
                             doc='simple class property with default value')
     
-    # Class property with custom getter/setter
     managed_class_prop = Number(class_member=True, 
-                            doc='class property with custom getter/setter')
+                            doc='(managed) class property with custom getter/setter')
     
     @managed_class_prop.getter
     def get_managed_class_prop(cls):
@@ -181,7 +198,6 @@ class TestThing(Thing):
             raise ValueError("Value must be non-negative")
         cls._managed_value = value
         
-    # Read-only class property
     readonly_class_prop = String(class_member=True, readonly=True,
                                 doc='read-only class property')
     
@@ -189,7 +205,6 @@ class TestThing(Thing):
     def get_readonly_class_prop(cls):
         return "read-only-value"
     
-    # Deletable class property
     deletable_class_prop = Number(class_member=True, default=100,
                                 doc='deletable class property with custom deleter')
     
@@ -234,7 +249,6 @@ class TestThing(Thing):
         print(f'db_init_int_prop: {self.db_init_int_prop}')
         print(f'db_persist_selctor_prop: {self.db_persist_selector_prop}')
         print(f'non_remote_number_prop: {self.non_remote_number_prop}')
-
     
     test_event = Event(friendly_name='test-event', doc='test event')
 
