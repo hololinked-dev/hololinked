@@ -30,8 +30,6 @@ from ..td import PropertyAffordance, ActionAffordance, EventAffordance
 
 class ConsumedThingAction:
     
-    __slots__ = ['_resource', '_schema_validator', '__name__', '__qualname__', '__doc__']
-    
     # action call abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
@@ -124,8 +122,6 @@ class ConsumedThingAction:
     
 
 class ConsumedThingProperty:
-
-    __slots__ = ['_resource', '_schema_validator', '__name__', '__qualname__', '__doc__']   
 
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
@@ -230,9 +226,6 @@ class ConsumedThingProperty:
   
 
 class ConsumedThingEvent:
-    
-    __slots__ = ['__name__', '__qualname__', '__doc__', 
-                '_callbacks', '_subscribed', '_thread', '_thread_callbacks', '_logger']
     
     # event subscription
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable

@@ -39,31 +39,36 @@ class TestSocket(TestCase):
         Check that context and socket type are as expected.
         Async context should be used for async socket and sync context for sync socket.
         """
+        context = zmq.Context()
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
-                                context=zmq.Context()
+                                context=context
                             )
         self.assertTrue(isinstance(socket, zmq.Socket))
         self.assertTrue(not isinstance(socket, zmq.asyncio.Socket))
         socket.close()
+        context.term()
 
+        context = zmq.asyncio.Context()
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
-                                context=zmq.asyncio.Context()
+                                context=context
                             )       
         self.assertTrue(isinstance(socket, zmq.Socket))
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
         socket.close()
+        context.term()
 
 
     def test_3_transport_options(self):
         """check only three transport options are supported"""
+        context = zmq.asyncio.Context()
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
                                         node_type='server',
-                                        context=zmq.asyncio.Context(),
+                                        context=context,
                                         transport='TCP',
                                         socket_address='tcp://*:5555'
                                     )
@@ -75,7 +80,7 @@ class TestSocket(TestCase):
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
                                         node_type='server',
-                                        context=zmq.asyncio.Context(),
+                                        context=context,
                                         transport='IPC',
                                     )
        
@@ -87,19 +92,21 @@ class TestSocket(TestCase):
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
                                         node_type='server',
-                                        context=zmq.asyncio.Context(),
+                                        context=context,
                                         transport='INPROC',
                                     )        
         self.assertEqual(socket_address, socket.getsockopt_string(zmq.LAST_ENDPOINT))
         self.assertTrue(socket_address.startswith('inproc://'))
         self.assertTrue(socket_address.endswith('test-server'))
         socket.close()
+        context.term()
 
         # Specify transport as enum and do the same tests
+        context = zmq.Context()
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
                                         node_type='server',
-                                        context=zmq.Context(),
+                                        context=context,
                                         transport=ZMQ_TRANSPORTS.INPROC,
                                     )
         self.assertTrue(socket_address.startswith('inproc://'))
@@ -109,7 +116,7 @@ class TestSocket(TestCase):
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
                                         node_type='server',
-                                        context=zmq.Context(),
+                                        context=context,
                                         transport=ZMQ_TRANSPORTS.IPC,
                                     )
         self.assertTrue(socket_address.startswith('ipc://'))
@@ -119,21 +126,24 @@ class TestSocket(TestCase):
         socket, socket_address = BaseZMQ.get_socket(
                                         id='test-server',
                                         node_type='server',
-                                        context=zmq.Context(),
+                                        context=context,
                                         transport=ZMQ_TRANSPORTS.TCP,
                                         socket_address='tcp://*:5556'
                                     )
         self.assertTrue(socket_address.startswith('tcp://'))
         self.assertTrue(socket_address.endswith(':5556'))
         socket.close()
+        context.term()
 
         # check that other transport options raise error
+        context = zmq.asyncio.Context()
         self.assertRaises(NotImplementedError, lambda: BaseZMQ.get_socket(
                                                                     id='test-server',
                                                                     node_type='server',
-                                                                    context=zmq.asyncio.Context(),
+                                                                    context=context,
                                                                     transport='PUB',
                                                                 ))
+        context.term()
         
         
     def test_4_socket_options(self):
