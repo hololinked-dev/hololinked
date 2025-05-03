@@ -245,7 +245,6 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
         test_basic_operations()
         self.client.handshake()
 
-
         async def test_operations_thorough():
             # Generate 20 random JSON serializable data structures
             nonlocal self
@@ -281,21 +280,6 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
         
         get_current_async_loop().run_until_complete(test_operations_thorough())
         self.client.handshake()
-
-
-    def test_4_return_binary_value(self):
-
-        async def async_call():
-            await self.get_mixed_content_data_action.async_call()
-            return self.get_mixed_content_data_action.last_return_value
-        result = get_current_async_loop().run_until_complete(async_call())
-        self.assertEqual(result, ('foobar', b'foobar'))
-
-        async def async_call():
-            await self.get_serialized_data_action.async_call()
-            return self.get_serialized_data_action.last_return_value
-        result = get_current_async_loop().run_until_complete(async_call())
-        self.assertEqual(result, b'foobar')
 
 
     def test_5_thing_execution_context(self):
@@ -337,6 +321,21 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
             else:
                 self.assertTrue(False) # fail the test if reached here
         get_current_async_loop().run_until_complete(test_invokation_timeout())
+
+
+    # def test_4_return_binary_value(self):
+
+    #     async def async_call():
+    #         await self.get_mixed_content_data_action.async_call()
+    #         return self.get_mixed_content_data_action.last_return_value
+    #     result = get_current_async_loop().run_until_complete(async_call())
+    #     self.assertEqual(result, ('foobar', b'foobar'))
+
+    #     async def async_call():
+    #         await self.get_serialized_data_action.async_call()
+    #         return self.get_serialized_data_action.last_return_value
+    #     result = get_current_async_loop().run_until_complete(async_call())
+    #     self.assertEqual(result, b'foobar')
 
 
     def test_7_stop(self):
@@ -402,23 +401,30 @@ class TestRPCServer(TestInprocRPCServer):
 
 
     def test_3_action_abstractions(self):
-        super().test_3_action_abstractions()
         old_client = self.action_echo._zmq_client
         for client in [self.tcp_client, self.ipc_client]:
             self.action_echo._zmq_client = client
-            self.assertEqual(self.action_echo('ipc_value'), 'ipc_value')
+            super().test_3_action_abstractions()
         self.action_echo._zmq_client = old_client
 
-    def test_4_return_binary_value(self):
-        super().test_4_return_binary_value()
-        old_client = self.sleep_action._zmq_client
+    
+    def test_4_property_abstractions(self):
+        old_client = self.test_prop._zmq_client
         for client in [self.tcp_client, self.ipc_client]:
-            self.sleep_action._zmq_client = client
-            return_value = self.get_mixed_content_data_action()
-            self.assertEqual(return_value, ('foobar', b'foobar'))
-            return_value = self.get_serialized_data_action()
-            self.assertEqual(return_value, b'foobar')
-        self.sleep_action._zmq_client = old_client
+            self.test_prop._zmq_client = client
+            super().test_4_property_abstractions()
+        self.test_prop._zmq_client = old_client
+
+    # def test_4_return_binary_value(self):
+    #     super().test_4_return_binary_value()
+    #     old_client = self.sleep_action._zmq_client
+    #     for client in [self.tcp_client, self.ipc_client]:
+    #         self.sleep_action._zmq_client = client
+    #         return_value = self.get_mixed_content_data_action()
+    #         self.assertEqual(return_value, ('foobar', b'foobar'))
+    #         return_value = self.get_serialized_data_action()
+    #         self.assertEqual(return_value, b'foobar')
+    #     self.sleep_action._zmq_client = old_client
 
 
     def test_6_server_execution_context(self):

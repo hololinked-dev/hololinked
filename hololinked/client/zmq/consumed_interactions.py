@@ -20,12 +20,29 @@ __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
 class ZMQConsumedAffordanceMixin:
 
-    _last_zmq_response: ResponseMessage
+    __slots__ = ['_resource', '_schema_validator', '__name__', '__qualname__', '__doc__',
+                '_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout',
+                '_thing_execution_context', '_last_zmq_response' ]  # __slots__ dont support multiple inheritance
+
+    def __init__(self, 
+                sync_client: SyncZMQClient, 
+                async_client: AsyncZMQClient | None = None,  
+                **kwargs
+                # schema_validator: typing.Type[BaseSchemaValidator] | None = None
+            ) -> None:
+        self._zmq_client = sync_client
+        self._async_zmq_client = async_client
+        self._invokation_timeout = kwargs.get('invokation_timeout', 5)
+        self._execution_timeout = kwargs.get('execution_timeout', 5)
+        self._thing_execution_context = dict(fetch_execution_logs=False) 
+        self._last_zmq_response = None # type: typing.Optional[ResponseMessage]
 
     def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
         """
         cached return value of the last call to the method
         """
+        if self._last_zmq_response is None:
+            raise RuntimeError("No last response available. Did you make an operation?")
         payload = self._last_zmq_response.payload.deserialize()
         preserialized_payload = self._last_zmq_response.preserialized_payload.value
         if self._last_zmq_response.type in __error_message_types__ and raise_exception:
@@ -47,9 +64,6 @@ class ZMQConsumedAffordanceMixin:
 
 class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
     
-    __slots__ = ['_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout',
-                '_schema_validator', '_last_return_value', '_thing_execution_context' 
-                ]
     # method call abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
@@ -69,16 +83,11 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
             synchronous ZMQ client
         async_zmq_client: AsyncZMQClient
             asynchronous ZMQ client for async calls
-        instruction: str
-            The instruction needed to call the method        
         """
-        super().__init__(resource, **kwargs)
-        self._zmq_client = sync_client
-        self._async_zmq_client = async_client
-        self._invokation_timeout = kwargs.get('invokation_timeout', 5)
-        self._execution_timeout = kwargs.get('execution_timeout', 5)
-        self._thing_execution_context = dict(fetch_execution_logs=False) 
-   
+        ConsumedThingAction.__init__(self, resource=resource)
+        ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
+        self._resource # type: ActionAffordance
+
     last_return_value = property(fget=ZMQConsumedAffordanceMixin.get_last_return_value,
                                 doc="cached return value of the last call to the method")
     
@@ -105,9 +114,6 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
     
     async def async_call(self, *args, **kwargs) -> typing.Any:
-        """
-        async execute method on server
-        """
         if not self._async_zmq_client:
             raise RuntimeError("async calls not possible as async_mixin was not set True at __init__()")
         if len(args) > 0: 
@@ -174,15 +180,10 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                     thing_execution_context=self._thing_execution_context    
                                 )
      
-   
-
 
     
 class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
 
-    __slots__ = ['_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout', 
-                '_schema_validator', '_last_return_value', '_thing_execution_context'
-                ]   
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
@@ -202,13 +203,9 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
         async_client: AsyncZMQClient
             asynchronous ZMQ client for async calls
         """
-        super().__init__(resource, **kwargs)
-        self._zmq_client = sync_client
-        self._async_zmq_client = async_client
-        self._invokation_timeout = kwargs.get('invokation_timeout', 5)
-        self._execution_timeout = kwargs.get('execution_timeout', 5)
-        self._schema_validator = None
-        self._thing_execution_context = dict(fetch_execution_logs=False)
+        ConsumedThingProperty.__init__(self, resource=resource) 
+        ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
+        self._resource # type: PropertyAffordance
         
     last_read_value = property(fget=ZMQConsumedAffordanceMixin.get_last_return_value,
                                 doc="cached return value of the last call to the method")
@@ -278,19 +275,6 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                             )
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, True) 
         
-    def noblock_get(self) -> None:
-        return self._zmq_client.send_request(
-                                            thing_id=self._resource.thing_id,
-                                            objekt=self._resource.name,
-                                            operation=Operations.readProperty,
-                                            server_execution_context=dict(
-                                                invokation_timeout=self._invokation_timeout, 
-                                                execution_timeout=self._execution_timeout
-                                            ),
-                                            thing_execution_context=self._thing_execution_context
-                                        )
-    
-    
     def oneway_set(self, value: typing.Any) -> None:
         self._zmq_client.send_request(
                                     thing_id=self._resource.thing_id,
@@ -307,14 +291,28 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                         oneway=True
                                     ),
                                 )
+        
+    def noblock_get(self) -> None:
+        return self._zmq_client.send_request(
+                                            thing_id=self._resource.thing_id,
+                                            objekt=self._resource.name,
+                                            operation=Operations.readProperty,
+                                            server_execution_context=dict(
+                                                invokation_timeout=self._invokation_timeout, 
+                                                execution_timeout=self._execution_timeout
+                                            ),
+                                            thing_execution_context=self._thing_execution_context
+                                        )
   
 
 
 class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     
-    __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
-                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger',
-                    '_deserialize']
+    __slots__ = ['__name__', '__qualname__', '__doc__', 
+                '_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
+                '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger',
+                '_deserialize']
+
     # event subscription
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
@@ -356,7 +354,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                     else: 
                         threading.Thread(target=cb, args=(data,)).start()
             except Exception as ex:
-                print(ex)
+                # print(ex)
                 warnings.warn(f"Uncaught exception from {self._name} event - {str(ex)}", 
                                 category=RuntimeWarning)
         try:
