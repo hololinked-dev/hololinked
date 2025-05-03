@@ -277,24 +277,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                                 thing_execution_context=self._thing_execution_context
                                             )
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, True) 
-    
-    def noblock_set(self, value : typing.Any) -> None:
-        return self._zmq_client.send_request(   
-                                        thing_id=self._resource.thing_id,
-                                        objekt=self._resource.name,
-                                        operation=Operations.writeProperty,
-                                        payload=SerializableData(
-                                            value=value, 
-                                            content_type=self._resource.retrieve_form('writeProperty', {}).get(
-                                                                            'contentType', 'application/json')
-                                        ),
-                                        server_execution_context=dict(
-                                            invokation_timeout=self._invokation_timeout, 
-                                            execution_timeout=self._execution_timeout
-                                        ),
-                                        thing_execution_context=self._thing_execution_context
-                                    )
-    
+        
     def noblock_get(self) -> None:
         return self._zmq_client.send_request(
                                             thing_id=self._resource.thing_id,

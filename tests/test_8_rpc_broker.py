@@ -29,6 +29,21 @@ except ImportError:
 
 
 
+data_structures = [
+    {"key": "value"},
+    [1, 2, 3], 
+    "string", 
+    42, 
+    3.14, 
+    True, 
+    None,
+    {"nested": {"key": "value"}},
+    [{"list": "of"}, {"dicts": "here"}],
+    {"complex": {"nested": {"list": [1, 2, 3]}, "mixed": [1, "two", 3.0, None]}},
+    {"array": [1, 2, 3]}
+] # to use for testing
+
+
 
 class InteractionAffordanceMixin(TestBrokerMixin):
 
@@ -157,7 +172,7 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
     def test_3_action_abstractions(self):
         """"Test if action can be invoked by a client"""
         
-        async def test_basic_callers():
+        async def test_basic_operations():
             """Test if action can be invoked by a client in basic request/response way, oneway and no block"""
             nonlocal self
             await self.action_echo.async_call('value')
@@ -170,26 +185,18 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
             self.assertEqual(self.action_echo.last_return_value, 10)
             self.assertEqual(self.action_echo(2), 2)
 
-        get_current_async_loop().run_until_complete(test_basic_callers())
+        get_current_async_loop().run_until_complete(test_basic_operations())
         self.client.handshake() 
 
-        async def test_callers_thorough():
+        async def test_operations_thorough():
             # Generate 20 random JSON serializable data structures
             nonlocal self
-            data_structures = [
-                {"key": "value"},
-                [1, 2, 3], "string", 42, 3.14, True, None,
-                {"nested": {"key": "value"}},
-                [{"list": "of"}, {"dicts": "here"}],
-                {"complex": {"nested": {"list": [1, 2, 3]}, "mixed": [1, "two", 3.0, None]}},
-                {"array": [1, 2, 3]}
-            ]
+            global data_structures
 
-            msg_ids = []
+            msg_ids = [None for i in range(len(data_structures))]
             last_call_type = None
             # Randomize calls to self.action_echo
             for index, data in enumerate(data_structures):
-                msg_ids.append(None)
                 call_type = random.choice(["async_call", "plain_call", "oneway", "noblock"])
                 if call_type == "async_call":
                     result = await self.action_echo.async_call(data)
@@ -202,8 +209,8 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
                     self.assertNotEqual(data, self.action_echo.last_return_value)
                 elif call_type == "noblock":
                     msg_ids[index] = self.action_echo.noblock(data)
-                    # noblock_expected_last_response = data
                     self.assertNotEqual(data, self.action_echo.last_return_value)
+
                 # print("last_call_type", last_call_type, "call_type", call_type, "data", data)
                 if last_call_type == "noblock":
                     response = self.action_echo._zmq_client.recv_response(msg_ids[index-1])
@@ -212,25 +219,67 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
                     
                 last_call_type = call_type
 
-        get_current_async_loop().run_until_complete(test_callers_thorough())
+        get_current_async_loop().run_until_complete(test_operations_thorough())
         self.client.handshake() 
 
 
     def test_4_property_abstractions(self):
         """Test if property can be invoked by a client"""
-        self.test_prop.set(100)
-        self.assertEqual(self.test_prop.get(), 100)
-        self.test_prop.oneway_set(200)
-        self.assertEqual(self.test_prop.get(), 200)
 
-        async def test_async_property_abstractions():
+        def test_basic_operations():
             nonlocal self
-            await self.test_prop.async_set(300)
-            self.assertEqual(self.test_prop.get(), 300)
-            await self.test_prop.async_set(0)
-            self.assertEqual(await self.test_prop.async_get(), 0)
+            self.test_prop.set(100)
+            self.assertEqual(self.test_prop.get(), 100)
+            self.test_prop.oneway_set(200)
+            self.assertEqual(self.test_prop.get(), 200)
 
-        get_current_async_loop().run_until_complete(test_async_property_abstractions())
+            async def test_async_property_abstractions():
+                nonlocal self
+                await self.test_prop.async_set(300)
+                self.assertEqual(self.test_prop.get(), 300)
+                await self.test_prop.async_set(0)
+                self.assertEqual(await self.test_prop.async_get(), 0)
+
+            get_current_async_loop().run_until_complete(test_async_property_abstractions())
+        
+        test_basic_operations()
+        self.client.handshake()
+
+
+        async def test_operations_thorough():
+            # Generate 20 random JSON serializable data structures
+            nonlocal self
+            global data_structures
+
+            msg_ids = [None for i in range(len(data_structures))]
+            last_call_type = None
+            # Randomize calls to self.action_echo
+            for index, data in enumerate(data_structures):
+                call_type = random.choice(["async_set", "set", "oneway_set", "noblock_get"])
+                if call_type == "async_set":
+                    self.assertIsNone(await self.test_prop.async_set(data))
+                    self.assertEqual(await self.test_prop.async_get(), data)
+                elif call_type == "set":
+                    self.assertIsNone(self.test_prop.set(data))
+                    self.assertEqual(self.test_prop.get(), data)
+                elif call_type == "oneway_set":
+                    self.assertIsNone(self.test_prop.oneway_set(data))
+                    self.assertNotEqual(data, self.test_prop.last_read_value)
+                    self.assertEqual(data, self.test_prop.get()) 
+                    # for one way calls as well, get() will return the latest value 
+                elif call_type == "noblock_get":
+                    msg_ids[index] = self.test_prop.noblock_get()
+                    self.assertNotEqual(data, self.test_prop.last_read_value)
+                    
+                #  print("last_call_type", last_call_type, "call_type", call_type, "data", data)
+                if last_call_type == "noblock":
+                    response = self.test_prop._zmq_client.recv_response(msg_ids[index-1])
+                    self.test_prop._last_zmq_response = response
+                    self.assertEqual(self.test_prop.last_read_value, data_structures[index-1])
+                    
+                last_call_type = call_type
+        
+        get_current_async_loop().run_until_complete(test_operations_thorough())
         self.client.handshake()
 
 
