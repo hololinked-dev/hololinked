@@ -138,9 +138,7 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
                                 handshake=False,
                                 transport='INPROC'
                             ) 
-        self.client = self.async_client
     
-        
     @classmethod
     def startServer(self):
         self._server_thread = threading.Thread(
@@ -157,12 +155,14 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
 
     
     def test_1_creation_defaults(self):
+        """test server configuration defaults"""
         self.assertTrue(self.server.req_rep_server.socket_address.startswith('inproc://'))
         self.assertTrue(self.server.event_publisher.socket_address.startswith('inproc://'))
 
 
     def test_2_handshake(self):
-        self.client.handshake()
+        """test handshake mechanisms"""
+        self.sync_client.handshake()
         async def async_handshake():
             self.async_client.handshake()
             await self.async_client.handshake_complete()
@@ -170,7 +170,7 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
 
 
     def test_3_action_abstractions(self):
-        """"Test if action can be invoked by a client"""
+        """"test if action can be invoked by a client"""
         
         async def test_basic_operations():
             """Test if action can be invoked by a client in basic request/response way, oneway and no block"""
@@ -180,13 +180,13 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
             noblock_msg_id = self.action_echo.noblock(10)
             self.assertEqual(self.action_echo.last_return_value, 'value')
             # test the responses for no block call, so read the socket - but, this is usually abstracte in a higher level API
-            response = self.action_echo._zmq_client.recv_response(noblock_msg_id)
+            response = self.action_echo._sync_zmq_client.recv_response(noblock_msg_id)
             self.action_echo._last_zmq_response = response
             self.assertEqual(self.action_echo.last_return_value, 10)
             self.assertEqual(self.action_echo(2), 2)
 
         get_current_async_loop().run_until_complete(test_basic_operations())
-        self.client.handshake() 
+        self.sync_client.handshake() 
 
         async def test_operations_thorough():
             # Generate 20 random JSON serializable data structures
@@ -213,14 +213,14 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
 
                 # print("last_call_type", last_call_type, "call_type", call_type, "data", data)
                 if last_call_type == "noblock":
-                    response = self.action_echo._zmq_client.recv_response(msg_ids[index-1])
+                    response = self.action_echo._sync_zmq_client.recv_response(msg_ids[index-1])
                     self.action_echo._last_zmq_response = response
                     self.assertEqual(self.action_echo.last_return_value, data_structures[index-1])
                     
                 last_call_type = call_type
 
         get_current_async_loop().run_until_complete(test_operations_thorough())
-        self.client.handshake() 
+        self.sync_client.handshake() 
 
 
     def test_4_property_abstractions(self):
@@ -243,7 +243,7 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
             get_current_async_loop().run_until_complete(test_async_property_abstractions())
         
         test_basic_operations()
-        self.client.handshake()
+        self.sync_client.handshake()
 
         async def test_operations_thorough():
             # Generate 20 random JSON serializable data structures
@@ -272,33 +272,34 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
                     
                 #  print("last_call_type", last_call_type, "call_type", call_type, "data", data)
                 if last_call_type == "noblock":
-                    response = self.test_prop._zmq_client.recv_response(msg_ids[index-1])
+                    response = self.test_prop._sync_zmq_client.recv_response(msg_ids[index-1])
                     self.test_prop._last_zmq_response = response
                     self.assertEqual(self.test_prop.last_read_value, data_structures[index-1])
                     
                 last_call_type = call_type
         
         get_current_async_loop().run_until_complete(test_operations_thorough())
-        self.client.handshake()
+        self.sync_client.handshake()
 
 
     def test_5_thing_execution_context(self):
-        """Test if thing execution context is used correctly"""
+        """test if thing execution context is used correctly"""
         old_thing_execution_context = self.action_echo._thing_execution_context
+        # Only fetch_execution_logs currently supported
         self.action_echo._thing_execution_context = dict(fetch_execution_logs=True)
         get_current_async_loop().run_until_complete(self.action_echo.async_call('value'))
         self.assertIsInstance(self.action_echo.last_return_value, dict)
-        self.assertFalse(self.action_echo.last_return_value == 'value')
-        self.assertTrue(
-                    'execution_logs' in self.action_echo.last_return_value.keys() and 
-                    'return_value' in self.action_echo.last_return_value.keys()    
-                )
+        self.assertTrue('execution_logs' in self.action_echo.last_return_value.keys())
+        self.assertTrue('return_value' in self.action_echo.last_return_value.keys())
         self.assertTrue(len(self.action_echo.last_return_value) == 2)
+        self.assertFalse(self.action_echo.last_return_value == 'value') # because its a dict now
+        self.assertIsInstance(self.action_echo.last_return_value['execution_logs'], list)
+        self.assertTrue(self.action_echo.last_return_value['return_value'] == 'value')
         self.action_echo._thing_execution_context = old_thing_execution_context
 
 
     def test_6_server_execution_context(self):
-        """Test if server execution context is used correctly"""
+        """test if server execution context is used correctly"""
         async def test_execution_timeout():
             try:
                 await self.sleep_action.async_call()
@@ -312,33 +313,39 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
         async def test_invokation_timeout():
             try:
                 old_timeout = self.sleep_action._invokation_timeout
-                self.sleep_action._invokation_timeout = 1
+                self.sleep_action._invokation_timeout = 0.1 # reduce the value to test timeout
                 await self.sleep_action.async_call()
             except Exception as ex:
                 self.assertIsInstance(ex, TimeoutError)
                 self.assertIn('Invokation timeout occured', str(ex))
-                self.sleep_action._invokation_timeout = old_timeout
             else:
                 self.assertTrue(False) # fail the test if reached here
+            finally:
+                self.sleep_action._invokation_timeout = old_timeout
+
         get_current_async_loop().run_until_complete(test_invokation_timeout())
 
 
-    # def test_4_return_binary_value(self):
+    def test_7_binary_payloads(self):
+        """test if binary payloads are handled correctly"""
+        self.assertEqual(self.get_mixed_content_data_action(), ('foobar', b'foobar'))
+        self.assertEqual(self.get_serialized_data_action(), b'foobar')
 
-    #     async def async_call():
-    #         await self.get_mixed_content_data_action.async_call()
-    #         return self.get_mixed_content_data_action.last_return_value
-    #     result = get_current_async_loop().run_until_complete(async_call())
-    #     self.assertEqual(result, ('foobar', b'foobar'))
+        async def async_call():
+            await self.get_mixed_content_data_action.async_call()
+            return self.get_mixed_content_data_action.last_return_value
+        result = get_current_async_loop().run_until_complete(async_call())
+        self.assertEqual(result, ('foobar', b'foobar'))
 
-    #     async def async_call():
-    #         await self.get_serialized_data_action.async_call()
-    #         return self.get_serialized_data_action.last_return_value
-    #     result = get_current_async_loop().run_until_complete(async_call())
-    #     self.assertEqual(result, b'foobar')
+        async def async_call():
+            await self.get_serialized_data_action.async_call()
+            return self.get_serialized_data_action.last_return_value
+        result = get_current_async_loop().run_until_complete(async_call())
+        self.assertEqual(result, b'foobar')
 
 
-    def test_7_stop(self):
+    def test_8_stop(self):
+        """test if server can be stopped"""
         self.server.stop()
        
         
@@ -360,31 +367,36 @@ class TestRPCServer(TestInprocRPCServer):
     @classmethod
     def setUpClient(self):
         super().setUpClient()
-        self.inproc_client = self.client 
-        self.ipc_client = SyncZMQClient(
-                                id=self.client_id,
+        self.sync_ipc_client = SyncZMQClient(
+                                id=self.client_id+"-sync", 
                                 server_id=self.server_id, 
                                 logger=self.logger,
                                 handshake=False,
                                 transport='IPC'
                             )
-        self.tcp_client = SyncZMQClient(
-                                id=self.client_id,
+        self.sync_tcp_client = SyncZMQClient(
+                                id=self.client_id+"-sync",
                                 server_id=self.server_id, 
                                 logger=self.logger,
                                 handshake=False,
                                 transport='TCP',
-                                tcp_socket_address='tcp://localhost:59000'
+                                socket_address='tcp://localhost:59000'
                             )
-
-
-    @classmethod
-    def setUpActions(self):
-        super().setUpActions()
-        self.action_echo._zmq_client = self.ipc_client
-        self.get_serialized_data_action._zmq_client = self.ipc_client
-        self.get_mixed_content_data_action._zmq_client = self.ipc_client
-        self.sleep_action._zmq_client = self.ipc_client
+        self.async_ipc_client = AsyncZMQClient(
+                                id=self.client_id+"-async", 
+                                server_id=self.server_id, 
+                                logger=self.logger,
+                                handshake=False,
+                                transport='IPC'
+                            )
+        self.async_tcp_client = AsyncZMQClient(
+                                id=self.client_id+"-async",
+                                server_id=self.server_id, 
+                                logger=self.logger,
+                                handshake=False,
+                                transport='TCP',
+                                socket_address='tcp://localhost:59000'
+                            )
 
 
     def test_1_creation_defaults(self):
@@ -396,56 +408,70 @@ class TestRPCServer(TestInprocRPCServer):
 
     def test_2_handshake(self):
         super().test_2_handshake()
-        self.ipc_client.handshake()    
-        self.tcp_client.handshake()
+        self.sync_ipc_client.handshake()    
+        self.sync_tcp_client.handshake()
+        async def async_handshake():
+            self.async_ipc_client.handshake()
+            await self.async_ipc_client.handshake_complete()
+            self.async_tcp_client.handshake()
+            await self.async_tcp_client.handshake_complete()
+        get_current_async_loop().run_until_complete(async_handshake())
 
 
     def test_3_action_abstractions(self):
-        old_client = self.action_echo._zmq_client
-        for client in [self.tcp_client, self.ipc_client]:
-            self.action_echo._zmq_client = client
+        old_sync_client = self.action_echo._sync_zmq_client
+        old_async_client = self.action_echo._async_zmq_client
+        for clients in [(self.sync_tcp_client, self.async_tcp_client), (self.sync_ipc_client, self.async_ipc_client)]:
+            self.action_echo._sync_zmq_client, self.action_echo._async_zmq_client = clients
             super().test_3_action_abstractions()
-        self.action_echo._zmq_client = old_client
+        self.action_echo._sync_zmq_client = old_sync_client
+        self.action_echo._async_zmq_client = old_async_client
 
     
     def test_4_property_abstractions(self):
-        old_client = self.test_prop._zmq_client
-        for client in [self.tcp_client, self.ipc_client]:
-            self.test_prop._zmq_client = client
+        old_sync_client = self.test_prop._sync_zmq_client
+        old_async_client = self.test_prop._async_zmq_client
+        for clients in [(self.sync_tcp_client, self.async_tcp_client), (self.sync_ipc_client, self.async_ipc_client)]:
+            self.test_prop._sync_zmq_client, self.test_prop._async_zmq_client = clients
             super().test_4_property_abstractions()
-        self.test_prop._zmq_client = old_client
+        self.test_prop._sync_zmq_client = old_sync_client
+        self.test_prop._async_zmq_client = old_async_client
 
-    # def test_4_return_binary_value(self):
-    #     super().test_4_return_binary_value()
-    #     old_client = self.sleep_action._zmq_client
-    #     for client in [self.tcp_client, self.ipc_client]:
-    #         self.sleep_action._zmq_client = client
-    #         return_value = self.get_mixed_content_data_action()
-    #         self.assertEqual(return_value, ('foobar', b'foobar'))
-    #         return_value = self.get_serialized_data_action()
-    #         self.assertEqual(return_value, b'foobar')
-    #     self.sleep_action._zmq_client = old_client
+
+    def test_5_thing_execution_context(self):
+        old_sync_client = self.sleep_action._sync_zmq_client
+        old_async_client = self.sleep_action._async_zmq_client
+        for clients in [(self.sync_tcp_client, self.async_tcp_client), (self.sync_ipc_client, self.async_ipc_client)]:
+            self.sleep_action._sync_zmq_client, self.sleep_action._async_zmq_client = clients
+            super().test_5_thing_execution_context()
+        self.sleep_action._sync_zmq_client = old_sync_client
+        self.sleep_action._async_zmq_client = old_async_client
 
 
     def test_6_server_execution_context(self):
-        super().test_6_server_execution_context()
-        # test oneway action
-        old_client = self.sleep_action._zmq_client
-        for client in [self.tcp_client, self.ipc_client]:
-            self.action_echo._zmq_client = client
-            self.action_echo('ipc_value_2')
-            self.assertEqual(self.action_echo.last_return_value, 'ipc_value_2')
-            self.action_echo.oneway('ipc_value_3')
-            self.assertEqual(self.action_echo.last_return_value, 'ipc_value_2')
-            return_value = self.action_echo('ipc_value_4')
-            self.assertEqual(return_value, 'ipc_value_4')        
-        self.sleep_action._zmq_client = old_client
+        old_sync_client = self.sleep_action._sync_zmq_client
+        old_async_client = self.sleep_action._async_zmq_client
+        for clients in [(self.sync_tcp_client, self.async_tcp_client), (self.sync_ipc_client, self.async_ipc_client)]:
+            self.sleep_action._sync_zmq_client, self.sleep_action._async_zmq_client = clients
+            super().test_6_server_execution_context()
+        self.sleep_action._sync_zmq_client = old_sync_client
+        self.sleep_action._async_zmq_client = old_async_client
+
+    
+    def test_7_binary_payloads(self):
+        super().test_7_binary_payloads()
+        old_sync_client = self.sleep_action._sync_zmq_client
+        old_async_client = self.sleep_action._async_zmq_client
+        for clients in [(self.sync_tcp_client, self.async_tcp_client), (self.sync_ipc_client, self.async_ipc_client)]:
+            self.sleep_action._sync_zmq_client, self.sleep_action._async_zmq_client = clients
+            super().test_7_binary_payloads()
+        self.sleep_action._sync_zmq_client = old_sync_client
+        self.sleep_action._async_zmq_client = old_async_client
 
 
 
 class TestExposedActions(InteractionAffordanceMixin):
-
-
+    
     @classmethod
     def setUpClient(self):
         super().setUpClient()
@@ -459,8 +485,11 @@ class TestExposedActions(InteractionAffordanceMixin):
         self.client = self.sync_client
 
 
-    def test_7_exposed_actions(self):
-        """Test if actions can be invoked by a client"""
+    def test_1_exposed_actions(self):
+        """
+        Now that actions can be invoked by a client, test different types of actions
+        and their behaviors
+        """
         run_thing_with_zmq_server_forked(
             thing_cls=TestThing, 
             id='test-action', 
@@ -469,7 +498,7 @@ class TestExposedActions(InteractionAffordanceMixin):
             prerun_callback=replace_methods_with_actions,
         )
         thing = TestThing(id='test-action', log_level=logging.ERROR)
-        self.client.handshake()
+        self.sync_client.handshake()
 
         # thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
         assert isinstance(thing.action_echo, BoundAction) # type definition
@@ -524,16 +553,16 @@ class TestExposedActions(InteractionAffordanceMixin):
         self.assertTrue(str(ex.exception).startswith("Subclasses must implement __call__"))
 
         
-    def test_8_schema_validation(self):
+    def test_2_schema_validation(self):
         """Test if schema validation is working correctly"""
-        self._test_8_json_schema_validation()
-        self._test_8_pydantic_validation()
+        self._test_2_json_schema_validation()
+        self._test_2_pydantic_validation()
 
     
-    def _test_8_json_schema_validation(self):
+    def _test_2_json_schema_validation(self):
 
         thing = TestThing(id='test-action', log_level=logging.ERROR)
-        self.client.handshake()
+        self.sync_client.handshake()
 
         # JSON schema validation
         assert isinstance(thing.json_schema_validated_action, BoundAction) # type definition
@@ -564,10 +593,10 @@ class TestExposedActions(InteractionAffordanceMixin):
         jsonschema.Draft7Validator(action_affordance.output).validate(return_value)
 
 
-    def _test_8_pydantic_validation(self):
+    def _test_2_pydantic_validation(self):
 
         thing = TestThing(id='test-action', log_level=logging.ERROR)
-        self.client.handshake()
+        self.sync_client.handshake()
 
         # Pydantic schema validation
         assert isinstance(thing.pydantic_validated_action, BoundAction) # type definition
@@ -617,14 +646,14 @@ class TestExposedActions(InteractionAffordanceMixin):
         self.assertEqual(return_value, {'val2': 'hello', 'val4': []})
 
 
-    def test_9_exit(self):
+    def test_3_exit(self):
+        """Exit the server"""
         exit_message = RequestMessage.craft_with_message_type(
             sender_id='test-action-client', 
             receiver_id='test-action',
             message_type=EXIT
         )
-        self.client.socket.send_multipart(exit_message.byte_array)
-
+        self.sync_client.socket.send_multipart(exit_message.byte_array)
         self.assertEqual(self.done_queue.get(), 'test-action')
         
 
@@ -653,7 +682,7 @@ class TestExposedProperties(InteractionAffordanceMixin):
             done_queue=self.done_queue,
         )
         thing = TestThing(id='test-property', log_level=logging.ERROR)
-        self.client.handshake()
+        self.sync_client.handshake()
 
         descriptor = thing.properties['number_prop']
         assert isinstance(descriptor, Property) # type definition
@@ -692,7 +721,7 @@ class TestExposedProperties(InteractionAffordanceMixin):
             receiver_id='test-property',
             message_type=EXIT
         )
-        self.client.socket.send_multipart(exit_message.byte_array)
+        self.sync_client.socket.send_multipart(exit_message.byte_array)
 
         self.assertEqual(self.done_queue.get(), 'test-property')
 
