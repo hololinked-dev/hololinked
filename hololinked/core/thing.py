@@ -120,9 +120,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         )   
         prepare_object_FSM(self)
         prepare_object_storage(self, **kwargs) # use_default_db, db_config_file, use_json_file, json_filename
-         # choose storage type, if use_json_file is True - use JSON storage, else - use database
-       
-       
+        
+        self._qualified_id = self.id # filler for now - TODO
         # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
 
 

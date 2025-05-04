@@ -153,14 +153,12 @@ class Property(Parameter):
         if self._execution_info_validator:
             self._execution_info_validator.obj_name = attrib_name
         if self._observable:
-            self._old_value_internal_name = f'{self._internal_name}_old_value'
+            self._old_value_internal_name = f'{self._internal_name}_old_value' 
             _observable_event_name = f'{self.name}_change_event'  
-            # This is a descriptor object, so we need to set it on the owner class
-            self._observable_event_descriptor = Event(
-                        friendly_name=_observable_event_name,
-                        doc=f"change event for {self.name}"
-                    ) # type: Event
+            self._observable_event_descriptor = Event(doc=f"change event for {self.name}")
             self._observable_event_descriptor.__set_name__(owner, _observable_event_name)
+            self._observable_event_descriptor._observable = True
+            # This is a descriptor object, so we need to set it on the owner class
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
     
 

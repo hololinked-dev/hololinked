@@ -5,6 +5,7 @@ import zmq.asyncio
 import jsonschema
 import logging
 import random
+import time
 
 from hololinked.core.actions import BoundAction
 from hololinked.core.property import Property
@@ -13,8 +14,8 @@ from hololinked.core.zmq.message import EXIT, RequestMessage
 from hololinked.core.zmq.rpc_server import RPCServer
 from hololinked.server.zmq import ZMQServer
 from hololinked.utils import get_current_async_loop
-from hololinked.td import ActionAffordance, PropertyAffordance
-from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty, ZMQConsumedAffordanceMixin
+from hololinked.td import ActionAffordance, PropertyAffordance, EventAffordance
+from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty, ZMQEvent
 
 try:
     from .test_5_brokers import TestBrokerMixin
@@ -52,6 +53,7 @@ class InteractionAffordanceMixin(TestBrokerMixin):
         super().setUpClass()
         self.setUpActions()
         self.setUpProperties()
+        self.setUpEvents()
         
     @classmethod
     def setUpActions(self):
@@ -64,7 +66,7 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                                 schema_validator=None
                             )
     
-        self.get_serialized_data_action = ZMQAction(
+        self.action_get_serialized_data = ZMQAction(
                                 resource=ActionAffordance.from_TD('get_serialized_data', test_thing_TD),
                                 sync_client=self.sync_client,
                                 async_client=self.async_client, 
@@ -73,7 +75,7 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                                 schema_validator=None
                             )
         
-        self.sleep_action = ZMQAction(
+        self.action_sleep = ZMQAction(
                                 resource=ActionAffordance.from_TD('sleep', test_thing_TD),
                                 sync_client=self.sync_client,
                                 async_client=self.async_client, 
@@ -82,18 +84,26 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                                 schema_validator=None
                             )
 
-        self.get_mixed_content_data_action = ZMQAction(
-                        resource= ActionAffordance.from_TD('get_mixed_content_data', test_thing_TD),
-                        sync_client=self.sync_client,
-                        async_client=self.async_client, 
-                        invokation_timeout=5, 
-                        execution_timeout=5, 
-                        schema_validator=None
-                    )
+        self.action_get_mixed_content_data = ZMQAction(
+                                resource= ActionAffordance.from_TD('get_mixed_content_data', test_thing_TD),
+                                sync_client=self.sync_client,
+                                async_client=self.async_client, 
+                                invokation_timeout=5, 
+                                execution_timeout=5, 
+                                schema_validator=None
+                            )
+        self.action_push_events = ZMQAction(
+                                resource=ActionAffordance.from_TD('push_events', test_thing_TD),
+                                sync_client=self.sync_client,
+                                async_client=self.async_client,
+                                invokation_timeout=5,
+                                execution_timeout=5,
+                                schema_validator=None
+                            )
     
     @classmethod
     def setUpProperties(self):
-        self.test_prop = ZMQProperty(
+        self.base_property = ZMQProperty(
                                 resource=PropertyAffordance.from_TD('base_property', test_thing_TD),
                                 sync_client=self.sync_client,
                                 async_client=self.async_client, 
@@ -101,7 +111,26 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                                 execution_timeout=5, 
                                 schema_validator=None
                             )
-
+        self.total_number_of_events = ZMQProperty(
+                                resource=PropertyAffordance.from_TD('total_number_of_events', test_thing_TD),
+                                sync_client=self.sync_client,
+                                async_client=self.async_client,
+                                invokation_timeout=5,
+                                execution_timeout=5,
+                                schema_validator=None
+                            )      
+    
+    @classmethod
+    def setUpEvents(self):
+        self.test_event = ZMQEvent(
+                                resource=EventAffordance.from_TD('test_event', test_thing_TD),
+                                sync_client=self.sync_client,
+                                async_client=self.async_client, 
+                                invokation_timeout=5, 
+                                execution_timeout=5, 
+                                schema_validator=None
+                            )
+       
 
 
 class TestInprocRPCServer(InteractionAffordanceMixin):
@@ -228,17 +257,17 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
 
         def test_basic_operations():
             nonlocal self
-            self.test_prop.set(100)
-            self.assertEqual(self.test_prop.get(), 100)
-            self.test_prop.oneway_set(200)
-            self.assertEqual(self.test_prop.get(), 200)
+            self.base_property.set(100)
+            self.assertEqual(self.base_property.get(), 100)
+            self.base_property.oneway_set(200)
+            self.assertEqual(self.base_property.get(), 200)
 
             async def test_async_property_abstractions():
                 nonlocal self
-                await self.test_prop.async_set(300)
-                self.assertEqual(self.test_prop.get(), 300)
-                await self.test_prop.async_set(0)
-                self.assertEqual(await self.test_prop.async_get(), 0)
+                await self.base_property.async_set(300)
+                self.assertEqual(self.base_property.get(), 300)
+                await self.base_property.async_set(0)
+                self.assertEqual(await self.base_property.async_get(), 0)
 
             get_current_async_loop().run_until_complete(test_async_property_abstractions())
         
@@ -256,25 +285,25 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
             for index, data in enumerate(data_structures):
                 call_type = random.choice(["async_set", "set", "oneway_set", "noblock_get"])
                 if call_type == "async_set":
-                    self.assertIsNone(await self.test_prop.async_set(data))
-                    self.assertEqual(await self.test_prop.async_get(), data)
+                    self.assertIsNone(await self.base_property.async_set(data))
+                    self.assertEqual(await self.base_property.async_get(), data)
                 elif call_type == "set":
-                    self.assertIsNone(self.test_prop.set(data))
-                    self.assertEqual(self.test_prop.get(), data)
+                    self.assertIsNone(self.base_property.set(data))
+                    self.assertEqual(self.base_property.get(), data)
                 elif call_type == "oneway_set":
-                    self.assertIsNone(self.test_prop.oneway_set(data))
-                    self.assertNotEqual(data, self.test_prop.last_read_value)
-                    self.assertEqual(data, self.test_prop.get()) 
+                    self.assertIsNone(self.base_property.oneway_set(data))
+                    self.assertNotEqual(data, self.base_property.last_read_value)
+                    self.assertEqual(data, self.base_property.get()) 
                     # for one way calls as well, get() will return the latest value 
                 elif call_type == "noblock_get":
-                    msg_ids[index] = self.test_prop.noblock_get()
-                    self.assertNotEqual(data, self.test_prop.last_read_value)
+                    msg_ids[index] = self.base_property.noblock_get()
+                    self.assertNotEqual(data, self.base_property.last_read_value)
                     
                 #  print("last_call_type", last_call_type, "call_type", call_type, "data", data)
                 if last_call_type == "noblock":
-                    response = self.test_prop._sync_zmq_client.recv_response(msg_ids[index-1])
-                    self.test_prop._last_zmq_response = response
-                    self.assertEqual(self.test_prop.last_read_value, data_structures[index-1])
+                    response = self.base_property._sync_zmq_client.recv_response(msg_ids[index-1])
+                    self.base_property._last_zmq_response = response
+                    self.assertEqual(self.base_property.last_read_value, data_structures[index-1])
                     
                 last_call_type = call_type
         
@@ -302,7 +331,7 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
         """test if server execution context is used correctly"""
         async def test_execution_timeout():
             try:
-                await self.sleep_action.async_call()
+                await self.action_sleep.async_call()
             except Exception as ex:
                 self.assertIsInstance(ex, TimeoutError)
                 self.assertIn('Execution timeout occured', str(ex))
@@ -312,34 +341,34 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
        
         async def test_invokation_timeout():
             try:
-                old_timeout = self.sleep_action._invokation_timeout
-                self.sleep_action._invokation_timeout = 0.1 # reduce the value to test timeout
-                await self.sleep_action.async_call()
+                old_timeout = self.action_sleep._invokation_timeout
+                self.action_sleep._invokation_timeout = 0.1 # reduce the value to test timeout
+                await self.action_sleep.async_call()
             except Exception as ex:
                 self.assertIsInstance(ex, TimeoutError)
                 self.assertIn('Invokation timeout occured', str(ex))
             else:
                 self.assertTrue(False) # fail the test if reached here
             finally:
-                self.sleep_action._invokation_timeout = old_timeout
+                self.action_sleep._invokation_timeout = old_timeout
 
         get_current_async_loop().run_until_complete(test_invokation_timeout())
 
 
     def test_7_binary_payloads(self):
         """test if binary payloads are handled correctly"""
-        self.assertEqual(self.get_mixed_content_data_action(), ('foobar', b'foobar'))
-        self.assertEqual(self.get_serialized_data_action(), b'foobar')
+        self.assertEqual(self.action_get_mixed_content_data(), ('foobar', b'foobar'))
+        self.assertEqual(self.action_get_serialized_data(), b'foobar')
 
         async def async_call():
-            await self.get_mixed_content_data_action.async_call()
-            return self.get_mixed_content_data_action.last_return_value
+            await self.action_get_mixed_content_data.async_call()
+            return self.action_get_mixed_content_data.last_return_value
         result = get_current_async_loop().run_until_complete(async_call())
         self.assertEqual(result, ('foobar', b'foobar'))
 
         async def async_call():
-            await self.get_serialized_data_action.async_call()
-            return self.get_serialized_data_action.last_return_value
+            await self.action_get_serialized_data.async_call()
+            return self.action_get_serialized_data.last_return_value
         result = get_current_async_loop().run_until_complete(async_call())
         self.assertEqual(result, b'foobar')
 
@@ -429,45 +458,41 @@ class TestRPCServer(TestInprocRPCServer):
 
     
     def test_4_property_abstractions(self):
-        old_sync_client = self.test_prop._sync_zmq_client
-        old_async_client = self.test_prop._async_zmq_client
+        old_sync_client = self.base_property._sync_zmq_client
+        old_async_client = self.base_property._async_zmq_client
         for clients in [(self.sync_tcp_client, self.async_tcp_client), (self.sync_ipc_client, self.async_ipc_client)]:
-            self.test_prop._sync_zmq_client, self.test_prop._async_zmq_client = clients
+            self.base_property._sync_zmq_client, self.base_property._async_zmq_client = clients
             super().test_4_property_abstractions()
-        self.test_prop._sync_zmq_client = old_sync_client
-        self.test_prop._async_zmq_client = old_async_client
+        self.base_property._sync_zmq_client = old_sync_client
+        self.base_property._async_zmq_client = old_async_client
 
 
     def test_5_thing_execution_context(self):
-        old_sync_client = self.sleep_action._sync_zmq_client
-        old_async_client = self.sleep_action._async_zmq_client
+        old_sync_client = self.action_echo._sync_zmq_client
+        old_async_client = self.action_echo._async_zmq_client
         for clients in [(self.sync_tcp_client, self.async_tcp_client), (self.sync_ipc_client, self.async_ipc_client)]:
-            self.sleep_action._sync_zmq_client, self.sleep_action._async_zmq_client = clients
+            self.action_echo._sync_zmq_client, self.action_echo._async_zmq_client = clients
             super().test_5_thing_execution_context()
-        self.sleep_action._sync_zmq_client = old_sync_client
-        self.sleep_action._async_zmq_client = old_async_client
+        self.action_echo._sync_zmq_client = old_sync_client
+        self.action_echo._async_zmq_client = old_async_client
 
 
     def test_6_server_execution_context(self):
-        old_sync_client = self.sleep_action._sync_zmq_client
-        old_async_client = self.sleep_action._async_zmq_client
+        old_sync_client = self.action_sleep._sync_zmq_client
+        old_async_client = self.action_sleep._async_zmq_client
         for clients in [(self.sync_tcp_client, self.async_tcp_client), (self.sync_ipc_client, self.async_ipc_client)]:
-            self.sleep_action._sync_zmq_client, self.sleep_action._async_zmq_client = clients
+            self.action_sleep._sync_zmq_client, self.action_sleep._async_zmq_client = clients
             super().test_6_server_execution_context()
-        self.sleep_action._sync_zmq_client = old_sync_client
-        self.sleep_action._async_zmq_client = old_async_client
+        self.action_sleep._sync_zmq_client = old_sync_client
+        self.action_sleep._async_zmq_client = old_async_client
 
     
     def test_7_binary_payloads(self):
-        super().test_7_binary_payloads()
-        old_sync_client = self.sleep_action._sync_zmq_client
-        old_async_client = self.sleep_action._async_zmq_client
         for clients in [(self.sync_tcp_client, self.async_tcp_client), (self.sync_ipc_client, self.async_ipc_client)]:
-            self.sleep_action._sync_zmq_client, self.sleep_action._async_zmq_client = clients
+            for action in [self.action_get_serialized_data, self.action_get_mixed_content_data]:
+                action._sync_zmq_client, action._async_zmq_client = clients
             super().test_7_binary_payloads()
-        self.sleep_action._sync_zmq_client = old_sync_client
-        self.sleep_action._async_zmq_client = old_async_client
-
+            
 
 
 class TestExposedActions(InteractionAffordanceMixin):
@@ -727,6 +752,31 @@ class TestExposedProperties(InteractionAffordanceMixin):
 
 
 
+class TestEvent(InteractionAffordanceMixin):
+        
+    def test_1_event(self):
+        attempts = self.total_number_of_events.get()
+        
+        results = []
+        def cb(value):
+            nonlocal results
+            results.append(value)
+
+        self.test_event.subscribe(cb)
+        time.sleep(3) # calm down for event publisher to connect fully as there is no handshake for events
+        self.action_push_events()
+
+        for i in range(attempts):
+            if len(results) == attempts:
+                break
+            time.sleep(0.1)
+
+        self.assertEqual(len(results), attempts)
+        self.assertEqual(results, ['test data']*attempts)
+        self.test_event.unsubscribe(cb)
+
+
+
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInprocRPCServer))
@@ -735,8 +785,6 @@ def load_tests(loader, tests, pattern):
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
     return suite
         
-
-
 if __name__ == '__main__':
     runner = TestRunner()
     runner.run(load_tests(unittest.TestLoader(), None, None))
