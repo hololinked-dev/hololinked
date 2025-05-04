@@ -83,7 +83,7 @@ class OceanOpticsSpectrometer(Thing):
     last_intensity = ClassSelector(default=None, allow_None=True, class_=Intensity, 
                     doc="last measurement intensity (in arbitrary units)") # type: Intensity
     
-    intensity_measurement_event = Event(friendly_name='intensity-measurement-event', 
+    intensity_measurement_event = Event(
             doc="event generated on measurement of intensity, max 30 per second even if measurement is faster.",
             schema=Intensity.schema)
     
