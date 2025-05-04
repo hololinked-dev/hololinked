@@ -1,5 +1,4 @@
-import asyncio
-import time, logging, unittest, os
+import asyncio, threading, time, logging, unittest, os
 import typing
 from pydantic import BaseModel
 
@@ -147,6 +146,7 @@ class TestThing(Thing):
     
     @sleeping_prop.setter
     def set_sleeping_prop(self, value):
+        time.sleep(10)
         self._sleeping_prop = value
     
     
@@ -249,9 +249,31 @@ class TestThing(Thing):
         print(f'db_init_int_prop: {self.db_init_int_prop}')
         print(f'db_persist_selctor_prop: {self.db_persist_selector_prop}')
         print(f'non_remote_number_prop: {self.non_remote_number_prop}')
-    
-    test_event = Event(friendly_name='test-event', doc='test event')
 
+
+    #----------- Events --------------
+    
+    test_event = Event(doc='test event with arbitrary payload')
+
+    total_number_of_events = Number(default=100, bounds=(1, None),                            
+                            doc="Total number of events pushed")
+     
+    @action()
+    def push_events(self):
+        threading.Thread(target=self._push_worker).start()
+
+    def _push_worker(self):
+        for i in range(100):
+            self.test_event.push('test data')
+            time.sleep(0.01) # 10ms
+
+    test_binary_payload_event = Event(doc='test event with binary payload')
+
+    test_mixed_content_payload_event = Event(doc='test event with mixed content payload')
+
+    test_event_with_json_schema = Event(doc='test event with schema validation')
+
+    test_event_with_pydantic_schema = Event(doc='test event with pydantic schema validation')
 
 
 def replace_methods_with_actions(thing_cls: typing.Type[TestThing]) -> None:
@@ -350,6 +372,10 @@ test_thing_TD = {
         'sleep': {
             'title' : 'sleep',
             'description' : 'sleeps for 10 seconds',
+        },
+        'push_events': {
+            'title' : 'push_events',
+            'description' : 'pushes events',
         }
     },
     'properties' : {
@@ -369,7 +395,19 @@ test_thing_TD = {
             'default' : 'hello',
             'regex' : '^[a-z]+$'
         },
-    }
+        'total_number_of_events': {
+            'title' : 'total_number_of_events',
+            'description' : 'Total number of events pushed',
+            'default' : 100,
+            'minimum' : 1
+        }
+    },
+    'events' : {
+        'test_event': {
+            'title' : 'test_event',
+            'description' : 'test event'
+        }
+    },
 }
 
 

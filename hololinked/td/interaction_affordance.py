@@ -204,7 +204,22 @@ class InteractionAffordance(Schema):
         -------
         typing.Union[PropertyAffordance, ActionAffordance, EventAffordance]
         """
-        raise NotImplementedError("from_TD must be implemented in subclass of InteractionAffordance")
+        if cls == PropertyAffordance:
+            affordance_name = "properties"
+        elif cls == ActionAffordance:
+            affordance_name = "actions"
+        elif cls == EventAffordance:
+            affordance_name = "events"
+        else:
+            raise ValueError(f"unknown affordance type - {cls}, cannot create object from TD")
+        affordance_json = TD[affordance_name][name] # type: typing.Dict[str, JSON]
+        affordance = cls()
+        for field in cls.model_fields:
+            if field in affordance_json:
+                setattr(affordance, field, affordance_json[field])
+        affordance._name = name
+        affordance._thing_id = TD["id"]
+        return affordance
     
     @classmethod
     def register_descriptor(cls, descriptor: Property | Action | Event, schema_generator: "InteractionAffordance") -> None:
@@ -424,7 +439,7 @@ class EventAffordance(InteractionAffordance):
         # self.forms = [form.asdict()]
 
     @classmethod
-    def generate_schema(cls, event, owner, authority : str) -> JSON:
+    def generate(cls, event: Event, owner, **kwargs) -> "EventAffordance":
         affordance = EventAffordance()
         affordance.owner = owner
         affordance.objekt = event
