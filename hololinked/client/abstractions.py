@@ -299,13 +299,13 @@ class ConsumedThingEvent:
 
 def raise_local_exception(error_message : typing.Dict[str, typing.Any]) -> None:
     """
-    raises an exception on client side using an exception from server by mapping it to the correct one based on type.
+    raises an exception on client side using an exception from server by mapping it to the correct one based on 
+    exception type.
 
     Parameters
     ----------
     exception: Dict[str, Any]
         exception dictionary made by server with following keys - type, message, traceback, notes
-
     """
     if isinstance(error_message, Exception):
         raise error_message from None
