@@ -267,8 +267,8 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
     def build(self) -> None:
         property = self.objekt
         self.ds_build_from_property(property)
-        if property._observable:
-            self.observable = property._observable
+        if property.observable: # does not disturb the default value of None, which will omit the field in the JSON
+            self.observable = property.observable
     
     # def build_forms(self, authority: str) -> None:
         # property = self.objekt

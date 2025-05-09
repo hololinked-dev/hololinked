@@ -32,9 +32,11 @@ class Event:
                 'doc', 'schema', 'security', 'label', 'owner']
 
 
-    def __init__(self, doc : typing.Optional[str] = None, 
+    def __init__(self, 
+                doc : typing.Optional[str] = None, 
                 schema : typing.Optional[JSON] = None, # security : typing.Optional[BaseSecurityDefinition] = None,
-                label : typing.Optional[str] = None) -> None:
+                label : typing.Optional[str] = None
+            ) -> None:
         self.doc = doc 
         if global_config.validate_schemas and schema:
             jsonschema.Draft7Validator.check_schema(schema)
