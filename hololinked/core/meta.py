@@ -716,7 +716,7 @@ class EventsRegistry(DescriptorRegistry):
         except AttributeError:
             props = dict()
             for name, prop in self.owner_cls.properties.descriptors.items():
-                if not isinstance(prop, Property) or not prop._observable:
+                if not isinstance(prop, Property) or not prop.observable:
                     continue
                 props[name] = prop
             setattr(
@@ -730,7 +730,7 @@ class EventsRegistry(DescriptorRegistry):
 
 class Propertized(Parameterized):
     """
-    Bae class providing additional functionality related to properties,
+    Base class providing additional functionality related to properties,
     like setting up a registry, allowing values to be set at `__init__()` etc. 
     It is not meant to be subclassed directly by the end-user.
 
