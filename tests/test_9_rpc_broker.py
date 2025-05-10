@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import typing
 import unittest
 import zmq.asyncio
 import jsonschema
@@ -10,7 +11,7 @@ import time
 from hololinked.core.actions import BoundAction
 from hololinked.core.property import Property
 from hololinked.core.thing import Thing
-from hololinked.core.zmq.brokers import AsyncZMQClient, EventConsumer, SyncZMQClient
+from hololinked.core.zmq.brokers import AsyncEventConsumer, AsyncZMQClient, EventConsumer, SyncZMQClient
 from hololinked.core.zmq.message import EXIT, RequestMessage
 from hololinked.core.zmq.rpc_server import RPCServer
 from hololinked.server.zmq import ZMQServer
@@ -760,24 +761,35 @@ class TestExposedProperties(InteractionAffordanceMixin):
 class TestExposedEvents(TestRPCServerMixin):
 
     @classmethod
-    def setUpClient(self):
-        super().setUpClient()
-        event_affordance = EventAffordance.from_TD('test_event', test_thing_TD)
-        self.sync_event_client = EventConsumer(
-                    id=f"{event_affordance.thing_id}|{event_affordance.name}", 
-                    event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
-                    socket_address=self.server.event_publisher.socket_address,
-                    logger=self.logger,
-                    context=self.context
-                )
-        
-    @classmethod
     def setUpEvents(self):
-        self.test_event = ZMQEvent(
-                                resource=EventAffordance.from_TD('test_event', test_thing_TD),
-                                sync_zmq_client=self.sync_event_client,                        
-                            )
-        
+        self.event_names = ['test_event', 'test_binary_payload_event', 'test_event_with_json_schema']
+        for event_name in self.event_names:
+            event_affordance = EventAffordance.from_TD(event_name, test_thing_TD)
+            sync_event_client = EventConsumer(
+                                    id=f"{event_affordance.thing_id}|{event_affordance.name}|sync", 
+                                    event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
+                                    socket_address=self.server.event_publisher.socket_address,
+                                    logger=self.logger,
+                                    context=self.context
+                                )
+            async_event_client = AsyncEventConsumer(
+                                    id=f"{event_affordance.thing_id}|{event_affordance.name}|async", 
+                                    event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
+                                    socket_address=self.server.event_publisher.socket_address,
+                                    logger=self.logger,
+                                    context=self.context
+                                )
+            event = ZMQEvent(
+                        resource=event_affordance,
+                        sync_zmq_client=sync_event_client,
+                        async_zmq_client=async_event_client,
+                    )
+            setattr(self, event_name, event)
+        self.test_event # type: ZMQEvent
+        self.test_binary_payload_event # type: ZMQEvent
+        # self.test_mixed_content_payload_event # type: ZMQEvent
+        self.test_event_with_json_schema # type: ZMQEvent
+
 
     def test_1_creation_defaults(self):
         """test server configuration defaults"""
@@ -791,37 +803,95 @@ class TestExposedEvents(TestRPCServerMixin):
                 self.assertEqual(event._owner_inst, thing)
 
 
-    def test_2_event(self):
+    def test_2_sync_client_event_stream(self):
         """test if event can be invoked by a client"""
-        self.assertEqual(
-            get_zmq_unique_identifier_from_event_affordance(self.test_event._resource),
-            self.thing.test_event._unique_identifier
-        )
-        self.assertEqual(
-            self.test_event._sync_zmq_client.socket_address, 
-            self.server.event_publisher.socket_address
-        )
-        attempts = self.total_number_of_events.get()
+        def test_events(event_name: str, expected_data: typing.Any) -> None:
+            event_client = getattr(self, event_name) # type: ZMQEvent
+            self.assertEqual(
+                get_zmq_unique_identifier_from_event_affordance(event_client._resource),
+                getattr(self.thing, event_client._resource.name)._unique_identifier # type: EventDispatcher
+            )
+            self.assertEqual(
+                event_client._sync_zmq_client.socket_address, 
+                self.server.event_publisher.socket_address
+            )
+            attempts = 100
+            results = []
+            def cb(value):
+                nonlocal results
+                results.append(value)
+
+            event_client.subscribe(cb)
+            time.sleep(3) # calm down for event publisher to connect fully as there is no handshake for events
+            self.action_push_events(event_name=event_name ,total_number_of_events=attempts)
+
+            for i in range(attempts):
+                if len(results) == attempts:
+                    break
+                time.sleep(0.1)
+
+            self.assertEqual(len(results), attempts)
+            self.assertEqual(results, [expected_data]*attempts)
+            event_client.unsubscribe(cb)
+
+        for name, data in zip(
+                        self.event_names, 
+                        ['test data', b'test data', 
+                            {
+                                'val1': 1,
+                                'val2': 'test',
+                                'val3': {'key': 'value'},
+                                'val4': [1, 2, 3]
+                            }
+                        ]
+                    ):
+            test_events(name, data)
         
-        results = []
-        def cb(value):
-            nonlocal results
-            # print("Event received:", value)
-            results.append(value)
 
-        self.test_event.subscribe(cb)
-        time.sleep(3) # calm down for event publisher to connect fully as there is no handshake for events
-        self.action_push_events()
+    def test_3_async_client_event_stream(self):
 
-        for i in range(attempts):
-            if len(results) == attempts:
-                break
-            time.sleep(0.1)
+        async def test_events(event_name: str, expected_data: typing.Any) -> None:
+            event_client = getattr(self, event_name) # type: ZMQEvent
+            event_client._default_scheduling_mode = 'async'
+            self.assertEqual(
+                get_zmq_unique_identifier_from_event_affordance(event_client._resource),
+                getattr(self.thing, event_client._resource.name)._unique_identifier # type: EventDispatcher
+            )
+            self.assertEqual(
+                event_client._async_zmq_client.socket_address, 
+                self.server.event_publisher.socket_address
+            )
+            attempts = 100
+            results = []
+            def cb(value):
+                nonlocal results
+                results.append(value)
 
-        self.assertEqual(len(results), attempts)
-        self.assertEqual(results, ['test data']*attempts)
-        self.test_event.unsubscribe(cb)
+            event_client.subscribe(cb)
+            time.sleep(3) # calm down for event publisher to connect fully as there is no handshake for events
+            self.action_push_events(event_name=event_name ,total_number_of_events=attempts)
 
+            for i in range(attempts):
+                if len(results) == attempts:
+                    break
+                await asyncio.sleep(0.1)
+
+            self.assertEqual(len(results), attempts)
+            self.assertEqual(results, [expected_data]*attempts)
+            event_client.unsubscribe(cb)
+
+        for name, data in zip(
+                        self.event_names, 
+                        ['test data', b'test data', 
+                            {
+                                'val1': 1,
+                                'val2': 'test',
+                                'val3': {'key': 'value'},
+                                'val4': [1, 2, 3]
+                            }
+                        ]
+                    ):
+            get_current_async_loop().run_until_complete(test_events(name, data))
 
     def test_9_exit(self):
         exit_message = RequestMessage.craft_with_message_type(

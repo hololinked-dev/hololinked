@@ -1946,10 +1946,28 @@ class BaseEventConsumer(BaseZMQClient):
                 id: str, 
                 event_unique_identifier: str, 
                 socket_address: str, 
+                context: zmq.Context | None = None, 
                 **kwargs
             ) -> None:
-        self._terminate_context = False
+        self._terminate_context = context == None
+        if isinstance(self, BaseSyncZMQ):
+            self.context = context or zmq.Context()
+            self.poller = zmq.Poller()
+        elif isinstance(self, BaseAsyncZMQ):
+            self.context = context or zmq.asyncio.Context()
+            self.poller = zmq.asyncio.Poller()
+        else:
+            raise TypeError("BaseEventConsumer must be subclassed by either BaseSyncZMQ or BaseAsyncZMQ")
         super().__init__(id=id, server_id=kwargs.get('server_id', None), **kwargs)
+        self.create_socket(
+                        id=id, 
+                        node_type='client', 
+                        context=self.context,
+                        socket_type=zmq.SUB, 
+                        socket_address=socket_address, 
+                        transport=socket_address.split('://', 1)[0].upper(),
+                        **kwargs
+                    )
         self.event_unique_identifier = bytes(event_unique_identifier, encoding='utf-8')
         self.interruptor = self.context.socket(zmq.PAIR)
         self.interruptor.setsockopt_string(zmq.IDENTITY, f'interrupting-server')
@@ -1968,6 +1986,14 @@ class BaseEventConsumer(BaseZMQClient):
         #     self.poller.unregister(self.interruptor)
         self.poller.register(self.socket, zmq.POLLIN)
         self.poller.register(self.interruptor, zmq.POLLIN)
+
+    
+    def craft_interrupt_message(self) -> EventMessage:
+        return EventMessage.craft_from_arguments(
+                        event_id=f'{self.id}/interrupting-server',
+                        sender_id=self.id,
+                        payload=SerializableData("INTERRUPT")
+                    )
         
 
     def exit(self):
@@ -1978,8 +2004,7 @@ class BaseEventConsumer(BaseZMQClient):
             self.poller.unregister(self.interruptor)
         except Exception as E:
             self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message: {}".format(
-                self.socket_address, str(E)))
-            
+                self.socket_address, str(E)))  
         try:
             self.socket.close(0)
             self.interruptor.close(0)
@@ -2021,32 +2046,6 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         server_id: str
             instance name of the Thing publishing the event
     """
-
-    def __init__(self, 
-                id: str, 
-                event_unique_identifier: str, 
-                socket_address: str, 
-                context: zmq.Context | None = None, 
-                **kwargs
-            ) -> None:
-        self.context = context or zmq.Context()
-        self.poller = zmq.Poller()
-        super().__init__(
-                        id=id,
-                        event_unique_identifier=event_unique_identifier,
-                        socket_address=socket_address,
-                        **kwargs
-                    )
-        self.create_socket(id=id, 
-                        node_type='client', 
-                        context=self.context,
-                        socket_type=zmq.SUB, 
-                        socket_address=socket_address, 
-                        transport=socket_address.split('://', 1)[0].upper(),
-                        **kwargs
-                    )
-        self._terminate_context = context == None
-        
     def receive(self, timeout: typing.Optional[float] = None) -> EventMessage:
         """
         receive event with given timeout
@@ -2077,15 +2076,12 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method, 
         generally should be used for exiting this object
         """
-        message = EventMessage.craft_from_arguments(
-                        event_id=f'{self.id}/interrupting-server',
-                        sender_id=self.id,
-                        payload=SerializableData("INTERRUPT")
-                    )
-        self.interrupting_peer.send_multipart(message.byte_array)
+        self.interrupting_peer.send_multipart(
+            self.craft_interrupt_message().byte_array
+        )
 
 
-class AsyncEventConsumer(BaseEventConsumer):
+class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
     """
     Listens to events published at PUB sockets using SUB socket, use in async loops.
 
@@ -2109,16 +2105,7 @@ class AsyncEventConsumer(BaseEventConsumer):
         server_id: str
             instance name of the Thing publishing the event
     """
-
-    def __init__(self, unique_identifier: str, socket_address: str, identity: str, client_type = b'HTTP_SERVER', 
-                    context: typing.Optional[zmq.asyncio.Context] = None, **kwargs) -> None:
-        self.context = context or zmq.asyncio.Context()
-        self.poller = zmq.asyncio.Poller()
-        super().__init__(unique_identifier=unique_identifier, socket_address=socket_address, 
-                        identity=identity, client_type=client_type, **kwargs)
-        self._terminate_context = context == None
-        
-    async def receive(self, timeout: typing.Optional[float] = None, deserialize = True) -> typing.Union[bytes, typing.Any]:
+    async def receive(self, timeout: typing.Optional[float] = None) -> EventMessage:
         """
         receive event with given timeout
 
@@ -2129,9 +2116,10 @@ class AsyncEventConsumer(BaseEventConsumer):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
-        contents = None
         sockets = await self.poller.poll(timeout) 
-        if len(sockets) > 1:
+        if len(sockets) > 1: 
+            # if there is an interrupt message as well as an event,
+            # give preference to interrupt message.
             if socket[0] == self.interrupting_peer:
                 sockets = [socket[0]]
             elif sockets[1] == self.interrupting_peer:
@@ -2142,9 +2130,7 @@ class AsyncEventConsumer(BaseEventConsumer):
                 event = EventMessage(raw_message)
             except zmq.Again:
                 pass     
-        if not deserialize or not contents: 
-            return event 
-        return event.body
+        return event
         
 
     async def interrupt(self):
@@ -2152,10 +2138,9 @@ class AsyncEventConsumer(BaseEventConsumer):
         interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method, 
         generally should be used for exiting this object
         """
-     
-        message = [Serializers.json.dumps(f'{self.id}/interrupting-server'), 
-                JSONSerializer.json.dumps("INTERRUPT")]
-        await self.interrupting_peer.send_multipart(message)
+        await self.interrupting_peer.send_multipart(
+            self.craft_interrupt_message().byte_array
+        )
 
     
 

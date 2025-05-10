@@ -96,7 +96,9 @@ jobs:
 
       - name: Run unit tests and generate coverage report
         run: |
-          python -m unittest discover -s tests -p 'test_*.py'
+          pip install coverage
+          coverage run -m unittest discover -s tests -p 'test_*.py'
+          coverage report -m
 
     
     
