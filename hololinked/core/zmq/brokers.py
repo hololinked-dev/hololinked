@@ -1835,6 +1835,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         self.logger.info(f"created event publishing socket at {self.socket_address}")
         self.events = set() # type is typing.Set[EventDispatcher] 
         self.event_ids = set() # type: typing.Set[str]
+        self._terminate_context = context == None
        
     def register(self, event) -> None:
         """
@@ -1909,8 +1910,9 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             self.logger.warning("could not properly terminate context or attempted to terminate an already terminated context at address '{}'. Exception message: {}".format(
                 self.socket_address, str(E)))
         try:
-            self.context.term()
-            self.logger.info("terminated context of event publishing socket with address '{}'".format(self.socket_address)) 
+            if self._terminate_context:
+                self.context.term()
+                self.logger.info("terminated context of event publishing socket with address '{}'".format(self.socket_address)) 
         except Exception as E: 
             self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated socket of event publishing socket at address '{}'. Exception message: {}".format(
                 self.socket_address, str(E)))

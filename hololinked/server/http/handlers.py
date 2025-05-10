@@ -5,12 +5,12 @@ import zmq.asyncio
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
-from ....utils import *
-from ....config import global_config
-from ....core.zmq.brokers import AsyncEventConsumer, EventConsumer
-from ....constants import Operations
-from ....schema_validators import BaseSchemaValidator
-from ....td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
+from ...utils import *
+from ...config import global_config
+from ...core.zmq.brokers import AsyncEventConsumer, EventConsumer
+from ...constants import Operations
+from ...schema_validators import BaseSchemaValidator
+from ...td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
 
 
 

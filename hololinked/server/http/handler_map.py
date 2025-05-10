@@ -1,4 +1,4 @@
-from ....core.properties import (
+from ...core.properties import (
     String,
     Bytes,
     Integer,
