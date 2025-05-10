@@ -256,10 +256,15 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 ZMQ context object to be used for creating sockets. If not supplied, a new context is created.
                 For INPROC clients, you need to provide the same context used here.
         """
-        from .zmq.rpc_server import prepare_rpc_server
-        prepare_rpc_server(instance=self, transports=transports, **kwargs)
-        self.rpc_server.run()
-     
+        def run():
+            nonlocal self
+            from .zmq.rpc_server import prepare_rpc_server
+            prepare_rpc_server(instance=self, transports=transports, **kwargs)
+            self.rpc_server.run()
+        if forked:
+            threading.Thread(target=run).start()
+        else:
+            run() 
 
     def run_with_http_server(self, port: int = 8080, address: str = '0.0.0.0', 
                 # host: str = None, 
