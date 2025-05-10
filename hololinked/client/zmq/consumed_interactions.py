@@ -1,9 +1,12 @@
+import asyncio
 import logging
 import typing
 import threading
 import warnings
 from uuid import uuid4
 
+
+from ...utils import get_current_async_loop
 from ...constants import Operations
 from ...serializers import BaseSerializer, Serializers
 from ...serializers.payloads import SerializableData, PreserializedData
@@ -328,6 +331,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         self._sync_zmq_client = sync_zmq_client
         self._async_zmq_client = async_zmq_client
         self._default_scheduling_mode = default_scheduling_mode
+        self._thread = None
         
     def subscribe(self, 
                 callbacks: typing.Union[typing.List[typing.Callable], typing.Callable], 
@@ -336,12 +340,19 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
             ) -> None:
         if self._default_scheduling_mode == 'sync':
             self._sync_zmq_client.subscribe()
+        elif self._default_scheduling_mode == 'async':
+            self._async_zmq_client.subscribe()
+        else:
+            raise ValueError(f"Invalid scheduling mode: {self._default_scheduling_mode}. Must be 'sync' or 'async'.")
         self.add_callbacks(callbacks)
         self._subscribed = True
         self._deserialize = deserialize
         self._thread_callbacks = thread_callbacks
-        self._thread = threading.Thread(target=self.listen)
-        self._thread.start()
+        if self._default_scheduling_mode == 'sync':
+            self._thread = threading.Thread(target=self.listen)
+            self._thread.start()
+        else:
+            get_current_async_loop().call_soon(lambda: asyncio.create_task(self.async_listen()))
 
     def listen(self):
         while self._subscribed:
@@ -359,14 +370,42 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
             except Exception as ex:
                 # import traceback
                 # traceback.print_exc()
+                # TODO: some minor bug here within the umq receive loop when the loop is interrupted
+                # uncomment the above line to see the traceback
                 warnings.warn(f"Uncaught exception from {self._resource.name} event - {str(ex)}", 
                                 category=RuntimeWarning)
+
+
+    async def async_listen(self):
+        while self._subscribed:
+            try:
+                event_message = await self._async_zmq_client.receive()
+                self._last_zmq_response = event_message
+                value = self.get_last_return_value(raise_exception=True)
+                if value == 'INTERRUPT':
+                    break
+                for cb in self._callbacks: 
+                    if not self._thread_callbacks:
+                        if asyncio.iscoroutinefunction(cb):
+                            await cb(value)
+                        else:
+                            cb(value)
+                    else: 
+                        threading.Thread(target=cb, args=(value,)).start()
+            except Exception as ex:
+                # import traceback
+                # traceback.print_exc()
+                # TODO: some minor bug here within the umq receive loop when the loop is interrupted
+                # uncomment the above line to see the traceback
+                warnings.warn(f"Uncaught exception from {self._resource.name} event - {str(ex)}", 
+                                category=RuntimeWarning)        
         
-    def unsubscribe(self, join_thread : bool = True):
-        self._subscribed = False
+    def unsubscribe(self, join_thread: bool = True) -> None:
         self._sync_zmq_client.interrupt()
-        if join_thread:
+        self._subscribed = False
+        if join_thread and self._thread is not None and self._thread.is_alive():
             self._thread.join()
+            self._thread = None
 
 
 __all__ = [
