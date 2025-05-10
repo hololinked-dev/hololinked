@@ -3,6 +3,7 @@ import logging
 import typing
 import threading
 import warnings
+import traceback
 from uuid import uuid4
 
 
@@ -368,11 +369,11 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                     else: 
                         threading.Thread(target=cb, args=(value,)).start()
             except Exception as ex:
-                # import traceback
+                import traceback
                 # traceback.print_exc()
                 # TODO: some minor bug here within the umq receive loop when the loop is interrupted
                 # uncomment the above line to see the traceback
-                warnings.warn(f"Uncaught exception from {self._resource.name} event - {str(ex)}", 
+                warnings.warn(f"Uncaught exception from {self._resource.name} event - {str(ex)}\n{traceback.print_exc()}", 
                                 category=RuntimeWarning)
 
 
@@ -393,16 +394,19 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                     else: 
                         threading.Thread(target=cb, args=(value,)).start()
             except Exception as ex:
-                # import traceback
+                # 
                 # traceback.print_exc()
-                # TODO: some minor bug here within the umq receive loop when the loop is interrupted
-                # uncomment the above line to see the traceback
-                warnings.warn(f"Uncaught exception from {self._resource.name} event - {str(ex)}", 
+                # if "There is no current event loop in thread" and not self._subscribed:
+                #     # TODO: some minor bug here within the umq receive loop when the loop is interrupted
+                #     # uncomment the above line to see the traceback
+                #    pass 
+                # else: 
+                warnings.warn(f"Uncaught exception from {self._resource.name} event - {str(ex)}\n{traceback.print_exc()}", 
                                 category=RuntimeWarning)        
         
     def unsubscribe(self, join_thread: bool = True) -> None:
-        self._sync_zmq_client.interrupt()
         self._subscribed = False
+        self._sync_zmq_client.interrupt()
         if join_thread and self._thread is not None and self._thread.is_alive():
             self._thread.join()
             self._thread = None

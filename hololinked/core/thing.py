@@ -127,7 +127,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     def __post_init__(self):
         from .zmq.rpc_server import RPCServer
-        from .events import EventPublisher
         from .logger import RemoteAccessHandler
         from ..storage.database import prepare_object_database, ThingDB
         # Type definitions
@@ -218,10 +217,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         return build_our_temp_TD(self, ignore_errors=ignore_errors)
     
-
+    
+    @forkable
     def run_with_zmq_server(self, 
             transports: typing.Sequence[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC, 
-            forked: bool = False,
+            forked: bool = False, # used by decorator 
             # expose_eventloop : bool = False,
             **kwargs: typing.Dict[str, typing.Any]
         ) -> None:
@@ -256,22 +256,19 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 ZMQ context object to be used for creating sockets. If not supplied, a new context is created.
                 For INPROC clients, you need to provide the same context used here.
         """
-        def run():
-            nonlocal self
-            from .zmq.rpc_server import prepare_rpc_server
-            prepare_rpc_server(instance=self, transports=transports, **kwargs)
-            self.rpc_server.run()
-        if forked:
-            threading.Thread(target=run).start()
-        else:
-            run() 
+        from .zmq.rpc_server import prepare_rpc_server
+        prepare_rpc_server(instance=self, transports=transports, **kwargs)
+        self.rpc_server.run()
+        
 
+    @forkable
     def run_with_http_server(self, port: int = 8080, address: str = '0.0.0.0', 
                 # host: str = None, 
                 allowed_clients: str | typing.Iterable[str] | None = None,   
                 ssl_context: ssl.SSLContext | None = None, 
                 # protocol_version : int = 1, 
                 # network_interface : str = 'Ethernet', 
+                forked: bool = False, # used by forkable decorator
                 **kwargs: typing.Dict[str, typing.Any]
             ) -> None:
         """
@@ -308,7 +305,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # host: str
         #     Host Server to subscribe to coordinate starting sequence of things & web GUI
         
-        from ..protocols.http.server import HTTPServer        
+        from ..server.http import HTTPServer        
         http_server = HTTPServer(
             [self], logger=self.logger,
             port=port, address=address, ssl_context=ssl_context,
@@ -318,9 +315,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         )
         assert http_server.all_ok
         http_server.listen()
-            
-    
-    def run(self, servers: typing.Sequence[BaseProtocolServer]) -> None:
+
+
+    @forkable
+    def run(self, servers: typing.Sequence[BaseProtocolServer], forked: bool = False) -> None:
         """
         Expose the object with the given servers. This method is blocking until `exit()` is called.
         
@@ -329,8 +327,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         servers: Sequence[BaseProtocolServer] 
             list of instantiated servers to expose the object.
         """
-        from ..protocols.http.server import HTTPServer        
-        from ..protocols.zmq.server import ZMQServer
+        from ..server.http import HTTPServer        
+        from ..server.zmq import ZMQServer
         from .zmq.rpc_server import RPCServer, prepare_rpc_server
 
         rpc_server = None
@@ -341,8 +339,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             if isinstance(server, HTTPServer):
                 server.add_thing(self.id)
                 threading.Thread(target=server.listen).start()
-            elif isinstance(server, (ZMQServer, RPCServer)):
-                rpc_server = server
         rpc_server.run()
 
 
