@@ -259,12 +259,38 @@ class TestThing(Thing):
                             doc="Total number of events pushed")
      
     @action()
-    def push_events(self):
-        threading.Thread(target=self._push_worker).start()
+    def push_events(self, event_name: str = 'test_event', total_number_of_events: int = 100):
+        if event_name not in self.events:
+            raise ValueError(f"Event {event_name} is not a valid event")
+        threading.Thread(target=self._push_worker, args=(event_name, total_number_of_events)).start()
 
-    def _push_worker(self):
-        for i in range(100):
-            self.test_event.push('test data')
+    def _push_worker(self, event_name: str = 'test_event', total_number_of_events: int = 100):
+        for i in range(total_number_of_events):
+            event_descriptor = self.events.descriptors[event_name]
+            if event_descriptor == self.__class__.test_event:
+                # print(f"pushing event {event_name} with value {i}")
+                self.test_event.push('test data')
+            elif event_descriptor == self.__class__.test_binary_payload_event:
+                # print(f"pushing event {event_name} with value {i}")
+                self.test_binary_payload_event.push(b'test data')
+            elif event_descriptor == self.__class__.test_mixed_content_payload_event:
+                # print(f"pushing event {event_name} with value {i}")
+                self.test_mixed_content_payload_event.push(('test data', b'test data'))
+            elif event_descriptor == self.__class__.test_event_with_json_schema:
+                # print(f"pushing event {event_name} with value {i}")
+                self.test_event_with_json_schema.push({
+                    'val1': 1,
+                    'val2': 'test',
+                    'val3': {'key': 'value'},
+                    'val4': [1, 2, 3]
+                })
+            elif event_descriptor == self.test_event_with_pydantic_schema:
+                self.test_event_with_pydantic_schema.push({
+                    'val1': 1,
+                    'val2': 'test',
+                    'val3': {'key': 'value'},
+                    'val4': [1, 2, 3]
+                })
             time.sleep(0.01) # 10ms
 
     test_binary_payload_event = Event(doc='test event with binary payload')
@@ -406,6 +432,40 @@ test_thing_TD = {
         'test_event': {
             'title' : 'test_event',
             'description' : 'test event'
+        },
+        'test_binary_payload_event': {
+            'title' : 'test_binary_payload_event',
+            'description' : 'test event with binary payload'
+        },
+        'test_mixed_content_payload_event': {
+            'title' : 'test_mixed_content_payload_event',
+            'description' : 'test event with mixed content payload'
+        },
+        'test_event_with_json_schema': {
+            'title' : 'test_event_with_json_schema',
+            'description' : 'test event with schema validation',
+            'data' : {
+                'val1': {
+                    'type': 'integer',
+                    'description': 'integer value'
+                },
+                'val2': {
+                    'type': 'string',
+                    'description': 'string value'
+                },
+                'val3': {
+                    'type': 'object',
+                    'description': 'object value'
+                },
+                'val4': {
+                    'type': 'array',
+                    'description': 'array value'
+                }
+            }
+        },
+        'test_event_with_pydantic_schema': {
+            'title' : 'test_event_with_pydantic_schema',
+            'description' : 'test event with pydantic schema validation'
         }
     },
 }
