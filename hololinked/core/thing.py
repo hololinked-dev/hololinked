@@ -363,6 +363,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         pass 
 
+
     def __hash__(self) -> int:
         filename = inspect.getfile(self.__class__)
         if filename is not None:
