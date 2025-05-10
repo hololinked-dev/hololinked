@@ -38,7 +38,7 @@ class TestEvents(TestCase):
         )
         self.assertEqual(
             dispatcher._unique_identifier, 
-            bytes(f'{thing._qualified_id}/{descriptor._internal_name}', 'utf-8')
+            f'{thing._qualified_id}/{descriptor._internal_name}'
         )
 
       
