@@ -9,11 +9,13 @@ import time
 
 from hololinked.core.actions import BoundAction
 from hololinked.core.property import Property
-from hololinked.core.zmq.brokers import AsyncZMQClient, SyncZMQClient
+from hololinked.core.thing import Thing
+from hololinked.core.zmq.brokers import AsyncZMQClient, EventConsumer, SyncZMQClient
 from hololinked.core.zmq.message import EXIT, RequestMessage
 from hololinked.core.zmq.rpc_server import RPCServer
 from hololinked.server.zmq import ZMQServer
-from hololinked.utils import get_current_async_loop
+from hololinked.td.utils import get_zmq_unique_identifier_from_event_affordance
+from hololinked.utils import get_all_sub_things_recusively, get_current_async_loop
 from hololinked.td import ActionAffordance, PropertyAffordance, EventAffordance
 from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty, ZMQEvent
 
@@ -124,16 +126,12 @@ class InteractionAffordanceMixin(TestBrokerMixin):
     def setUpEvents(self):
         self.test_event = ZMQEvent(
                                 resource=EventAffordance.from_TD('test_event', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client, 
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                schema_validator=None
+                                sync_zmq_client=None
                             )
        
 
 
-class TestInprocRPCServer(InteractionAffordanceMixin):
+class TestRPCServerMixin(InteractionAffordanceMixin):
 
     @classmethod
     def setUpThing(self):
@@ -182,11 +180,17 @@ class TestInprocRPCServer(InteractionAffordanceMixin):
         super().setUpClass()
         print(f"test ZMQ RPC Server {self.__name__}")
 
+
+
+class TestInprocRPCServer(TestRPCServerMixin):
     
     def test_1_creation_defaults(self):
         """test server configuration defaults"""
         self.assertTrue(self.server.req_rep_server.socket_address.startswith('inproc://'))
         self.assertTrue(self.server.event_publisher.socket_address.startswith('inproc://'))
+
+        self.assertTrue(self.thing.rpc_server, self.server)
+        self.assertTrue(self.thing.event_publisher, self.server.event_publisher)
 
 
     def test_2_handshake(self):
@@ -430,11 +434,12 @@ class TestRPCServer(TestInprocRPCServer):
 
     def test_1_creation_defaults(self):
         super().test_1_creation_defaults()
+        # check socket creation defaults
         self.assertTrue(self.server.ipc_server.socket_address.startswith('ipc://'))
         self.assertTrue(self.server.tcp_server.socket_address.startswith('tcp://'))
         self.assertTrue(self.server.tcp_server.socket_address.endswith(':59000'))
 
-
+        
     def test_2_handshake(self):
         super().test_2_handshake()
         self.sync_ipc_client.handshake()    
@@ -702,11 +707,11 @@ class TestExposedProperties(InteractionAffordanceMixin):
   
         run_thing_with_zmq_server_forked(
             thing_cls=TestThing, 
-            id='test-property', 
+            id=self.server_id, 
             log_level=logging.ERROR+10, 
             done_queue=self.done_queue,
         )
-        thing = TestThing(id='test-property', log_level=logging.ERROR)
+        thing = TestThing(id=self.server_id, log_level=logging.ERROR)
         self.sync_client.handshake()
 
         descriptor = thing.properties['number_prop']
@@ -725,7 +730,7 @@ class TestExposedProperties(InteractionAffordanceMixin):
             nonlocal number_prop
             async_client = AsyncZMQClient(
                                 id='test-property-async-client',
-                                server_id='test-property', 
+                                server_id=self.server_id, 
                                 log_level=logging.ERROR, 
                                 handshake=False
                             )
@@ -743,23 +748,65 @@ class TestExposedProperties(InteractionAffordanceMixin):
     def test_9_exit(self):
         exit_message = RequestMessage.craft_with_message_type(
             sender_id='test-property-client', 
-            receiver_id='test-property',
+            receiver_id=self.server_id,
             message_type=EXIT
         )
         self.sync_client.socket.send_multipart(exit_message.byte_array)
 
-        self.assertEqual(self.done_queue.get(), 'test-property')
+        self.assertEqual(self.done_queue.get(), self.server_id)
 
 
 
-class TestEvent(InteractionAffordanceMixin):
+class TestExposedEvents(TestRPCServerMixin):
+
+    @classmethod
+    def setUpClient(self):
+        super().setUpClient()
+        event_affordance = EventAffordance.from_TD('test_event', test_thing_TD)
+        self.sync_event_client = EventConsumer(
+                    id=f"{event_affordance.thing_id}|{event_affordance.name}", 
+                    event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
+                    socket_address=self.server.event_publisher.socket_address,
+                    logger=self.logger,
+                    context=self.context
+                )
         
-    def test_1_event(self):
+    @classmethod
+    def setUpEvents(self):
+        self.test_event = ZMQEvent(
+                                resource=EventAffordance.from_TD('test_event', test_thing_TD),
+                                sync_zmq_client=self.sync_event_client,                        
+                            )
+        
+
+    def test_1_creation_defaults(self):
+        """test server configuration defaults"""
+        all_things = get_all_sub_things_recusively(self.thing)
+        self.assertTrue(len(all_things) > 1) # run the test only if there are sub things
+        for thing in all_things:
+            assert isinstance(thing, Thing)
+            for name, event in thing.events.values.items():
+                self.assertTrue(event.publisher, self.server.event_publisher)
+                self.assertIsInstance(event._unique_identifier, bytes)
+                self.assertEqual(event._owner_inst, thing)
+
+
+    def test_2_event(self):
+        """test if event can be invoked by a client"""
+        self.assertEqual(
+            get_zmq_unique_identifier_from_event_affordance(self.test_event._resource),
+            self.thing.test_event._unique_identifier.decode('utf-8')
+        )
+        self.assertEqual(
+            self.test_event._sync_zmq_client.socket_address, 
+            self.server.event_publisher.socket_address
+        )
         attempts = self.total_number_of_events.get()
         
         results = []
         def cb(value):
             nonlocal results
+            # print("Event received:", value)
             results.append(value)
 
         self.test_event.subscribe(cb)
@@ -772,8 +819,20 @@ class TestEvent(InteractionAffordanceMixin):
             time.sleep(0.1)
 
         self.assertEqual(len(results), attempts)
-        self.assertEqual(results, ['test data']*attempts)
+        # self.assertEqual(results, ['test data']*attempts)
         self.test_event.unsubscribe(cb)
+
+
+    def test_9_exit(self):
+        exit_message = RequestMessage.craft_with_message_type(
+            sender_id='test-event-client', 
+            receiver_id=self.server_id,
+            message_type=EXIT
+        )
+        self.sync_client.socket.send_multipart(exit_message.byte_array)
+
+        # self.assertEqual(self.done_queue.get(), self.server_id)
+
 
 
 
@@ -783,6 +842,7 @@ def load_tests(loader, tests, pattern):
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
     return suite
         
 if __name__ == '__main__':

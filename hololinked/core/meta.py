@@ -4,15 +4,15 @@ import inspect
 from types import FunctionType
 import typing
 
-from ..param.parameterized import (EventResolver, EventDispatcher, Parameter, Parameterized, 
-                            ParameterizedMetaclass, ClassParameters,
+from ..param.parameterized import (EventResolver as ParamEventResolver, EventDispatcher as ParamEventDispatcher, 
+                            Parameter, Parameterized, ParameterizedMetaclass, ClassParameters,
                             edit_constant as edit_constant_parameters)
 from ..utils import getattr_without_descriptor_read
 from ..constants import JSON, JSONSerializable
 from ..serializers import Serializers
 from .actions import Action, BoundAction
 from .property import Property
-from .events import Event, EventPublisher
+from .events import Event, EventPublisher, EventDispatcher
 
 
 
@@ -27,7 +27,7 @@ class ThingMeta(ParameterizedMetaclass):
     Currently `__post_init__()`, which is run after the user's `__init__()` method, properties that can be 
     loaded from a database are loaded and written. 	
 
-    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/Thing.pdf)
     """
     def __init__(mcs, name, bases, dict_):
         super().__init__(name, bases, dict_)
@@ -89,7 +89,7 @@ class DescriptorRegistry:
     Provides a dictionary interface to access the descriptors under the `descriptors` attribute. 
     Each of properties, actions and events subclasss from here to implement a registry of their available objects. 
 
-    [UML Diagram](http://localhost:8000/UML/PDF/DescriptorRegistry.pdf)
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/DescriptorRegistry.pdf)
     """
 
     def __init__(self, owner_cls: ThingMeta, owner_inst = None) -> None:
@@ -262,21 +262,21 @@ class PropertiesRegistry(DescriptorRegistry):
     """
     A `DescriptorRegistry` for properties of a `Thing` class or `Thing` instance.
 
-    [UML Diagram](http://localhost:8000/UML/PDF/DescriptorRegistry.pdf)
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/DescriptorRegistry.pdf)
     """
 
     def __init__(self, owner_cls: ThingMeta, owner_class_members: dict, owner_inst=None):
         super().__init__(owner_cls, owner_inst)
         if self.owner_inst is None and owner_class_members is not None:
             # instantiated by class 
-            self.event_resolver = EventResolver(owner_cls=owner_cls)
-            self.event_dispatcher = EventDispatcher(owner_cls, self.event_resolver)
+            self.event_resolver = ParamEventResolver(owner_cls=owner_cls)
+            self.event_dispatcher = ParamEventDispatcher(owner_cls, self.event_resolver)
             self.event_resolver.create_unresolved_watcher_info(owner_class_members)
         else:
             # instantiated by instance
             self._instance_params = {}
             self.event_resolver = self.owner_cls.properties.event_resolver
-            self.event_dispatcher = EventDispatcher(owner_inst, self.event_resolver)
+            self.event_dispatcher = ParamEventDispatcher(owner_inst, self.event_resolver)
             self.event_dispatcher.prepare_instance_dependencies()    
         
         
@@ -637,7 +637,7 @@ class ActionsRegistry(DescriptorRegistry):
     """
     A `DescriptorRegistry` for actions of a `Thing` class or `Thing` instance.
 
-    [UML Diagram](http://localhost:8000/UML/PDF/DescriptorRegistry.pdf)
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/DescriptorRegistry.pdf)
     """
 
     @property
@@ -662,7 +662,7 @@ class EventsRegistry(DescriptorRegistry):
     """
     A `DescriptorRegistry` for events of a `Thing` class or `Thing` instance.
 
-    [UML Diagram](http://localhost:8000/UML/PDF/DescriptorRegistry.pdf)
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/DescriptorRegistry.pdf)
     """
 
     @property
@@ -734,7 +734,7 @@ class Propertized(Parameterized):
     like setting up a registry, allowing values to be set at `__init__()` etc. 
     It is not meant to be subclassed directly by the end-user.
 
-    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/Thing.pdf)
     """
 
     # There is a word called Property+ize in english dictionary
@@ -760,7 +760,7 @@ class RemoteInvokable:
     Base class providing additional functionality related to actions, 
     it is not meant to be subclassed directly by the end-user.
 
-    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/Thing.pdf)
     """
     id : str
     
@@ -785,13 +785,12 @@ class EventSource:
     Base class to add event functionality to an object, 
     it is not meant to be subclassed directly by the end-user.
 
-    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/Thing.pdf)
     """
 
-    id : str
-
+    id: str
+  
     def __init__(self) -> None:
-        self._event_publisher = None # type: typing.Optional["EventPublisher"]
         self.create_events_registry()
 
     # creating name without underscore causes clash with the metaclass method 
@@ -811,29 +810,9 @@ class EventSource:
         event publishing object `EventPublisher` that owns the zmq.PUB socket, valid only after 
         creating an RPC server or calling a `run()` method on the `Thing` instance.
         """
-        return self._event_publisher 
+        return self.rpc_server.event_publisher if self.rpc_server else None
 
-    @event_publisher.setter           
-    def event_publisher(self, value: "EventPublisher") -> None:
-        from .thing import Thing
-
-        if self._event_publisher is not None:
-            raise AttributeError("Can set event publisher only once")
-        if value is None:
-            return 
-        
-        def recusively_set_event_publisher(obj : Thing, publisher : "EventPublisher") -> None:
-            for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
-                assert isinstance(evt, Event), "object is not an event"
-                # above is type definition
-                evt._publisher = publisher
-            for name, subobj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
-                if name == '_owner':
-                    continue 
-                recusively_set_event_publisher(subobj, publisher)
-            obj._event_publisher = publisher            
-
-        recusively_set_event_publisher(self, value)
+       
 
 
 

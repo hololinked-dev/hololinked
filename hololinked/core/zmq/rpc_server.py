@@ -12,7 +12,7 @@ from collections import deque
 
 from ...exceptions import *
 from ...constants import ZMQ_TRANSPORTS
-from ...utils import format_exception_as_json, get_current_async_loop, get_default_logger
+from ...utils import format_exception_as_json, get_all_sub_things_recusively, get_current_async_loop, get_default_logger
 from ...config import global_config
 from ...serializers import Serializers
 from .message import EMPTY_BYTE, ERROR, REPLY, PreserializedData, RequestMessage, SerializableData
@@ -126,6 +126,7 @@ class RPCServer(BaseZMQServer):
         self.event_publisher = EventPublisher(
                                 id=f'{self.id}/event-publisher',
                                 # dont pass the context
+                                context=self.context,
                                 transport=transport,
                                 **kwargs
                             )        
@@ -134,15 +135,17 @@ class RPCServer(BaseZMQServer):
         
         # setup scheduling requirements
         for instance in self.things.values():
-            instance.rpc_server = self
-            instance.event_publisher = self.event_publisher 
-            for action in instance.actions.descriptors.values():
-                if action.execution_info.iscoroutine and not action.execution_info.synchronous:
-                    self.schedulers[f'{instance.id}.{action.name}.invokeAction'] = AsyncScheduler
-                elif not action.execution_info.synchronous:
-                    self.schedulers[f'{instance.id}.{action.name}.invokeAction'] = ThreadedScheduler
-                # else QueuedScheduler which is default
-            # properties need not dealt yet, but may be in future
+            all_things = get_all_sub_things_recusively(instance)
+            for instance in all_things:
+                assert isinstance(instance, Thing), "instance must be of type Thing"
+                instance.rpc_server = self
+                for action in instance.actions.descriptors.values():
+                    if action.execution_info.iscoroutine and not action.execution_info.synchronous:
+                        self.schedulers[f'{instance.id}.{action.name}.invokeAction'] = AsyncScheduler
+                    elif not action.execution_info.synchronous:
+                        self.schedulers[f'{instance.id}.{action.name}.invokeAction'] = ThreadedScheduler
+                    # else QueuedScheduler which is default
+                # properties need not dealt yet, but may be in future
     
     schedulers: typing.Dict[str, "QueuedScheduler"]
     

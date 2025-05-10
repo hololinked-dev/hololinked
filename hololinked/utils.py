@@ -523,6 +523,13 @@ def get_return_type_from_signature(func: typing.Callable) -> RootModel:
         return wrap_plain_types_in_rootmodel(type_hints["return"])
     
 
+def get_all_sub_things_recusively(thing) -> typing.List:
+    sub_things = [thing]
+    for sub_thing in thing.sub_things.values():
+        sub_things.extend(get_all_sub_things_recusively(sub_thing))
+    return sub_things
+    
+
 
 __all__ = [
     get_IP_from_interface.__name__,
