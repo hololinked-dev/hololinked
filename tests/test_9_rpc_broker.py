@@ -11,7 +11,7 @@ import time
 from hololinked.core.actions import BoundAction
 from hololinked.core.property import Property
 from hololinked.core.thing import Thing
-from hololinked.core.zmq.brokers import AsyncEventConsumer, AsyncZMQClient, EventConsumer, SyncZMQClient
+from hololinked.core.zmq.brokers import AsyncEventConsumer, AsyncZMQClient, EventConsumer, EventPublisher, SyncZMQClient
 from hololinked.core.zmq.message import EXIT, RequestMessage
 from hololinked.core.zmq.rpc_server import RPCServer
 from hololinked.server.zmq import ZMQServer
@@ -23,12 +23,12 @@ from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty, 
 try:
     from .test_5_brokers import TestBrokerMixin
     from .test_6_actions import replace_methods_with_actions
-    from .utils import TestRunner
+    from .utils import TestRunner, TestCase
     from .things import run_thing_with_zmq_server_forked, test_thing_TD, TestThing
 except ImportError:
     from test_5_brokers import TestBrokerMixin
     from test_6_actions import replace_methods_with_actions
-    from utils import TestRunner
+    from utils import TestRunner, TestCase
     from things import run_thing_with_zmq_server_forked, test_thing_TD, TestThing
 
 
@@ -785,11 +785,7 @@ class TestExposedEvents(TestRPCServerMixin):
                         async_zmq_client=async_event_client,
                     )
             setattr(self, event_name, event)
-        self.test_event # type: ZMQEvent
-        self.test_binary_payload_event # type: ZMQEvent
-        # self.test_mixed_content_payload_event # type: ZMQEvent
-        self.test_event_with_json_schema # type: ZMQEvent
-
+      
 
     def test_1_creation_defaults(self):
         """test server configuration defaults"""
@@ -804,7 +800,7 @@ class TestExposedEvents(TestRPCServerMixin):
 
 
     def test_2_sync_client_event_stream(self):
-        """test if event can be invoked by a client"""
+        """test if event can be streamed by a synchronous threaded client"""
         def test_events(event_name: str, expected_data: typing.Any) -> None:
             event_client = getattr(self, event_name) # type: ZMQEvent
             self.assertEqual(
@@ -849,7 +845,7 @@ class TestExposedEvents(TestRPCServerMixin):
         
 
     def test_3_async_client_event_stream(self):
-
+        """test if event can be streamed by an asynchronous client in an async loop"""
         async def test_events(event_name: str, expected_data: typing.Any) -> None:
             event_client = getattr(self, event_name) # type: ZMQEvent
             event_client._default_scheduling_mode = 'async'
@@ -893,16 +889,55 @@ class TestExposedEvents(TestRPCServerMixin):
                     ):
             get_current_async_loop().run_until_complete(test_events(name, data))
 
-    def test_9_exit(self):
-        exit_message = RequestMessage.craft_with_message_type(
-            sender_id='test-event-client', 
-            receiver_id=self.server_id,
-            message_type=EXIT
-        )
-        self.sync_client.socket.send_multipart(exit_message.byte_array)
+    def test_4_exit(self):
+        self.server.stop()
 
-        # self.assertEqual(self.done_queue.get(), self.server_id)
 
+
+class TestThingRPCServer(TestBrokerMixin):
+    """Finally check if the thing can be run with a ZMQ server"""
+
+    @classmethod
+    def setUpThing(self):
+        self.thing = TestThing(
+                            id=self.thing_id,
+                            logger=self.logger,
+                            remote_accessible_logger=True
+                        )
+       
+    @classmethod
+    def startServer(self):
+        self.thing.run_with_zmq_server(forked=True)
+        self.server = self.thing.rpc_server
+        self.sync_client = SyncZMQClient(
+                                id=self.client_id,
+                                server_id=self.thing_id, 
+                                logger=self.logger,
+                                handshake=False,
+                                context=self.thing.rpc_server.context,
+                                transport='INPROC'
+                            )
+        self.async_client = AsyncZMQClient(
+                                id=self.client_id+'async',
+                                server_id=self.thing_id, 
+                                logger=self.logger,
+                                handshake=False,
+                                context=self.thing.rpc_server.context,
+                                transport='INPROC'
+                            )
+        time.sleep(2)
+
+    def test_1_setup_zmq_server(self):
+        self.assertIsInstance(self.thing.rpc_server, ZMQServer)
+        self.assertIsInstance(self.thing.event_publisher, EventPublisher)
+
+    def test_2_handshake(self):
+        self.sync_client.handshake()
+        self.async_client.handshake()
+        get_current_async_loop().run_until_complete(self.async_client.handshake_complete())
+        
+    def test_3_stop(self):
+        self.thing.rpc_server.stop()
 
 
 
@@ -913,6 +948,7 @@ def load_tests(loader, tests, pattern):
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRPCServer))
     return suite
         
 if __name__ == '__main__':
