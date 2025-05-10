@@ -1835,7 +1835,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         self.logger.info(f"created event publishing socket at {self.socket_address}")
         self.events = set() # type is typing.Set[EventDispatcher] 
         self.event_ids = set() # type: typing.Set[str]
-
+       
     def register(self, event) -> None:
         """
         register event with a specific (unique) name
@@ -2051,20 +2051,21 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
-        sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
-        if len(sockets) > 1:
-            # if there is an interrupt message as well as an event,
-            # give preference to interrupt message.
-            if socket[0] == self.interrupting_peer:
-                sockets = [socket[0]]
-            elif sockets[1] == self.interrupting_peer:
-                sockets = [socket[1]]
-        for socket, _ in sockets:
-            try:
-                raw_message = socket.recv_multipart(zmq.NOBLOCK) 
-            except zmq.Again:
-                pass
-        return EventMessage(raw_message)
+        while True:
+            sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
+            if len(sockets) > 1:
+                # if there is an interrupt message as well as an event,
+                # give preference to interrupt message.
+                if socket[0] == self.interrupting_peer:
+                    sockets = [socket[0]]
+                elif sockets[1] == self.interrupting_peer:
+                    sockets = [socket[1]]
+            for socket, _ in sockets:
+                try:
+                    raw_message = socket.recv_multipart(zmq.NOBLOCK) 
+                    return EventMessage(raw_message)
+                except zmq.Again:
+                    pass
         
 
     def interrupt(self):
@@ -2089,19 +2090,13 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         socket address of the event publisher (``EventPublisher``)
     identity: str
         unique identity for the consumer
-    client_type: bytes 
-        b'HTTP_SERVER' or b'PROXY'
     **kwargs:
         transport: str 
             TCP, IPC or INPROC
-        http_serializer: JSONSerializer
-            json serializer instance for HTTP_SERVER client type
-        zmq_serializer: BaseSerializer
-            serializer for ZMQ clients
         server_id: str
             instance name of the Thing publishing the event
     """
-    async def receive(self, timeout: typing.Optional[float] = None) -> EventMessage:
+    async def receive(self, timeout: typing.Optional[float] = None, raise_interrupt_as_exception: bool = False) -> EventMessage:
         """
         receive event with given timeout
 
@@ -2112,21 +2107,21 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
-        sockets = await self.poller.poll(timeout) 
-        if len(sockets) > 1: 
-            # if there is an interrupt message as well as an event,
-            # give preference to interrupt message.
-            if socket[0] == self.interrupting_peer:
-                sockets = [socket[0]]
-            elif sockets[1] == self.interrupting_peer:
-                sockets = [socket[1]]
-        for socket, _ in sockets:
-            try:
-                raw_message = await socket.recv_multipart(zmq.NOBLOCK)
-                event = EventMessage(raw_message)
-            except zmq.Again:
-                pass     
-        return event
+        while True:
+            sockets = await self.poller.poll(timeout) 
+            if len(sockets) > 1: 
+                # if there is an interrupt message as well as an event,
+                # give preference to interrupt message.
+                if socket[0] == self.interrupting_peer:
+                    sockets = [socket[0]]
+                elif sockets[1] == self.interrupting_peer:
+                    sockets = [socket[1]]
+            for socket, _ in sockets:
+                try:
+                    raw_message = await socket.recv_multipart(zmq.NOBLOCK)
+                    return EventMessage(raw_message)
+                except zmq.Again:
+                    pass     
         
 
     async def interrupt(self):

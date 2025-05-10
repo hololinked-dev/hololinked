@@ -125,12 +125,10 @@ class RPCServer(BaseZMQServer):
                             )        
         self.event_publisher = EventPublisher(
                                 id=f'{self.id}/event-publisher',
-                                # dont pass the context
                                 context=self.context,
                                 transport=transport,
                                 **kwargs
                             )        
-        
         self.schedulers = dict()
         
         # setup scheduling requirements
@@ -793,8 +791,7 @@ class ThreadedScheduler(Scheduler):
         self._execution_thread.start()
         self._job_queued_event.set()
     
-
-
+     
 def prepare_rpc_server(
                     instance: Thing, 
                     transports: ZMQ_TRANSPORTS, 
