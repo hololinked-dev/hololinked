@@ -2034,15 +2034,9 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         socket address of the event publisher (``EventPublisher``)
     identity: str
         unique identity for the consumer
-    client_type: bytes 
-        b'HTTP_SERVER' or b'PROXY'
     **kwargs:
         transport: str 
             TCP, IPC or INPROC
-        http_serializer: JSONSerializer
-            json serializer instance for HTTP_SERVER client type
-        zmq_serializer: BaseSerializer
-            serializer for ZMQ clients
         server_id: str
             instance name of the Thing publishing the event
     """
@@ -2059,6 +2053,8 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         """
         sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
         if len(sockets) > 1:
+            # if there is an interrupt message as well as an event,
+            # give preference to interrupt message.
             if socket[0] == self.interrupting_peer:
                 sockets = [socket[0]]
             elif sockets[1] == self.interrupting_peer:
