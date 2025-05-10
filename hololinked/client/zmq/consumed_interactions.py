@@ -346,21 +346,22 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     def listen(self):
         while self._subscribed:
             try:
-                data = self._sync_zmq_client.receive(deserialize=self._deserialize)
-                if data == 'INTERRUPT':
+                event_message = self._sync_zmq_client.receive()
+                self._last_zmq_response = event_message
+                value = self.get_last_return_value(raise_exception=True)
+                if value == 'INTERRUPT':
                     break
                 for cb in self._callbacks: 
                     if not self._thread_callbacks:
-                        cb(data)
+                        cb(value)
                     else: 
-                        threading.Thread(target=cb, args=(data,)).start()
+                        threading.Thread(target=cb, args=(value,)).start()
             except Exception as ex:
-                # print(ex)
+                # import traceback
+                # traceback.print_exc()
                 warnings.warn(f"Uncaught exception from {self._resource.name} event - {str(ex)}", 
                                 category=RuntimeWarning)
         
-       
-
     def unsubscribe(self, join_thread : bool = True):
         self._subscribed = False
         self._sync_zmq_client.interrupt()

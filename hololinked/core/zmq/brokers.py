@@ -1834,7 +1834,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                            transport=transport, socket_type=zmq.PUB, **kwargs)
         self.logger.info(f"created event publishing socket at {self.socket_address}")
         self.events = set() # type is typing.Set[EventDispatcher] 
-        self.event_ids = set() # type: typing.Set[bytes]
+        self.event_ids = set() # type: typing.Set[str]
 
     def register(self, event) -> None:
         """
@@ -1868,7 +1868,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         else:
             warnings.warn(f"event {event._name} not found in list of events, please use another name.", UserWarning)
                
-    def publish(self, event, data: SerializableData, *, serialize: bool = True) -> None: 
+    def publish(self, event, data: typing.Any) -> None: 
         """
         publish an event with given unique name. 
 
@@ -1881,11 +1881,18 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         serialize: bool, default True
             serialize the payload before pushing, set to False when supplying raw bytes
         """
+        # uncomment for type definitions
+        # from ...core.events import EventDispatcher
+        # assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
         if event._unique_identifier in self.event_ids:
-            if serialize:
-                self.socket.send_multipart(EventMessage([event._unique_identifier, data.serialize()]).byte_array)
-            else:
-                self.socket.send_multipart(EventMessage([event._unique_identifier, data]).byte_array)
+            payload = SerializableData(data, serializer=Serializers.for_object(event._owner_inst.id, event._owner_inst.__class__.__name__, event._descriptor)) if not isinstance(data, bytes) else SerializableNone
+            preserialized_payload = PreserializedData(data) if isinstance(data, bytes) else PreserializedEmptyByte
+            event_message = EventMessage.craft_from_arguments(
+                                            event._unique_identifier, self.id, 
+                                            payload=payload,
+                                            preserialized_payload=preserialized_payload 
+                                        )
+            self.socket.send_multipart(event_message.byte_array)
             self.logger.debug("published event with unique identifier {}".format(event._unique_identifier))
             # print("published event with unique identifier {}".format(event._unique_identifier))
         else:
@@ -2040,7 +2047,7 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
                     )
         self._terminate_context = context == None
         
-    def receive(self, timeout: typing.Optional[float] = None, deserialize = True) -> EventMessage:
+    def receive(self, timeout: typing.Optional[float] = None) -> EventMessage:
         """
         receive event with given timeout
 
@@ -2051,7 +2058,6 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
-        contents = None
         sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
         if len(sockets) > 1:
             if socket[0] == self.interrupting_peer:
@@ -2063,18 +2069,20 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
                 raw_message = socket.recv_multipart(zmq.NOBLOCK) 
             except zmq.Again:
                 pass
-        if not deserialize: 
-            return contents
         return EventMessage(raw_message)
         
+
     def interrupt(self):
         """
         interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method, 
         generally should be used for exiting this object
         """
-        message = [Serializers.json.dumps(f'{self.id}/interrupting-server'),
-                Serializers.json.dumps("INTERRUPT")]
-        self.interrupting_peer.send_multipart(message)
+        message = EventMessage.craft_from_arguments(
+                        event_id=f'{self.id}/interrupting-server',
+                        sender_id=self.id,
+                        payload=SerializableData("INTERRUPT")
+                    )
+        self.interrupting_peer.send_multipart(message.byte_array)
 
 
 class AsyncEventConsumer(BaseEventConsumer):
@@ -2151,11 +2159,7 @@ class AsyncEventConsumer(BaseEventConsumer):
 
     
 
-    
-        
-
 # from ...core.events import EventDispatcher
-
 
 __all__ = [
     AsyncZMQServer.__name__, 
