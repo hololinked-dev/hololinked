@@ -704,7 +704,7 @@ class TestExposedProperties(InteractionAffordanceMixin):
         self.client = self.sync_client
 
 
-    def test_6_property_abstractions(self):
+    def test_1_property_abstractions(self):
   
         run_thing_with_zmq_server_forked(
             thing_cls=TestThing, 
@@ -746,19 +746,29 @@ class TestExposedProperties(InteractionAffordanceMixin):
         get_current_async_loop().run_until_complete(test_6_async_property_abstractions(self))
 
 
-    def test_9_exit(self):
+    def test_2_exit(self):
         exit_message = RequestMessage.craft_with_message_type(
             sender_id='test-property-client', 
             receiver_id=self.server_id,
             message_type=EXIT
         )
         self.sync_client.socket.send_multipart(exit_message.byte_array)
-
         self.assertEqual(self.done_queue.get(), self.server_id)
 
 
 
 class TestExposedEvents(TestRPCServerMixin):
+
+    @classmethod
+    def setUpServer(self):
+        self.server = ZMQServer(
+                            id=self.server_id,
+                            things=[self.thing],
+                            logger=self.logger,
+                            context=self.context,
+                            transports=['INPROC', 'IPC', 'TCP'],
+                            tcp_socket_address='tcp://*:59005'
+                        )
 
     @classmethod
     def setUpEvents(self):
@@ -803,31 +813,32 @@ class TestExposedEvents(TestRPCServerMixin):
         """test if event can be streamed by a synchronous threaded client"""
         def test_events(event_name: str, expected_data: typing.Any) -> None:
             event_client = getattr(self, event_name) # type: ZMQEvent
+            event_client._default_scheduling_mode = 'sync'
             self.assertEqual(
                 get_zmq_unique_identifier_from_event_affordance(event_client._resource),
                 getattr(self.thing, event_client._resource.name)._unique_identifier # type: EventDispatcher
             )
-            self.assertEqual(
-                event_client._sync_zmq_client.socket_address, 
-                self.server.event_publisher.socket_address
-            )
+            # self.assertEqual(
+            #     event_client._sync_zmq_client.socket_address, 
+            #     self.server.event_publisher.socket_address
+            # )
             attempts = 100
             results = []
             def cb(value):
                 nonlocal results
                 results.append(value)
-
+            if event_client._callbacks:
+                event_client._callbacks.clear()
             event_client.subscribe(cb)
-            time.sleep(3) # calm down for event publisher to connect fully as there is no handshake for events
-            self.action_push_events(event_name=event_name ,total_number_of_events=attempts)
+            time.sleep(5) # calm down for event publisher to connect fully as there is no handshake for events
+            self.action_push_events(event_name=event_name, total_number_of_events=attempts)
 
             for i in range(attempts):
                 if len(results) == attempts:
                     break
                 time.sleep(0.1)
-
-            self.assertEqual(len(results), attempts)
-            self.assertEqual(results, [expected_data]*attempts)
+            self.assertTrue(len(results) >= attempts)
+            self.assertEqual(results, [expected_data]*len(results))
             event_client.unsubscribe(cb)
 
         for name, data in zip(
@@ -853,32 +864,37 @@ class TestExposedEvents(TestRPCServerMixin):
                 get_zmq_unique_identifier_from_event_affordance(event_client._resource),
                 getattr(self.thing, event_client._resource.name)._unique_identifier # type: EventDispatcher
             )
-            self.assertEqual(
-                event_client._async_zmq_client.socket_address, 
-                self.server.event_publisher.socket_address
-            )
+            # self.assertEqual(
+            #     event_client._async_zmq_client.socket_address, 
+            #     self.server.event_publisher.socket_address
+            # )
             attempts = 100
             results = []
             def cb(value):
                 nonlocal results
+                # print("event callback", value)
                 results.append(value)
-
+            if event_client._callbacks:
+                event_client._callbacks.clear()
             event_client.subscribe(cb)
-            time.sleep(3) # calm down for event publisher to connect fully as there is no handshake for events
-            self.action_push_events(event_name=event_name ,total_number_of_events=attempts)
+            time.sleep(5) # calm down for event publisher to connect fully as there is no handshake for events
+            self.action_push_events(event_name=event_name, total_number_of_events=attempts)
 
             for i in range(attempts):
                 if len(results) == attempts:
                     break
                 await asyncio.sleep(0.1)
-
-            self.assertEqual(len(results), attempts)
-            self.assertEqual(results, [expected_data]*attempts)
+            self.assertTrue(len(results) >= attempts) 
+            # since we are pushing events in multiple protocols, sometimes the event from the previous test is 
+            # still lingering on the socket. So the captured event must be at least the number of attempts.
+            self.assertEqual(results, [expected_data]*len(results))
             event_client.unsubscribe(cb)
 
         for name, data in zip(
                         self.event_names, 
-                        ['test data', b'test data', 
+                        [
+                            'test data',
+                            b'test data', 
                             {
                                 'val1': 1,
                                 'val2': 'test',
@@ -889,12 +905,38 @@ class TestExposedEvents(TestRPCServerMixin):
                     ):
             get_current_async_loop().run_until_complete(test_events(name, data))
 
-    def test_4_exit(self):
+
+    def test_4_other_transports(self):
+        for publisher in [self.server.ipc_event_publisher, self.server.tcp_event_publisher]:
+            self.assertIsInstance(publisher, EventPublisher)
+            self.assertTrue(publisher.socket_address.startswith('tcp://') or publisher.socket_address.startswith('ipc://'))
+            for event_name in self.event_names:
+                event_affordance = EventAffordance.from_TD(event_name, test_thing_TD)
+                event = getattr(self, event_name) # type: ZMQEvent
+                sync_event_client = EventConsumer(
+                                        id=f"{event_affordance.thing_id}|{event_affordance.name}|sync", 
+                                        event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
+                                        socket_address=publisher.socket_address.replace('*', 'localhost'),
+                                        logger=self.logger
+                                    )
+                async_event_client = AsyncEventConsumer(
+                                        id=f"{event_affordance.thing_id}|{event_affordance.name}|async", 
+                                        event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
+                                        socket_address=publisher.socket_address.replace('*', 'localhost'),
+                                        logger=self.logger           
+                                    )
+                event._sync_zmq_client = sync_event_client
+                event._async_zmq_client = async_event_client
+            self.test_2_sync_client_event_stream()
+            self.test_3_async_client_event_stream()
+         
+
+    def test_5_exit(self):
         self.server.stop()
 
 
 
-class TestThingRPCServer(TestBrokerMixin):
+class TestThingRunRPCServer(TestBrokerMixin):
     """Finally check if the thing can be run with a ZMQ server"""
 
     @classmethod
@@ -948,7 +990,7 @@ def load_tests(loader, tests, pattern):
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
     return suite
         
 if __name__ == '__main__':

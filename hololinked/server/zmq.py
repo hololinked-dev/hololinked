@@ -6,7 +6,7 @@ import zmq.asyncio
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import get_current_async_loop
 from ..core.thing import Thing
-from ..core.zmq.brokers import AsyncZMQServer
+from ..core.zmq.brokers import AsyncEventConsumer, AsyncZMQServer, EventPublisher
 from ..core.zmq.rpc_server import RPCServer
 
 
@@ -20,7 +20,8 @@ class ZMQServer(RPCServer):
                 transports: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC,
                 **kwargs
             ) -> None:
-        self.ipc_server = self.tcp_server = self.event_publisher = None
+        self.ipc_server = self.tcp_server = None
+        self.ipc_event_publisher = self.tcp_event_publisher = self.inproc_events_proxy = None
         super().__init__(id=id, things=things, context=context, **kwargs)
 
         if isinstance(transports, str): 
@@ -28,7 +29,7 @@ class ZMQServer(RPCServer):
         elif not isinstance(transports, list): 
             raise TypeError(f"unsupported transport type : {type(transports)}")
         tcp_socket_address = kwargs.pop('tcp_socket_address', None)
-        event_publisher_protocol = None 
+       
         
         # initialise every externally visible protocol          
         if ZMQ_TRANSPORTS.TCP in transports or "TCP" in transports:
@@ -39,7 +40,16 @@ class ZMQServer(RPCServer):
                                 socket_address=tcp_socket_address,
                                 **kwargs
                             )        
-            event_publisher_protocol = ZMQ_TRANSPORTS.TCP
+            host, port = tcp_socket_address.rsplit(':', 1)
+            new_port = int(port) + 1
+            tcp_socket_address = f"{host}:{new_port}"
+            self.tcp_event_publisher = EventPublisher(
+                                            id=f'{self.id}/event-publisher',
+                                            context=self.context,
+                                            transport=ZMQ_TRANSPORTS.TCP,
+                                            socket_address=tcp_socket_address,
+                                            **kwargs
+                                        )       
         if ZMQ_TRANSPORTS.IPC in transports or "IPC" in transports: 
             self.ipc_server = AsyncZMQServer(
                                 id=self.id, 
@@ -47,19 +57,52 @@ class ZMQServer(RPCServer):
                                 transport=ZMQ_TRANSPORTS.IPC,
                                 **kwargs
                             )        
-            
-            event_publisher_protocol = ZMQ_TRANSPORTS.IPC if not event_publisher_protocol else event_publisher_protocol           
-        event_publisher_protocol = "IPC" if not event_publisher_protocol else event_publisher_protocol    
-
+            self.ipc_event_publisher = EventPublisher(
+                                            id=f'{self.id}/event-publisher',
+                                            context=self.context,
+                                            transport=ZMQ_TRANSPORTS.IPC,
+                                            **kwargs
+                                        )
+        if self.ipc_event_publisher is not None or self.tcp_event_publisher is not None:
+            self.inproc_events_proxy = AsyncEventConsumer(
+                                            id=f'{self.id}/event-proxy',
+                                            event_unique_identifier="",
+                                            socket_address=self.event_publisher.socket_address,
+                                            context=self.context,
+                                            **kwargs
+                                        )
+           
     
     def run_zmq_request_listener(self) -> None:
+        # doc in parent class
         eventloop = get_current_async_loop()
-       
         if self.ipc_server is not None:
             eventloop.call_soon(lambda : asyncio.create_task(self.recv_requests_and_dispatch_jobs(self.ipc_server)))
         if self.tcp_server is not None:
             eventloop.call_soon(lambda : asyncio.create_task(self.recv_requests_and_dispatch_jobs(self.tcp_server)))
+        if self.inproc_events_proxy is not None:
+            eventloop.call_soon(lambda : asyncio.create_task(self.tunnel_events_from_inproc()))
         super().run_zmq_request_listener()
+
+    
+    async def tunnel_events_from_inproc(self) -> None:
+        if not self.inproc_events_proxy:
+            return
+        self.inproc_events_proxy.subscribe()
+        while True:
+            try:
+                event = await self.inproc_events_proxy.receive(raise_interrupt_as_exception=True)
+                if self.ipc_event_publisher is not None:
+                    self.ipc_event_publisher.socket.send_multipart(event.byte_array)
+                    # print(f"sent event to ipc publisher {event.byte_array}")
+                if self.tcp_event_publisher is not None:
+                    self.tcp_event_publisher.socket.send_multipart(event.byte_array)
+                    # print(f"sent event to tcp publisher {event.byte_array}")
+            except ConnectionAbortedError:
+                break
+            except Exception as e:
+                self.logger.error(f"error in tunneling events from inproc: {e}")
+                break
 
 
     def stop(self) -> None:
@@ -67,6 +110,8 @@ class ZMQServer(RPCServer):
             self.ipc_server.stop_polling()
         if self.tcp_server is not None:
             self.tcp_server.stop_polling()
+        if self.inproc_events_proxy is not None:
+            get_current_async_loop().call_soon(lambda : asyncio.create_task(self.inproc_events_proxy.interrupt()))
         super().stop()
 
 

@@ -9,6 +9,8 @@ import types
 import traceback
 import typing
 import ifaddr
+import threading
+from functools import wraps
 from collections import OrderedDict
 from dataclasses import asdict
 from pydantic import BaseModel, ConfigDict, create_model, Field, RootModel
@@ -461,7 +463,6 @@ def pydantic_validate_args_kwargs(model: typing.Type[BaseModel], args: typing.Tu
     model.model_validate(data)
 
 
-
 def json_schema_merge_args_to_kwargs(schema: dict, args: typing.Tuple = tuple(), kwargs: typing.Dict = dict()) -> typing.Dict[str, typing.Any]:
     """
     Merge positional arguments into keyword arguments according to the schema.
@@ -509,7 +510,6 @@ def json_schema_merge_args_to_kwargs(schema: dict, args: typing.Tuple = tuple(),
     return data
     
 
-
 def get_return_type_from_signature(func: typing.Callable) -> RootModel:
     """Determine the return type of a function."""
     sig = inspect.signature(func)
@@ -530,6 +530,21 @@ def get_all_sub_things_recusively(thing) -> typing.List:
     return sub_things
     
 
+def forkable(func):
+    """
+    Decorator to make a function forkable. This is useful for functions that need to be run in a separate process.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        forked = kwargs.pop('forked', False)  # Extract 'fork' argument, default to False
+        if forked:
+            thread = threading.Thread(target=func, args=args, kwargs=kwargs)
+            thread.start()
+            return thread
+        else:
+            return func(*args, **kwargs)
+    return wrapper
+
 
 __all__ = [
     get_IP_from_interface.__name__,
@@ -545,6 +560,7 @@ __all__ = [
     get_input_model_from_signature.__name__,
     pydantic_validate_args_kwargs.__name__,
     get_return_type_from_signature.__name__,
-    getattr_without_descriptor_read.__name__
+    getattr_without_descriptor_read.__name__,
+    forkable.__name__,
 ]
 
