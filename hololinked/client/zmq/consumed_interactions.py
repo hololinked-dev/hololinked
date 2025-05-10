@@ -11,7 +11,7 @@ from ...td import PropertyAffordance, ActionAffordance, EventAffordance
 from ...client.abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
 from ...core.zmq.message import ResponseMessage
 from ...core.zmq.message import EMPTY_BYTE, REPLY, TIMEOUT, ERROR, INVALID_MESSAGE
-from ...core.zmq.brokers import SyncZMQClient, AsyncZMQClient, EventConsumer
+from ...core.zmq.brokers import SyncZMQClient, AsyncZMQClient, EventConsumer, AsyncEventConsumer
 
 
 
@@ -309,33 +309,34 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
 class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     
     __slots__ = ['__name__', '__qualname__', '__doc__', 
-                '_sync_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
-                '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger',
-                '_deserialize']
+                '_sync_zmq_client', '_async_zmq_client', '_default_scheduling_mode', 
+                '_event_consumer', '_callbacks',
+                '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_logger', '_deserialize']
 
     # event subscription
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
     def __init__(self, 
                 resource: EventAffordance,
-                sync_client: SyncZMQClient, 
-                serializer: BaseSerializer = None, 
+                sync_zmq_client: EventConsumer,
+                async_zmq_client: AsyncEventConsumer | None = None,
+                default_scheduling_mode: str = 'sync',
                 logger: logging.Logger = None,
                 **kwargs
             ) -> None:
         super().__init__(resource=resource, logger=logger, **kwargs)
-        self._sync_zmq_client = sync_client      
-        self._serializer = serializer
-
-
-    def subscribe(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable], 
-                    thread_callbacks : bool = False, deserialize : bool = True) -> None:
-        self._event_consumer = EventConsumer(
-                                    'zmq-' + self._unique_identifier if self._serialization_specific else self._unique_identifier, 
-                                    self._socket_address, f"{self._name}|RPCEvent|{uuid4()}", b'PROXY',
-                                    zmq_serializer=self._serializer, logger=self._logger
-                                )
-        self.add_callbacks(callbacks) 
+        self._sync_zmq_client = sync_zmq_client
+        self._async_zmq_client = async_zmq_client
+        self._default_scheduling_mode = default_scheduling_mode
+        
+    def subscribe(self, 
+                callbacks: typing.Union[typing.List[typing.Callable], typing.Callable], 
+                thread_callbacks: bool = False, 
+                deserialize: bool = True
+            ) -> None:
+        if self._default_scheduling_mode == 'sync':
+            self._sync_zmq_client.subscribe()
+        self.add_callbacks(callbacks)
         self._subscribed = True
         self._deserialize = deserialize
         self._thread_callbacks = thread_callbacks
@@ -345,7 +346,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     def listen(self):
         while self._subscribed:
             try:
-                data = self._event_consumer.receive(deserialize=self._deserialize)
+                data = self._sync_zmq_client.receive(deserialize=self._deserialize)
                 if data == 'INTERRUPT':
                     break
                 for cb in self._callbacks: 
@@ -355,17 +356,14 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                         threading.Thread(target=cb, args=(data,)).start()
             except Exception as ex:
                 # print(ex)
-                warnings.warn(f"Uncaught exception from {self._name} event - {str(ex)}", 
+                warnings.warn(f"Uncaught exception from {self._resource.name} event - {str(ex)}", 
                                 category=RuntimeWarning)
-        try:
-            self._event_consumer.exit()
-        except:
-            pass
+        
        
 
     def unsubscribe(self, join_thread : bool = True):
         self._subscribed = False
-        self._event_consumer.interrupt()
+        self._sync_zmq_client.interrupt()
         if join_thread:
             self._thread.join()
 

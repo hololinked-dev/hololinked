@@ -54,7 +54,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         obj = super().__new__(cls)
         # defines some internal fixed attributes. attributes created by us that require no validation but 
         # cannot be modified are called _internal_fixed_attributes
-        obj._internal_fixed_attributes = ['_internal_fixed_attributes', '_owners', 'rpc_server', 'event_publisher']        
+        obj._internal_fixed_attributes = ['_internal_fixed_attributes', '_owners']        
         return obj
 
 
@@ -132,7 +132,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from ..storage.database import prepare_object_database, ThingDB
         # Type definitions
         self.rpc_server = None # type: typing.Optional[RPCServer]
-        self.event_publisher = None # type: typing.Optional[EventPublisher] 
         self.db_engine: typing.Optional[ThingDB]
         self._owners = None if not hasattr(self, '_owners') else self._owners # type: typing.Optional[typing.List[Thing]]
         self._remote_access_loghandler: typing.Optional[RemoteAccessHandler] 

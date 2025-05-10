@@ -1,6 +1,9 @@
 import typing 
 import jsonschema
 
+from ..serializers.payloads import SerializableData
+from ..serializers import Serializers
+
 from ..param.parameterized import Parameterized, ParameterizedMetaclass
 from ..constants import JSON 
 from ..utils import pep8_to_dashed_name
@@ -64,7 +67,8 @@ class Event:
             return EventDispatcher(
                 unique_identifier=f'{obj._qualified_id}/{self._internal_name}',
                 publisher=obj.rpc_server.event_publisher if obj.rpc_server else None,
-                owner_inst=obj
+                owner_inst=obj,
+                descriptor=self	    
             )
         except KeyError:
             raise AttributeError("Event object not yet initialized, please dont access now." +
@@ -81,13 +85,13 @@ class EventDispatcher:
     `EventDispatcher` to allow class level definitions of the `Event` 
     """
 
-    __slots__ = ['_unique_identifier', '_unique_zmq_identifier', '_unique_http_identifier',
-                '_publisher', '_owner_inst']
+    __slots__ = ['_unique_identifier', '_publisher', '_owner_inst', '_descriptor']
 
-    def __init__(self, unique_identifier: str, publisher: "EventPublisher", owner_inst: ParameterizedMetaclass) -> None:
+    def __init__(self, unique_identifier: str, publisher: "EventPublisher", owner_inst: ParameterizedMetaclass, descriptor: Event) -> None:
         self._unique_identifier = bytes(unique_identifier, encoding='utf-8')   
-        self.publisher = publisher
         self._owner_inst = owner_inst
+        self.publisher = publisher
+        self._descriptor = descriptor
 
     @property
     def publisher(self) -> "EventPublisher": 
@@ -102,8 +106,10 @@ class EventDispatcher:
             self._publisher = value
         elif not isinstance(value, EventPublisher):
             raise AttributeError("Publisher must be of type EventPublisher. Given type: " + str(type(value)))
+        if self._publisher is not None:
+            self._publisher.register(self)
 
-    def push(self, data: typing.Any = None, *, serialize: bool = True, **kwargs) -> None:
+    def push(self, data: typing.Any, *, serialize: bool = True) -> None:
         """
         publish the event. 
 
@@ -113,17 +119,11 @@ class EventDispatcher:
             payload of the event
         serialize: bool, default True
             serialize the payload before pushing, set to False when supplying raw bytes. 
-        **kwargs:
-            zmq_clients: bool, default True
-                pushes event to RPC clients, irrelevant if `Thing` uses only one type of serializer (refer to 
-                difference between zmq_serializer and http_serializer).
-            http_clients: bool, default True
-                pushed event to HTTP clients, irrelevant if `Thing` uses only one type of serializer (refer to 
-                difference between zmq_serializer and http_serializer).
         """
-        self.publisher.publish(self, data, zmq_clients=kwargs.get('zmq_clients', True), 
-                                http_clients=kwargs.get('http_clients', True), serialize=serialize)
-
+        self.publisher.publish(self, 
+                            SerializableData(value=data, serializer=Serializers.for_object(self._owner_inst.id, None, self._descriptor)), 
+                            serialize=serialize
+                        )
 
     def receive_acknowledgement(self, timeout : typing.Union[float, int, None]) -> bool:
         """

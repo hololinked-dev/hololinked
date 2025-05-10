@@ -45,7 +45,8 @@ class TestBrokerMixin(MessageValidatorMixin):
     def setUpThing(self):
         self.thing = TestThing(
                             id=self.thing_id,
-                            logger=self.logger
+                            logger=self.logger,
+                            remote_accessible_logger=True
                         )
        
     @classmethod

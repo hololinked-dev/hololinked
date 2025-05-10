@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+from types import FunctionType, MethodType
 import typing
 import builtins
 
@@ -257,8 +258,13 @@ class ConsumedThingEvent:
         """
         if not self._callbacks:
             self._callbacks = [] 
-        self._callbacks.extend(callbacks)
-       
+        if isinstance(callbacks, (FunctionType, MethodType)):
+           self._callbacks.append(callbacks)
+        elif isinstance(callbacks, (list, tuple)):
+            self._callbacks.extend(callbacks)
+        else:
+            raise TypeError("callbacks must be a callable or a list of callables")
+            
     def subscribe(self, 
                 callbacks: typing.Union[typing.List[typing.Callable], typing.Callable], 
                 thread_callbacks: bool = False,

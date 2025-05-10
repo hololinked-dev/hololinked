@@ -12,7 +12,7 @@ from zmq.utils.monitor import parse_monitor_message
 from ...utils import *
 from ...config import global_config
 from ...constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS, get_socket_type_name
-from ...serializers.serializers import JSONSerializer
+from ...serializers.serializers import JSONSerializer, Serializers
 from ...exceptions import BreakLoop
 from .message import (EMPTY_BYTE, ERROR, EXIT, HANDSHAKE, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED, TIMEOUT, 
         EventMessage, RequestMessage, ResponseMessage, SerializableData, PreserializedData, ServerExecutionContext, ThingExecutionContext, 
@@ -29,14 +29,13 @@ class BaseZMQ:
     def __init__(self, id: str, logger: logging.Logger | None, **kwargs) -> None:
         super().__init__()
         self.id = id # type: str
-        self.logger = None
         if not logger:
             logger = get_default_logger('{}|{}'.format(self.__class__.__name__, self.id), 
                                                 kwargs.get('log_level', logging.INFO))
         self.logger = logger
-        self.context = None # type: zmq.Context | zmq.asyncio.Context
-        self.socket = None # type: zmq.Socket | None
-        self.socket_address = None # type: str | None
+        self.context = self.context if hasattr(self, 'context') and self.context else None # type: zmq.Context | zmq.asyncio.Context
+        self.socket = self.socket if hasattr(self, 'socket') and self.socket else None # type: zmq.Socket | None
+        self.socket_address = self.socket_address if hasattr(self, 'socket_address') and self.socket_address else None # type: str | None
 
 
     def exit(self) -> None:
@@ -778,8 +777,8 @@ class BaseZMQClient(BaseZMQ):
         self._monitor_socket = None
         self._response_cache = dict()
         self._terminate_context = False
-        self.poller: zmq.Poller | zmq.asyncio.Poller 
         self.socket: zmq.Socket | zmq.asyncio.Socket
+        self.poller: zmq.Poller | zmq.asyncio.Poller 
         self._poll_timeout = kwargs.get('poll_timeout', 1000)  # default to 1000 ms
 
     @property
@@ -1044,9 +1043,13 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                     if response_message.type == HANDSHAKE:  
                         self.logger.info(f"client '{self.id}' handshook with server '{self.server_id}'")
                         break
+                    elif self.handled_default_message_types(response_message):
+                        continue
                     else:
-                        raise ConnectionAbortedError(f"Handshake cannot be done with '{self.server_id}'. " + 
-                                                    "Another message arrived before handshake complete.")
+                        warnings.warn(f"Handshake cannot be done with '{self.server_id}'. " + 
+                                    f"Another message arrived before handshake complete - {response_message.type}",
+                                    category=RuntimeWarning)
+                        self._response_cache[response_message.id] = response_message
             else:
                 self.logger.info('got no response for handshake')
         self._monitor_socket = self.socket.get_monitor_socket()
@@ -1139,9 +1142,13 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                     if response_message.type == HANDSHAKE: # type: ignore
                         self.logger.info(f"client '{self.id}' handshook with server '{self.server_id}'")               
                         break
+                    elif self.handled_default_message_types(response_message):
+                        continue
                     else:
-                        raise ConnectionAbortedError(f"Handshake cannot be done with server '{self.server_id}'." + 
-                                                    f" Another message arrived before handshake complete - {response_message.type}")
+                        warnings.warn(f"Handshake cannot be done with '{self.server_id}'. " + 
+                                    f"Another message arrived before handshake complete - {response_message.type}",
+                                    category=RuntimeWarning)
+                        self._response_cache[response_message.id] = response_message
             else:
                 self.logger.info('got no response for handshake')
         self._handshake_event.set()
@@ -1839,14 +1846,14 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             ``Event`` object that needs to be registered. Events created at ``__init__()`` of Thing are 
             automatically registered. 
         """
-        from ...core import EventDispatcher
+        from ...core.events import EventDispatcher
         assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
         if event._unique_identifier in self.events and event not in self.events:
             raise AttributeError(f"event {event._unique_identifier} already found in list of events, please use another name.")
         self.event_ids.add(event._unique_identifier)       
         self.events.add(event) 
     
-    def unregister(self, event : "EventDispatcher") -> None:
+    def unregister(self, event: "EventDispatcher") -> None:
         """
         unregister event with a specific (unique) name
 
@@ -1878,7 +1885,9 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             if serialize:
                 self.socket.send_multipart(EventMessage([event._unique_identifier, data.serialize()]).byte_array)
             else:
-                self.socket.send_multipart([event._unique_identifier, data])
+                self.socket.send_multipart(EventMessage([event._unique_identifier, data]).byte_array)
+            self.logger.debug("published event with unique identifier {}".format(event._unique_identifier))
+            # print("published event with unique identifier {}".format(event._unique_identifier))
         else:
             raise AttributeError("event name {} not yet registered with socket {}".format(event._unique_identifier, 
                                                                                         self.socket_address))
@@ -1926,23 +1935,30 @@ class BaseEventConsumer(BaseZMQClient):
             instance name of the Thing publishing the event
     """
 
-    def __init__(self, unique_identifier: str, socket_address: str, 
-                    identity: str, client_type = b'HTTP_SERVER', **kwargs) -> None:
-        self._terminate_context: bool 
-        transport = socket_address.split('://', 1)[0].upper()
-        super().__init__(server_id=kwargs.get('server_id', None), 
-                    client_type=client_type, **kwargs)
-        self.create_socket(identity=identity, bind=False, context=self.context,
-                        socket_address=socket_address, socket_type=zmq.SUB, transport=transport, **kwargs)
-        self.unique_identifier = bytes(unique_identifier, encoding='utf-8')
-        self.socket.setsockopt(zmq.SUBSCRIBE, self.unique_identifier) 
-        # pair sockets cannot be polled unforunately, so we use router
+    def __init__(self, 
+                id: str, 
+                event_unique_identifier: str, 
+                socket_address: str, 
+                **kwargs
+            ) -> None:
+        self._terminate_context = False
+        super().__init__(id=id, server_id=kwargs.get('server_id', None), **kwargs)
+        self.event_unique_identifier = bytes(event_unique_identifier, encoding='utf-8')
         self.interruptor = self.context.socket(zmq.PAIR)
         self.interruptor.setsockopt_string(zmq.IDENTITY, f'interrupting-server')
-        self.interruptor.bind(f'inproc://{self.identity}/interruption')    
+        self.interruptor.bind(f'inproc://{self.id}/interruption')    
         self.interrupting_peer = self.context.socket(zmq.PAIR)
         self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f'interrupting-client')
-        self.interrupting_peer.connect(f'inproc://{self.identity}/interruption')
+        self.interrupting_peer.connect(f'inproc://{self.id}/interruption')
+        
+
+    def subscribe(self) -> None:
+        self.socket.setsockopt(zmq.SUBSCRIBE, self.event_unique_identifier) 
+        # pair sockets cannot be polled unforunately, so we use router
+        # if self.socket in self.poller._map:
+        #     self.poller.unregister(self.socket)
+        # if self.interruptor in self.poller._map:
+        #     self.poller.unregister(self.interruptor)
         self.poller.register(self.socket, zmq.POLLIN)
         self.poller.register(self.interruptor, zmq.POLLIN)
         
@@ -1974,6 +1990,92 @@ class BaseEventConsumer(BaseZMQClient):
                 self.socket_address, str(E)))
 
 
+class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
+    """
+    Listens to events published at PUB sockets using SUB socket, listen in blocking fashion or use in threads. 
+
+    Parameters
+    ----------
+    unique_identifier: str
+        identifier of the event registered at the PUB socket
+    socket_address: str
+        socket address of the event publisher (``EventPublisher``)
+    identity: str
+        unique identity for the consumer
+    client_type: bytes 
+        b'HTTP_SERVER' or b'PROXY'
+    **kwargs:
+        transport: str 
+            TCP, IPC or INPROC
+        http_serializer: JSONSerializer
+            json serializer instance for HTTP_SERVER client type
+        zmq_serializer: BaseSerializer
+            serializer for ZMQ clients
+        server_id: str
+            instance name of the Thing publishing the event
+    """
+
+    def __init__(self, 
+                id: str, 
+                event_unique_identifier: str, 
+                socket_address: str, 
+                context: zmq.Context | None = None, 
+                **kwargs
+            ) -> None:
+        self.context = context or zmq.Context()
+        self.poller = zmq.Poller()
+        super().__init__(
+                        id=id,
+                        event_unique_identifier=event_unique_identifier,
+                        socket_address=socket_address,
+                        **kwargs
+                    )
+        self.create_socket(id=id, 
+                        node_type='client', 
+                        context=self.context,
+                        socket_type=zmq.SUB, 
+                        socket_address=socket_address, 
+                        transport=socket_address.split('://', 1)[0].upper(),
+                        **kwargs
+                    )
+        self._terminate_context = context == None
+        
+    def receive(self, timeout: typing.Optional[float] = None, deserialize = True) -> EventMessage:
+        """
+        receive event with given timeout
+
+        Parameters
+        ----------
+        timeout: float, int, None
+            timeout in milliseconds, None for blocking
+        deserialize: bool, default True
+            deseriliaze the data, use False for HTTP server sent event to simply bypass
+        """
+        contents = None
+        sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
+        if len(sockets) > 1:
+            if socket[0] == self.interrupting_peer:
+                sockets = [socket[0]]
+            elif sockets[1] == self.interrupting_peer:
+                sockets = [socket[1]]
+        for socket, _ in sockets:
+            try:
+                raw_message = socket.recv_multipart(zmq.NOBLOCK) 
+            except zmq.Again:
+                pass
+        if not deserialize: 
+            return contents
+        return EventMessage(raw_message)
+        
+    def interrupt(self):
+        """
+        interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method, 
+        generally should be used for exiting this object
+        """
+        message = [Serializers.json.dumps(f'{self.id}/interrupting-server'),
+                Serializers.json.dumps("INTERRUPT")]
+        self.interrupting_peer.send_multipart(message)
+
 
 class AsyncEventConsumer(BaseEventConsumer):
     """
@@ -2002,11 +2104,11 @@ class AsyncEventConsumer(BaseEventConsumer):
 
     def __init__(self, unique_identifier: str, socket_address: str, identity: str, client_type = b'HTTP_SERVER', 
                     context: typing.Optional[zmq.asyncio.Context] = None, **kwargs) -> None:
-        self._terminate_context = context == None
         self.context = context or zmq.asyncio.Context()
         self.poller = zmq.asyncio.Poller()
         super().__init__(unique_identifier=unique_identifier, socket_address=socket_address, 
                         identity=identity, client_type=client_type, **kwargs)
+        self._terminate_context = context == None
         
     async def receive(self, timeout: typing.Optional[float] = None, deserialize = True) -> typing.Union[bytes, typing.Any]:
         """
@@ -2043,79 +2145,12 @@ class AsyncEventConsumer(BaseEventConsumer):
         generally should be used for exiting this object
         """
      
-        message = [JSONSerializer.dumps(f'{self.identity}/interrupting-server'), 
-                JSONSerializer.dumps("INTERRUPT")]
+        message = [Serializers.json.dumps(f'{self.id}/interrupting-server'), 
+                JSONSerializer.json.dumps("INTERRUPT")]
         await self.interrupting_peer.send_multipart(message)
 
     
-class EventConsumer(BaseEventConsumer):
-    """
-    Listens to events published at PUB sockets using SUB socket, listen in blocking fashion or use in threads. 
 
-    Parameters
-    ----------
-    unique_identifier: str
-        identifier of the event registered at the PUB socket
-    socket_address: str
-        socket address of the event publisher (``EventPublisher``)
-    identity: str
-        unique identity for the consumer
-    client_type: bytes 
-        b'HTTP_SERVER' or b'PROXY'
-    **kwargs:
-        transport: str 
-            TCP, IPC or INPROC
-        http_serializer: JSONSerializer
-            json serializer instance for HTTP_SERVER client type
-        zmq_serializer: BaseSerializer
-            serializer for ZMQ clients
-        server_id: str
-            instance name of the Thing publishing the event
-    """
-
-    def __init__(self, unique_identifier: str, socket_address: str, identity: str, client_type = b'HTTP_SERVER', 
-                    context: typing.Optional[zmq.Context] = None, **kwargs) -> None:
-        self._terminate_context = context == None
-        self.context = context or zmq.Context()
-        self.poller = zmq.Poller()
-        super().__init__(unique_identifier=unique_identifier, socket_address=socket_address,
-                        identity=identity, client_type=client_type, **kwargs)
-        
-    def receive(self, timeout: typing.Optional[float] = None, deserialize = True) -> typing.Union[bytes, typing.Any]:
-        """
-        receive event with given timeout
-
-        Parameters
-        ----------
-        timeout: float, int, None
-            timeout in milliseconds, None for blocking
-        deserialize: bool, default True
-            deseriliaze the data, use False for HTTP server sent event to simply bypass
-        """
-        contents = None
-        sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
-        if len(sockets) > 1:
-            if socket[0] == self.interrupting_peer:
-                sockets = [socket[0]]
-            elif sockets[1] == self.interrupting_peer:
-                sockets = [socket[1]]
-        for socket, _ in sockets:
-            try:
-                raw_message = socket.recv_multipart(zmq.NOBLOCK) 
-            except zmq.Again:
-                pass
-        if not deserialize: 
-            return contents
-        return EventMessage(raw_message).body
-        
-    def interrupt(self):
-        """
-        interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method, 
-        generally should be used for exiting this object
-        """
-        message = [JSONSerializer.dumps(f'{self.identity}/interrupting-server'),
-                JSONSerializer.dumps("INTERRUPT")]
-        self.interrupting_peer.send_multipart(message)
     
         
 
