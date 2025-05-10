@@ -116,6 +116,27 @@ class ResponseHeader(msgspec.Struct):
     def json(self):
         return {f: getattr(self, f) for f in self.__struct_fields__}
         
+
+class EventHeader(msgspec.Struct):
+    """
+    Header of an event message
+    For detailed schema, visit [here](https://hololinked.readthedocs.io/en/latest/protocols/zmq/event-message-header.json).
+    """
+    messageType: str
+    messageID: str
+    senderID: str
+    eventID: str
+    payloadContentType: typing.Optional[str] = 'application/json'
+    preencodedPayloadContentType: typing.Optional[str] = ''
+
+    def __getitem__(self, key: str) -> typing.Any:
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            raise KeyError(f"key {key} not found in {self.__class__.__name__}") from None
+        
+    def json(self):
+        return {f: getattr(self, f) for f in self.__struct_fields__}
         
 
 class RequestMessage:
@@ -587,8 +608,59 @@ class ResponseMessage:
         
    
 class EventMessage(ResponseMessage):
-    pass
 
+    @classmethod
+    def craft_from_arguments(cls, 
+                            event_id: str, 
+                            sender_id: str, 
+                            message_type: str = EVENT, 
+                            payload: SerializableData = SerializableNone,
+                            preserialized_payload: PreserializedData = PreserializedEmptyByte
+                        ) -> "EventMessage":
+        """
+        create a plain message with a certain type, for example a handshake message.
 
+        Parameters
+        ----------
+        event_id: str
+            id of the server
+        message_type: bytes
+            message type to be sent
 
+        Returns
+        -------
+        message: RequestMessage
+            the crafted message
+        """
+        message = EventMessage([])
+        message._header = EventHeader(
+            messageType=message_type,
+            messageID=str(uuid4()),
+            eventID=event_id,
+            senderID=sender_id,
+            payloadContentType=payload.content_type,
+            preencodedPayloadContentType=preserialized_payload.content_type
+        )
+        message._body = [payload, preserialized_payload]
+        message._bytes = [
+            bytes(event_id, encoding='utf-8'),
+            Serializers.json.dumps(message._header.json()),
+            payload.serialize(),
+            preserialized_payload.value
+        ]
+        return message
+
+    @property
+    def event_id(self) -> str:
+        """unique ID of the event by which ZMQ pub-sub works"""
+        return self.header['eventID']
+
+    def parse_header(self) -> None:
+        """parse the header"""
+        if isinstance(self._bytes[INDEX_HEADER], EventHeader):
+            self._header = self._bytes[INDEX_HEADER]
+        elif isinstance(self._bytes[INDEX_HEADER], byte_types):
+            self._header = EventHeader(**Serializers.json.loads(self._bytes[INDEX_HEADER]))
+        else:
+            raise ValueError(f"header must be of type ResponseHeader or bytes, not {type(self._bytes[INDEX_HEADER])}")
 

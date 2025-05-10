@@ -2,9 +2,9 @@ import unittest
 from uuid import UUID, uuid4
 
 from hololinked.core.zmq.message import (EXIT, OPERATION, HANDSHAKE, 
-                            PreserializedData,  SerializableData, RequestHeader, RequestMessage) # client to server
+                PreserializedData, SerializableData, RequestHeader, EventHeader, RequestMessage) # client to server
 from hololinked.core.zmq.message import (TIMEOUT, INVALID_MESSAGE, ERROR, REPLY, ERROR,
-                            ResponseMessage, ResponseHeader) # server to client
+                ResponseMessage, ResponseHeader, EventMessage) # server to client
 from hololinked.serializers.serializers import Serializers
 
 try:
@@ -69,6 +69,29 @@ class MessageValidatorMixin(TestCase):
         self.assertEqual(len(response_message.body), 2)
         self.assertIsInstance(response_message.body[0], SerializableData)
         self.assertIsInstance(response_message.body[1], PreserializedData)
+
+
+    def validate_event_message(self, event_message: EventMessage) -> None:
+        """call this method to validate event message"""
+
+        # check message ID is a UUID
+        self.assertTrue(isinstance(event_message.id, UUID) or isinstance(UUID(event_message.id, version=4), UUID))
+        # check message length
+        self.assertEqual(len(event_message.byte_array), event_message.length)
+        # no receiver id for event message, only event id
+        self.assertIsInstance(event_message.event_id, str) 
+        # sender_id is not set before sending message on the socket       
+        self.assertEqual(event_message.sender_id, self.server_id)
+        # check that all indices are bytes 
+        for obj in event_message.byte_array:
+            self.assertIsInstance(obj, bytes)
+        # check that header is correct type
+        self.assertIsInstance(event_message.header, EventHeader)
+        # check that body is correct type
+        self.assertIsInstance(event_message.body, list)
+        self.assertEqual(len(event_message.body), 2)
+        self.assertIsInstance(event_message.body[0], SerializableData)
+        self.assertIsInstance(event_message.body[1], PreserializedData)
 
 
 
@@ -177,6 +200,18 @@ class TestMessagingContract(MessageValidatorMixin):
         self.assertEqual(request_message.id, response_message.id)
 
 
+    def test_3_event_message(self):
+        """test the event message"""
+        # event messages types are HANDSHAKE, TIMEOUT, INVALID_MESSAGE, ERROR and REPLY
+        event_message = EventMessage.craft_from_arguments(
+            event_id='test-event',
+            sender_id=self.server_id,
+            payload=SerializableData('test'),
+            preserialized_payload=PreserializedData(b'test'),
+        )
+        self.validate_event_message(event_message)
+
+        
 
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())

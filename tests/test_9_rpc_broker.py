@@ -787,7 +787,7 @@ class TestExposedEvents(TestRPCServerMixin):
             assert isinstance(thing, Thing)
             for name, event in thing.events.values.items():
                 self.assertTrue(event.publisher, self.server.event_publisher)
-                self.assertIsInstance(event._unique_identifier, bytes)
+                self.assertIsInstance(event._unique_identifier, str)
                 self.assertEqual(event._owner_inst, thing)
 
 
@@ -795,7 +795,7 @@ class TestExposedEvents(TestRPCServerMixin):
         """test if event can be invoked by a client"""
         self.assertEqual(
             get_zmq_unique_identifier_from_event_affordance(self.test_event._resource),
-            self.thing.test_event._unique_identifier.decode('utf-8')
+            self.thing.test_event._unique_identifier
         )
         self.assertEqual(
             self.test_event._sync_zmq_client.socket_address, 
@@ -819,7 +819,7 @@ class TestExposedEvents(TestRPCServerMixin):
             time.sleep(0.1)
 
         self.assertEqual(len(results), attempts)
-        # self.assertEqual(results, ['test data']*attempts)
+        self.assertEqual(results, ['test data']*attempts)
         self.test_event.unsubscribe(cb)
 
 

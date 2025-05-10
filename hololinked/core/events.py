@@ -88,10 +88,10 @@ class EventDispatcher:
     __slots__ = ['_unique_identifier', '_publisher', '_owner_inst', '_descriptor']
 
     def __init__(self, unique_identifier: str, publisher: "EventPublisher", owner_inst: ParameterizedMetaclass, descriptor: Event) -> None:
-        self._unique_identifier = bytes(unique_identifier, encoding='utf-8')   
+        self._unique_identifier = unique_identifier
         self._owner_inst = owner_inst
-        self.publisher = publisher
         self._descriptor = descriptor
+        self.publisher = publisher
 
     @property
     def publisher(self) -> "EventPublisher": 
@@ -109,7 +109,7 @@ class EventDispatcher:
         if self._publisher is not None:
             self._publisher.register(self)
 
-    def push(self, data: typing.Any, *, serialize: bool = True) -> None:
+    def push(self, data: typing.Any) -> None:
         """
         publish the event. 
 
@@ -117,13 +117,8 @@ class EventDispatcher:
         ----------
         data: Any
             payload of the event
-        serialize: bool, default True
-            serialize the payload before pushing, set to False when supplying raw bytes. 
         """
-        self.publisher.publish(self, 
-                            SerializableData(value=data, serializer=Serializers.for_object(self._owner_inst.id, None, self._descriptor)), 
-                            serialize=serialize
-                        )
+        self.publisher.publish(self, data=data)
 
     def receive_acknowledgement(self, timeout : typing.Union[float, int, None]) -> bool:
         """
