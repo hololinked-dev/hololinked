@@ -13,7 +13,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from ...param import Parameterized
 from ...param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, String
 from ...constants import HTTP_METHODS, ZMQ_TRANSPORTS, HTTPServerTypes, Operations
-from ...utils import get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, run_callable_somehow
+from ...utils import complete_pending_tasks_in_current_loop, forkable, get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, run_callable_somehow
 from ...serializers.serializers import JSONSerializer
 from ...schema_validators import BaseSchemaValidator, JSONSchemaValidator
 from ...core.property import Property
@@ -159,7 +159,6 @@ class HTTPServer(Parameterized):
                                                     logger=self.logger
                                                 )
 
-        self._type = HTTPServerTypes.THING_SERVER
         self._disconnected_things = dict() # see update_router_with_thing
         
         self._zmq_protocol = ZMQ_TRANSPORTS.IPC
@@ -178,12 +177,11 @@ class HTTPServer(Parameterized):
             return True
         # print("client pool context", self.zmq_client_pool.context)
         event_loop = get_current_async_loop() # sets async loop for a non-possessing thread as well
-        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
+        # event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll_responses()) )
-        for client in self.zmq_client_pool: 
-            event_loop.call_soon(lambda : asyncio.create_task(client._handshake(timeout=60000)))
- 
+        self.zmq_client_pool.handshake()
+      
         self.tornado_event_loop = None 
         # set value based on what event loop we use, there is some difference 
         # between the asyncio event loop and the tornado event loop
@@ -192,27 +190,29 @@ class HTTPServer(Parameterized):
         #     raise NotImplementedError("Current HTTP2 is not implemented.")
         #     self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
         # else:
-        self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
+        self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context) # type: TornadoHTTP1Server
         self._checked = True
         return True
     
 
-    def listen(self) -> None:
+    @forkable
+    def listen(self, forked: bool = False) -> None:
         """
         Start the HTTP server. This method is blocking. Async event loops intending to schedule the HTTP server should instead use
         the inner tornado instance's (``HTTPServer.tornado_instance``) listen() method. 
         """
-        if not self._checked:
-            assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
+        assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
         self.tornado_event_loop = ioloop.IOLoop.current()
         self.tornado_instance.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
         self.tornado_event_loop.start()
+        complete_pending_tasks_in_current_loop()
 
 
     def stop(self) -> None:
         """
-        Stop the HTTP server. A stop handler at the path '/stop' with POST method is already implemented that invokes this 
+        Stop the HTTP server - unreliable, use async_stop() if possible. 
+        A stop handler at the path '/stop' with POST method is already implemented that invokes this 
         method for the clients. 
         """
         self.tornado_instance.stop()
@@ -220,9 +220,9 @@ class HTTPServer(Parameterized):
         run_callable_somehow(self.tornado_instance.close_all_connections())
         if self.tornado_event_loop is not None:
             self.tornado_event_loop.stop()
-
-
-    async def _stop_async(self) -> None:
+        
+       
+    async def async_stop(self) -> None:
         """
         Stop the HTTP server. A stop handler at the path '/stop' with POST method is already implemented that invokes this 
         method for the clients. 
@@ -262,7 +262,7 @@ class HTTPServer(Parameterized):
         thing: str | Thing | ThingMeta
             id of the thing or the thing instance or thing class to be served
         """
-        self.add_things(thing)
+        self.add_things([thing])
   
 
     def add_property(self, 
@@ -293,8 +293,8 @@ class HTTPServer(Parameterized):
             raise TypeError(f"property should be of type Property, given type {type(property)}")
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
-        http_methods = _comply_http_method(http_methods)
         read_http_method = write_http_method = delete_http_method = None
+        http_methods = _comply_http_method(http_methods)
         if len(http_methods) == 1:
             read_http_method = http_methods[0]
         elif len(http_methods) == 2:
@@ -309,16 +309,14 @@ class HTTPServer(Parameterized):
             raise ValueError("delete method should be DELETE")
         if isinstance(property, Property):
             property = property.to_affordance()
-            property._build_forms()
+            # property._build_forms()
         kwargs['resource'] = property
         kwargs['owner'] = self
         for rule in self.app.wildcard_router.rules:
             if rule.matcher == URL_path:
-                warnings.warn(f"property {property.name} already exists in the router - replacing it.",
+                warnings.warn(f"URL path {URL_path} already exists in the router - property {property.name} will be replacing it further.",
                         category=UserWarning)
-                # raise ValueError(f"URL path {URL_path} already exists in the router")
         self.app.wildcard_router.add_rules([(URL_path, handler, kwargs)])
-
         """
         for handler based tornado rule matcher, the Rule object has following
         signature
@@ -379,13 +377,13 @@ class HTTPServer(Parameterized):
             raise ValueError("http_method should be a single HTTP method")
         if isinstance(action, Action):
             action = action.to_affordance() # type: ActionAffordance
-            action._build_forms()
+            # action._build_forms()
         kwargs['resource'] = action
         kwargs['owner'] = self
         for rule in self.app.wildcard_router.rules:
             if rule.matcher == URL_path:
                 warnings.warn(f"URL path {URL_path} already exists in the router -" +
-                        " replacing it for action {action.name}", category=UserWarning)
+                        f" replacing it for action {action.name}", category=UserWarning)
         self.app.wildcard_router.add_rules([(URL_path, handler, kwargs)])
 
     
@@ -415,13 +413,13 @@ class HTTPServer(Parameterized):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(event, Event):
             event = event.to_affordance()
-            event._build_forms()
+            # event._build_forms()
         kwargs['resource'] = event
         kwargs['owner'] = self
         for rule in self.app.wildcard_router.rules:
             if rule.matcher == URL_path:
                 warnings.warn(f"URL path {URL_path} already exists in the router -" + 
-                        " replacing it for event {event.friendly_name}", category=UserWarning)
+                        f" replacing it for event {event.name}", category=UserWarning)
         self.app.wildcard_router.add_rules([(URL_path, handler, kwargs)])
 
 
@@ -499,16 +497,16 @@ def add_thing_instance(server: HTTPServer, thing: Thing | ThingMeta) -> None:
             http_methods=('GET') if prop.readonly else ('GET', 'PUT') if prop.fdel is None else ('GET', 'PUT', 'DELETE'),
             handler=server.property_handler
         )
-    for action in thing.actions.values():
+    for action in thing.actions.descriptors.values():
         server.add_action(
             URL_path=f'/{thing.id}/{pep8_to_dashed_name(action.name)}', 
             action=action, 
             http_method='POST', 
             handler=server.action_handler
         )
-    for event in thing.events.values():
+    for event in thing.events.descriptors.values():
         server.add_event(
-            URL_path=f'/{thing.id}/{pep8_to_dashed_name(event.friendly_name)}', 
+            URL_path=f'/{thing.id}/{pep8_to_dashed_name(event.name)}', 
             event=event, 
             handler=server.event_handler
         )
