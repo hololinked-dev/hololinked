@@ -245,9 +245,9 @@ class Property(Parameter):
         """Returns True if the property is observable, i.e. it has an event descriptor."""
         return self._observable_event_descriptor is not None
     
-    def to_affordance(self, owner_inst) -> dict:
+    def to_affordance(self, owner_inst = None):
         from ..td import PropertyAffordance
-        return PropertyAffordance.generate(self, owner_inst)
+        return PropertyAffordance.generate(self, owner_inst or self.owner)
         
 
    

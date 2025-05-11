@@ -67,9 +67,9 @@ class Action:
             raise TypeError("execution_info must be of type ActionInfoValidator")
         self._execution_info = value # type: ActionInfoValidator
     
-    def to_affordance(self, owner_inst):
+    def to_affordance(self, owner_inst = None):
         from ..td import ActionAffordance
-        return ActionAffordance.generate(self, owner_inst) 
+        return ActionAffordance.generate(self, owner_inst or self.owner) 
   
     
 class BoundAction:
