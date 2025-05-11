@@ -74,9 +74,9 @@ class Event:
             raise AttributeError("Event object not yet initialized, please dont access now." +
                                 " Access after Thing is running.")
         
-    def to_affordance(self, owner_inst):
+    def to_affordance(self, owner_inst = None):
         from ..td import EventAffordance
-        return EventAffordance.generate(self, owner_inst)
+        return EventAffordance.generate(self, owner_inst or self.owner)
         
     
 class EventDispatcher:

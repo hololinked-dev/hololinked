@@ -171,6 +171,18 @@ class StateMachine:
         raise TypeError(f"cannot comply state to a string: {state} which is of type {type(state)}. owner - {self.owner}.")
     
 
+    def contains_object(self, object: typing.Union[Property, typing.Callable]) -> bool:
+        """
+        returns True if specified object is found in any of the state machine states. 
+        Supply unbound method for checking methods, as state machine is specified at class level
+        when the methods are unbound. 
+        """
+        for objects in self.machine.values():
+            if object in objects:
+                return True 
+        return False
+    
+
         
 class BoundFSM:
     """
@@ -241,10 +253,7 @@ class BoundFSM:
         Supply unbound method for checking methods, as state machine is specified at class level
         when the methods are unbound. 
         """
-        for objects in self.machine.values():
-            if object in objects:
-                return True 
-        return False
+        return self.descriptor.contains_object(object)
     
     def __hash__(self):
         return hash(self.owner.id + (str(state) for state in self.states) + str(self.initial_state) + self.owner.__class__.__name__)
