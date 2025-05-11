@@ -139,6 +139,15 @@ def run_callable_somehow(method : typing.Union[typing.Callable, typing.Coroutine
     else:
         # task = method
         return eventloop.run_until_complete(coro)
+    
+
+def complete_pending_tasks_in_current_loop():
+    """
+    Complete all pending tasks in the current asyncio event loop.
+    """
+    get_current_async_loop().run_until_complete(
+        asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
+    )
 
 
 def get_signature(callable : typing.Callable) -> typing.Tuple[typing.List[str], typing.List[type]]: 
@@ -553,6 +562,7 @@ __all__ = [
     get_default_logger.__name__,
     run_coro_sync.__name__,
     run_callable_somehow.__name__,
+    complete_pending_tasks_in_current_loop.__name__,
     get_signature.__name__,
     isclassmethod.__name__,
     issubklass.__name__,

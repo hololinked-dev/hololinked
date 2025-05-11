@@ -780,6 +780,7 @@ class BaseZMQClient(BaseZMQ):
         self.socket: zmq.Socket | zmq.asyncio.Socket
         self.poller: zmq.Poller | zmq.asyncio.Poller 
         self._poll_timeout = kwargs.get('poll_timeout', 1000)  # default to 1000 ms
+        self._stop = False # in general, stop any loop with this variaböe
 
     @property
     def poll_timeout(self) -> int:
@@ -849,6 +850,13 @@ class BaseZMQClient(BaseZMQ):
         if response_message.type == HANDSHAKE:
             return True
         return False
+    
+
+    def stop(self) -> None:
+        """
+        stop the client. 
+        """
+        self._stop = True
 
 
 
@@ -955,7 +963,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             if True, any exceptions raised during execution inside ``Thing`` instance will be raised on the client.
             See docs of ``raise_local_exception()`` for info on exception 
         """
-        while True:
+        self._stop = False
+        while not self._stop:
             if message_id in self._response_cache:
                 return self._response_cache.pop(message_id)
             sockets = self.poller.poll(self.poll_timeout)
@@ -1027,8 +1036,9 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         """
         hanshake with server before sending first message
         """
+        self._stop = False
         start_time = time.time_ns()
-        while True:
+        while not self._stop:
             if timeout is not None and (time.time_ns() - start_time)/1e6 > timeout:
                 raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
             self.socket.send_multipart(RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE).byte_array)
@@ -1123,11 +1133,12 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         """
         hanshake with server before sending first message
         """
+        self._stop = False
         if self._monitor_socket is not None and self._monitor_socket in self.poller:
             self.poller.unregister(self._monitor_socket)
         self._handshake_event.clear()
         start_time = time.time_ns()    
-        while True:
+        while not self._stop:
             if timeout is not None and (time.time_ns() - start_time)/1e6 > timeout:
                 raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
             await self.socket.send_multipart(RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE).byte_array)
@@ -1237,7 +1248,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         deserialize_response: bool
             deserializes the data field of the message
         """
-        while True:
+        self._stop = False
+        while not self._stop:
             if message_id in self._response_cache:
                 return self._response_cache.pop(message_id)
             sockets = await self.poller.poll(self._poll_timeout)
@@ -1700,6 +1712,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         stop polling for replies from server
         """
         self.stop_poll = True
+        for client in self.pool.values():
+            client.stop()
 
     async def async_execute_in_all(self, 
                                 objekt: str, 
