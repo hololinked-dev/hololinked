@@ -61,11 +61,12 @@ class InteractionAffordance(Schema):
         if self._owner is not None:
             raise ValueError(f"owner is already set for this {self.what.name.lower()} affordance, " + 
                         "recreate the affordance to change owner")
-        if not isinstance(value, Thing):
+        if not isinstance(value, (Thing, ThingMeta)):
             raise TypeError(f"owner must be instance of Thing, given type {type(value)}")
         self._owner = value
-        self._thing_cls = value.__class__
-        self._thing_id = value.id
+        if isinstance(value, Thing):
+            self._thing_cls = value.__class__
+            self._thing_id = value.id
 
     @property
     def objekt(self) -> Property | Action | Event: 
@@ -243,6 +244,10 @@ class InteractionAffordance(Schema):
     def __eq__(self, value):
         if not isinstance(value, self.__class__):
             return False
+        if self._thing_id is None:
+            if self.owner == value.owner and self.name == value.name:
+                return True
+            return False
         return self.thing_id == value.thing_id and self.name == value.name
     
 
@@ -298,7 +303,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         #     self.forms.append(form.asdict())
 
     @classmethod
-    def generate(cls, property, owner):
+    def generate(cls, property, owner = None):
         assert isinstance(property, Property), f"property must be instance of Property, given type {type(property)}"
         affordance = PropertyAffordance()
         affordance.owner = owner      
@@ -349,8 +354,10 @@ class ActionAffordance(InteractionAffordance):
             self.input = action.execution_info.argument_schema 
         if action.execution_info.return_value_schema: 
             self.output = action.execution_info.return_value_schema 
-        if (not (hasattr(self.owner, 'state_machine') and self.owner.state_machine is not None and 
-                self.owner.state_machine.contains_object(action)) and action.execution_info.idempotent):
+        if (not (
+                hasattr(self.owner, 'state_machine') and self.owner.state_machine is not None and 
+                self.owner.state_machine.contains_object(action)
+            ) and action.execution_info.idempotent):
             self.idempotent = action.execution_info.idempotent
         if action.execution_info.synchronous:
             self.synchronous = action.execution_info.synchronous

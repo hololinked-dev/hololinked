@@ -21,13 +21,13 @@ from hololinked.td import ActionAffordance, PropertyAffordance, EventAffordance
 from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty, ZMQEvent
 
 try:
-    from .test_5_brokers import TestBrokerMixin
-    from .test_6_actions import replace_methods_with_actions
+    from .test_05_brokers import TestBrokerMixin
+    from .test_06_actions import replace_methods_with_actions
     from .utils import TestRunner, TestCase
     from .things import run_thing_with_zmq_server_forked, test_thing_TD, TestThing
 except ImportError:
-    from test_5_brokers import TestBrokerMixin
-    from test_6_actions import replace_methods_with_actions
+    from tests.test_05_brokers import TestBrokerMixin
+    from tests.test_06_actions import replace_methods_with_actions
     from utils import TestRunner, TestCase
     from things import run_thing_with_zmq_server_forked, test_thing_TD, TestThing
 
