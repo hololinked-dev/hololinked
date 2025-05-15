@@ -893,9 +893,11 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                 **kwargs
             ) -> None:
         super().__init__(id=id, server_id=server_id, **kwargs)
-        self.create_socket(id=id, 
+        socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('socket_address', None)
+        kwargs['socket_address'] = socket_address
+        self.create_socket(
+                        id=id, 
                         node_type='client', 
-                        socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('socket_address', None),
                         context=context, 
                         transport=transport, 
                         **kwargs
@@ -1106,12 +1108,15 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                 **kwargs
             ) -> None:
         super().__init__(id=id, server_id=server_id, **kwargs)
-        self.create_socket(id=id, 
+        socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('socket_address', None)
+        kwargs['socket_address'] = socket_address
+        self.create_socket(
+                        id=id, 
                         node_type='client', 
-                        socket_address=server_id if str(transport) in ["IPC", "INPROC"] else kwargs.pop('socket_address', None),
                         context=context, 
                         transport=transport, 
-                        **kwargs)
+                        **kwargs
+                    )
         self._monitor_socket = self.socket.get_monitor_socket()
         self.poller = zmq.asyncio.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
@@ -1303,7 +1308,6 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         message id: bytes
             a byte representation of message id
         """
-       
         message_id = await self.async_send_request(
                                         thing_id=thing_id, 
                                         objekt=objekt, 
@@ -1316,7 +1320,6 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         return await self.async_recv_response(message_id)
        
    
-
         
 class MessageMappedZMQClientPool(BaseZMQClient):
     """
