@@ -251,10 +251,13 @@ class HTTPServer(Parameterized):
             for example - {'tcp://my-pc:5555': 'my-thing-id', 'IPC' : 'my-thing-id-2'}
         """
         for thing in things:
-            if isinstance(thing, (Thing, ThingMeta)): 
+            if isinstance(thing, Thing): 
                 self.router.add_thing_instance(thing)
-            elif isinstance(thing, dict):
-                self.router.add_zmq_served_thing(self, thing)
+            elif isinstance(thing, ThingMeta):
+                warnings.warn(f"ThingMeta {thing} is not a thing instance, no need to add it to the server." + 
+                            f" Just supply a thing instance to the server. skipping...", category=UserWarning)
+            elif isinstance(thing, (dict, str)):
+                self.router.add_zmq_served_thing(thing)
             elif issubklass(thing, ThingMeta):
                 raise TypeError(f"thing should be of type Thing, given type {type(thing)}")
 
@@ -540,7 +543,7 @@ class ApplicationRouter:
             for rule in self._pending_rules:
                 if rule[0] == item:
                     return True
-        elif isinstance(item, (Property, ActionAffordance, Event)):
+        elif isinstance(item, (Property, Action, Event)):
             item = item.to_affordance()
         if isinstance(item, (PropertyAffordance, ActionAffordance, EventAffordance)):
             for rule in self._pending_rules:
@@ -554,100 +557,77 @@ class ApplicationRouter:
         internal method to add a thing instance to be served by the HTTP server. Iterates through the 
         interaction affordances and adds a route for each property, action and event.
         """
-        for prop in thing.properties.remote_objects.values():
-            if prop in self:
+        self.add_interaction_affordances(
+            [obj.to_affordance(thing) for obj in thing.properties.remote_objects.values()], 
+            [obj.to_affordance(thing) for obj in thing.actions.descriptors.values()], 
+            [obj.to_affordance(thing) for obj in thing.events.descriptors.values()],
+        )
+        
+
+    def add_interaction_affordances(
+            self, 
+            properties: typing.Iterable[PropertyAffordance], 
+            actions: typing.Iterable[ActionAffordance], 
+            events: typing.Iterable[EventAffordance],
+        ) -> None:
+        for property in properties:
+            if property in self:
                 continue
-            if isinstance(thing, Thing):
-                path = f'/{thing.id}/{pep8_to_dashed_name(prop.name)}'
-                affordance = prop.to_affordance(thing)
+            if property.thing_id is not None:
+                path = f'/{property.thing_id}/{pep8_to_dashed_name(property.name)}'
             else:
-                path = f'/{pep8_to_dashed_name(prop.name)}'
-                affordance = prop.to_affordance()
+                path = f'/{pep8_to_dashed_name(property.name)}'
             self.server.add_property(
                 URL_path=path, 
-                property=affordance,
-                http_methods=('GET') if prop.readonly else ('GET', 'PUT') if prop.fdel is None else ('GET', 'PUT', 'DELETE'),
+                property=property,
+                http_methods=('GET') if property.readOnly else ('GET', 'PUT'), # if prop.fdel is None else ('GET', 'PUT', 'DELETE'),
                 handler=self.server.property_handler
             )
-        for action in thing.actions.descriptors.values():
+        for action in actions:
             if action in self:
                 continue
-            if isinstance(thing, Thing):
-                path = f'/{thing.id}/{pep8_to_dashed_name(action.name)}'
-                affordance = action.to_affordance(thing)
+            if action.thing_id is not None:
+                path = f'/{action.thing_id}/{pep8_to_dashed_name(action.name)}'
             else:
                 path = f'/{pep8_to_dashed_name(action.name)}'
-                affordance = action.to_affordance()
             self.server.add_action(
                 URL_path=path, 
-                action=affordance,
-                http_method='POST', 
+                action=action,
                 handler=self.server.action_handler
             )
-        for event in thing.events.descriptors.values():
+        for event in events:
             if event in self:
                 continue
-            if isinstance(thing, Thing):
-                path = f'/{thing.id}/{pep8_to_dashed_name(event.name)}'
-                affordance = event.to_affordance(thing)
+            if event.thing_id is not None:
+                path = f'/{event.thing_id}/{pep8_to_dashed_name(event.name)}'
             else:
                 path = f'/{pep8_to_dashed_name(event.name)}'
-                affordance = event.to_affordance()
             self.server.add_event(
                 URL_path=path, 
-                event=affordance,
+                event=event,
                 handler=self.server.event_handler
             )
 
 
-    def add_zmq_served_thing(self, *things: dict | str) -> None:
+    def add_zmq_served_thing(self, *thing_ids: dict[str, typing.Any] | str) -> None:
         """
         Add a thing served by ZMQ server to the HTTP server. Mostly useful for INPROC transport which behaves like a local object.  
         Iterates through the interaction affordances and adds a route for each property, action and event.
         """
-        async def update_router_with_thing(thing_id: str, client: AsyncZMQClient):
-            TD = await client.async_execute(
-                        thing_id=thing_id,
-                        objekt='get_thing_model',
-                        operation=Operations.invokeAction,
-                    ) # type: dict[str, dict]
-            for name in TD["properties"].keys():
-                resource = PropertyAffordance.from_TD(name, TD)
-                if resource in self:
-                    continue
-                self.server.add_property(
-                    URL_path=f'/{client.id}/{pep8_to_dashed_name(name)}',
-                    property=resource,
-                    handler=self.server.property_handler,
-                )   
-            for name in TD["actions"].keys():
-                resource = ActionAffordance.from_TD(name, TD)
-                if resource in self:
-                    continue
-                self.server.add_action(
-                    URL_path=f'/{client.id}/{pep8_to_dashed_name(name)}',
-                    action=resource,
-                    http_method='POST',
-                    handler=self.server.action_handler
-                )
-            for name in TD["events"].keys():
-                resource = EventAffordance.from_TD(name, TD)
-                if resource in self:
-                    continue
-                self.server.add_event(
-                    URL_path=f'/{client.id}/{pep8_to_dashed_name(name)}',
-                    event=resource,
-                    handler=self.server.event_handler
-                )
-
-        async def register_thing_with_server(thing: str, transport) -> None:
+        async def update_server_with_TD(
+                thing_id: str, 
+                transport: str = None,
+                socket_address: str = None
+            ) -> None:
             try:
+                from ...client.zmq.consumed_interactions import ZMQAction 
+                from ...core import Thing
                 client = AsyncZMQClient(
                             id=self.server._IP, 
-                            server_id=thing,
+                            server_id=thing_id,
                             handshake=False,
                             transport=transport,
-                            socket_address=transport if isinstance(transport, str) and transport.startswith('tcp://') else None, 
+                            socket_address=socket_address, 
                             context=self.server.zmq_client_pool.context,
                             poll_timeout=self.server.zmq_client_pool.poll_timeout,
                             logger=self.server.logger    
@@ -655,20 +635,36 @@ class ApplicationRouter:
                 client.handshake(timeout=10000)
                 await client.handshake_complete()
                 self.server.zmq_client_pool.register(client)
-                await update_router_with_thing(thing, client)
+                assert isinstance(Thing.get_thing_model, Action)
+                FetchTDAffordance = Thing.get_thing_model.to_affordance()
+                FetchTDAffordance._thing_id = thing_id
+                FetchTD = ZMQAction(
+                    resource=FetchTDAffordance,
+                    sync_client=None,
+                    async_client=client
+                )
+                TD = await FetchTD.async_call() 
+                self.add_interaction_affordances(
+                    [PropertyAffordance.from_TD(name, TD) for name in TD["properties"].keys()],
+                    [ActionAffordance.from_TD(name, TD) for name in TD["actions"].keys()],
+                    [EventAffordance.from_TD(name, TD) for name in TD["events"].keys()]
+                )
             except ConnectionError:
-                self.server.logger.warning(f"could not connect to {thing} using {protocol} transport")
+                self.server.logger.warning(f"could not connect to {thing_id} using {transport or socket_address} transport")
             except Exception as ex:
-                self.server.logger.error(f"could not connect to {id} using {protocol} transport. error : {str(ex)}")
+                self.server.logger.error(f"could not connect to {thing_id} using {transport or socket_address} transport. error: {str(ex)}")
 
         coroutines = []
-        for thing in things:
-            if isinstance(thing, str):
-                for transport in ['INRPOC', 'IPC']:
-                    coroutines.append(register_thing_with_server(thing, transport))
-            elif isinstance(thing, dict):
-                for protocol, thing in thing.items():
-                    coroutines.append(register_thing_with_server(thing, protocol))
+        for thing_id in thing_ids:
+            if isinstance(thing_id, str):
+                for transport in ['INPROC', 'IPC']:
+                    coroutines.append(update_server_with_TD(thing_id, transport, None))
+            elif isinstance(thing_id, dict):
+                for socket_address_or_transport, thing_id in thing_id.items():
+                    if socket_address_or_transport.startswith('tcp://'):
+                        coroutines.append(update_server_with_TD(thing_id, None, socket_address_or_transport))
+                    else:
+                        coroutines.append(update_server_with_TD(thing_id, socket_address_or_transport, None))
         get_current_async_loop().run_until_complete(asyncio.gather(*coroutines))
         
 
