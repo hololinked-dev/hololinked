@@ -1,7 +1,9 @@
 import unittest, time, logging
+from hololinked.constants import ZMQ_TRANSPORTS
+from hololinked.core.meta import ThingMeta
 from hololinked.server.http import HTTPServer
 from hololinked.core.zmq.rpc_server import RPCServer # sets loop policy, TODO: move somewhere else
-from hololinked.utils import get_current_async_loop
+from hololinked.utils import get_current_async_loop, issubklass
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing
@@ -74,9 +76,7 @@ class TestHTTPServer(TestCase):
         
         # add a thing, both class and instance
         for thing in [
-                    OceanOpticsSpectrometer, 
                     OceanOpticsSpectrometer(id='test-spectrometer', log_level=logging.ERROR+10),
-                    # TestThing,
                     # TestThing(id='test-thing', log_level=logging.ERROR+10)
                 ]:
             server = HTTPServer(log_level=logging.ERROR+10)
@@ -88,11 +88,16 @@ class TestHTTPServer(TestCase):
             )
             # server.router.print_rules()
 
+        for thing_meta in [OceanOpticsSpectrometer, TestThing]:
+            self.assertWarns(
+                UserWarning,
+                server.add_thing,
+                thing_meta
+            )
+       
         # dont overwrite already given routes
         for thing in [
-                    OceanOpticsSpectrometer, 
                     OceanOpticsSpectrometer(id='test-spectrometer', log_level=logging.ERROR+10),
-                    # TestThing,
                     # TestThing(id='test-thing', log_level=logging.ERROR+10)
                 ]:
             server = HTTPServer(log_level=logging.ERROR+10)
@@ -108,7 +113,30 @@ class TestHTTPServer(TestCase):
                     len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >= 
                     len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
                 )
+            
 
+    def test_4_add_thing_over_zmq_server(self):
+        """extension of previous two tests to complete adding a thing running over a zmq server"""
+        server = HTTPServer(log_level=logging.ERROR+10)
+        old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
+
+        thing = OceanOpticsSpectrometer(id='test-spectrometer', log_level=logging.ERROR+10)
+        thing.run_with_zmq_server(ZMQ_TRANSPORTS.INPROC, forked=True)
+        
+        while thing.rpc_server is None: 
+            time.sleep(0.1)
+        server.zmq_client_pool.context = thing.rpc_server.context
+        server.add_property('/max-intensity/custom', OceanOpticsSpectrometer.max_intensity)
+        server.add_action('/connect/custom', OceanOpticsSpectrometer.connect)
+        server.add_event('/intensity/event/custom', OceanOpticsSpectrometer.intensity_measurement_event)
+        server.add_thing({"INPROC": thing.id})
+
+        # self.assertTrue(
+        #     len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >= 
+        #     len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
+        # )
+        thing.rpc_server.stop()
+        server.stop()
 
 
 
