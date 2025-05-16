@@ -1,4 +1,5 @@
 import typing
+from pydantic import Field, ConfigDict
 
 from .base import *
 from .data_schema import *
@@ -11,6 +12,21 @@ from ..core.state_machine import StateMachine
 
 class ThingModel(Schema):
 
+    context: typing.List[str] | str | typing.Dict[str, str] = "https://www.w3.org/2022/wot/td/v1.1"
+    type: typing.Optional[typing.Union[str, typing.List[str]]] = None
+    id: str = None
+    title: str = None
+    description: typing.Optional[str] = None
+    version: typing.Optional[VersionInfo] = None
+    created: typing.Optional[str] = None
+    modified: typing.Optional[str] = None
+    support: typing.Optional[str] = None
+    base: typing.Optional[str] = None 
+    properties: typing.Dict[str, DataSchema] = Field(default_factory=dict)
+    actions: typing.Dict[str, ActionAffordance] = Field(default_factory=dict)
+    events: typing.Dict[str, EventAffordance] = Field(default_factory=dict) 
+   
+    model_config = ConfigDict(extra="allow")
 
     def __init__(self, 
                 instance: "Thing", 
@@ -26,8 +42,9 @@ class ThingModel(Schema):
     def produce(self) -> "ThingModel": 
         """create thing model"""
         self.id = self.instance.id
-        self.title = self.instance.__class__.__name__ 
-        self.description = Schema.format_doc(self.instance.__doc__) if self.instance.__doc__ else "no class doc provided" 
+        self.title = self.instance.__class__.__name__
+        if self.instance.__doc__:
+            self.description = Schema.format_doc(self.instance.__doc__)
         self.properties = dict()
         self.actions = dict()
         self.events = dict()
@@ -35,21 +52,22 @@ class ThingModel(Schema):
         return self
     
     # not the best code and logic, but works for now
-    skip_properties = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',
+    skip_properties: typing.List[str] = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',
                     'events', 'thing_description', 'GUI', 'object_info' ]
-    skip_actions = ['_set_properties', '_get_properties', '_add_property', '_get_properties_in_db', 
+    skip_actions: typing.List[str] = ['_set_properties', '_get_properties', '_add_property', '_get_properties_in_db', 
                     'get_postman_collection', 'get_thing_description', 'get_our_temp_thing_description']
-
+    skip_events: typing.List[str] = []
 
     def add_interaction_affordances(self):
         """add interaction affordances to thing model"""
         for name, prop in self.instance.properties.remote_objects.items():
             if name in self.skip_properties: 
                 continue
-            if name == 'state' and (
-                                not hasattr(self.instance, 'state_machine') or 
-                                not isinstance(self.instance.state_machine, StateMachine)
-                            ):
+            if (    
+                name == 'state' and 
+                (not hasattr(self.instance, 'state_machine') or 
+                not isinstance(self.instance.state_machine, StateMachine))
+            ):
                 continue
             try:
                 self.properties[prop.name] = PropertyAffordance.generate(prop, self.instance) 
@@ -57,7 +75,6 @@ class ThingModel(Schema):
                 if not self.ignore_errors:
                     raise ex from None
                 self.instance.logger.error(f"Error while generating schema for {prop.name} - {ex}")
-        
         for name, action in self.instance.actions.descriptors.items():
             if name in self.skip_actions:
                 continue    
@@ -68,6 +85,8 @@ class ThingModel(Schema):
                     raise ex from None
                 self.instance.logger.error(f"Error while generating schema for {name} - {ex}")
         for name, event in self.instance.events.descriptors.items():
+            if name in self.skip_events:
+                continue
             try:
                 self.events[name] = EventAffordance.generate(event, self.instance)
             except Exception as ex:

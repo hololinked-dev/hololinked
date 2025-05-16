@@ -22,7 +22,7 @@ class DataSchema(Schema):
     """
     title: str = None
     titles: Optional[dict[str, str]] = None
-    description: Optional[str] = None
+    description: str = None
     descriptions: Optional[dict[str, str]] = None
     const: Optional[bool] = None
     default: Optional[Any] = None 
@@ -42,7 +42,7 @@ class DataSchema(Schema):
     def ds_build_fields_from_property(self, property: Property) -> None:
         """populates schema information from descriptor object"""
         assert isinstance(property, Property), f"only Property is a subclass of dataschema, given type: {type(property)}"
-        self.title = get_summary(property)
+        self.title = get_summary(property.doc)
         if property.constant:
             self.const = property.constant 
         if property.readonly:
@@ -96,7 +96,7 @@ class DataSchema(Schema):
         elif isinstance(property, Property) and property.model is not None:
             from .pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
             base_data_schema = DataSchema()
-            base_data_schema._build_from_property(property=property)
+            base_data_schema.ds_build_from_property(property=property)
             if isinstance(property.model, dict):
                 given_data_schema = property.model
             elif isinstance(property.model, (BaseModel, RootModel)):
