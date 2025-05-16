@@ -308,9 +308,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from ..server.http import HTTPServer        
         http_server = HTTPServer(
             [self], 
-            logger=self.logger,
             port=port, 
             address=address, 
+            logger=self.logger,
             ssl_context=ssl_context,
             allowed_clients=allowed_clients, 
             # network_interface=network_interface, 
@@ -334,15 +334,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from ..server.zmq import ZMQServer
         from .zmq.rpc_server import RPCServer, prepare_rpc_server
 
-        rpc_server = None
         if not any(isinstance(server, (RPCServer, ZMQServer)) for server in servers):
             prepare_rpc_server(transports=ZMQ_TRANSPORTS.INPROC)
-            rpc_server = self.rpc_server
         for server in servers:
             if isinstance(server, HTTPServer):
-                server.add_thing(self.id)
+                server.add_thing(self)
                 threading.Thread(target=server.listen).start()
-        rpc_server.run()
+        self.rpc_server.run()
 
 
     @action()                                                                 
