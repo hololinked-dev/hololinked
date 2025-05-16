@@ -75,6 +75,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                 resource: ActionAffordance, 
                 sync_client: SyncZMQClient, 
                 async_client: AsyncZMQClient | None = None,  
+                owner_inst: typing.Optional[typing.Any] = None,
                 **kwargs
                 # schema_validator: typing.Type[BaseSchemaValidator] | None = None
             ) -> None:
@@ -88,7 +89,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
         async_zmq_client: AsyncZMQClient
             asynchronous ZMQ client for async calls
         """
-        ConsumedThingAction.__init__(self, resource=resource)
+        ConsumedThingAction.__init__(self, resource=resource, owner_inst=owner_inst)
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
         self._resource # type: ActionAffordance
 
@@ -168,7 +169,7 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        return self._sync_zmq_client.send_request(
+        msg_id = self._sync_zmq_client.send_request(
                                     thing_id=self._resource.thing_id, 
                                     objekt=self._resource.name,
                                     operation=Operations.invokeAction,
@@ -183,9 +184,11 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
                                     ),
                                     thing_execution_context=self._thing_execution_context    
                                 )
+        self._owner_inst._noblock_messages[msg_id] = self
+        return msg_id
+     
      
 
-    
 class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
 
     # property get set abstraction
@@ -195,6 +198,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                 resource: PropertyAffordance, 
                 sync_client: SyncZMQClient, 
                 async_client: AsyncZMQClient | None = None,
+                owner_inst: typing.Optional[typing.Any] = None,
                 **kwargs    
             ) -> None:
         """
@@ -207,7 +211,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
         async_client: AsyncZMQClient
             asynchronous ZMQ client for async calls
         """
-        ConsumedThingProperty.__init__(self, resource=resource) 
+        ConsumedThingProperty.__init__(self, resource=resource, owner_inst=owner_inst) 
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
         self._resource # type: PropertyAffordance
         
@@ -297,7 +301,7 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                 )
         
     def noblock_get(self) -> None:
-        return self._sync_zmq_client.send_request(
+        msg_id = self._sync_zmq_client.send_request(
                                             thing_id=self._resource.thing_id,
                                             objekt=self._resource.name,
                                             operation=Operations.readProperty,
@@ -307,6 +311,27 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                             ),
                                             thing_execution_context=self._thing_execution_context
                                         )
+        self._owner_inst._noblock_messages[msg_id] = self
+        return msg_id
+    
+    def noblock_set(self, value: typing.Any) -> None:
+        msg_id = self._sync_zmq_client.send_request(
+                                            thing_id=self._resource.thing_id,
+                                            objekt=self._resource.name,
+                                            operation=Operations.writeProperty,
+                                            payload=SerializableData(
+                                                value=value, 
+                                                content_type=self._resource.retrieve_form('writeProperty', {}).get(
+                                                                                'contentType', 'application/json')
+                                            ),
+                                            server_execution_context=dict(
+                                                invokation_timeout=self._invokation_timeout, 
+                                                execution_timeout=self._execution_timeout
+                                            ),
+                                            thing_execution_context=self._thing_execution_context
+                                        )
+        self._owner_inst._noblock_messages[msg_id] = self
+        return msg_id
   
 
 
