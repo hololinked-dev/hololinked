@@ -9,6 +9,7 @@ from zmq.utils.monitor import parse_monitor_message
 
 from ..constants import ZMQ_TRANSPORTS
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
+from .exceptions import ReplyNotArrivedError
 
 
 
@@ -51,16 +52,17 @@ class ObjectProxy:
 
     _own_attrs = frozenset([
         '__annotations__',
-        'zmq_client', 'async_zmq_client', '_allow_foreign_attributes',
-        'identity', 'id', 'logger', 'execution_timeout', 'invokation_timeout', 
-        '_execution_timeout', '_invokation_timeout', '_events', '_noblock_messages',
+        '_allow_foreign_attributes',
+        'id', 'logger', 
+        'execution_timeout', 'invokation_timeout', '_execution_timeout', '_invokation_timeout', 
+        '_events', 
+        '_noblock_messages',
         '_schema_validator'
     ])
 
     def __init__(self, 
                 id: str, 
                 protocol: str = ZMQ_TRANSPORTS.IPC, 
-                invokation_timeout : float = 5, 
                 load_thing = True, 
                 **kwargs
             ) -> None:
@@ -73,7 +75,7 @@ class ObjectProxy:
                                     level=kwargs.get('log_level', logging.INFO)))
         
 
-        self.invokation_timeout = invokation_timeout
+        self.invokation_timeout = kwargs.get("invokation_timeout", 5)
         self.execution_timeout = kwargs.get("execution_timeout", None)
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
@@ -162,58 +164,21 @@ class ObjectProxy:
                                 "Defaults to None (i.e. waits indefinitely until return) and network times not considered."
     )
 
-    @property
-    # @abstractmethod
-    def protocol(self):
-        """Protocol of this client instance.
-        A member of the Protocols enum."""
-        raise NotImplementedError()
-
     # @abstractmethod
     def is_supported_interaction(self, td, name):
         """Returns True if the any of the Forms for the Interaction
         with the given name is supported in this Protocol Binding client."""
         raise NotImplementedError()
 
-    # @abstractmethod
-    def invoke_action(self, td, name, input_value, timeout=None):
-        """Invokes an Action on a remote Thing.
-        Returns a Future."""
-        raise NotImplementedError()
-
-    # @abstractmethod
-    def write_property(self, td, name, value, timeout=None):
-        """Updates the value of a Property on a remote Thing.
-        Returns a Future."""
-        raise NotImplementedError()
-
-    # @abstractmethod
-    def read_property(self, td, name, timeout=None):
-        """Reads the value of a Property on a remote Thing.
-        Returns a Future."""
-        raise NotImplementedError()
-
-    # @abstractmethod
-    def subscribe_event(self, td, name):
-        """Subscribes to an event on a remote Thing.
-        Returns an Observable."""
-        raise NotImplementedError()
-
-    # @abstractmethod
-    def observe_property(self, td, name):
-        """Subscribes to property changes on a remote Thing.
-        Returns an Observable"""
-        raise NotImplementedError()
-
-    # @abstractmethod
-    def on_td_change(self, url):
-        """Subscribes to Thing Description changes on a remote Thing.
-        Returns an Observable."""
-        raise NotImplementedError()
-
-
-    def invoke_action(self, method : str, oneway : bool = False, noblock : bool = False, 
-                                *args, **kwargs) -> typing.Any:
+   
+    def invoke_action(
+                    self, 
+                    name: str, 
+                    oneway: bool = False, 
+                    noblock: bool = False, 
+                    *args, 
+                    **kwargs
+                ) -> typing.Any:
         """
         call a method specified by name on the server with positional/keyword arguments
 
@@ -242,20 +207,23 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated 
         """
-        method = getattr(self, method, None) # type: ConsumedThingAction 
+        method = getattr(self, name, None) # type: ConsumedThingAction 
         if not isinstance(method, ConsumedThingAction):
             raise AttributeError(f"No remote method named {method} in Thing {self.td['id']}")
         if oneway:
             method.oneway(*args, **kwargs)
         elif noblock:
-            msg_id = method.noblock(*args, **kwargs)
-            self._noblock_messages[msg_id] = method
-            return msg_id
+            return method.noblock(*args, **kwargs)
         else:
             return method(*args, **kwargs)
 
 
-    async def async_invoke_action(self, method : str, *args, **kwargs) -> typing.Any:
+    async def async_invoke_action(
+                                self, 
+                                name: str, 
+                                *args, 
+                                **kwargs
+                            ) -> typing.Any:
         """
         async(io) call a method specified by name on the server with positional/keyword 
         arguments. noblock and oneway not supported for async calls. 
@@ -283,13 +251,13 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated
         """
-        method = getattr(self, method, None) # type: ConsumedThingAction 
+        method = getattr(self, name, None) # type: ConsumedThingAction 
         if not isinstance(method, ConsumedThingAction):
             raise AttributeError(f"No remote method named {method}")
         return await method.async_call(*args, **kwargs)
 
 
-    def read_property(self, name : str, noblock : bool = False) -> typing.Any:
+    def read_property(self, name: str, noblock: bool = False) -> typing.Any:
         """
         get property specified by name on server. 
 
@@ -311,15 +279,18 @@ class ObjectProxy:
         if not isinstance(prop, ConsumedThingProperty):
             raise AttributeError(f"No property named {prop}")
         if noblock:
-            msg_id = prop.noblock_get()
-            self._noblock_messages[msg_id] = prop
-            return msg_id
+            return prop.noblock_get()
         else:
             return prop.get()
 
 
-    def write_property(self, name : str, value : typing.Any, oneway : bool = False, 
-                        noblock : bool = False) -> None:
+    def write_property(
+                    self, 
+                    name: str, 
+                    value: typing.Any, 
+                    oneway: bool = False, 
+                    noblock: bool = False
+                ) -> None:
         """
         set property specified by name on server with specified value. 
 
@@ -348,14 +319,12 @@ class ObjectProxy:
         if oneway:
             prop.oneway_set(value)
         elif noblock:
-            msg_id = prop.noblock_set(value)
-            self._noblock_messages[msg_id] = prop
-            return msg_id
+            return prop.noblock_set(value)
         else:
             prop.set(value)
 
 
-    async def async_read_property(self, name : str) -> None:
+    async def async_read_property(self, name: str) -> None:
         """
         async(io) get property specified by name on server. 
 
@@ -377,7 +346,7 @@ class ObjectProxy:
         return await prop.async_get()
     
 
-    async def async_write_property(self, name : str, value : typing.Any) -> None:
+    async def async_write_property(self, name: str, value: typing.Any) -> None:
         """
         async(io) set property specified by name on server with specified value.  
         noblock and oneway not supported for async calls. 
@@ -402,7 +371,7 @@ class ObjectProxy:
         await prop.async_set(value)
 
 
-    def read_multiple_properties(self, names : typing.List[str], noblock : bool = False) -> typing.Any:
+    def read_multiple_properties(self, names: typing.List[str], noblock: bool = False) -> typing.Any:
         """
         get properties specified by list of names.
 
@@ -422,15 +391,17 @@ class ObjectProxy:
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if noblock:
-            msg_id = method.noblock(names=names)
-            self._noblock_messages[msg_id] = method
-            return msg_id
+            return method.noblock(names=names)
         else:
             return method(names=names)
         
     
-    def write_multiple_properties(self, oneway : bool = False, noblock : bool = False,
-                       **properties : typing.Dict[str, typing.Any]) -> None:
+    def write_multiple_properties(
+                                self, 
+                                oneway: bool = False, 
+                                noblock: bool = False,
+                                **properties : typing.Dict[str, typing.Any]
+                            ) -> None:
         """
         set properties whose name is specified by keys of a dictionary
 
@@ -459,14 +430,12 @@ class ObjectProxy:
         if oneway:
             method.oneway(**properties)
         elif noblock:
-            msg_id = method.noblock(**properties)
-            self._noblock_messages[msg_id] = method
-            return msg_id
+            return method.noblock(**properties)
         else:
             return method(**properties)
         
 
-    async def async_read_multiple_properties(self, names) -> None:
+    async def async_read_multiple_properties(self, names: typing.List[str]) -> None:
         """
         async(io) get properties specified by list of names. no block gets are not supported for asyncio.
 
@@ -486,7 +455,7 @@ class ObjectProxy:
         return await method.async_call(names=names)
 
 
-    async def async_write_multiple_properties(self, **properties) -> None:
+    async def async_write_multiple_properties(self, **properties: dict[str, typing.Any]) -> None:
         """
         async(io) set properties whose name is specified by keys of a dictionary
 
@@ -510,8 +479,38 @@ class ObjectProxy:
         await method.async_call(**properties)
 
 
-    def subscribe_event(self, name : str, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable],
-                        thread_callbacks : bool = False, deserialize : bool = True) -> None:
+    def observe_property(
+                    self,
+                    name: str,
+                    callbacks: typing.Union[typing.List[typing.Callable], typing.Callable],
+                    thread_callbacks: bool = False,
+                    deserialize: bool = True
+                ) -> None:
+        raise NotImplementedError("observe_property not implemented yet.") 
+
+    def unobserve_property(self, name: str) -> None:
+        """
+        Unsubscribe to property specified by name. 
+
+        Parameters
+        ----------
+        name: str
+            name of the property 
+        callbacks: Callable | List[Callable]
+            one or more callbacks that will be executed
+        thread_callbacks: bool
+            thread the callbacks otherwise the callbacks will be executed serially
+        """ 
+        raise NotImplementedError("unobserve_property not implemented yet.")
+        
+
+    def subscribe_event(
+                    self, 
+                    name: str, 
+                    callbacks: typing.Union[typing.List[typing.Callable], typing.Callable],
+                    thread_callbacks: bool = False, 
+                    deserialize: bool = True
+                ) -> None:
         """
         Subscribe to event specified by name. Events are listened in separate threads and supplied callbacks are
         are also called in those threads. 
@@ -541,7 +540,7 @@ class ObjectProxy:
             event.subscribe(callbacks, thread_callbacks, deserialize)
        
 
-    def unsubscribe_event(self, name : str):
+    def unsubscribe_event(self, name: str):
         """
         Unsubscribe to event specified by name. 
 
@@ -565,7 +564,7 @@ class ObjectProxy:
         event.unsubscribe()
 
     
-    def read_reply(self, message_id : bytes, timeout : typing.Optional[float] = 5000) -> typing.Any:
+    def read_reply(self, message_id: bytes, timeout: typing.Optional[float] = 5000) -> typing.Any:
         """
         read reply of no block calls of an action or a property read/write.
         """
@@ -579,99 +578,14 @@ class ObjectProxy:
         if not reply:
             raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
         if isinstance(obj, ConsumedThingAction):
-            obj._last_return_value = reply 
+            obj._last_zmq_response = reply 
             return obj.last_return_value # note the missing underscore
         elif isinstance(obj, ConsumedThingProperty):
             obj._last_value = reply 
             return obj.last_read_value
 
 
-   
-
-
-
-class ClientFactory: 
-            
-    __allowed_attribute_types__ = (ConsumedThingProperty, ConsumedThingAction, ConsumedThingEvent)
-    __WRAPPER_ASSIGNMENTS__ =  ('__name__', '__qualname__', '__doc__')
-
-    def get_zmq_client(self):
-        self.async_zmq_client = None    
-        self.zmq_client = SyncZMQClient(id, self.identity, client_type=PROXY, protocol=protocol, 
-                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
-                                            logger=self.logger, **kwargs)
-        if kwargs.get("async_mixin", False):
-            self.async_zmq_client = AsyncZMQClient(id, self.identity + '|async', client_type=PROXY, protocol=protocol, 
-                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
-                                            logger=self.logger, **kwargs)
-        if load_thing:
-            self.load_thing()
-
-    def add_method(client_obj : ObjectProxy, method : ConsumedThingAction, func_info) -> None:
-        if not func_info.top_owner:
-            return 
-            raise RuntimeError("logic error")
-        for dunder in __WRAPPER_ASSIGNMENTS__:
-            if dunder == '__qualname__':
-                info = '{}.{}'.format(client_obj.__class__.__name__, func_info.get_dunder_attr(dunder).split('.')[1])
-            else:
-                info = func_info.get_dunder_attr(dunder)
-            setattr(method, dunder, info)
-        client_obj.__setattr__(func_info.obj_name, method)
-
-    def add_property(client_obj : ObjectProxy, property : ConsumedThingProperty, property_info) -> None:
-        if not property_info.top_owner:
-            return
-            raise RuntimeError("logic error")
-        for attr in ['__doc__', '__name__']: 
-            # just to imitate _add_method logic
-            setattr(property, attr, property_info.get_dunder_attr(attr))
-        client_obj.__setattr__(property_info.obj_name, property)
-
-    def add_event(client_obj : ObjectProxy, event : ConsumedThingEvent, event_info) -> None:
-        setattr(client_obj, event_info.obj_name, event)
-    
-
-    def load_thing(self):
-        """
-        Get exposed resources from server (methods, properties, events) and remember them as attributes of the proxy.
-        """
-        fetch = ConsumedThingAction(self.zmq_client, CommonRPC.zmq_resource_read(id=self.id), 
-                                    invokation_timeout=self._invokation_timeout) # type: ConsumedThingAction
-        reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
-
-        for name, data in reply.items():
-            if isinstance(data, dict):
-                try:
-                    if data["what"] == ResourceTypes.EVENT:
-                        data = ZMQEvent(**data)
-                    elif data["what"] == ResourceTypes.ACTION:
-                        data = ZMQAction(**data)
-                    else:
-                        data = ZMQResource(**data)
-                except Exception as ex:
-                    ex.add_note("Did you correctly configure your serializer? " + 
-                            "This exception occurs when given serializer does not work the same way as server serializer")
-                    raise ex from None
-            elif not isinstance(data, ZMQResource):
-                raise RuntimeError("Logic error - deserialized info about server not instance of hololinked.server.data_classes.ZMQResource")
-            if data.what == ResourceTypes.ACTION:
-                _add_method(self, ConsumedThingAction(self.zmq_client, data.instruction, self.invokation_timeout, 
-                                                self.execution_timeout, data.argument_schema, self.async_zmq_client, self._schema_validator), data)
-            elif data.what == ResourceTypes.PROPERTY:
-                _add_property(self, ConsumedThingProperty(self.zmq_client, data.instruction, self.invokation_timeout,
-                                                self.execution_timeout, self.async_zmq_client), data)
-            elif data.what == ResourceTypes.EVENT:
-                assert isinstance(data, ZMQEvent)
-                event = ConsumedThingEvent(self.zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
-                            serialization_specific=data.serialization_specific, serializer=self.zmq_client.zmq_serializer, logger=self.logger)
-                _add_event(self, event, data)
-                self.__dict__[data.name] = event 
-
-
-class ReplyNotArrivedError(Exception):
-    pass 
-
-
-__all__ = ['ObjectProxy']
+__all__ = [
+    ObjectProxy.__name__
+]
 
