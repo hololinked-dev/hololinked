@@ -27,6 +27,7 @@ import tempfile
 import os
 import typing 
 import warnings
+import zmq.asyncio 
 
 from . import __version__
 from .serializers.serializers import PythonBuiltinJSONSerializer
@@ -88,7 +89,9 @@ class Configuration:
         # Eventloop
         "USE_UVLOOP", "TRACE_MALLOC",
         # Schema
-        'validate_schema_on_client', 'validate_schemas'
+        'VALIDATE_SCHEMA_ON_CLIENT', 'VALIDATE_SCHEMAS',
+        # ZMQ
+        "ZMQ_CONTEXT"
     ]
 
     def __init__(self, use_environment : bool = False):
@@ -106,8 +109,9 @@ class Configuration:
         self.PWD_HASHER_TIME_COST = 15
         self.USE_UVLOOP = False
         self.TRACE_MALLOC = False
-        self.validate_schema_on_client = False
-        self.validate_schemas = True 
+        self.VALIDATE_SCHEMA_ON_CLIENT = False
+        self.VALIDATE_SCHEMAS = True
+        self.ZMQ_CONTEXT = zmq.asyncio.Context()
 
         if not use_environment:
             return 

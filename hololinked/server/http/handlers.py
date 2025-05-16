@@ -177,7 +177,7 @@ class RPCHandler(BaseHandler):
         try:
             server_exeuction_context, thing_execution_context = self.get_execution_parameters()
             payload, preserialized_payload = self.get_payload()
-            if self.schema_validator is not None and global_config.validate_schema_on_client:
+            if self.schema_validator is not None and global_config.VALIDATE_SCHEMA_ON_CLIENT:
                 self.schema_validator.validate(payload)
             reply = await self.zmq_client_pool.async_execute(
                                     client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
@@ -533,7 +533,7 @@ class StopHandler(BaseHandler):
         else:
             try:
                 # Stop the Tornado server
-                asyncio.get_event_loop().call_soon(lambda : asyncio.create_task(self.owner_inst.stop()))
+                run_callable_somehow(self.owner_inst.async_stop())
                 self.set_status(204, "ok")
                 self.set_header("Access-Control-Allow-Credentials", "true")
             except Exception as ex:
