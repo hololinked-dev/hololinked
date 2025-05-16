@@ -3,18 +3,15 @@ import typing
 from typing import ClassVar, Optional
 from pydantic import ConfigDict
 
-
 from .base import Schema
 from .data_schema import DataSchema
 from .forms import Form
 from .utils import get_summary
-from ..constants import JSON, Operations, ResourceTypes
+from ..constants import JSON, ResourceTypes
 from ..core.property import Property
-from ..core.actions import Action, BoundAction
+from ..core.actions import Action
 from ..core.events import Event
 from ..core.thing import Thing, ThingMeta
-from pydantic import BaseModel
-
 
 
 
@@ -52,8 +49,6 @@ class InteractionAffordance(Schema):
     @property
     def owner(self) -> Thing:
         """Owning `Thing` instance of the interaction affordance"""
-        if self._owner is None:
-            raise AttributeError("owner is not set for this interaction affordance")
         return self._owner
     
     @owner.setter
@@ -71,8 +66,6 @@ class InteractionAffordance(Schema):
     @property
     def objekt(self) -> Property | Action | Event: 
         """Object instance of the interaction affordance - `Property`, `Action` or `Event`"""
-        if self._objekt is None:
-            raise AttributeError("objekt is not set for this interaction affordance")
         return self._objekt
     
     @objekt.setter
@@ -239,6 +232,8 @@ class InteractionAffordance(Schema):
         if not isinstance(value, self.__class__):
             return False
         if self.thing_id is None or value.thing_id is None:
+            if self.owner is None or value.owner is None:
+                return False
             if self.owner == value.owner and self.name == value.name:
                 return True
             return False
@@ -332,16 +327,22 @@ class ActionAffordance(InteractionAffordance):
         action = self.objekt
         assert isinstance(action, Action) # type definition
         if action.obj.__doc__:
-            self.title = get_summary(action.obj.__doc__)
-            self.description = self.format_doc(action.obj.__doc__)
+            title = get_summary(action.obj.__doc__)
+            description = self.format_doc(action.obj.__doc__)
+            if title == description:
+                self.description = description
+            else:
+                self.title = title
+                self.description = description
         if action.execution_info.argument_schema:
             self.input = action.execution_info.argument_schema 
         if action.execution_info.return_value_schema: 
             self.output = action.execution_info.return_value_schema 
-        if (not (
-                hasattr(self.owner, 'state_machine') and self.owner.state_machine is not None and 
-                self.owner.state_machine.contains_object(action)
-            ) and action.execution_info.idempotent):
+        if (
+            not (hasattr(self.owner, 'state_machine') and self.owner.state_machine is not None and 
+                self.owner.state_machine.contains_object(action)) and 
+            action.execution_info.idempotent
+        ):
             self.idempotent = action.execution_info.idempotent
         if action.execution_info.synchronous:
             self.synchronous = action.execution_info.synchronous
@@ -391,8 +392,13 @@ class EventAffordance(InteractionAffordance):
         event = self.objekt
         assert isinstance(event, Event) # type definition
         if event.__doc__:
-            self.title = get_summary(event.__doc__) 
-            self.description = self.format_doc(event.__doc__)
+            title = get_summary(event.doc) 
+            description = self.format_doc(event.doc)
+            if title == description:
+                self.description = description
+            else:
+                self.title = title
+                self.description = description
         if event.schema:
             self.data = event.schema
 
