@@ -13,7 +13,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from ...param import Parameterized
 from ...param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, String
 from ...constants import HTTP_METHODS, ZMQ_TRANSPORTS, HTTPServerTypes, Operations
-from ...utils import complete_pending_tasks_in_current_loop, forkable, get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, run_callable_somehow
+from ...utils import complete_pending_tasks_in_current_loop, complete_pending_tasks_in_current_loop_async, forkable, get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, run_callable_somehow
 from ...serializers.serializers import JSONSerializer
 from ...schema_validators import BaseSchemaValidator, JSONSchemaValidator
 from ...core.property import Property
@@ -31,7 +31,7 @@ class HTTPServer(Parameterized):
     HTTP(s) server to route requests to `Thing`.
     """
     
-    things = TypedList(item_type=str, default=None, allow_None=True, 
+    things = TypedList(item_type=(str, Thing), default=None, allow_None=True, 
                        doc="instance name of the things to be served by the HTTP server." ) # type: typing.List[str]
     port = Integer(default=8080, bounds=(1, 65535),  
                     doc="the port at which the server should be run" ) # type: int
@@ -42,11 +42,13 @@ class HTTPServer(Parameterized):
     #                 When no SSL configurations are provided, defaults to 1.1" ) # type: float
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, 
                     doc="logging.Logger" ) # type: logging.Logger
-    log_level = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.WARN, 
+    log_level = Selector(
+                    objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.WARN, 
                                 logging.CRITICAL, logging.ERROR], 
                     default=logging.INFO, 
                     doc="""alternative to logger, this creates an internal logger with the specified log level 
-                    along with a IO stream handler.""" ) # type: int
+                    along with a IO stream handler.""" 
+                ) # type: int
     serializer = ClassSelector(class_=JSONSerializer,  default=None, allow_None=True,
                     doc="""json serializer used by the server""" ) # type: JSONSerializer
     ssl_context = ClassSelector(class_=ssl.SSLContext, default=None, allow_None=True, 
@@ -81,18 +83,18 @@ class HTTPServer(Parameterized):
     def __init__(self, 
                 things : typing.List[str] | typing.List[Thing] | typing.List[ThingMeta] | None = None, 
                 *, 
-                port : int = 8080, 
-                address : str = '0.0.0.0', 
-                host : typing.Optional[str] = None, 
-                logger : typing.Optional[logging.Logger] = None, 
-                log_level : int = logging.INFO, 
-                serializer : typing.Optional[JSONSerializer] = None, 
-                ssl_context : typing.Optional[ssl.SSLContext] = None, 
-                schema_validator : typing.Optional[BaseSchemaValidator] = JSONSchemaValidator,
-                certfile : str = None, 
-                keyfile : str = None, 
+                port: int = 8080, 
+                address: str = '0.0.0.0', 
+                # host: typing.Optional[str] = None, 
+                logger: typing.Optional[logging.Logger] = None, 
+                log_level: int = logging.INFO, 
+                serializer: typing.Optional[JSONSerializer] = None, 
+                ssl_context: typing.Optional[ssl.SSLContext] = None, 
+                schema_validator: typing.Optional[BaseSchemaValidator] = JSONSchemaValidator,
+                certfile: str = None, 
+                keyfile: str = None, 
                 # protocol_version : int = 1, network_interface : str = 'Ethernet', 
-                allowed_clients : typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   
+                allowed_clients: typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   
                 **kwargs
             ) -> None:
         """
@@ -129,7 +131,7 @@ class HTTPServer(Parameterized):
             things=things,
             port=port, 
             address=address, 
-            host=host,
+            # host=host,
             logger=logger, 
             log_level=log_level,
             serializer=serializer or JSONSerializer(), 
@@ -150,10 +152,11 @@ class HTTPServer(Parameterized):
             self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, 
                                             f"{self.address}:{self.port}"), 
                                             self.log_level)
-            
+        
+        self.tornado_instance = None
         self.app = Application(handlers=[
-            (r'/things', ThingsHandler, dict(owner=self)),
-            (r'/stop', StopHandler, dict(owner=self))
+            (r'/things', ThingsHandler, dict(owner_inst=self)),
+            (r'/stop', StopHandler, dict(owner_inst=self))
         ])
         self.router = ApplicationRouter(self.app, self)
         self._checked = False
@@ -167,11 +170,13 @@ class HTTPServer(Parameterized):
                                                     logger=self.logger
                                                 )
         self._disconnected_things = dict()
+        self._registered_things = dict() # type: typing.Dict[typing.Type[ThingMeta], typing.List[str]]
         
         self._zmq_inproc_socket_context = None 
         self._zmq_inproc_event_context = None
 
-        # self.add_things(*things)
+        if self.things is not None:
+            self.add_things(*self.things)
     
 
     @property
@@ -212,20 +217,26 @@ class HTTPServer(Parameterized):
         self.tornado_instance.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
         self.tornado_event_loop.start()
-        complete_pending_tasks_in_current_loop()
+        complete_pending_tasks_in_current_loop() # will reach here only when the server is stopped, so complete pending tasks
 
 
-    def stop(self) -> None:
+    def stop(self, attempt_async_stop: bool = True) -> None:
         """
         Stop the HTTP server - unreliable, use async_stop() if possible. 
         A stop handler at the path '/stop' with POST method is already implemented that invokes this 
         method for the clients. 
         """
-        self.tornado_instance.stop()
+        if attempt_async_stop:
+            run_callable_somehow(self.async_stop())
+            return 
         self.zmq_client_pool.stop_polling()
+        if not self.tornado_instance:
+            return
+        self.tornado_instance.stop()
         run_callable_somehow(self.tornado_instance.close_all_connections())
         if self.tornado_event_loop is not None:
             self.tornado_event_loop.stop()
+        # complete_pending_tasks_in_current_loop()
         
        
     async def async_stop(self) -> None:
@@ -233,11 +244,14 @@ class HTTPServer(Parameterized):
         Stop the HTTP server. A stop handler at the path '/stop' with POST method is already implemented that invokes this 
         method for the clients. 
         """
-        self.tornado_instance.stop()
         self.zmq_client_pool.stop_polling()
+        if not self.tornado_instance:
+            return    
+        self.tornado_instance.stop()
         await self.tornado_instance.close_all_connections()
         if self.tornado_event_loop is not None:
             self.tornado_event_loop.stop()
+        # await complete_pending_tasks_in_current_loop_async()
         
        
     def add_things(self, *things: Thing | ThingMeta | dict | str) -> None:
@@ -272,7 +286,30 @@ class HTTPServer(Parameterized):
             id of the thing or the thing instance or thing class to be served
         """
         self.add_things(thing)
-  
+
+
+    def register_id_for_thing(
+                            self, 
+                            thing_cls: typing.Type[ThingMeta], 
+                            thing_id: str
+                        ) -> None:
+        """register an expected thing id for a thing class"""
+        assert isinstance(thing_id, str), f"thing_id should be a string, given {type(thing_id)}"
+        if not self._registered_things.get(thing_cls, None):
+            self._registered_things[thing_cls] = []
+        if isinstance(thing_id, list):
+            self._registered_things[thing_cls].extend(thing_id)
+        else:
+            self._registered_things[thing_cls].append(thing_id)
+
+
+    def get_thing_from_id(self, id: str) -> typing.Type[ThingMeta] | None:
+        """get the thing id for a thing class"""
+        for thing_cls, thing_ids in self._registered_things.items():
+            if id in thing_ids:
+                return thing_cls
+        return None
+
 
     def add_property(self, 
                     URL_path: str, 
@@ -521,13 +558,21 @@ class ApplicationRouter:
         """
 
 
-    def _process_pending_rules(self):
+    def _resolve_rules(self, id: str) -> None:
         """
         Process the pending rules and add them to the application router.
         """
+        thing_cls = self.server.get_thing_from_id(id)
+        pending_rules = []
         for rule in self._pending_rules:
+            if rule[2]["resource"].owner != thing_cls:
+                pending_rules.append(rule)
+                continue
+            URL_path, handler, kwargs = rule
+            URL_path = f'/{id}{URL_path}'
+            rule = (URL_path, handler, kwargs)
             self.app.wildcard_router.add_rules([rule])
-        self._pending_rules.clear()
+        self._pending_rules = pending_rules
 
     
     def __contains__(self, item: str | Property | Action | Event | PropertyAffordance | ActionAffordance | EventAffordance) -> bool:
@@ -643,12 +688,13 @@ class ApplicationRouter:
                     sync_client=None,
                     async_client=client
                 )
-                TD = await FetchTD.async_call() 
+                TD = await FetchTD.async_call() # type: typing.Dict[str, typing.Any]
                 self.add_interaction_affordances(
                     [PropertyAffordance.from_TD(name, TD) for name in TD["properties"].keys()],
                     [ActionAffordance.from_TD(name, TD) for name in TD["actions"].keys()],
                     [EventAffordance.from_TD(name, TD) for name in TD["events"].keys()]
                 )
+                self._resolve_rules(thing_id)
             except ConnectionError:
                 self.server.logger.warning(f"could not connect to {thing_id} using {transport or socket_address} transport")
             except Exception as ex:

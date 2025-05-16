@@ -144,10 +144,16 @@ def run_callable_somehow(method : typing.Union[typing.Callable, typing.Coroutine
 def complete_pending_tasks_in_current_loop():
     """
     Complete all pending tasks in the current asyncio event loop.
-    """
+    """    
     get_current_async_loop().run_until_complete(
         asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
     )
+
+async def complete_pending_tasks_in_current_loop_async():
+    """
+    Complete all pending tasks in the current asyncio event loop.
+    """
+    await asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
 
 
 def get_signature(callable : typing.Callable) -> typing.Tuple[typing.List[str], typing.List[type]]: 

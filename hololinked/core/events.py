@@ -41,7 +41,7 @@ class Event:
                 label : typing.Optional[str] = None
             ) -> None:
         self.doc = doc 
-        if global_config.validate_schemas and schema:
+        if global_config.VALIDATE_SCHEMAS and schema:
             jsonschema.Draft7Validator.check_schema(schema)
         self.schema = schema
         # self.security = security

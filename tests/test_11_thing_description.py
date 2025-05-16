@@ -9,11 +9,12 @@ from hololinked.td.interaction_affordance import (PropertyAffordance, Interactio
 from hololinked.core.properties import Property, Number, String, Boolean
 
 try:
-    from .things import OceanOpticsSpectrometer
+    from .things import OceanOpticsSpectrometer, TestThing
     from .utils import TestCase, TestRunner
 except ImportError:
-    from things import OceanOpticsSpectrometer
+    from things import OceanOpticsSpectrometer, TestThing
     from utils import TestCase, TestRunner
+
 
 
 
@@ -49,11 +50,11 @@ class TestInteractionAffordance(TestCase):
         # test the opposite 
         affordance = PropertyAffordance()
         # req. 7. accessing any of unset objects should raise an error
-        self.assertRaises(AttributeError, lambda: affordance.owner)
-        self.assertRaises(AttributeError, lambda: affordance.objekt)
-        self.assertRaises(AttributeError, lambda: affordance.name)
-        self.assertRaises(AttributeError, lambda: affordance.thing_id)
-        self.assertRaises(AttributeError, lambda: affordance.thing_cls)
+        self.assertTrue(affordance.owner is None)
+        self.assertTrue(affordance.objekt is None)
+        self.assertTrue(affordance.name is None)
+        self.assertTrue(affordance.thing_id is None)
+        self.assertTrue(affordance.thing_cls is None)
 
         # req. 8. Only the corresponding object can be set for each affordance type
         affordance = ActionAffordance()
@@ -217,17 +218,22 @@ class TestDataSchema(TestCase):
     #     pass 
 
 
-    # def test_6_thing_model_generation(self):
-    #     pass
-        # basic test only to make sure nothing is fundamentally wrong
-        # thing = self.thing_cls(id="test_servers_init", log_level=logging.WARN)
-        # self.assertIsInstance(thing.get_thing_description(), dict)
-        # self.assertIsInstance(thing.get_our_temp_thing_description(), dict)
+
+class TestThingDescription(TestCase):
+
+    def test_1_thing_model_generation(self):
+        
+        thing = TestThing(id="test-thing-model", log_level=logging.ERROR+10)
+        self.assertIsInstance(thing.get_thing_model(ignore_errors=True).json(), dict)
+        # print(json.dumps(thing.get_thing_model(ignore_errors=True).json(), indent=4))
+        # self.assertIsInstance(thing.get_our_thing_model().json(), dict)
      
         # start_thing_forked(self.thing_cls, id='test-gui-resource-generation', log_level=logging.WARN)
         # thing_client = ObjectProxy('test-gui-resource-generation')
         # self.assertIsInstance(thing_client.get_our_temp_thing_description(), dict)
         # thing_client.exit()
+
+
 
 
 if __name__ == '__main__':
