@@ -1,14 +1,15 @@
-import typing 
-from dataclasses import dataclass, field
+import typing
+from pydantic import Field 
+
 from .base import Schema
 
 
-@dataclass
+
 class Link(Schema):
     href : str
-    anchor : typing.Optional[str]  
-    type : typing.Optional[str] = field(default='application/json')
-    # rel : typing.Optional[str] = field(default='next')
+    anchor: typing.Optional[str]  
+    rel: typing.Optional[str] 
+    type: typing.Optional[str] = Field(default='application/json')
 
     def __init__(self):
         super().__init__()
@@ -18,8 +19,8 @@ class Link(Schema):
         self.anchor = f"{authority}{owner._full_URL_path_prefix}"
 
 
-@dataclass
-class VersionInfo:
+
+class VersionInfo(Schema):
     """
     create version info.
     schema - https://www.w3.org/TR/wot-thing-description11/#versioninfo
