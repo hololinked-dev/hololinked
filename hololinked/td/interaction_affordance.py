@@ -96,22 +96,16 @@ class InteractionAffordance(Schema):
     @property
     def name(self) -> str:
         """Name of the interaction affordance used as key in the TD"""
-        if self._name is None:
-            raise AttributeError("name is not set for this interaction affordance")
         return self._name
     
     @property
     def thing_id(self) -> str:
         """ID of the `Thing` instance owning the interaction affordance"""
-        if self._thing_id is None:
-            raise AttributeError("thing_id is not set for this interaction affordance")
         return self._thing_id
     
     @property
     def thing_cls(self) -> ThingMeta:
         """`Thing` class owning the interaction affordance"""
-        if self._thing_cls is None:
-            raise AttributeError("thing_cls is not set for this interaction affordance")
         return self._thing_cls
     
     def build(self, interaction: Property | Action | Event, owner: Thing) -> None:
@@ -244,7 +238,7 @@ class InteractionAffordance(Schema):
     def __eq__(self, value):
         if not isinstance(value, self.__class__):
             return False
-        if self._thing_id is None:
+        if self.thing_id is None or value.thing_id is None:
             if self.owner == value.owner and self.name == value.name:
                 return True
             return False
@@ -311,16 +305,6 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         affordance.build()       
         return affordance
     
-    @classmethod
-    def from_TD(self, name: str, TD: JSON) -> "PropertyAffordance":
-        prop = TD["properties"][name] # type: typing.Dict[str, JSON]
-        property_affordance = PropertyAffordance()
-        for field in PropertyAffordance.model_fields:
-            if field in prop:
-                setattr(property_affordance, field, prop[field])
-        property_affordance._name = name
-        property_affordance._thing_id = TD["id"]
-        return property_affordance
 
  
 class ActionAffordance(InteractionAffordance):
@@ -383,31 +367,8 @@ class ActionAffordance(InteractionAffordance):
         affordance.build()
         return affordance
 
-    @classmethod
-    def from_TD(self, name: str, TD: JSON) -> "ActionAffordance":
-        action = TD["actions"][name] # type: typing.Dict[str, JSON]
-        action_affordance = ActionAffordance()
-        if action.get("title", None):
-            action_affordance.title = action.get("title", None)
-        if action.get("description", None):
-            action_affordance.description = action.get("description", None)
-        if action.get("input", None):
-            action_affordance.input = action.get("input", None)
-        if action.get("output", None):
-            action_affordance.output = action.get("output", None)
-        if action.get("safe", None) is not None:
-            action_affordance.safe = action.get("safe", None)
-        if action.get("idempotent", None) is not None:
-            action_affordance.idempotent = action.get("idempotent", None)
-        if action.get("synchronous", None) is not None:
-            action_affordance.synchronous = action.get("synchronous", None)
-        if action.get("forms", None):
-            action_affordance.forms = action.get("forms", [])
-        action_affordance._name = name
-        action_affordance._thing_id = TD["id"]
-        return action_affordance
-          
     
+        
 class EventAffordance(InteractionAffordance):
     """
     creates event affordance schema from events.

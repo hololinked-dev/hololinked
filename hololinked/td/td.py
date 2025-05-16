@@ -1,5 +1,5 @@
 import typing
-from dataclasses import dataclass
+
 
 from .base import *
 from .data_schema import *
@@ -7,9 +7,10 @@ from .forms import *
 from .security_definitions import *
 from .metadata import *
 from .interaction_affordance import *
+from ..core.state_machine import StateMachine
 
 
-@dataclass
+
 class ThingDescription(Schema):
     """
     generate Thing Description of W3C Web of Things standard. 
@@ -35,23 +36,17 @@ class ThingDescription(Schema):
     securityDefinitions : SecurityScheme
     schemaDefinitions : typing.Optional[typing.List[DataSchema]]
     
-#     skip_properties = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',
-#                     'events', 'thing_description', 'GUI', 'object_info' ]
+    def __init__(self, 
+                instance: "Thing", 
+                allow_loose_schema: typing.Optional[bool] = False, 
+                ignore_errors: bool = False
+            ) -> None:
+        super().__init__()
+        self.instance = instance
+        self.allow_loose_schema = allow_loose_schema
+        self.ignore_errors = ignore_errors
 
-#     skip_actions = ['_set_properties', '_get_properties', '_add_property', '_get_properties_in_db', 
-#                     'get_postman_collection', 'get_thing_description', 'get_our_temp_thing_description']
-
-#     # not the best code and logic, but works for now
-
-#     def __init__(self, instance : "Thing", authority : typing.Optional[str] = None, 
-#                     allow_loose_schema : typing.Optional[bool] = False, ignore_errors : bool = False) -> None:
-#         super().__init__()
-#         self.instance = instance
-#         self.authority = authority
-#         self.allow_loose_schema = allow_loose_schema
-#         self.ignore_errors = ignore_errors
-
-    def produce(self) -> JSON: 
+    def produce(self) -> "ThingDescription": 
 
         self.id = self.instance.id
         self.title = self.instance.__class__.__name__ 
@@ -59,75 +54,16 @@ class ThingDescription(Schema):
         self.properties = dict()
         self.actions = dict()
         self.events = dict()
-#         self.forms = NotImplemented
-#         self.links = NotImplemented
-        
-#         # self.schemaDefinitions = dict(exception=JSONSchema.get_type(Exception))
+        # self.forms = NotImplemented
+        # self.links = NotImplemented
+        # self.schemaDefinitions = dict(exception=JSONSchema.get_type(Exception))
 
-#         self.add_interaction_affordances()
-#         self.add_links()
-#         self.add_top_level_forms()
-#         self.add_security_definitions()
+        self.add_interaction_affordances()
+        # self.add_links()
+        # self.add_top_level_forms()
+        # self.add_security_definitions()
        
-#         return self
-    
-
-#     def add_interaction_affordances(self):
-#         # properties 
-#         for prop in self.instance.properties.descriptors.values():
-#             if not isinstance(prop, Property) or not prop.remote or prop.name in self.skip_properties: 
-#                 continue
-#             if prop.name == 'state' and (not hasattr(self.instance, 'state_machine') or 
-#                                 not isinstance(self.instance.state_machine, StateMachine)):
-#                 continue
-#             try:
-#                 if (resource.isproperty and resource.obj_name not in self.properties and 
-#                     resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
-#                     resource.obj._remote_info is not None): 
-#                     if (resource.obj_name == 'state' and (not hasattr(self.instance, 'state_machine') or 
-#                                 not isinstance(self.instance.state_machine, StateMachine))):
-#                         continue
-#                     if resource.obj_name not in self.instance.properties:
-#                         continue 
-#                     self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, 
-#                                                                             self.instance, self.authority) 
-                
-#                 elif (resource.isaction and resource.obj_name not in self.actions and 
-#                     resource.obj_name not in self.skip_actions and hasattr(resource.obj, '_remote_info')):
-
-#                     if resource.bound_obj != self.instance or (resource.obj_name == 'exit' and 
-#                             self.instance._owner is not None) or (not hasattr(resource.bound_obj, 'db_engine') and
-#                             resource.obj_name == 'load_properties_from_DB'):
-#                         continue
-#                     self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, 
-#                                                                                 self.instance, self.authority)
-#                 self.properties[prop.name] = PropertyAffordance.generate_schema(prop, self.instance, self.authority) 
-#             except Exception as ex:
-#                 if not self.ignore_errors:
-#                     raise ex from None
-#                 self.instance.logger.error(f"Error while generating schema for {prop.name} - {ex}")
-#         # actions       
-#         for name, resource in self.instance.actions.items():
-#             if name in self.skip_actions:
-#                 continue    
-#             try:       
-#                 self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, self.instance, 
-#                                                                                self.authority)
-#             except Exception as ex:
-#                 if not self.ignore_errors:
-#                     raise ex from None
-#                 self.instance.logger.error(f"Error while generating schema for {name} - {ex}")
-#         # events
-#         for name, resource in self.instance.events.items():
-#             try:
-#                 self.events[name] = EventAffordance.generate_schema(resource, self.instance, self.authority)
-#             except Exception as ex:
-#                 if not self.ignore_errors:
-#                     raise ex from None
-#                 self.instance.logger.error(f"Error while generating schema for {resource.obj_name} - {ex}")
-
-#         self.add_links()
-    
+        return self
     
 #     def add_links(self):
 #         for name, resource in self.instance.sub_things.items():
