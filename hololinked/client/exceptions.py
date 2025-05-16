@@ -1,0 +1,4 @@
+
+
+class ReplyNotArrivedError(Exception):
+    pass 

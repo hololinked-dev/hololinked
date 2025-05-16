@@ -36,6 +36,7 @@ class ConsumedThingAction:
 
     def __init__(self, 
                 resource: ActionAffordance, 
+                owner_inst: typing.Optional[typing.Any] = None,
                 # schema_validator: typing.Type[BaseSchemaValidator] | None = None
                 **kwargs
             ) -> None:
@@ -47,6 +48,7 @@ class ConsumedThingAction:
         """
         self._resource = resource
         self._schema_validator = None # schema_validator
+        self._owner_inst = owner_inst
 
     def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
         """retrieve return value of the last call to the action"""
@@ -129,6 +131,7 @@ class ConsumedThingProperty:
 
     def __init__(self, 
                 resource: PropertyAffordance, 
+                owner_inst: typing.Optional[typing.Any] = None,
                 **kwargs
             ) -> None:
         """
@@ -138,6 +141,7 @@ class ConsumedThingProperty:
             dataclass object representing the property
         """
         self._resource = resource
+        self._owner_inst = owner_inst
        
     @property # i.e. cannot have setter
     def last_read_value(self) -> typing.Any:
@@ -198,6 +202,22 @@ class ConsumedThingProperty:
             id of the request or message (UUID4 as string)
         """
         raise NotImplementedError("implement property noblock get per protocol")
+    
+    def noblock_set(self, value: typing.Any) -> str:
+        """
+        Set or write property value without blocking, i.e. collect it later as the method returns immediately.
+        
+        Parameters
+        ----------
+        value: typing.Any
+            value to set
+        
+        Returns
+        -------
+        str
+            id of the request or message (UUID4 as string)
+        """
+        raise NotImplementedError("implement property noblock set per protocol")
         
     def oneway_set(self, value: typing.Any) -> None:
         """
