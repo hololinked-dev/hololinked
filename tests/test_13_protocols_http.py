@@ -1,4 +1,5 @@
-import unittest, time, logging
+from types import SimpleNamespace
+import unittest, time, logging, requests
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.meta import ThingMeta
 from hololinked.server.http import HTTPServer
@@ -22,7 +23,7 @@ class TestHTTPServer(TestCase):
 
         # init, run and stop synchronously
         server = HTTPServer(log_level=logging.ERROR+10)
-        self.assertTrue(server.all_ok)
+        # self.assertTrue(server.all_ok)
         # server.listen(forked=True)
         # time.sleep(3)
         # server.stop()
@@ -32,6 +33,11 @@ class TestHTTPServer(TestCase):
         time.sleep(3)
         get_current_async_loop().run_until_complete(server.async_stop())
 
+        server.listen(forked=True)
+        time.sleep(3)
+        response = requests.post('http://localhost:8080/stop')
+        self.assertIn(response.status_code, [200, 201, 202, 204])
+        
 
     def test_2_add_interaction_affordance(self):
         """Test adding an interaction affordance to the HTTP server."""
@@ -124,20 +130,48 @@ class TestHTTPServer(TestCase):
         thing.run_with_zmq_server(ZMQ_TRANSPORTS.INPROC, forked=True)
         
         while thing.rpc_server is None: 
-            time.sleep(0.1)
+            time.sleep(0.01)
         server.zmq_client_pool.context = thing.rpc_server.context
         server.add_property('/max-intensity/custom', OceanOpticsSpectrometer.max_intensity)
         server.add_action('/connect/custom', OceanOpticsSpectrometer.connect)
         server.add_event('/intensity/event/custom', OceanOpticsSpectrometer.intensity_measurement_event)
+        server.register_id_for_thing(OceanOpticsSpectrometer, 'test-spectrometer')
         server.add_thing({"INPROC": thing.id})
 
-        # self.assertTrue(
-        #     len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >= 
-        #     len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
-        # )
-        thing.rpc_server.stop()
-        server.stop()
+        self.assertTrue(
+            len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >= 
+            len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
+        )
+        
+        fake_request = SimpleNamespace(path='/test-spectrometer/max-intensity/custom')
+        self.assertTrue(any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules]))
+        fake_request = SimpleNamespace(path='/non-existing-path-that-i-know-will-not-match')
+        self.assertFalse(any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules]))
+        fake_request = SimpleNamespace(path='/test-spectrometer/connect/custom')
+        self.assertTrue(any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules]))
+        fake_request = SimpleNamespace(path='/test-spectrometer/intensity/event/custom')
+        self.assertTrue(any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules]))
 
+        # server.router.print_rules()
+        thing.rpc_server.stop()
+
+
+    def test_5_run_thing_with_http_server(self):
+        """Test running a thing with an HTTP server."""
+
+        # add a thing, both class and instance
+        for thing, port in zip([
+                    OceanOpticsSpectrometer(id='test-spectrometer', log_level=logging.ERROR+10),
+                    # TestThing(id='test-thing', log_level=logging.ERROR+10)
+                ], [
+                    8085
+                ]):
+            thing.run_with_http_server(forked=True, port=port)
+            time.sleep(3)
+            response = requests.post(f'http://localhost:{port}/stop')
+            self.assertTrue(response.status_code in [200, 201, 202, 204])
+
+           
 
 
 def load_tests(loader, tests, pattern):

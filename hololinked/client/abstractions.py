@@ -246,7 +246,6 @@ class ConsumedThingEvent:
         self._thread_callbacks = False
         self._logger = kwargs.get('logger', None)
      
-
     def add_callbacks(self, *callbacks : typing.Union[typing.List[typing.Callable], typing.Callable]) -> None:
         """
         add callbacks to the event

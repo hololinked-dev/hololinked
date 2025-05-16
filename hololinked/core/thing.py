@@ -307,8 +307,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         
         from ..server.http import HTTPServer        
         http_server = HTTPServer(
-            [self], logger=self.logger,
-            port=port, address=address, ssl_context=ssl_context,
+            [self], 
+            logger=self.logger,
+            port=port, 
+            address=address, 
+            ssl_context=ssl_context,
             allowed_clients=allowed_clients, 
             # network_interface=network_interface, 
             **kwargs,
