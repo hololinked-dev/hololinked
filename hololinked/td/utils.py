@@ -1,14 +1,13 @@
 from typing import Any, Optional
 from ..utils import pep8_to_dashed_name
 
-def get_summary(obj: Any) -> Optional[str]:
+def get_summary(docs: Any) -> Optional[str]:
     """Return the first line of the dosctring of an object
 
     :param obj: Any Python object
     :returns: str: First line of object docstring
 
     """
-    docs = obj.__doc__
     if docs:
         return docs.partition("\n")[0].strip()
     else:
