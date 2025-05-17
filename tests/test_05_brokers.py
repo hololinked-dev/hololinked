@@ -10,12 +10,12 @@ from hololinked.utils import get_current_async_loop, get_default_logger
 
 try:
     from .utils import TestRunner
-    from .test_1_message import MessageValidatorMixin
+    from .test_01_message import MessageValidatorMixin
     from .things.starter import run_zmq_server
     from .things import TestThing
 except ImportError:
     from utils import TestRunner
-    from test_1_message import MessageValidatorMixin
+    from test_01_message import MessageValidatorMixin
     from things.starter import run_zmq_server
     from things import TestThing
 

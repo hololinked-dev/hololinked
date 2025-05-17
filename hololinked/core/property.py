@@ -176,7 +176,7 @@ class Property(Parameter):
         if obj is None:
             return
         if self._observable_event_descriptor and obj.event_publisher:
-            event_dispatcher = getattr(obj, self._observable_event_descriptor._obj_name, None) # type: EventDispatcher
+            event_dispatcher = getattr(obj, self._observable_event_descriptor.name, None) # type: EventDispatcher
             old_value = obj.__dict__.get(self._old_value_internal_name, NotImplemented)
             obj.__dict__[self._old_value_internal_name] = value 
             if self.fcomparator:
