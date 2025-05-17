@@ -36,13 +36,28 @@ class TestCase(unittest.TestCase):
     def setUpClass(self):
         print(f"----------------------------------------------------------------------")
     
-    def setUp(self):
-        print() # dont concatenate with results printed by unit test
-
     @classmethod
     def tearDownClass(self):
         print(f"\n\ntear down {self.__name__}")
+    
+    def setUp(self):
+        print() # add gaps between results printed by unit test
 
+
+class AsyncTestCase(unittest.IsolatedAsyncioTestCase):
+    """Custom async test case class to print some extra spaces and info about test carried out"""
+
+    @classmethod
+    def setUpClass(self):
+        print(f"----------------------------------------------------------------------")
+    
+    @classmethod
+    def tearDownClass(self):
+        print(f"\n\ntear down {self.__name__}")
+    
+    def setUp(self):
+        print() # add gaps between results printed by unit test
+    
 
 def print_lingering_threads(exclude_daemon: bool = True):
     """
