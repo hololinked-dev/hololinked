@@ -64,7 +64,7 @@ class ObjectProxy:
                 **kwargs
             ) -> None:
         self._allow_foreign_attributes = kwargs.get('allow_foreign_attributes', False)
-        self._noblock_messages = dict()
+        self._noblock_messages = dict() # type: typing.Dict[str, ConsumedThingAction | ConsumedThingProperty]
         self._schema_validator = kwargs.get('schema_validator', None)
         self.id = id
         self.logger = kwargs.pop(
@@ -206,10 +206,10 @@ class ObjectProxy:
             raise AttributeError(f"No remote method named {method} in Thing {self.td['id']}")
         oneway = kwargs.pop('oneway', False)
         noblock = kwargs.pop('noblock', False)
-        if oneway:
-            method.oneway(*args, **kwargs)
-        elif noblock:
+        if noblock:
             return method.noblock(*args, **kwargs)
+        elif oneway:
+            method.oneway(*args, **kwargs)
         else:
             return method(*args, **kwargs)
 
@@ -560,14 +560,15 @@ class ObjectProxy:
         event.unsubscribe()
 
     
-    def read_reply(self, message_id: bytes, timeout: typing.Optional[float] = 5000) -> typing.Any:
+    def read_reply(self, message_id: str, timeout: typing.Optional[float] = 5000) -> typing.Any:
         """
         read reply of no block calls of an action or a property read/write.
         """
         obj = self._noblock_messages.get(message_id, None) 
         if not obj:
             raise ValueError('given message id not a one way call or invalid.')
-        reply = self.zmq_client._reply_cache.get(message_id, None)
+        return obj.read_reply(message_id=message_id, timeout=timeout)
+        # reply = obj.sync_zmq_client._.get(message_id, None)
         if not reply: 
             reply = self.zmq_client.recv_reply(message_id=message_id, timeout=timeout,
                                     raise_client_side_exception=True)

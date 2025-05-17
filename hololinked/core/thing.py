@@ -127,10 +127,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     def __post_init__(self):
         from .zmq.rpc_server import RPCServer
+        from ..server.zmq import ZMQServer
         from .logger import RemoteAccessHandler
         from ..storage.database import prepare_object_database, ThingDB
         # Type definitions
-        self.rpc_server = None # type: typing.Optional[RPCServer]
+        self.rpc_server = None # type: typing.Optional[RPCServer | ZMQServer]
         self.db_engine: typing.Optional[ThingDB]
         self._owners = None if not hasattr(self, '_owners') else self._owners # type: typing.Optional[typing.List[Thing]]
         self._remote_access_loghandler: typing.Optional[RemoteAccessHandler] 

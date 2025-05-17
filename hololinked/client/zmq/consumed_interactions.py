@@ -187,7 +187,12 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
         self._owner_inst._noblock_messages[msg_id] = self
         return msg_id
      
-     
+    def read_reply(self, message_id, timeout = None):
+        if self._owner_inst._noblock_messages.get(message_id) != self:
+            raise RuntimeError(f"Message ID {message_id} does not belong to this action.")
+        self._last_zmq_response = self._sync_zmq_client.recv_response(message_id=message_id)
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
+    
 
 class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
 

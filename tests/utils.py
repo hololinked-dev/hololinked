@@ -1,7 +1,10 @@
+import asyncio
 import threading
 import typing
 import unittest
 from faker import Faker
+
+from hololinked.utils import get_current_async_loop
 
 
 
@@ -50,14 +53,21 @@ class AsyncTestCase(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(self):
         print(f"----------------------------------------------------------------------")
+
+    async def asyncSetUp(self):
+        loop = asyncio.get_running_loop()
+        loop.set_debug(False)
     
     @classmethod
     def tearDownClass(self):
         print(f"\n\ntear down {self.__name__}")
-    
+      
     def setUp(self):
         print() # add gaps between results printed by unit test
     
+  
+
+
 
 def print_lingering_threads(exclude_daemon: bool = True):
     """
