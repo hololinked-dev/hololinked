@@ -4,12 +4,11 @@ import warnings
 import typing 
 import logging
 import uuid
-from zmq.utils.monitor import parse_monitor_message
-
 
 from ..constants import ZMQ_TRANSPORTS
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
 from .exceptions import ReplyNotArrivedError
+from .factory import ClientFactory
 
 
 
@@ -62,25 +61,22 @@ class ObjectProxy:
 
     def __init__(self, 
                 id: str, 
-                protocol: str = ZMQ_TRANSPORTS.IPC, 
-                load_thing = True, 
                 **kwargs
             ) -> None:
         self._allow_foreign_attributes = kwargs.get('allow_foreign_attributes', False)
         self._noblock_messages = dict()
         self._schema_validator = kwargs.get('schema_validator', None)
         self.id = id
-        self.identity = f"{id}|{uuid.uuid4()}"
-        self.logger = kwargs.pop('logger', logging.Logger(self.identity, 
-                                    level=kwargs.get('log_level', logging.INFO)))
-        
-
+        self.logger = kwargs.pop(
+                            'logger', 
+                            logging.Logger(self.id, level=kwargs.get('log_level', logging.INFO))
+                        )
         self.invokation_timeout = kwargs.get("invokation_timeout", 5)
-        self.execution_timeout = kwargs.get("execution_timeout", None)
+        self.execution_timeout = kwargs.get("execution_timeout", 5)
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
-        
+        # ClientFactory.zmq(self, **kwargs)
 
     def __getattribute__(self, __name: str) -> typing.Any:
         obj = super().__getattribute__(__name)
@@ -102,7 +98,7 @@ class ObjectProxy:
         raise AttributeError(f"Cannot set foreign attribute {__name} to ObjectProxy for {self.id}. Given attribute not found in server object.")
 
     def __repr__(self) -> str:
-        return f'ObjectProxy {self.identity}'
+        return f'ObjectProxy {self.id}'
 
     def __enter__(self):
         return self
@@ -131,7 +127,7 @@ class ObjectProxy:
         return True
 
     def __hash__(self) -> int:
-        return hash(self.identity)
+        return hash(self.id)
     
     def get_invokation_timeout(self) -> typing.Union[float, int]:
         return self._invokation_timeout 
@@ -174,8 +170,6 @@ class ObjectProxy:
     def invoke_action(
                     self, 
                     name: str, 
-                    oneway: bool = False, 
-                    noblock: bool = False, 
                     *args, 
                     **kwargs
                 ) -> typing.Any:
@@ -210,6 +204,8 @@ class ObjectProxy:
         method = getattr(self, name, None) # type: ConsumedThingAction 
         if not isinstance(method, ConsumedThingAction):
             raise AttributeError(f"No remote method named {method} in Thing {self.td['id']}")
+        oneway = kwargs.pop('oneway', False)
+        noblock = kwargs.pop('noblock', False)
         if oneway:
             method.oneway(*args, **kwargs)
         elif noblock:
@@ -583,6 +579,27 @@ class ObjectProxy:
         elif isinstance(obj, ConsumedThingProperty):
             obj._last_value = reply 
             return obj.last_read_value
+        
+    @property
+    def properties(self) -> typing.List[ConsumedThingProperty]:
+        """
+        list of properties in the server object
+        """
+        return [prop for prop in self.__dict__.values() if isinstance(prop, ConsumedThingProperty)]
+    
+    @property
+    def actions(self) -> typing.List[ConsumedThingAction]:
+        """
+        list of actions in the server object
+        """
+        return [action for action in self.__dict__.values() if isinstance(action, ConsumedThingAction)]
+
+    @property
+    def events(self) -> typing.List[ConsumedThingEvent]:
+        """
+        list of events in the server object
+        """
+        return [event for event in self.__dict__.values() if isinstance(event, ConsumedThingEvent)]
 
 
 __all__ = [
