@@ -15,7 +15,7 @@ class TestThing(Thing):
     @action()
     def get_transports(self):
         transports = []
-        if self.rpc_server.inproc_server is not None and self.rpc_server.inproc_server.socket_address.startswith('inproc://'):
+        if self.rpc_server.req_rep_server is not None and self.rpc_server.req_rep_server.socket_address.startswith('inproc://'):
             transports.append('INPROC')
         if self.rpc_server.ipc_server is not None and self.rpc_server.ipc_server.socket_address.startswith('ipc://'): 
             transports.append('IPC')
@@ -148,7 +148,16 @@ class TestThing(Thing):
     def set_sleeping_prop(self, value):
         time.sleep(10)
         self._sleeping_prop = value
-    
+
+    @action()
+    def set_non_remote_number_prop(self, value):
+        if value < 0:
+            raise ValueError("Value must be non-negative")
+        self.non_remote_number_prop = value
+
+    @action()
+    def get_non_remote_number_prop(self):
+        return self.non_remote_number_prop
     
     #----------- Pydantic and JSON schema properties --------------
     

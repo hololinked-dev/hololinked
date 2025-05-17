@@ -115,6 +115,22 @@ class ConsumedThingAction:
         """
         raise NotImplementedError("implement action noblock call per protocol")
     
+    def read_reply(self, message_id: str, timeout: float | int | None = None) -> typing.Any:
+        """
+        Read the reply of the action call
+        
+        Parameters
+        ----------
+        message_id: str
+            id of the request or message (UUID4 as string)
+        
+        Returns
+        -------
+        typing.Any
+            reply of the action call
+        """
+        raise NotImplementedError("implement action read_reply per protocol")
+    
     def __hash__(self):
         return hash(self._resource.name)
     

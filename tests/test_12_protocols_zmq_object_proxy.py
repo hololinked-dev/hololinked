@@ -2,6 +2,7 @@
 import time, unittest, logging
 from hololinked.client.factory import ClientFactory
 from hololinked.client.proxy import ObjectProxy
+from hololinked.utils import complete_pending_tasks_in_current_loop_async
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing
@@ -41,12 +42,24 @@ class TestZMQObjectProxyClient(TestCase):
         """Test the invocation of an action on the zmq object proxy client"""
         thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
         self.assertIsInstance(thing, ObjectProxy)  
+        # Test invoke_action method with reply
         self.assertEqual(thing.invoke_action("action_echo", fake.text(max_nb_chars=100)), fake.last)
         self.assertEqual(thing.invoke_action("action_echo", fake.sentence()), fake.last)
         self.assertEqual(thing.invoke_action("action_echo", fake.json()), fake.last)
+        # Test invoke_action with dot notation
         self.assertEqual(thing.action_echo(fake.chrome()), fake.last)
         self.assertEqual(thing.action_echo(fake.sha256()), fake.last)
         self.assertEqual(thing.action_echo(fake.address()), fake.last)
+        # Test invoke_action with no reply
+        self.assertEqual(thing.invoke_action("set_non_remote_number_prop", fake.random_number(), oneway=True), None)
+        self.assertEqual(thing.get_non_remote_number_prop(), fake.last)
+        # Test invoke_action in non blocking mode
+        noblock_payload = fake.pylist(20, value_types=[int, float, str, bool])
+        noblock_msg_id = thing.invoke_action("action_echo", noblock_payload, noblock=True)
+        self.assertIsInstance(noblock_msg_id, str)
+        self.assertEqual(thing.invoke_action("action_echo", fake.pylist(20, value_types=[int, float, str, bool])), fake.last)
+        self.assertEqual(thing.invoke_action("action_echo", fake.pylist(10, value_types=[int, float, str, bool])), fake.last)
+        self.assertEqual(thing.read_reply(noblock_msg_id), noblock_payload)
 
 
     def test_03_rwd_properties(self):
@@ -140,6 +153,8 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
         self.assertEqual(await thing.async_read_property("selector_prop"), TestThing.selector_prop.objects[fake.last])
         await thing.async_write_property("observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool]))
         self.assertEqual(await thing.async_read_property("observable_list_prop"), fake.last)
+
+        # await complete_pending_tasks_in_current_loop_async()
       
 
 
