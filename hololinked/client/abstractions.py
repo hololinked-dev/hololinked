@@ -260,6 +260,22 @@ class ConsumedThingProperty:
     def unobserve(self) -> None:
         """Stop observing property value changes"""
         raise NotImplementedError("implement property unobserve per protocol")
+    
+    def read_reply(self, message_id: str, timeout: float | int | None = None) -> typing.Any:
+        """
+        Read the reply of the action call
+        
+        Parameters
+        ----------
+        message_id: str
+            id of the request or message (UUID4 as string)
+        
+        Returns
+        -------
+        typing.Any
+            reply of the action call
+        """
+        raise NotImplementedError("implement action read_reply per protocol")
   
 
 class ConsumedThingEvent:

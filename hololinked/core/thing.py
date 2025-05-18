@@ -25,7 +25,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     actions to instruct the object to perform tasks and events to get notified of any relevant information. State Machines
     can be used to contrain operations on properties and actions.  
     
-    [UML Diagram](http://localhost:8000/UML/PDF/Thing.pdf)
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/Thing.pdf)
     """
 
     # local properties

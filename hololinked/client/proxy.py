@@ -52,7 +52,7 @@ class ObjectProxy:
     _own_attrs = frozenset([
         '__annotations__',
         '_allow_foreign_attributes',
-        'id', 'logger', 
+        'id', 'logger', 'td', 
         'execution_timeout', 'invokation_timeout', '_execution_timeout', '_invokation_timeout', 
         '_events', 
         '_noblock_messages',
@@ -73,6 +73,7 @@ class ObjectProxy:
                         )
         self.invokation_timeout = kwargs.get("invokation_timeout", 5)
         self.execution_timeout = kwargs.get("execution_timeout", 5)
+        self.td = kwargs.get('td', dict()) # type: typing.Dict[str, typing.Any]
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
@@ -161,10 +162,10 @@ class ObjectProxy:
     )
 
     # @abstractmethod
-    def is_supported_interaction(self, td, name):
-        """Returns True if the any of the Forms for the Interaction
-        with the given name is supported in this Protocol Binding client."""
-        raise NotImplementedError()
+    # def is_supported_interaction(self, td, name):
+    #     """Returns True if the any of the Forms for the Interaction
+    #     with the given name is supported in this Protocol Binding client."""
+    #     raise NotImplementedError()
 
    
     def invoke_action(
@@ -568,18 +569,7 @@ class ObjectProxy:
         if not obj:
             raise ValueError('given message id not a one way call or invalid.')
         return obj.read_reply(message_id=message_id, timeout=timeout)
-        # reply = obj.sync_zmq_client._.get(message_id, None)
-        if not reply: 
-            reply = self.zmq_client.recv_reply(message_id=message_id, timeout=timeout,
-                                    raise_client_side_exception=True)
-        if not reply:
-            raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
-        if isinstance(obj, ConsumedThingAction):
-            obj._last_zmq_response = reply 
-            return obj.last_return_value # note the missing underscore
-        elif isinstance(obj, ConsumedThingProperty):
-            obj._last_value = reply 
-            return obj.last_read_value
+        
         
     @property
     def properties(self) -> typing.List[ConsumedThingProperty]:
@@ -601,6 +591,20 @@ class ObjectProxy:
         list of events in the server object
         """
         return [event for event in self.__dict__.values() if isinstance(event, ConsumedThingEvent)]
+    
+    @property
+    def thing_id(self) -> str:
+        """
+        id of the server object
+        """
+        return self.td.get("id", None)
+    
+    @property
+    def TD(self) -> typing.Dict[str, typing.Any]:
+        """
+        Thing description of the server object
+        """
+        return self.td
 
 
 __all__ = [
