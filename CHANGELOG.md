@@ -25,6 +25,13 @@ This release will contain a lot of new features and improvements so that a versi
 Not finalised:
 - cookie auth & its specification in TD (cookie auth branch)
 
+## [v0.2.12] - 2025-05-18
+- virtual environment with `uv` package manager:
+⚡ Faster onboarding: New contributors can setup environments in seconds
+📦 Consistent installations: Precise dependency resolution avoids "works on my machine" issues
+🧪 Efficient testing: uv run executes tests with minimal overhead
+please report bugs if any as this is the first iteration of this feature.
+
 ## [v0.2.11] - 2025-04-25
 
 - new feature - support for JSON files as backup for property values (use with `db_commit`, `db_persist` and `db_init`). Compatible only with JSON serializable properties. 
