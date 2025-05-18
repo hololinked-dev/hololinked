@@ -439,9 +439,9 @@ See [organization info](https://github.com/hololinked-dev) for details regarding
 
 #### Development with UV
 
-This project uses [uv](https://docs.astral.sh/uv/), a fast Python package installer and resolver. Here's how to set up your development environment using uv:
+One can setup a development environment with [uv](https://docs.astral.sh/uv/) as follows:
 
-##### Setup Development Environment
+###### Setup Development Environment
 
 1. Install uv if you don't have it already: https://docs.astral.sh/uv/getting-started/installation/
 2. Create and activate a virtual environment:
@@ -458,11 +458,17 @@ uv pip install -e .
 uv pip install -e ".[dev,test]"
 ```
 
-##### Running Tests
+###### Running Tests
 
 To run the tests with uv:
 
+In linux:
 ```bash
 uv run --active coverage run -m unittest discover -s tests -p 'test_*.py'
 uv run --active coverage report -m
+```
+
+In windows:
+```bash
+python -m unittest
 ```
