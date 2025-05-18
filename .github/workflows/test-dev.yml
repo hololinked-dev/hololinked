@@ -25,6 +25,8 @@ jobs:
           #   python-version: 3.11
           - os: ubuntu-latest
             python-version: 3.12
+          - os: ubuntu-latest
+            python-version: 3.13
 
     runs-on: ${{ matrix.os }}
 
