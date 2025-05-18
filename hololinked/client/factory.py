@@ -1,7 +1,7 @@
 import uuid
 
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
-from .zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty
+from .zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty, WriteMultipleProperties, ReadMultipleProperties
 from ..core.zmq import SyncZMQClient, AsyncZMQClient
 from ..core import Thing, Action
 from ..td.interaction_affordance import PropertyAffordance, ActionAffordance, EventAffordance
@@ -39,6 +39,7 @@ class ClientFactory:
             async_client=async_zmq_client,
         )
         TD = FetchTD(ignore_errors=True)
+        object_proxy.td = TD
         for name  in TD["properties"]:
             affordance = PropertyAffordance.from_TD(name, TD)
             consumed_property = ZMQProperty(
@@ -72,6 +73,16 @@ class ClientFactory:
                                     execution_timeout=object_proxy.execution_timeout,
                                 )
             self.add_event(object_proxy, consumed_event)
+        for opname, ophandler in zip(['_get_properties', '_set_properties'], [ReadMultipleProperties, WriteMultipleProperties]):
+            setattr(
+                object_proxy, 
+                opname,
+                ophandler(
+                    sync_client=sync_zmq_client, 
+                    async_client=async_zmq_client, 
+                    owner_inst=object_proxy
+                )
+            )
         return object_proxy
 
     @classmethod

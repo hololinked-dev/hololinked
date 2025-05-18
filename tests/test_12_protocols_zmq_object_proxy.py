@@ -96,11 +96,61 @@ class TestZMQObjectProxyClient(TestCase):
         thing.write_property("observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool]), oneway=True)
         self.assertEqual(thing.read_property("observable_list_prop"), fake.last)
         # Test noblock read property
-        # ...
+        noblock_msg_id = thing.read_property("number_prop", noblock=True)
+        self.assertIsInstance(noblock_msg_id, str)
+        self.assertIn(thing.read_property("selector_prop"), TestThing.selector_prop.objects)
+        self.assertIsInstance(thing.read_property("string_prop"), str)
+        self.assertEqual(thing.read_reply(noblock_msg_id), thing.number_prop)
         # Test noblock write property
-        # ...
+        noblock_msg_id = thing.write_property("number_prop", fake.random_number(), noblock=True)
+        self.assertIsInstance(noblock_msg_id, str)
+        self.assertEqual(thing.read_property("number_prop"), fake.last) # noblock worked 
+        self.assertEqual(thing.read_reply(noblock_msg_id), None)
+        # Test exception propagation to client
+        thing.string_prop = 'world'
+        self.assertEqual(thing.string_prop, 'world')
+        with self.assertRaises(ValueError):
+            thing.string_prop = 'WORLD'
+        with self.assertRaises(TypeError):
+            thing.int_prop = '5'
+        # Test non remote prop (non-)availability on client
+        with self.assertRaises(AttributeError):
+            thing.non_remote_number_prop
 
-    def test_04_stop(self):
+    
+    def test_04_RW_multiple_properties(self):
+        
+        # TD is not well defined for this yet, although both client and server separately work.
+        # Test partial list of read write properties
+        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+        self.assertIsInstance(thing, ObjectProxy)  
+        # Test read_multiple_properties method
+        thing.write_multiple_properties(
+                number_prop=15,
+                string_prop='foobar'
+            )
+        self.assertEqual(thing.number_prop, 15)
+        self.assertEqual(thing.string_prop, 'foobar')
+        # check prop that was not set in multiple properties
+      
+        thing.int_prop = 5
+        thing.selector_prop = 'b'
+        thing.number_prop = -15 # simply override
+        props = thing.read_multiple_properties(
+            names=[
+                'selector_prop', 
+                'int_prop',
+                'number_prop', 
+                'string_prop'
+                ]
+            )
+        self.assertEqual(props['selector_prop'], 'b')
+        self.assertEqual(props['int_prop'], 5)
+        self.assertEqual(props['number_prop'], -15)
+        self.assertEqual(props['string_prop'], 'foobar')
+
+
+    def test_05_stop(self):
         """Test the stop of the zmq object proxy client"""
         self.thing.rpc_server.stop()       
 

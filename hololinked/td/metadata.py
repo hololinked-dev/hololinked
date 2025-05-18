@@ -4,7 +4,6 @@ from pydantic import Field
 from .base import Schema
 
 
-
 class Link(Schema):
     href : str
     anchor: typing.Optional[str]  

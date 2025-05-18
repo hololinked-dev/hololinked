@@ -6,7 +6,6 @@ import typing
 from .base import Schema
 
 
-
 class SecurityScheme(Schema):
     """
     create security scheme. 

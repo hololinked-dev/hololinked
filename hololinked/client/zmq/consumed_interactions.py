@@ -4,8 +4,6 @@ import typing
 import threading
 import warnings
 import traceback
-from uuid import uuid4
-
 
 from ...utils import get_current_async_loop
 from ...constants import Operations
@@ -16,6 +14,8 @@ from ...client.abstractions import ConsumedThingAction, ConsumedThingEvent, Cons
 from ...core.zmq.message import ResponseMessage
 from ...core.zmq.message import EMPTY_BYTE, REPLY, TIMEOUT, ERROR, INVALID_MESSAGE
 from ...core.zmq.brokers import SyncZMQClient, AsyncZMQClient, EventConsumer, AsyncEventConsumer
+from ...core import Thing, Action
+from ..exceptions import ReplyNotArrivedError
 
 
 
@@ -24,7 +24,7 @@ __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
 class ZMQConsumedAffordanceMixin:
 
-    __slots__ = ['_resource', '_schema_validator', '__name__', '__qualname__', '__doc__',
+    __slots__ = ['_resource', '_schema_validator', '__name__', '__qualname__', '__doc__', '_owner_inst',
                 '_sync_zmq_client', '_async_zmq_client', '_invokation_timeout', '_execution_timeout',
                 '_thing_execution_context', '_last_zmq_response' ]  # __slots__ dont support multiple inheritance
 
@@ -64,9 +64,16 @@ class ZMQConsumedAffordanceMixin:
         """
         return self._last_zmq_response
     
+    def read_reply(self, message_id: str, timeout: int = None) -> typing.Any:
+        if self._owner_inst._noblock_messages.get(message_id) != self:
+            raise RuntimeError(f"Message ID {message_id} does not belong to this property.")
+        self._last_zmq_response = self._sync_zmq_client.recv_response(message_id=message_id)
+        if not self._last_zmq_response:
+            raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
+    
 
-
-class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
+class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
     
     # method call abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
@@ -187,14 +194,9 @@ class ZMQAction(ConsumedThingAction, ZMQConsumedAffordanceMixin):
         self._owner_inst._noblock_messages[msg_id] = self
         return msg_id
      
-    def read_reply(self, message_id, timeout = None):
-        if self._owner_inst._noblock_messages.get(message_id) != self:
-            raise RuntimeError(f"Message ID {message_id} does not belong to this action.")
-        self._last_zmq_response = self._sync_zmq_client.recv_response(message_id=message_id)
-        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
     
 
-class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
+class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
 
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
@@ -337,9 +339,9 @@ class ZMQProperty(ConsumedThingProperty, ZMQConsumedAffordanceMixin):
                                         )
         self._owner_inst._noblock_messages[msg_id] = self
         return msg_id
+    
   
-
-
+  
 class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     
     __slots__ = ['__name__', '__qualname__', '__doc__', 
@@ -441,6 +443,54 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
             self._thread.join()
             self._thread = None
 
+
+
+class WriteMultipleProperties(ZMQAction):
+    """
+    Read and write multiple properties at once
+    """
+
+    def __init__(self, 
+                sync_client: SyncZMQClient, 
+                async_client: AsyncZMQClient | None = None,
+                owner_inst: typing.Optional[typing.Any] = None,
+                **kwargs
+            ) -> None:
+        action = Thing._set_properties # type: Action
+        resource = action.to_affordance(Thing)
+        resource._thing_id = owner_inst.thing_id
+        super().__init__(
+            resource=resource, 
+            sync_client=sync_client, 
+            async_client=async_client, 
+            owner_inst=owner_inst, 
+            **kwargs
+        )
+        
+
+class ReadMultipleProperties(ZMQAction):
+    """
+    Read multiple properties at once
+    """
+
+    def __init__(
+        self,
+        sync_client: SyncZMQClient,
+        async_client: AsyncZMQClient | None = None,
+        owner_inst: typing.Optional[typing.Any] = None,
+        **kwargs
+    ) -> None:
+        action = Thing._get_properties # type: Action
+        resource = action.to_affordance(Thing)
+        resource._thing_id = owner_inst.thing_id
+        super().__init__(
+            resource=resource,
+            sync_client=sync_client,
+            async_client=async_client,
+            owner_inst=owner_inst,
+            **kwargs
+        )
+    
 
 __all__ = [
     ZMQAction.__name__,

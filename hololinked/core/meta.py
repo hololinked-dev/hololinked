@@ -10,7 +10,7 @@ from ..param.parameterized import (EventResolver as ParamEventResolver, EventDis
 from ..utils import getattr_without_descriptor_read
 from ..constants import JSON, JSONSerializable
 from ..serializers import Serializers
-from .actions import Action, BoundAction
+from .actions import Action, BoundAction, action
 from .property import Property
 from .events import Event, EventPublisher, EventDispatcher
 
@@ -753,6 +753,54 @@ class Propertized(Parameterized):
     def properties(self) -> PropertiesRegistry:
         """container for the property descriptors of the object."""
         return self._properties_registry
+    
+    @action()
+    def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
+        """
+        """
+        return self.properties.get(**kwargs)
+
+    @action()
+    def _set_properties(self, **values : typing.Dict[str, typing.Any]) -> None:
+        """ 
+        set properties whose name is specified by keys of a dictionary
+        
+        Parameters
+        ----------
+        values: Dict[str, Any]
+            dictionary of property names and its values
+        """
+        return self.properties.set(**values) # returns None
+
+    @action()
+    def _get_properties_in_db(self) -> typing.Dict[str, JSONSerializable]:
+        """
+        get all properties in the database
+        
+        Returns
+        -------
+        Dict[str, JSONSerializable]
+            dictionary of property names and their values
+        """
+        return self.properties.get_from_DB()
+
+    @action()
+    def _add_property(self, name: str, prop: JSON) -> None:
+        """
+        add a property to the object
+        
+        Parameters
+        ----------
+        name: str
+            name of the property
+        prop: Property
+            property object
+        """
+        raise NotImplementedError("this method will be implemented properly in a future release")
+        prop = Property(**prop)
+        self.properties.add(name, prop)
+        self._prepare_resources()
+        # instruct the clients to fetch the new resources
     
     
 class RemoteInvokable:

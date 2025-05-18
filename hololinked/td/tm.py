@@ -58,38 +58,28 @@ class ThingModel(Schema):
                     'get_postman_collection', 'get_thing_description', 'get_our_temp_thing_description']
     skip_events: typing.List[str] = []
 
+
     def add_interaction_affordances(self):
         """add interaction affordances to thing model"""
-        for name, prop in self.instance.properties.remote_objects.items():
-            if name in self.skip_properties: 
-                continue
-            if (    
-                name == 'state' and 
-                (not hasattr(self.instance, 'state_machine') or 
-                not isinstance(self.instance.state_machine, StateMachine))
-            ):
-                continue
-            try:
-                self.properties[prop.name] = PropertyAffordance.generate(prop, self.instance) 
-            except Exception as ex:
-                if not self.ignore_errors:
-                    raise ex from None
-                self.instance.logger.error(f"Error while generating schema for {prop.name} - {ex}")
-        for name, action in self.instance.actions.descriptors.items():
-            if name in self.skip_actions:
-                continue    
-            try:       
-                self.actions[name] = ActionAffordance.generate(action, self.instance)
-            except Exception as ex:
-                if not self.ignore_errors:
-                    raise ex from None
-                self.instance.logger.error(f"Error while generating schema for {name} - {ex}")
-        for name, event in self.instance.events.descriptors.items():
-            if name in self.skip_events:
-                continue
-            try:
-                self.events[name] = EventAffordance.generate(event, self.instance)
-            except Exception as ex:
-                if not self.ignore_errors:
-                    raise ex from None
-                self.instance.logger.error(f"Error while generating schema for {name} - {ex}")
+        for affordance, items, affordance_cls, skip_list in [
+                ['properties', self.instance.properties.remote_objects.items(), PropertyAffordance, self.skip_properties],
+                ['actions', self.instance.actions.descriptors.items(), ActionAffordance, self.skip_actions],
+                ['events', self.instance.events.descriptors.items(), EventAffordance, self.skip_events],    
+            ]:
+            for name, obj in items:
+                if name in skip_list: 
+                    continue
+                if (    
+                    name == 'state' and affordance == 'properties' and
+                    (not hasattr(self.instance, 'state_machine') or 
+                    not isinstance(self.instance.state_machine, StateMachine))
+                ):
+                    continue
+                try:
+                    affordance_dict = getattr(self, affordance)
+                    affordance_dict[name] = affordance_cls.generate(obj, self.instance) 
+                except Exception as ex:
+                    if not self.ignore_errors:
+                        raise ex from None
+                    self.instance.logger.error(f"Error while generating schema for {name} - {ex}")
+       
