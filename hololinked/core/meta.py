@@ -858,8 +858,10 @@ class EventSource:
         event publishing object `EventPublisher` that owns the zmq.PUB socket, valid only after 
         creating an RPC server or calling a `run()` method on the `Thing` instance.
         """
-        return self.rpc_server.event_publisher if self.rpc_server else None
-
+        try:
+            return self.rpc_server.event_publisher if self.rpc_server else None
+        except AttributeError:
+            return None
        
 
 

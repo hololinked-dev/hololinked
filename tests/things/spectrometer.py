@@ -91,7 +91,7 @@ class OceanOpticsSpectrometer(Thing):
             doc="reference intensity to overlap in background") # type: Intensity
     
     
-    def __init__(self, id : str, serial_number : typing.Optional[str] = None, **kwargs) -> None:
+    def __init__(self, id: str, serial_number: typing.Optional[str] = None, **kwargs) -> None:
         super().__init__(id=id, serial_number=serial_number, **kwargs)
         self.set_status("disconnected")
         if serial_number is not None:

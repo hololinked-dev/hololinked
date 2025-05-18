@@ -150,7 +150,15 @@ class RPCServer(BaseZMQServer):
     def __post_init__(self):
         super().__post_init__()
         self.logger.info("Server with name '{}' can be started using run().".format(self.id))   
-        
+
+
+    @property
+    def is_running(self) -> bool:
+        """
+        Check if the server is running or not.
+        """
+        return self._run
+
         
     async def recv_requests_and_dispatch_jobs(self, server: AsyncZMQServer) -> None:
         """
@@ -457,6 +465,8 @@ class RPCServer(BaseZMQServer):
             del prop # raises NotImplementedError when deletion is not implemented which is mostly the case
         elif operation == 'invokeAction':
             action = instance.actions[objekt] # type: BoundAction
+            if payload is None:
+                payload = dict()
             args = payload.pop('__args__', tuple())
             # payload then become kwargs
             if preserialized_payload != EMPTY_BYTE:
@@ -577,7 +587,7 @@ class RPCServer(BaseZMQServer):
 
 
     def __hash__(self):
-        return hash('RPCServer' + self.id)
+        return hash(str(self))
     
     def __eq__(self, other):
         if not isinstance(other, RPCServer):
