@@ -8,11 +8,20 @@ from tornado.iostream import StreamClosedError
 from ...utils import *
 from ...config import global_config
 from ...core.zmq.brokers import AsyncEventConsumer, EventConsumer
+from ...core.zmq.message import EMPTY_BYTE, ResponseMessage
 from ...constants import Operations
 from ...schema_validators import BaseSchemaValidator
+from ...serializers.payloads import PreserializedData, SerializableData
 from ...td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
 
 
+
+__default_supported_content_types__ = [
+    "application/json",
+    "application/x-msgpack",
+    "application/text"
+]
+# octet-stream is not supported
 
 
 class BaseHandler(RequestHandler):
@@ -36,7 +45,7 @@ class BaseHandler(RequestHandler):
         from . import HTTPServer
         assert isinstance(owner_inst, HTTPServer)
         self.resource = resource
-        self.schema_validator = self.owner_inst.schema_validator
+        self.schema_validator = None # self.owner_inst.schema_validator # not supported yet
         self.owner_inst = owner_inst
         self.zmq_client_pool = self.owner_inst.zmq_client_pool 
         self.serializer = self.owner_inst.serializer
@@ -78,32 +87,68 @@ class BaseHandler(RequestHandler):
         raise NotImplementedError("implement set headers in child class to automatically call it" +
                             " while directing the request to Thing")
     
-    def get_execution_parameters(self) -> typing.Tuple[typing.Dict[str, typing.Any],
-                                                typing.Dict[str, typing.Any], typing.Union[float, int, None]]:
+    def get_execution_parameters(self) -> typing.Tuple[typing.Dict[str, typing.Any], typing.Dict[str, typing.Any]]:
         """
         merges all arguments to a single JSON body and retrieves execution context (like oneway calls, fetching executing
         logs) and timeouts
         """
-        if len(self.request.body) > 0:
-            arguments = self.serializer.loads(self.request.body)
-        else:
-            arguments = dict()
-        if isinstance(arguments, dict):
-            if len(self.request.query_arguments) >= 1:
-                for key, value in self.request.query_arguments.items():
-                    if len(value) == 1:
-                        arguments[key] = self.serializer.loads(value[0]) 
-                    else:
-                        arguments[key] = [self.serializer.loads(val) for val in value]
-            context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
-            timeout = arguments.pop('timeout', None)
-            if timeout is not None and timeout < 0:
-                timeout = None
-            if self.resource.request_as_argument:
-                arguments['request'] = self.request
-            return arguments, context, timeout
-        return arguments, dict(), 5 # arguments, context is empty, 5 seconds invokation timeout, hardcoded needs to be fixed
-
+        arguments = dict()
+        if len(self.request.query_arguments) >= 1:
+            for key, value in self.request.query_arguments.items():
+                if len(value) == 1:
+                    arguments[key] = self.serializer.loads(value[0]) 
+                else:
+                    arguments[key] = [self.serializer.loads(val) for val in value]
+            thing_execution_context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
+            server_execution_context = dict(
+                                            invokation_timeout=arguments.pop('invokation_timeout', None), 
+                                            execution_timeout=arguments.pop('execution_timeout', None),
+                                            oneway=arguments.pop('oneway', False)
+                                        )
+            
+            # if timeout is not None and timeout < 0:
+            #     timeout = None # reinstate logic soon
+            # if self.resource.request_as_argument:
+            #     arguments['request'] = self.request # find some way to pass the request object to the thing
+            return server_execution_context, thing_execution_context
+        return dict(), dict() 
+    
+    def get_payload(self) -> typing.Tuple[SerializableData, PreserializedData]:
+        """
+        retrieves the payload from the request body and deserializes it. 
+        """
+        payload = SerializableData(value=None)
+        preserialized_payload = PreserializedData(value=b'')
+        if self.request.body:
+            try:
+                if self.request.headers.get("Content-Type", None) in __default_supported_content_types__:
+                    payload.value = self.request.body
+                    payload.content_type = self.request.headers.get("Content-Type", None)
+                else:
+                    preserialized_payload.value = self.request.body
+                    preserialized_payload.content_type = self.request.headers.get("Content-Type", None)
+            except Exception as ex:
+                self.set_status(400, str(ex))
+                self.write(self.serializer.dumps({"exception" : format_exception_as_json(ex)}))
+                self.finish()
+                return None, None
+        return payload, preserialized_payload
+    
+    def get_response_payload(self, zmq_response: ResponseMessage) -> typing.Any:
+        """
+        cached return value of the last call to the method
+        """
+        # print("zmq_response - ", zmq_response)
+        if zmq_response is None:
+            raise RuntimeError("No last response available. Did you make an operation?")
+        payload = zmq_response.payload.value
+        preserialized_payload = zmq_response.preserialized_payload.value
+        if preserialized_payload != EMPTY_BYTE:
+            if payload is None:
+                return preserialized_payload
+            return payload, preserialized_payload
+        return payload
+    
     async def get(self) -> None:
         """
         runs property or action if accessible by 'GET' method. Default for property reads. 
@@ -176,38 +221,43 @@ class RPCHandler(BaseHandler):
         reply = None
         try:
             server_exeuction_context, thing_execution_context = self.get_execution_parameters()
+            # print(f"server execution context - {server_exeuction_context}, thing execution context - {thing_execution_context}")
             payload, preserialized_payload = self.get_payload()
+            # print(f"payload - {payload}, preserialized payload - {preserialized_payload}")
             if self.schema_validator is not None and global_config.VALIDATE_SCHEMA_ON_CLIENT:
                 self.schema_validator.validate(payload)
-            reply = await self.zmq_client_pool.async_execute(
+            response_message = await self.zmq_client_pool.async_execute(
                                     client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
                                     thing_id=self.resource.thing_id,
                                     objekt=self.resource.name,
                                     operation=operation,
                                     payload=payload,
+                                    preserialized_payload=preserialized_payload,
                                     server_execution_context=server_exeuction_context,
                                     thing_execution_context=thing_execution_context
                                 )                                 
             # message mapped client pool currently strips the data part from return message
             # and provides that as reply directly 
+            payload = self.get_response_payload(response_message)
             self.set_status(200, "ok")
+            # print(f"payload {self.request.path} - {payload}")
         except ConnectionAbortedError as ex:
             self.set_status(503, str(ex))
-            event_loop = asyncio.get_event_loop()
-            event_loop.call_soon(lambda : asyncio.create_task(self.owner_inst.update_router_with_thing(
-                                                                self.zmq_client_pool[self.resource.instance_name])))
-        except ConnectionError as ex:
-            await self.owner_inst.update_router_with_thing(self.zmq_client_pool[self.resource.instance_name])
-            await self.handle_through_thing(operation) # reschedule
-            return 
+            # event_loop = asyncio.get_event_loop()
+            # event_loop.call_soon(lambda : asyncio.create_task(self.owner_inst.update_router_with_thing(
+            #                                                     self.zmq_client_pool[self.resource.instance_name])))
+        # except ConnectionError as ex:
+        #     await self.owner_inst.update_router_with_thing(self.zmq_client_pool[self.resource.instance_name])
+        #     await self.handle_through_thing(operation) # reschedule
+        #     return 
         except Exception as ex:
             self.logger.error(f"error while scheduling RPC call - {str(ex)}")
             self.logger.debug(f"traceback - {ex.__traceback__}")
             self.set_status(500, "error while scheduling RPC call")
-            reply = self.serializer.dumps({"exception" : format_exception_as_json(ex)})
+            payload = self.serializer.dumps({"exception" : format_exception_as_json(ex)})
         self.set_headers()
-        if reply:
-            self.write(reply)
+        if payload:
+            self.write(payload)
         self.finish()
 
 
@@ -305,10 +355,6 @@ class ActionHandler(RPCHandler):
         if not self.has_access_control:
             self.set_status(401, "forbidden")    
             return False
-        # if method == 'GET' or method == 'PUT' or method == 'DELETE':
-        #     self.set_status(405, "method not allowed")
-        #     self.finish()
-        #     return False
         return True
     
     async def get(self) -> None:

@@ -356,7 +356,7 @@ class HTTPServer(Parameterized):
         if delete_http_method and delete_http_method != 'DELETE':
             raise ValueError("delete method should be DELETE")
         kwargs['resource'] = property
-        kwargs['owner'] = self
+        kwargs['owner_inst'] = self
         self.router.add_rule(
             affordance=property,
             URL_path=URL_path,
@@ -399,7 +399,7 @@ class HTTPServer(Parameterized):
             action = action.to_affordance() # type: ActionAffordance
             # action._build_forms()
         kwargs['resource'] = action
-        kwargs['owner'] = self
+        kwargs['owner_inst'] = self
         self.router.add_rule(
             affordance=action,
             URL_path=URL_path,
@@ -436,7 +436,7 @@ class HTTPServer(Parameterized):
             event = event.to_affordance()
             # event._build_forms()
         kwargs['resource'] = event
-        kwargs['owner'] = self
+        kwargs['owner_inst'] = self
         self.router.add_rule(
             affordance=event,
             URL_path=URL_path,
@@ -679,7 +679,7 @@ class ApplicationRouter:
                         )
                 client.handshake(timeout=10000)
                 await client.handshake_complete()
-                self.server.zmq_client_pool.register(client)
+                self.server.zmq_client_pool.register(client, thing_id)
                 assert isinstance(Thing.get_thing_model, Action)
                 FetchTDAffordance = Thing.get_thing_model.to_affordance()
                 FetchTDAffordance._thing_id = thing_id

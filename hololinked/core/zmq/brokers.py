@@ -1387,6 +1387,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self.cancelled_messages = []
         self.poll_timeout = poll_timeout
         self.stop_poll = False 
+        self._thing_to_client_map = dict() # type: typing.Dict[str, AsyncZMQClient]
        
 
     def create_new(self, id: str, server_id: str, transport: str = 'IPC') -> None:
@@ -1416,7 +1417,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             raise ValueError(f"client for instance name '{server_id}' already present in pool")
         
 
-    def register(self, client: AsyncZMQClient) -> None:
+    def register(self, client: AsyncZMQClient, thing_id: str) -> None:
         """
         Register a client with the pool. 
 
@@ -1431,13 +1432,15 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self.pool[client.id] = client 
         self.poller.register(client.socket, zmq.POLLIN)
         self.poller.register(client._monitor_socket, zmq.POLLIN)
-
+        self._thing_to_client_map[thing_id] = client.id
    
     def get_client_id_from_thing_id(self, thing_id: str) -> typing.Dict[str, AsyncZMQClient]:
         """
         map of thing_id to client
         """
-        raise NotImplementedError("get_client_id_from_thing_id not implemented for MessageMappedZMQClientPool")
+        if thing_id not in self._thing_to_client_map:
+            raise ValueError(f"client for thing_id '{thing_id}' not present in pool")
+        return self._thing_to_client_map.get(thing_id, None)
 
     @property
     def poll_timeout(self) -> int:
@@ -1510,7 +1513,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         if event:
                             event.set()
                         else:    
-                            invalid_event_task = asyncio.create_task(self._resolve_response(message_id, response_message.body))
+                            invalid_event_task = asyncio.create_task(self._resolve_response(message_id, response_message))
                             event_loop.call_soon(lambda: invalid_event_task)
 
 
@@ -1605,7 +1608,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                                 client_id: str, 
                                 message_id: bytes, 
                                 timeout: float | int | None = None
-                            ) -> typing.Dict[str, typing.Any]:
+                            ) -> ResponseMessage:
         """
         Receive response for specified message ID. 
 
@@ -1663,7 +1666,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         preserialized_payload: PreserializedData = PreserializedEmptyByte,
                         server_execution_context: ServerExecutionContext = default_server_execution_context,
                         thing_execution_context: ThingExecutionContext  = default_thing_execution_context, 
-                    ) -> typing.Dict[str, typing.Any]:
+                    ) -> ResponseMessage:
         """
         sends message and receives response.
 

@@ -2,6 +2,7 @@ import logging
 import inspect
 import threading
 import ssl
+import time
 import typing
 
 from ..constants import JSON, ZMQ_TRANSPORTS
@@ -305,18 +306,25 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         #     send the network interface name to retrieve the IP. If a DNS server is present, you may leave this field
         # host: str
         #     Host Server to subscribe to coordinate starting sequence of things & web GUI
-        
         from ..server.http import HTTPServer        
+        self.run_with_zmq_server(
+            transports=ZMQ_TRANSPORTS.INPROC, 
+            forked=True
+        )
+        while not self.rpc_server or not self.rpc_server.is_running:
+            time.sleep(0.01)       
         http_server = HTTPServer(
-            [self], 
+            [], 
             port=port, 
             address=address, 
             logger=self.logger,
             ssl_context=ssl_context,
             allowed_clients=allowed_clients, 
             # network_interface=network_interface, 
-            **kwargs,
+            **kwargs
         )
+        http_server.zmq_client_pool.context = self.rpc_server.context # TODO: issue https://github.com/hololinked-dev/hololinked/issues/84
+        http_server.add_thing(dict(INPROC=self.id))
         assert http_server.all_ok
         http_server.listen()
 
