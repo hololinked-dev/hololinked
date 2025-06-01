@@ -4,7 +4,7 @@ from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.meta import ThingMeta
 from hololinked.server.http import HTTPServer
 from hololinked.core.zmq.rpc_server import RPCServer # sets loop policy, TODO: move somewhere else
-from hololinked.utils import get_current_async_loop, issubklass
+from hololinked.utils import get_current_async_loop, issubklass, print_pending_tasks_in_current_loop
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing
@@ -18,26 +18,28 @@ except ImportError:
 class TestHTTPServer(TestCase):
 
 
-    def notest_1_init_run_and_stop(self):
+    def test_1_init_run_and_stop(self):
         """Test basic init, run and stop of the HTTP server."""
 
         # init, run and stop synchronously
         server = HTTPServer(log_level=logging.ERROR+10)
-        # self.assertTrue(server.all_ok)
-        # server.listen(forked=True)
-        # time.sleep(3)
-        # server.stop()
+        self.assertTrue(server.all_ok)
+        server.listen(forked=True)
+        time.sleep(3)
+        server.stop()
+        time.sleep(2)
 
         # init, run and stop asynchronously
         server.listen(forked=True)
         time.sleep(3)
         get_current_async_loop().run_until_complete(server.async_stop())
+        time.sleep(2)
 
         server.listen(forked=True)
         time.sleep(3)
         response = requests.post('http://localhost:8080/stop')
         self.assertIn(response.status_code, [200, 201, 202, 204])
-        
+        time.sleep(2)
 
     def notest_2_add_interaction_affordance(self):
         """Test adding an interaction affordance to the HTTP server."""
@@ -168,8 +170,9 @@ class TestHTTPServer(TestCase):
                     8085
                 ]):
             thing.run_with_http_server(forked=True, port=port)
-            time.sleep(3)
+            time.sleep(3) # TODO: add a way to check if the server is running
 
+        session = requests.Session()
         for (method, path, body) in [
                     ('get',  '/test-spectrometer/max-intensity', 16384),
                     ('get',  '/test-spectrometer/serial-number', 'simulation'),
@@ -178,12 +181,22 @@ class TestHTTPServer(TestCase):
                     ('post', '/test-spectrometer/connect', None)
                 ]:
             if method == 'get':
-                response = requests.get(f'http://localhost:{port}{path}')
+                response = session.get(f'http://localhost:{port}{path}')
             elif method == 'post':
-                response = requests.post(f'http://localhost:{port}{path}')
+                response = session.post(f'http://localhost:{port}{path}')
             self.assertTrue(response.status_code in [200, 201, 202, 204])
             if body:
                 self.assertTrue(response.json() == body)
+
+
+        for (method, path, body) in [
+                ('post', '/test-spectrometer/exit', None),
+                ('post', '/stop', None)
+            ]:
+            if method == 'get':
+                response = session.get(f'http://localhost:{port}{path}')
+            elif method == 'post':
+                response = session.post(f'http://localhost:{port}{path}')
       
 
     def notest_5_run_thing_with_http_server(self):
