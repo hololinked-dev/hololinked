@@ -359,10 +359,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             self.logger.debug("exit() called on a object that is not exposed yet.")
             return 
         if self._owners:
-            raise BreakInnerLoop # stops the inner loop of the object
-        else:
             raise NotImplementedError("call exit on the top-level object, composed objects cannot exit the loop. "+
                                 f"This object belongs to {self._owners.__class__.__name__} with ID {self._owners.id}.")
+        self.rpc_server.stop()
         
 
     @action()

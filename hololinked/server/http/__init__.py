@@ -13,7 +13,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from ...param import Parameterized
 from ...param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, String
 from ...constants import HTTP_METHODS, ZMQ_TRANSPORTS, HTTPServerTypes, Operations
-from ...utils import complete_pending_tasks_in_current_loop, complete_pending_tasks_in_current_loop_async, forkable, get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, run_callable_somehow
+from ...utils import complete_pending_tasks_in_current_loop, complete_pending_tasks_in_current_loop_async, forkable, get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, print_pending_tasks_in_current_loop, run_callable_somehow
 from ...serializers.serializers import JSONSerializer
 from ...schema_validators import BaseSchemaValidator, JSONSchemaValidator
 from ...core.property import Property
@@ -217,7 +217,8 @@ class HTTPServer(Parameterized):
         self.tornado_instance.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
         self.tornado_event_loop.start()
-        complete_pending_tasks_in_current_loop() # will reach here only when the server is stopped, so complete pending tasks
+        if forked:
+            complete_pending_tasks_in_current_loop() # will reach here only when the server is stopped, so complete pending tasks
 
 
     def stop(self, attempt_async_stop: bool = True) -> None:
@@ -236,7 +237,8 @@ class HTTPServer(Parameterized):
         run_callable_somehow(self.tornado_instance.close_all_connections())
         if self.tornado_event_loop is not None:
             self.tornado_event_loop.stop()
-        # complete_pending_tasks_in_current_loop()
+        complete_pending_tasks_in_current_loop()
+        print_pending_tasks_in_current_loop()
         
        
     async def async_stop(self) -> None:
@@ -251,6 +253,7 @@ class HTTPServer(Parameterized):
         await self.tornado_instance.close_all_connections()
         if self.tornado_event_loop is not None:
             self.tornado_event_loop.stop()
+        print_pending_tasks_in_current_loop()
         # await complete_pending_tasks_in_current_loop_async()
         
        

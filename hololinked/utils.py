@@ -155,6 +155,17 @@ async def complete_pending_tasks_in_current_loop_async():
     """
     await asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
 
+def print_pending_tasks_in_current_loop():
+    """
+    Print all pending tasks in the current asyncio event loop.
+    """
+    tasks = asyncio.all_tasks(get_current_async_loop())
+    if not tasks:
+        print("No pending tasks in the current event loop.")
+        return
+    for task in tasks:
+        print(f"Task: {task}, Status: {task._state}")
+
 
 def get_signature(callable : typing.Callable) -> typing.Tuple[typing.List[str], typing.List[type]]: 
     """
