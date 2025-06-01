@@ -1,0 +1,81 @@
+{ 
+    "type": "object",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "header of the message",
+    "properties": {
+        "senderID" : { 
+            "type": "string",
+            "description": "id of the sender of the message"
+        },
+        "receiverID" : { 
+            "type": "string",
+            "description": "id of the receiver of the message"
+        },
+        "messageType" : {
+            "type": "string",
+            "description": "type of the message being sent",
+            "enum": [
+                "HANDSHAKE", "OPERATION", "EXIT", "INTERRUPT"
+            ]
+        }, 
+        "messageID" : { 
+            "type": "string",
+            "format": "uuid",
+            "description": "unique id of the message to correlate with the response"
+        },
+        "serverExecutionContext" : {
+            "type": "object",
+            "description": "activities to be taken care by the server while performing the operation",
+            "properties": {
+                "oneway": { 
+                    "type": "boolean" 
+                },
+                "invokationTimeout": { 
+                    "type": "number",
+                    "minimum": 0
+                },
+                "executionTimeout": { 
+                    "type": "number", 
+                    "minimum": 0
+                }
+            }
+        },  
+        "thingID" : {
+            "type": "string",
+            "description": "id of the thing on which the operation is to be performed"
+        },
+        "object" : {
+            "type": "string",
+            "description" : "a property, action or event - object of the thing on which the operation is to be performed"    
+        },
+        "operation" : {
+            "type": "string",
+            "description" : "name of the peration to be performed",
+            "enum" : [
+                "readProperty", "writeProperty", "invokeAction", "subscribeEvent", 
+                "unsubscribeEvent", "readMultipleProperties", "writeMultipleProperties"        
+            ]    
+        },
+        "payloadContentType" : {
+            "type": "string",
+            "description" : "content type of the payload",
+            "enum" : [
+                "application/json", "pickle", "x-msgpack", "text", "text/plain"
+            ]
+        }, 
+        "preencodedPayloadContentType" : {
+            "type": "string",
+            "description" : "content type of the pre-encoded payload"
+        },
+        "thingExecutionContext" : {
+            "type": "object",
+            "description" : "thing execution context while performing the operation",
+            "properties" : {
+                "fetchExecutionLogs" : {
+                    "type" : "boolean"
+                }
+            }
+        }
+    },
+    "required": ["messageType", "messageID", "serverExecutionContext"]
+}

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hololinked"
-version = "0.2.12"
+version = "0.3.0"
 authors = [
     {name = "Vignesh Vaidyanathan", email = "vignesh.vaidyanathan@hololinked.dev"},
 ]
@@ -46,7 +46,17 @@ Documentation = "https://hololinked.readthedocs.io/en/latest/index.html"
 Repository = "https://github.com/hololinked-dev/hololinked"  # Update with actual repository URL
 
 [tool.setuptools]
-packages = ["hololinked", "hololinked.server", "hololinked.rpc", "hololinked.client", "hololinked.param"]
+packages = [
+    "hololinked", 
+    "hololinked.server", "hololinked.server.http",
+    "hololinked.client", "hololinked.client.http", "hololinked.client.zmq",
+    "hololinked.param", 
+    "hololinked.schema_validators", 
+    "hololinked.serializers", 
+    "hololinked.storage", 
+    "hololinked.td", 
+    "hololinked.core", "hololinked.core.zmq"
+]
 
 [project.optional-dependencies]
 dev = [
