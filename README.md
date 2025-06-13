@@ -76,33 +76,28 @@ class OceanOpticsSpectrometer(Thing):
 #### Instantiating properties
 
 Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc. 
-or one may define one's own using [pydantic or JSON schema](). To create properties:
+or one may define one's own using [pydantic or JSON schema](https://docs.staging.hololinked.dev/howto/articles/properties/#schema-constrained-property). To create properties:
 
 ```python
 
 class OceanOpticsSpectrometer(Thing):
     """class doc"""
 
-    serial_number = String(default=None, allow_None=True, URL_path='/serial-number',
+    serial_number = String(default=None, allow_None=True, 
                         doc="serial number of the spectrometer to connect/or connected",
-                        http_method=("GET", "PUT"))
-    # GET and PUT is default for reading and writing the property respectively.
-    # So you can leave it out, especially if you are going to use ZMQ and dont understand HTTP
-
+                       )
+   
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True,
-                            URL_path='/integration-time',
                             doc="integration time of measurement in milliseconds")
 
     intensity = List(default=None, allow_None=True,
                     doc="captured intensity", readonly=True,
                     fget=lambda self: self._intensity)
 
-    def __init__(self, instance_name, serial_number, **kwargs):
-        super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
+    def __init__(self, id, serial_number, **kwargs):
+        super().__init__(id=id, serial_number=serial_number, **kwargs)
 
 ```
-
-> There is an ongoing work to remove HTTP API from the property API and completely move them to the HTTP server
 
 In non-expert terms, properties look like class attributes however their data containers are instantiated at object instance level by default.
 For example, the `integration_time` property defined above as `Number`, whenever set/written, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name as the property value can be accessed again in any python logic, say, `print(self.integration_time)`.
@@ -113,7 +108,6 @@ To overload the get-set (or read-write) of properties, one may do the following:
 class OceanOpticsSpectrometer(Thing):
 
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True,
-                            URL_path='/integration-time',
                             doc="integration time of measurement in milliseconds")
 
     @integration_time.setter # by default called on http PUT method
@@ -159,8 +153,7 @@ If you are <span style="text-decoration: underline">not familiar</span> with Web
 what the property represents and how to interact with it from somewhere else. Such a JSON is both human-readable, yet consumable by any application that may use the property - say, a client provider to create a client object to interact with the property or a GUI application to autogenerate a suitable input field for this property.
 For example, the Eclipse ThingWeb [node-wot](https://github.com/eclipse-thingweb/node-wot) supports this feature to produce a HTTP(s) client that can issue `readProperty("integration_time")` and `writeProperty("integration_time", 1000)` to read and write this property.
 
-The URL path segment `../spectrometer/..` in href field is taken from the `instance_name` which was specified in the `__init__`.
-This is a mandatory key word argument to the parent class `Thing` to generate a unique name/id for the instance. One should use URI compatible strings.
+[Full Documentation](https://docs.staging.hololinked.dev/howto/articles/properties/)
 
 #### Specify methods as actions
 
@@ -170,7 +163,7 @@ decorate with `action` decorator on a python method to claim it as a network acc
 
 class OceanOpticsSpectrometer(Thing):
 
-    @action(URL_path='/connect', http_method="POST") # POST is default for actions
+    @action(input_schema={"type": "object", "properties": {"serial_number": {"type": "string"}}})
     def connect(self, serial_number = None):
         """connect to spectrometer with given serial number"""
         if serial_number is not None:
@@ -217,6 +210,8 @@ and how to interact with it):
 
 > input and output schema ("input" field above which describes the argument type `serial_number`) are optional and will be discussed in docs
 
+[Full Documentation](https://docs.staging.hololinked.dev/howto/articles/actions/)
+
 #### Defining and pushing events
 
 create a named event using `Event` object that can push any arbitrary data:
@@ -226,7 +221,6 @@ class OceanOpticsSpectrometer(Thing):
 
     # only GET HTTP method possible for events
     intensity_measurement_event = Event(name='intensity-measurement-event',
-            URL_path='/intensity/measurement-event',
             doc="""event generated on measurement of intensity,
             max 30 per second even if measurement is faster.""",
             schema=intensity_event_schema)
@@ -251,14 +245,14 @@ class OceanOpticsSpectrometer(Thing):
                 })
                 last_time = time.time()
 
-    @action(URL_path='/acquisition/start', http_method="POST")
+    @action()
     def start_acquisition(self):
         if self._acquisition_thread is not None and self._acquisition_thread.is_alive():
             return
         self._acquisition_thread = threading.Thread(target=self.capture)
         self._acquisition_thread.start()
 
-    @action(URL_path='/acquisition/stop', http_method="POST")
+    @action()
     def stop_acquisition(self):
         self._run = False
 ```
@@ -300,6 +294,8 @@ what the event represents and how to subscribe to it) with subprotocol SSE (HTTP
 
 > data schema ("data" field above which describes the event payload) are optional and discussed later
 
+[Full Documentation](https://docs.staging.hololinked.dev/howto/articles/events/)
+
 Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through ZMQ and HTTP SSE.
 
 To start the Thing, a configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object:
@@ -315,7 +311,7 @@ if __name__ == '__main__':
                         keyfile = f'assets{os.sep}security{os.sep}key.pem')
 
     O = OceanOpticsSpectrometer(
-        instance_name='spectrometer',
+        id='spectrometer',
         serial_number='S14155',
         log_level=logging.DEBUG
     )
@@ -324,10 +320,6 @@ if __name__ == '__main__':
     # or O.run(zmq_protocols=['IPC', 'TCP'], tcp_socket_address='tcp://*:9999')
     # both interprocess communication & TCP, no HTTP
 ```
-
-> There is an ongoing work to remove HTTP API from the API of all of properties, actions and events and completely move them to the HTTP server for a more accurate syntax. The functionality will not change though.
-
-Here one can see the use of `instance_name` and why it turns up in the URL path. See the detailed example of the above code [here](https://gitlab.com/hololinked-examples/oceanoptics-spectrometer/-/blob/simple/oceanoptics_spectrometer/device.py?ref_type=heads).
 
 ##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.
 
