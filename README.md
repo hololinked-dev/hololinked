@@ -17,6 +17,12 @@ For those that understand, this package is a ZMQ/HTTP-RPC.
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841)
 [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) 
 
+> **Note:**
+> Readers from WoT community and NEPHELE project, please head over to [main-next-release](https://github.com/hololinked-dev/hololinked/tree/main-next-release) branch for the latest codebase. Please also consider using the documentation at [docs.staging.hololinked.dev](https://docs.staging.hololinked.dev/design/descriptors/) for explanations. 
+
+> **⚠️ WARNING:**  
+> Currently there are discussions to donate part of the codebase to the [Web of Things](https://www.w3.org/WoT/) community. This may result in some changes to the package name (to `wotpy`) and the arrangement of features. If you are using this package, please be aware of this. Issues are also currently suspended.
+
 ### To Install
 
 From pip - `pip install hololinked` <br>
