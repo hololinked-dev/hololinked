@@ -293,33 +293,33 @@ class Serializers(metaclass=MappableSingleton):
     Registration of serializer is not mandatory for any property, action or event. 
     The default serializer is `JSONSerializer`, which will be provided to any unregistered object.
     """
-    json = ClassSelector(default=JSONSerializer(), class_=BaseSerializer, class_member=True, 
+    json = ClassSelector(default=JSONSerializer(), class_=BaseSerializer,  
                         doc="The default serializer for all properties, actions and events") # type: BaseSerializer
-    pickle = ClassSelector(default=PickleSerializer(), class_=BaseSerializer, class_member=True, 
+    pickle = ClassSelector(default=PickleSerializer(), class_=BaseSerializer,  
                         doc="pickle serializer, unsafe without encryption but useful for faster & flexible serialization of python specific types") # type: BaseSerializer
-    msgpack = ClassSelector(default=MsgpackSerializer(), class_=BaseSerializer, class_member=True, 
+    msgpack = ClassSelector(default=MsgpackSerializer(), class_=BaseSerializer,  
                         doc="MessagePack serializer, efficient binary format that is both fast & interoperable between languages ") # type: BaseSerializer
-    text = ClassSelector(default=TextSerializer(), class_=BaseSerializer, class_member=True, 
+    text = ClassSelector(default=TextSerializer(), class_=BaseSerializer,  
                         doc="Text serializer, converts string or string compatible types to bytes and vice versa") # type: BaseSerializer
-    default = ClassSelector(default=json.default, class_=BaseSerializer, class_member=True, 
+    default = ClassSelector(default=json.default, class_=BaseSerializer,  
                         doc="The default serialization to be used") # type: BaseSerializer
-    default_content_type = String(default=default.default.content_type, class_member=True,
+    default_content_type = String(default=default.default.content_type, 
                         doc="The default content type for the default serializer") # type: str
 
     content_types = Parameter(default={
-                                'application/json': json.default,
+                                'application/json': json.default, # as in the default value of the descriptor
                                 'application/octet-stream': pickle.default,
                                 'x-msgpack': msgpack.default,
                                 'text/plain': text.default
                             }, doc="A dictionary of content types and their serializers",
                             readonly=True, class_member=True) # type: typing.Dict[str, BaseSerializer]
-    object_content_type_map = Parameter(default=dict(), class_member=True,
+    object_content_type_map = Parameter(default=dict(), 
                                 doc="A dictionary of content types for specific properties, actions and events",
                                 readonly=True) # type: typing.Dict[str, typing.Dict[str, str]]
-    object_serializer_map = Parameter(default=dict(), class_member=True, 
+    object_serializer_map = Parameter(default=dict(),  
                                 doc="A dictionary of serializer for specific properties, actions and events",
                                 readonly=True) # type: typing.Dict[str, typing.Dict[str, BaseSerializer]]
-    protocol_serializer_map = Parameter(default=dict(), class_member=True, 
+    protocol_serializer_map = Parameter(default=dict(),  
                                 doc="A dictionary of serializer for a specific protocol",
                                 readonly=True) # type: typing.Dict[str, BaseSerializer]
 
