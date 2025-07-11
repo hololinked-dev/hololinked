@@ -32,7 +32,7 @@ class HTTPServer(Parameterized):
     """
     
     things = TypedList(item_type=(str, Thing), default=None, allow_None=True, 
-                       doc="instance name of the things to be served by the HTTP server." ) # type: typing.List[str]
+                    doc="id(s) of the things to be served by the HTTP server." ) # type: typing.List[str]
     port = Integer(default=8080, bounds=(1, 65535),  
                     doc="the port at which the server should be run" ) # type: int
     address = IPAddress(default='0.0.0.0', 
@@ -238,7 +238,7 @@ class HTTPServer(Parameterized):
         if self.tornado_event_loop is not None:
             self.tornado_event_loop.stop()
         complete_pending_tasks_in_current_loop()
-        print_pending_tasks_in_current_loop()
+        # print_pending_tasks_in_current_loop()
         
        
     async def async_stop(self) -> None:
@@ -253,7 +253,8 @@ class HTTPServer(Parameterized):
         await self.tornado_instance.close_all_connections()
         if self.tornado_event_loop is not None:
             self.tornado_event_loop.stop()
-        print_pending_tasks_in_current_loop()
+        # print_pending_tasks_in_current_loop()
+        # cannot do the following because the caller is also in same asnync loop
         # await complete_pending_tasks_in_current_loop_async()
         
        
@@ -497,8 +498,9 @@ class HTTPServer(Parameterized):
         
 class ApplicationRouter:
     """
-    Covering implementation of the application router to add rules to the tornado application.
-    Not a real router, which is taken care of by the tornado application automatically.
+    Covering implementation (as in - a layer on top of it) of the application router to 
+    add rules to the tornado application. Not a real router, which is taken care of 
+    by the tornado application automatically.
     """
 
     def __init__(self, app: Application, server: HTTPServer) -> None:
@@ -561,7 +563,7 @@ class ApplicationRouter:
         """
 
 
-    def _resolve_rules(self, id: str) -> None:
+    def _resolve_rules_per_thing_id(self, id: str) -> None:
         """
         Process the pending rules and add them to the application router.
         """
@@ -594,6 +596,9 @@ class ApplicationRouter:
         elif isinstance(item, (Property, Action, Event)):
             item = item.to_affordance()
         if isinstance(item, (PropertyAffordance, ActionAffordance, EventAffordance)):
+            for rule in self.app.wildcard_router.rules:
+                if rule.target_kwargs["resource"] == item
+                    return True
             for rule in self._pending_rules:
                 if rule[2]["resource"] == item:
                     return True
@@ -670,6 +675,7 @@ class ApplicationRouter:
             try:
                 from ...client.zmq.consumed_interactions import ZMQAction 
                 from ...core import Thing
+                # create client
                 client = AsyncZMQClient(
                             id=self.server._IP, 
                             server_id=thing_id,
@@ -680,24 +686,28 @@ class ApplicationRouter:
                             poll_timeout=self.server.zmq_client_pool.poll_timeout,
                             logger=self.server.logger    
                         )
+                # connect client
                 client.handshake(timeout=10000)
                 await client.handshake_complete()
                 self.server.zmq_client_pool.register(client, thing_id)
-                assert isinstance(Thing.get_thing_model, Action)
-                FetchTDAffordance = Thing.get_thing_model.to_affordance()
-                FetchTDAffordance._thing_id = thing_id
-                FetchTD = ZMQAction(
-                    resource=FetchTDAffordance,
+                # fetch TD
+                assert isinstance(Thing.get_thing_model, Action) # type definition
+                FetchTMAffordance = Thing.get_thing_model.to_affordance()
+                FetchTMAffordance._thing_id = thing_id
+                fetch_tm = ZMQAction(
+                    resource=FetchTMAffordance,
                     sync_client=None,
                     async_client=client
                 )
-                TD = await FetchTD.async_call() # type: typing.Dict[str, typing.Any]
+                TM = await fetch_tm.async_call() # type: typing.Dict[str, typing.Any]
+                # Add to server
                 self.add_interaction_affordances(
-                    [PropertyAffordance.from_TD(name, TD) for name in TD["properties"].keys()],
-                    [ActionAffordance.from_TD(name, TD) for name in TD["actions"].keys()],
-                    [EventAffordance.from_TD(name, TD) for name in TD["events"].keys()]
+                    [PropertyAffordance.from_TD(name, TM) for name in TM["properties"].keys()],
+                    [ActionAffordance.from_TD(name, TM) for name in TM["actions"].keys()],
+                    [EventAffordance.from_TD(name, TM) for name in TM["events"].keys()]
                 )
-                self._resolve_rules(thing_id)
+                # Resolve any rules that could have been locally added
+                self._resolve_rules_per_thing_id(thing_id)
             except ConnectionError:
                 self.server.logger.warning(f"could not connect to {thing_id} using {transport or socket_address} transport")
             except Exception as ex:
@@ -715,7 +725,11 @@ class ApplicationRouter:
                     else:
                         coroutines.append(update_server_with_TD(thing_id, socket_address_or_transport, None))
         get_current_async_loop().run_until_complete(asyncio.gather(*coroutines))
-        
+
+
+    def get_href_for_affordance(self, affordance) -> str:
+        return ""        
+
 
     def print_rules(self) -> None:
         """

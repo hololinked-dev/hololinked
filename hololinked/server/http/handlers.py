@@ -1,3 +1,4 @@
+import copy
 import typing
 import uuid
 import asyncio
@@ -9,7 +10,7 @@ from ...utils import *
 from ...config import global_config
 from ...core.zmq.brokers import AsyncEventConsumer, EventConsumer
 from ...core.zmq.message import EMPTY_BYTE, ResponseMessage
-from ...constants import Operations
+from ...constants import JSONSerializable, Operations
 from ...schema_validators import BaseSchemaValidator
 from ...serializers.payloads import PreserializedData, SerializableData
 from ...td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
@@ -67,6 +68,7 @@ class BaseHandler(RequestHandler):
         if origin is not None and (origin in self.allowed_clients or origin + '/' in self.allowed_clients):
             self.set_header("Access-Control-Allow-Origin", origin)
             return True
+        self.set_status(401, "authentication invalid or not supported")    
         return False
 
     def set_access_control_allow_headers(self) -> None:
@@ -121,7 +123,7 @@ class BaseHandler(RequestHandler):
         preserialized_payload = PreserializedData(value=b'')
         if self.request.body:
             try:
-                if self.request.headers.get("Content-Type", None) in __default_supported_content_types__:
+                if self.request.headers.get("Content-Type", "application/json") in __default_supported_content_types__:
                     payload.value = self.request.body
                     payload.content_type = self.request.headers.get("Content-Type", None)
                 else:
@@ -141,7 +143,7 @@ class BaseHandler(RequestHandler):
         # print("zmq_response - ", zmq_response)
         if zmq_response is None:
             raise RuntimeError("No last response available. Did you make an operation?")
-        payload = zmq_response.payload.value
+        payload = zmq_response.payload.value # dont deseriablize, there is no need, just pass it on to the client
         preserialized_payload = zmq_response.preserialized_payload.value
         if preserialized_payload != EMPTY_BYTE:
             if payload is None:
@@ -218,14 +220,19 @@ class RPCHandler(BaseHandler):
         """
         handles the Thing operations and writes the reply to the HTTP client. 
         """
-        reply = None
         try:
-            server_exeuction_context, thing_execution_context = self.get_execution_parameters()
-            # print(f"server execution context - {server_exeuction_context}, thing execution context - {thing_execution_context}")
+            server_execution_context, thing_execution_context = self.get_execution_parameters()
+            # print(f"server execution context - {server_execution_context}, thing execution context - {thing_execution_context}")
             payload, preserialized_payload = self.get_payload()
             # print(f"payload - {payload}, preserialized payload - {preserialized_payload}")
             if self.schema_validator is not None and global_config.VALIDATE_SCHEMA_ON_CLIENT:
                 self.schema_validator.validate(payload)
+        except Exception as ex:
+            self.set_status(400, "error while decoding request")
+            self.set_headers()
+            self.finish()
+            return 
+        try:
             response_message = await self.zmq_client_pool.async_execute(
                                     client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
                                     thing_id=self.resource.thing_id,
@@ -233,11 +240,9 @@ class RPCHandler(BaseHandler):
                                     operation=operation,
                                     payload=payload,
                                     preserialized_payload=preserialized_payload,
-                                    server_execution_context=server_exeuction_context,
+                                    server_execution_context=server_execution_context,
                                     thing_execution_context=thing_execution_context
                                 )                                 
-            # message mapped client pool currently strips the data part from return message
-            # and provides that as reply directly 
             payload = self.get_response_payload(response_message)
             self.set_status(200, "ok")
             # print(f"payload {self.request.path} - {payload}")
@@ -269,10 +274,9 @@ class PropertyHandler(RPCHandler):
         checks if the method is allowed for the property. 
         """
         if not self.has_access_control:
-            self.set_status(401, "forbidden")    
             return False
-        if (method == 'GET' and self.resource.writeOnly) or (
-            method == 'POST' or method == 'PUT' and self.resource.readOnly):
+        if (method == 'GET' and self.resource.writeOnly) or \
+            (method == 'POST' or method == 'PUT' and self.resource.readOnly):
             self.set_status(405, "method not allowed")
             self.finish()
             return False
@@ -353,7 +357,6 @@ class ActionHandler(RPCHandler):
         checks if the method is allowed for the property. 
         """
         if not self.has_access_control:
-            self.set_status(401, "forbidden")    
             return False
         return True
     
@@ -575,13 +578,75 @@ class StopHandler(BaseHandler):
     
     async def post(self):
         if not self.has_access_control:
-            self.set_status(401, 'forbidden')
-        else:
-            try:
-                # Stop the Tornado server
-                run_callable_somehow(self.owner_inst.async_stop())
-                self.set_status(204, "ok")
-                self.set_header("Access-Control-Allow-Credentials", "true")
-            except Exception as ex:
-                self.set_status(500, str(ex))
+            return 
+        try:
+            # Stop the Tornado server
+            run_callable_somehow(self.owner_inst.async_stop())
+            self.set_status(204, "ok")
+            self.set_header("Access-Control-Allow-Credentials", "true")
+        except Exception as ex:
+            self.set_status(500, str(ex))
         self.finish()
+
+
+class ThingDescriptionHandler(BaseHandler):
+
+    async def get(self):
+        if not self.has_access_control:
+            return 
+        try:
+            TM = await fetch_tm.async_call()
+            TD = self.generate_td()
+            self.set_status(200, "ok")
+            self.write(self.serializer.dumps(TD))
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        self.finish()
+        
+    def generate_td(self, TM, thing_id: str) -> dict[str, JSONSerializable]:
+        from ...td.forms import Form
+        fetch_tm = Thing.get_thing_model.to_affordance()
+        fetch_tm = ZMQAction()
+        TD = copy.deepcopy(TM)
+        for name, property in TM["properties"].items():
+            affordance = PropertyAffordance.from_TD(name, TM)
+            href = self.owner_inst.router.get_href_for_affordance(affordance)
+            TD["properties"][name]["forms"] = []
+            for operation, http_method in [
+                ('readProperty', 'GET'),
+                ('writeProperty', 'PUT'),
+                ('deleteProperty', 'DELETE')
+            ]:
+                if affordance.readOnly and operation != 'readProperty':
+                    break
+                form = Form()
+                form.href = href
+                form.htv_methodName = http_method 
+                form.contentType = "application/json"
+                TD["properties"][name]["forms"].append(form.asdict())
+        for name, action in TM["properties"].items():
+            affordance = ActionAffordance.from_TD(name, TM)
+            href = self.owner_inst.router.get_href_for_affordance(affordance)
+            TD["actions"][name]["forms"] = []
+            for operation, http_method in [
+                ('invokeAction', 'POST'),
+            ]:
+                form = Form()
+                form.href = href
+                form.htv_methodName = http_method 
+                form.contentType = "application/json"
+                TD["actions"][name]["forms"].append(form.asdict())
+        for name, event in TM["events"].items():
+            affordance = EventAffordance.from_TD(name, TM)
+            href = self.owner_inst.router.get_href_for_affordance(affordance)
+            TD["event"][name]["forms"] = []
+            for operation, http_method in [
+                ('subscribeEvent', 'GET'),
+            ]:
+                form = Form()
+                form.href = href
+                form.htv_methodName = http_method 
+                form.contentType = "application/json"
+                form.subprotocol = 'sse'
+                TD["events"][name]["forms"].append(form.asdict())
+        

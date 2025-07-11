@@ -1,11 +1,12 @@
 import uuid
 
+from tornado.httpclient import HTTPClient, HTTPRequest, HTTPResponse, HTTPTimeoutError
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
 from .zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty, WriteMultipleProperties, ReadMultipleProperties
 from ..core.zmq import SyncZMQClient, AsyncZMQClient
 from ..core import Thing, Action
 from ..td.interaction_affordance import PropertyAffordance, ActionAffordance, EventAffordance
-
+from .http.client import HTTPProperty, HTTPAction, HTTPEvent
 
 
 class ClientFactory: 
@@ -84,6 +85,41 @@ class ClientFactory:
                 )
             )
         return object_proxy
+    
+    @classmethod
+    def http(self, url: str, **kwargs):
+        from .proxy import ObjectProxy
+        TD = HTTPClient().fetch(HTTPRequest(url))
+        # id = f"{server_id}|{thing_id}|{protocol}|{uuid.uuid4()}" 
+        object_proxy = ObjectProxy(id, **kwargs)
+        for name in TD["properties"]:
+            affordance = PropertyAffordance.from_TD(name, TD)
+            consumed_property = HTTPProperty(
+                                    resource=affordance, 
+                                    invokation_timeout=kwargs.get('invokation_timeout', 5),
+                                    execution_timeout=kwargs.get('execution_timeout', 5),
+                                    owner_inst=object_proxy
+                                )
+            self.add_property(TD, consumed_property)
+        for action in TD["actions"]:
+            affordance = ActionAffordance.from_TD(action, TD)
+            consumed_action = HTTPAction(
+                                    resource=affordance, 
+                                    invokation_timeout=kwargs.get('invokation_timeout', 5),
+                                    execution_timeout=kwargs.get('execution_timeout', 5),
+                                    owner_inst=object_proxy
+                                )
+            self.add_action(TD, consumed_action)
+        for event in TD["events"]:
+            affordance = EventAffordance.from_TD(event, TD)
+            consumed_event = HTTPEvent(
+                                    resource=affordance, 
+                                    invokation_timeout=kwargs.get('invokation_timeout', 5),
+                                    execution_timeout=kwargs.get('execution_timeout', 5),
+                                    owner_inst=object_proxy
+                                )
+            self.add_event(TD, consumed_event)
+        
 
     @classmethod
     def add_action(self, client, action: ConsumedThingAction) -> None:
