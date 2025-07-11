@@ -39,7 +39,7 @@ class ThingModel(Schema):
         self.ignore_errors = ignore_errors
 
 
-    def produce(self) -> "ThingModel": 
+    def generate(self) -> "ThingModel": 
         """create thing model"""
         self.id = self.instance.id
         self.title = self.instance.__class__.__name__
@@ -50,6 +50,9 @@ class ThingModel(Schema):
         self.events = dict()
         self.add_interaction_affordances()
         return self
+    
+    def produce(self) -> Thing:
+        raise NotImplementedError("This will be implemented in a future release")
     
     # not the best code and logic, but works for now
     skip_properties: typing.List[str] = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',
