@@ -26,7 +26,8 @@ class ListHandler(logging.Handler):
         self.log_list : typing.List[typing.Dict] = [] if not log_list else log_list
     
     def emit(self, record : logging.LogRecord):
-        log_entry = self.format(record)
+        # log_entry = self.format(record)
+        self.format(record)
         self.log_list.insert(0, {
             'level' : record.levelname,
             'timestamp' : datetime.datetime.fromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S.%f"),
@@ -64,8 +65,12 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         }
     """
 
-    def __init__(self, id : str = 'logger', maxlen : int = 500, stream_interval : float = 1.0, 
-                    **kwargs) -> None:
+    def __init__(self, 
+                id: str = 'logger', 
+                maxlen: int = 500, 
+                stream_interval: float = 1.0, 
+                **kwargs
+            ) -> None:
         """
         Parameters
         ----------
@@ -104,7 +109,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
     def get_maxlen(self):
         return self._maxlen 
     
-    def set_maxlen(self, value, **kwargs):
+    def set_maxlen(self, value: int, **kwargs) -> None:
         self._maxlen = value
         self._debug_logs = deque(maxlen=kwargs.pop('len_debug', int(value/5)))
         self._info_logs = deque(maxlen=kwargs.pop('len_info', int(value/5)))
@@ -118,7 +123,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
 
 
     @remote_method()
-    def push_events(self, scheduling : str = 'threaded', stream_interval : float = 1) -> None:
+    def push_events(self, scheduling: str = 'threaded', stream_interval: float = 1) -> None:
         """
         Push events to client. This method is intended to be called remotely for
         debugging the Thing. 
@@ -152,8 +157,9 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
             self._owner.logger.debug(f"joined log event source with thread-id {self._events_thread.ident}.")
             self._events_thread = None
     
-    def emit(self, record : logging.LogRecord):
-        log_entry = self.format(record)
+    def emit(self, record: logging.LogRecord) -> None:
+        # log_entry = self.format(record)
+        self.format(record)
         info = {
             'level' : record.levelname,
             'timestamp' : datetime.datetime.fromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S.%f"),
@@ -190,22 +196,22 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
             await asyncio.sleep(self.stream_interval)
             self.event.push(self.diff_logs) 
             self.diff_logs.clear()
-        self._owner.logger.info(f"ending log events.")
+        self._owner.logger.info("ending log events.")
            
     debug_logs = List(default=[], readonly=True, fget=lambda self: self._debug_logs,
-                            doc="logs at logging.DEBUG level")
+                            doc="logs at logging.DEBUG level") # type: list[typing.Dict[str, typing.Any]]
     
     warn_logs = List(default=[], readonly=True, fget=lambda self: self._warn_logs,
-                            doc="logs at logging.WARN level")
+                            doc="logs at logging.WARN level") # type: list[typing.Dict[str, typing.Any]]
     
     info_logs = List(default=[], readonly=True, fget=lambda self: self._info_logs,
-                            doc="logs at logging.INFO level")
+                            doc="logs at logging.INFO level") # type: list[typing.Dict[str, typing.Any]]
        
     error_logs = List(default=[], readonly=True, fget=lambda self: self._error_logs,
-                            doc="logs at logging.ERROR level")
+                            doc="logs at logging.ERROR level") # type: list[typing.Dict[str, typing.Any]]
  
     critical_logs = List(default=[], readonly=True, fget=lambda self: self._critical_logs,
-                            doc="logs at logging.CRITICAL level")
+                            doc="logs at logging.CRITICAL level") # type: list[typing.Dict[str, typing.Any]]
   
     execution_logs = List(default=[], readonly=True, fget=lambda self: self._execution_logs,
                             doc="logs at all levels accumulated in order of collection/execution")

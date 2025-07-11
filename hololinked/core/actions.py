@@ -229,7 +229,7 @@ def action(
             obj = obj.__func__
         if isinstance(obj, (Action, BoundAction)):
             if obj.execution_info.isclassmethod:
-                raise RuntimeError(f"cannot wrap a classmethod as action once again, please skip")
+                raise RuntimeError("cannot wrap a classmethod as action once again, please skip")
             warnings.warn(f"{obj.name} is already wrapped as an action, wrapping it again with newer settings.",
                         category=UserWarning)
             obj = obj.obj

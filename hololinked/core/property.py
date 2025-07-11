@@ -6,7 +6,7 @@ from ..utils import issubklass
 from ..exceptions import StateMachineError
 from ..schema_validators import JSONSchemaValidator
 from .dataklasses import RemoteResourceInfoValidator
-from .events import Event, EventDispatcher
+from .events import Event, EventDispatcher # noqa: F401
 
 
 
