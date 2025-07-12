@@ -293,17 +293,17 @@ class Serializers(metaclass=MappableSingleton):
     Registration of serializer is not mandatory for any property, action or event. 
     The default serializer is `JSONSerializer`, which will be provided to any unregistered object.
     """
-    json = ClassSelector(default=JSONSerializer(), class_=BaseSerializer,  
+    json = ClassSelector(default=JSONSerializer(), class_=BaseSerializer, class_member=True, 
                         doc="The default serializer for all properties, actions and events") # type: BaseSerializer
-    pickle = ClassSelector(default=PickleSerializer(), class_=BaseSerializer,  
+    pickle = ClassSelector(default=PickleSerializer(), class_=BaseSerializer, class_member=True, 
                         doc="pickle serializer, unsafe without encryption but useful for faster & flexible serialization of python specific types") # type: BaseSerializer
-    msgpack = ClassSelector(default=MsgpackSerializer(), class_=BaseSerializer,  
+    msgpack = ClassSelector(default=MsgpackSerializer(), class_=BaseSerializer, class_member=True, 
                         doc="MessagePack serializer, efficient binary format that is both fast & interoperable between languages ") # type: BaseSerializer
-    text = ClassSelector(default=TextSerializer(), class_=BaseSerializer,  
+    text = ClassSelector(default=TextSerializer(), class_=BaseSerializer, class_member=True, 
                         doc="Text serializer, converts string or string compatible types to bytes and vice versa") # type: BaseSerializer
-    default = ClassSelector(default=json.default, class_=BaseSerializer,  
+    default = ClassSelector(default=json.default, class_=BaseSerializer, class_member=True, 
                         doc="The default serialization to be used") # type: BaseSerializer
-    default_content_type = String(default=default.default.content_type, 
+    default_content_type = String(default=default.default.content_type, class_member=True,
                         doc="The default content type for the default serializer") # type: str
 
     content_types = Parameter(default={
@@ -313,13 +313,13 @@ class Serializers(metaclass=MappableSingleton):
                                 'text/plain': text.default
                             }, doc="A dictionary of content types and their serializers",
                             readonly=True, class_member=True) # type: typing.Dict[str, BaseSerializer]
-    object_content_type_map = Parameter(default=dict(), 
+    object_content_type_map = Parameter(default=dict(), class_member=True,
                                 doc="A dictionary of content types for specific properties, actions and events",
                                 readonly=True) # type: typing.Dict[str, typing.Dict[str, str]]
-    object_serializer_map = Parameter(default=dict(),  
+    object_serializer_map = Parameter(default=dict(), class_member=True, 
                                 doc="A dictionary of serializer for specific properties, actions and events",
                                 readonly=True) # type: typing.Dict[str, typing.Dict[str, BaseSerializer]]
-    protocol_serializer_map = Parameter(default=dict(),  
+    protocol_serializer_map = Parameter(default=dict(), class_member=True, 
                                 doc="A dictionary of serializer for a specific protocol",
                                 readonly=True) # type: typing.Dict[str, BaseSerializer]
 

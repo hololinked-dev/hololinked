@@ -23,8 +23,8 @@ class ThingDescription(ThingModel):
     schemaDefinitions : typing.Optional[typing.List[DataSchema]]
     
    
-    def produce(self) -> "ThingDescription": 
-        super().produce()
+    def generate(self) -> "ThingDescription": 
+        super().generate()
         # self.forms = NotImplemented
         # self.links = NotImplemented
         # self.schemaDefinitions = dict(exception=JSONSchema.get_type(Exception))
@@ -32,6 +32,8 @@ class ThingDescription(ThingModel):
         # self.add_top_level_forms()
         # self.add_security_definitions()
         return self
+    
+    # def add_forms(self, protocol)
     
 #     def add_links(self):
 #         for name, resource in self.instance.sub_things.items():
