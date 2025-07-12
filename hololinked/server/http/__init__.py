@@ -159,7 +159,6 @@ class HTTPServer(Parameterized):
             (r'/stop', StopHandler, dict(owner_inst=self))
         ])
         self.router = ApplicationRouter(self.app, self)
-        self._checked = False
         
         self.zmq_client_pool = MessageMappedZMQClientPool(
                                                     id=self._IP,
@@ -184,16 +183,16 @@ class HTTPServer(Parameterized):
         """
         check if all the requirements are met before starting the server, auto invoked by listen().
         """
-        if self._checked:
-            return True
-        # print("client pool context", self.zmq_client_pool.context)
+        # Add only those code here that needs to be redone always before restarting the server.
+        # One time creation must be in init
+        ioloop.IOLoop.clear_current()
         event_loop = get_current_async_loop() # sets async loop for a non-possessing thread as well
         # event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll_responses()) )
         self.zmq_client_pool.handshake()
       
-        self.tornado_event_loop = None 
+        self.tornado_event_loop = ioloop.IOLoop.current()
         # set value based on what event loop we use, there is some difference 
         # between the asyncio event loop and the tornado event loop
         
@@ -202,7 +201,6 @@ class HTTPServer(Parameterized):
         #     self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
         # else:
         self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context) # type: TornadoHTTP1Server
-        self._checked = True
         return True
     
 
@@ -213,14 +211,13 @@ class HTTPServer(Parameterized):
         the inner tornado instance's (``HTTPServer.tornado_instance``) listen() method. 
         """
         assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
-        self.tornado_event_loop = ioloop.IOLoop.current()
         self.tornado_instance.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
         self.tornado_event_loop.start()
         if forked:
             complete_pending_tasks_in_current_loop() # will reach here only when the server is stopped, so complete pending tasks
-
-
+       
+        
     def stop(self, attempt_async_stop: bool = True) -> None:
         """
         Stop the HTTP server - unreliable, use async_stop() if possible. 
@@ -238,7 +235,6 @@ class HTTPServer(Parameterized):
         if self.tornado_event_loop is not None:
             self.tornado_event_loop.stop()
         complete_pending_tasks_in_current_loop()
-        # print_pending_tasks_in_current_loop()
         
        
     async def async_stop(self) -> None:
@@ -253,9 +249,7 @@ class HTTPServer(Parameterized):
         await self.tornado_instance.close_all_connections()
         if self.tornado_event_loop is not None:
             self.tornado_event_loop.stop()
-        # print_pending_tasks_in_current_loop()
-        # cannot do the following because the caller is also in same asnync loop
-        # await complete_pending_tasks_in_current_loop_async()
+            self.logger.info(f"stopped tornado event loop for server {self._IP}")
         
        
     def add_things(self, *things: Thing | ThingMeta | dict | str) -> None:
@@ -597,7 +591,7 @@ class ApplicationRouter:
             item = item.to_affordance()
         if isinstance(item, (PropertyAffordance, ActionAffordance, EventAffordance)):
             for rule in self.app.wildcard_router.rules:
-                if rule.target_kwargs["resource"] == item
+                if rule.target_kwargs["resource"] == item:
                     return True
             for rule in self._pending_rules:
                 if rule[2]["resource"] == item:

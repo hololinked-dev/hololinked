@@ -581,7 +581,8 @@ class StopHandler(BaseHandler):
             return 
         try:
             # Stop the Tornado server
-            run_callable_somehow(self.owner_inst.async_stop())
+            run_callable_somehow(self.owner_inst.async_stop()) # creates a task in current loop
+            # dont call it in sequence, its not clear whether its designed for that 
             self.set_status(204, "ok")
             self.set_header("Access-Control-Allow-Credentials", "true")
         except Exception as ex:

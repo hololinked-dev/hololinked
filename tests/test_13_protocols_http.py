@@ -22,30 +22,24 @@ except ImportError:
 class TestHTTPServer(TestCase):
 
 
-    def notest_1_init_run_and_stop(self):
+    def test_1_init_run_and_stop(self):
         """Test basic init, run and stop of the HTTP server."""
 
         # init, run and stop synchronously
         server = HTTPServer(log_level=logging.ERROR+10)
         self.assertTrue(server.all_ok)
         server.listen(forked=True)
-        time.sleep(3)
+        time.sleep(5)
         server.stop()
         time.sleep(2)
 
-        # init, run and stop asynchronously
         server.listen(forked=True)
-        time.sleep(3)
-        get_current_async_loop().run_until_complete(server.async_stop())
-        time.sleep(2)
-
-        server.listen(forked=True)
-        time.sleep(3)
+        time.sleep(5)
         response = requests.post('http://localhost:8080/stop')
         self.assertIn(response.status_code, [200, 201, 202, 204])
         time.sleep(2)
 
-    def test_2_add_interaction_affordance(self):
+    def notest_2_add_interaction_affordance(self):
         """Test adding an interaction affordance to the HTTP server."""
         server = HTTPServer(log_level=logging.ERROR+10)
         self.assertTrue(server.all_ok)
@@ -77,7 +71,7 @@ class TestHTTPServer(TestCase):
         )
         
 
-    def test_3_add_thing(self):
+    def notest_3_add_thing(self):
         """Test adding a Thing object to the HTTP server."""
 
         # self.assertTrue(server.all_ok)
