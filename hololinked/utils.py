@@ -101,9 +101,10 @@ def get_default_logger(
     from .config import global_config
     logger = logging.getLogger(name) 
     logger.setLevel(logging.DEBUG if global_config.DEBUG else log_level)
-    default_handler = logging.StreamHandler(sys.stdout)
-    default_handler.setFormatter(logging.Formatter(format, datefmt='%Y-%m-%dT%H:%M:%S'))
-    logger.addHandler(default_handler)
+    if not any(isinstance(handler, logging.StreamHandler) for handler in logger.handlers):
+        default_handler = logging.StreamHandler(sys.stdout)
+        default_handler.setFormatter(logging.Formatter(format, datefmt='%Y-%m-%dT%H:%M:%S'))
+        logger.addHandler(default_handler)
     if log_file:
         file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(logging.Formatter(format, datefmt='%Y-%m-%dT%H:%M:%S'))

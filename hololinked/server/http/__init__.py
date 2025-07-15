@@ -79,7 +79,6 @@ class HTTPServer(Parameterized):
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
     
    
-    
     def __init__(self, 
                 things : typing.List[str] | typing.List[Thing] | typing.List[ThingMeta] | None = None, 
                 *, 
@@ -187,7 +186,8 @@ class HTTPServer(Parameterized):
         # event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll_responses()) )
-        self.zmq_client_pool.handshake()
+        # self.zmq_client_pool.handshake(), NOTE - handshake better done upfront as we already poll_responses here
+        # which will prevent handshake function to succeed (although handshake will be done)
       
         self.tornado_event_loop = ioloop.IOLoop.current()
         # set value based on what event loop we use, there is some difference 

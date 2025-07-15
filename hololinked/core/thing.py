@@ -326,7 +326,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         )
         http_server.add_thing(dict(INPROC=self.id))
         assert http_server.all_ok
-        http_server.router.print_rules()
         http_server.listen()
 
 

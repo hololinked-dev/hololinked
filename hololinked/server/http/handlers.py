@@ -9,7 +9,7 @@ from tornado.iostream import StreamClosedError
 from ...utils import *
 from ...config import global_config
 from ...core.zmq.brokers import AsyncEventConsumer, EventConsumer
-from ...core.zmq.message import EMPTY_BYTE, ResponseMessage
+from ...core.zmq.message import EMPTY_BYTE, ResponseMessage, default_server_execution_context, default_thing_execution_context
 from ...constants import JSONSerializable, Operations
 from ...schema_validators import BaseSchemaValidator
 from ...serializers.payloads import PreserializedData, SerializableData
@@ -113,7 +113,7 @@ class BaseHandler(RequestHandler):
             # if self.resource.request_as_argument:
             #     arguments['request'] = self.request # find some way to pass the request object to the thing
             return server_execution_context, thing_execution_context
-        return dict(), dict() 
+        return default_server_execution_context, default_thing_execution_context
     
     def get_payload(self) -> typing.Tuple[SerializableData, PreserializedData]:
         """
@@ -125,7 +125,7 @@ class BaseHandler(RequestHandler):
             try:
                 if self.request.headers.get("Content-Type", "application/json") in __default_supported_content_types__:
                     payload.value = self.request.body
-                    payload.content_type = self.request.headers.get("Content-Type", None)
+                    payload.content_type = self.request.headers.get("Content-Type", "application/json")
                 else:
                     preserialized_payload.value = self.request.body
                     preserialized_payload.content_type = self.request.headers.get("Content-Type", None)

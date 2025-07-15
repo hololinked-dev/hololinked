@@ -3,9 +3,12 @@ from types import SimpleNamespace
 from typing import Any
 import typing
 import unittest, time, logging, requests
+from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.meta import ThingMeta
 from hololinked.core.zmq.message import ServerExecutionContext, ThingExecutionContext
+from hololinked.serializers import JSONSerializer
+from hololinked.serializers.payloads import PreserializedData, SerializableData
 from hololinked.server.http import HTTPServer
 from hololinked.core.zmq.rpc_server import RPCServer # sets loop policy, TODO: move somewhere else
 from hololinked.server.http.handlers import PropertyHandler, RPCHandler
@@ -167,19 +170,18 @@ class TestHTTPServer(TestCase):
 
     def test_5_handlers(self):
 
-        latest_request_info = None # type: typing.Optional["LatestRequestInfo"]
+        latest_request_info = None # type: "LatestRequestInfo"
 
         @dataclass 
         class LatestRequestInfo:
-            server_execution_context: Any 
-            thing_execution_context: Any
-            payload: Any 
-            preserialized_payload: Any
+            server_execution_context: ServerExecutionContext | dict[str, Any]
+            thing_execution_context: ThingExecutionContext | dict[str, Any]
+            payload: SerializableData
+            preserialized_payload: PreserializedData
 
         class TestableRPCHandler(RPCHandler):
 
-            def handle_through_thing(self, operation):
-                print("Handling operation through thing:", operation)
+            def update_latest_request_info(self) -> None:
                 nonlocal latest_request_info
                 server_execution_context, thing_execution_context = self.get_execution_parameters()
                 payload, preserialized_payload = self.get_payload()
@@ -189,36 +191,56 @@ class TestHTTPServer(TestCase):
                     payload=payload,
                     preserialized_payload=preserialized_payload
                 )
+                
+            async def get(self):
+                self.update_latest_request_info()
                 self.set_status(200)
                 self.finish()
+            
+            async def put(self):
+                self.update_latest_request_info()
+                self.set_status(200)
+                self.finish()
+            
+            async def post(self):
+                # for exit to go through 
+                await self.handle_through_thing('invokeAction')
 
+            
         thing = OceanOpticsSpectrometer(id='test-spectrometer', log_level=logging.ERROR+10)
         thing.run_with_http_server(port=8086, forked=True, property_handler=TestableRPCHandler,
                                 action_handler=TestableRPCHandler)
         
-        time.sleep(3)  # wait for the server to start
         session = requests.session()
         for (method, path, body) in [
-                    ('get', '/test-spectrometer/serial-number', 'simulation'),
-                    # ('put', '/test-spectrometer/integration-time', 1200),
+                    ('get', '/test-spectrometer/serial-number', None),
+                    ('put', '/test-spectrometer/integration-time', 1200),
                     # ('get', '/test-spectrometer/integration-time', 1200),
                     # ('post', '/test-spectrometer/disconnect', None),
                     # ('post', '/test-spectrometer/connect', None)
                 ]:
 
-            response = session.request(method=method, url=f'http://localhost:8086{path}')
+            response = session.request(
+                        method=method, url=f'http://localhost:8086{path}',
+                        data=JSONSerializer().dumps(body) if body is not None else None
+                    )
             self.assertTrue(response.status_code in [200, 201, 202, 204])
             assert isinstance(latest_request_info, LatestRequestInfo)
             self.assertTrue(
-                isinstance(latest_request_info.thing_execution_context,dict) and \
-                key in ThingExecutionContext.__dataclass_fields__ for key in latest_request_info.thing_execution_context.keys()
+                isinstance(latest_request_info.thing_execution_context, ThingExecutionContext) or \
+                (isinstance(latest_request_info.thing_execution_context, dict) and \
+                all(key in ThingExecutionContext.__struct_fields__ for key in latest_request_info.thing_execution_context.keys()))
             )
-            # self.assertTrue(
-            #     isinstance(latest_request_info.server_execution_context,dict) and \
-            #     key in ServerExecutionContext.__dataclass_fields__ for key in latest_request_info.server_execution_context.keys()
-            # )
-            # self.assertTrue(payload == body)
-            # self.assertTrue()
+            self.assertTrue(
+                isinstance(latest_request_info.server_execution_context, ServerExecutionContext) or
+                (isinstance(latest_request_info.server_execution_context, dict) and
+                 all(key in ServerExecutionContext.__struct_fields__ for key in latest_request_info.server_execution_context.keys()))
+            )
+            if body is not None:
+                self.assertTrue(latest_request_info.payload.deserialize() == body)
+      
+
+        self.stop_server(8086, thing_ids=['test-spectrometer'])
 
 
     def notest_5_http_handler_functionalities(self):
@@ -252,10 +274,12 @@ class TestHTTPServer(TestCase):
             response = session.request(method=method, url=f'http://localhost:{port}{path}')
             self.assertTrue(response.status_code == 404)
 
-        for (method, path, body) in [
-                ('post', '/test-spectrometer/exit', None),
-                ('post', '/stop', None)
-            ]:
+    @classmethod
+    def stop_server(self, port, thing_ids: list[str] = []):
+        session = requests.Session()
+        endpoints = [( 'post', f'/{thing_id}/exit', None ) for thing_id in thing_ids]
+        endpoints += [('post', '/stop', None)]
+        for (method, path, body) in endpoints:
             response = session.request(method=method, url=f'http://localhost:{port}{path}')
         
 

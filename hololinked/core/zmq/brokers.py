@@ -1404,6 +1404,11 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         if not isinstance(client, AsyncZMQClient):
             raise TypeError("registration possible for clients only subclass of AsyncZMQClient." +
                            f" Given type {type(client)}")
+        if client.id in self.pool:
+            if self.pool[client.id] == client:
+                return 
+            warnings.warn(f"client with id '{client.id}' already present in pool. Replacing with {client}",
+                        category=UserWarning)
         self.pool[client.id] = client 
         self.poller.register(client.socket, zmq.POLLIN)
         self.poller.register(client._monitor_socket, zmq.POLLIN)
