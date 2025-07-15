@@ -72,8 +72,12 @@ def pep8_to_dashed_name(word : str) -> str:
     return val.replace(' ', '-')
 
 
-def get_default_logger(name : str, log_level : int = logging.INFO, log_file = None,
-                format : str = '%(levelname)-8s - %(asctime)s:%(msecs)03d - %(name)s - %(message)s' ) -> logging.Logger:
+def get_default_logger(
+        name: str, 
+        log_level: int = logging.INFO, 
+        log_file = None,
+        format: str = '%(levelname)-8s - %(asctime)s:%(msecs)03d - %(name)s - %(message)s' 
+    ) -> logging.Logger:
     """
     the default logger used by most of hololinked package, when arguments are not modified.
     StreamHandler is always created, pass log_file for a FileHandler as well.
@@ -94,8 +98,9 @@ def get_default_logger(name : str, log_level : int = logging.INFO, log_file = No
     logging.Logger:
         created logger
     """
+    from .config import global_config
     logger = logging.getLogger(name) 
-    logger.setLevel(log_level)
+    logger.setLevel(logging.DEBUG if global_config.DEBUG else log_level)
     default_handler = logging.StreamHandler(sys.stdout)
     default_handler.setFormatter(logging.Formatter(format, datefmt='%Y-%m-%dT%H:%M:%S'))
     logger.addHandler(default_handler)

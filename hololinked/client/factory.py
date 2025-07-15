@@ -1,11 +1,13 @@
 import uuid
 
-from tornado.httpclient import HTTPClient, HTTPRequest, HTTPResponse, HTTPTimeoutError
-from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
-from .zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty, WriteMultipleProperties, ReadMultipleProperties
+from tornado.httpclient import HTTPClient, HTTPRequest, HTTPResponse
+from tornado.simple_httpclient import HTTPTimeoutError
+
 from ..core.zmq import SyncZMQClient, AsyncZMQClient
 from ..core import Thing, Action
 from ..td.interaction_affordance import PropertyAffordance, ActionAffordance, EventAffordance
+from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
+from .zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty, WriteMultipleProperties, ReadMultipleProperties
 from .http.client import HTTPProperty, HTTPAction, HTTPEvent
 
 

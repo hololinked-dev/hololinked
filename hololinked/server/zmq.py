@@ -120,16 +120,17 @@ class ZMQServer(RPCServer):
             self.stop()
             if self.ipc_server is not None:
                 self.ipc_server.exit()
+                self.ipc_event_publisher.exit()
             if self.tcp_server is not None:
                 self.tcp_server.exit()
+                self.tcp_event_publisher.exit()
             if self.req_rep_server is not None:
                 self.req_rep_server.exit()
-            # if self.event_publisher is not None:
-            #     self.event_publisher.exit()
-        except:
-            pass 
-        if self._terminate_context:
-            self.context.term()
-        self.logger.info("terminated context of socket '{}' of type '{}'".format(self.id, self.__class__))
-    
+            if self.event_publisher is not None:
+                self.event_publisher.exit()
+            if self.inproc_events_proxy is not None:
+                self.inproc_events_proxy.exit()
+        except Exception as ex:
+            self.logger.warning(f"Exception occurred while exiting the server - {str(ex)}")
+            
 

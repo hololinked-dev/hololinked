@@ -214,8 +214,8 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
                             doc="logs at logging.CRITICAL level") # type: list[typing.Dict[str, typing.Any]]
   
     execution_logs = List(default=[], readonly=True, fget=lambda self: self._execution_logs,
-                            doc="logs at all levels accumulated in order of collection/execution")
-    
+            doc="logs at all levels accumulated in order of collection/execution") # type: list[typing.Dict[str, typing.Any]]
+
 
 
 def prepare_object_logger(instance: RemoteObject, log_level: int, log_file: str, remote_access: bool = False) -> None:

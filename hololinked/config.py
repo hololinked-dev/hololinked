@@ -91,7 +91,7 @@ class Configuration:
         # Schema
         'VALIDATE_SCHEMA_ON_CLIENT', 'VALIDATE_SCHEMAS',
         # ZMQ
-        "ZMQ_CONTEXT"
+        "ZMQ_ASYNC_CONTEXT", "ZMQ_SYNC_CONTEXT",
         # make debugging easier
         "DEBUG"
     ]
@@ -155,8 +155,16 @@ class Configuration:
         if asynch:
             return self.ZMQ_ASYNC_CONTEXT
         return self.ZMQ_SYNC_CONTEXT
+    
+    def __del__(self):
+        for context in [self.ZMQ_ASYNC_CONTEXT, self.ZMQ_SYNC_CONTEXT]:
+            try:
+                context.destroy()
+            except Exception as ex:
+                warnings.warn(f"Error destroying ZMQ context - {str(ex)}", RuntimeWarning)
+
+
 
 global_config = Configuration()
-
 
 __all__ = ['global_config', 'Configuration']

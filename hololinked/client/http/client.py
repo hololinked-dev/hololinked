@@ -12,7 +12,7 @@ import urllib.parse as parse
 import tornado.httpclient
 from typing import Any
 from tornado.simple_httpclient import HTTPTimeoutError
-from ..abstractions import ConsumedThingAction, ConsumedThingProperty
+from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
 from ...td.interaction_affordance import ActionAffordance
 from ...serializers import Serializers
 
@@ -113,7 +113,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         href = self.pick_http_href(td, td.get_property_forms(name))
 
         if href is None:
-            raise FormNotFoundException()
+            raise ValueError("No href found for readProperty operation")
 
         http_client = tornado.httpclient.AsyncHTTPClient()
 
@@ -125,7 +125,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
                 request_timeout=req_timeout,
             )
         except HTTPTimeoutError as ex:
-            raise ClientRequestTimeout from ex
+            raise TimeoutError(str(ex))
 
         response = await http_client.fetch(http_request)
         result = json.loads(response.body)

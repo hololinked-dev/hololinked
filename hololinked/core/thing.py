@@ -324,7 +324,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             # network_interface=network_interface, 
             **kwargs
         )
-        http_server.zmq_client_pool.context = self.rpc_server.context # TODO: issue https://github.com/hololinked-dev/hololinked/issues/84
         http_server.add_thing(dict(INPROC=self.id))
         assert http_server.all_ok
         http_server.router.print_rules()

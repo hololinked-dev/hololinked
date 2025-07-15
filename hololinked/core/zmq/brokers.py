@@ -12,7 +12,7 @@ from zmq.utils.monitor import parse_monitor_message
 from ...utils import *
 from ...config import global_config
 from ...constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS, get_socket_type_name
-from ...serializers.serializers import JSONSerializer, Serializers
+from ...serializers.serializers import Serializers
 from ...exceptions import BreakLoop
 from .message import (EMPTY_BYTE, ERROR, EXIT, HANDSHAKE, INVALID_MESSAGE, REPLY, SERVER_DISCONNECTED, TIMEOUT, 
         EventMessage, RequestMessage, ResponseMessage, SerializableData, PreserializedData, ServerExecutionContext, ThingExecutionContext, 
@@ -347,7 +347,6 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         super().__init__(id=id, **kwargs)
         self.create_socket(id=id, node_type='server', context=context, transport=transport, 
                         socket_type=socket_type, **kwargs) 
-        self._terminate_context = context == None # terminate if it was created by instance
         self.poller = zmq.asyncio.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
         self.poll_timeout = poll_timeout
@@ -584,14 +583,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
             self.socket.close(0)
             self.logger.info(f"terminated socket of server '{self.id}' of type {self.__class__}")
         except Exception as ex:
-            self.logger.warning(f"could not unregister socket {self.id} from polling - {str(ex)}")
-        try:
-            if self._terminate_context:
-                self.context.term()
-                self.logger.info("terminated context of socket '{}' of type '{}'".format(self.id, self.__class__))
-        except Exception as ex:
-            self.logger.warning("could not properly terminate context or attempted to terminate an already terminated " +
-                            f" context '{self.id}'. Exception message: {str(ex)}")
+            self.logger.warning(f"error while closing socket {self.id} - {str(ex)}")
     
    
 
@@ -730,16 +722,10 @@ class ZMQServerPool(BaseZMQServer):
         for server in self.pool.values():       
             try:
                 self.poller.unregister(server.socket)
-                server.exit()
             except Exception as ex:
-                self.logger.warning(f"could not unregister poller and exit server {server.id} - {str(ex)}")
-        try:
-            self.context.term()
-            self.logger.info("context terminated for {}".format(self.__class__))
-        except Exception as ex:
-            self.logger.warning("could not properly terminate context or attempted to terminate an already terminated context " +
-                            f" Exception message: {str(ex)}")
-
+                self.logger.warning(f"could not unregister poller {server.id} - {str(ex)}")
+            server.exit()
+  
     
     
 class BaseZMQClient(BaseZMQ):
@@ -774,9 +760,8 @@ class BaseZMQClient(BaseZMQ):
             ) -> None:
         super().__init__(id=id, logger=logger, **kwargs)
         self.server_id = server_id 
-        self._monitor_socket = None
+        self._monitor_socket = None # type: zmq.Socket | zmq.asyncio.Socket | None 
         self._response_cache = dict()
-        self._terminate_context = False
         self.socket: zmq.Socket | zmq.asyncio.Socket
         self.poller: zmq.Poller | zmq.asyncio.Poller 
         self._poll_timeout = kwargs.get('poll_timeout', 1000)  # default to 1000 ms
@@ -796,8 +781,8 @@ class BaseZMQClient(BaseZMQ):
         self._poll_timeout = value
 
     def exit(self) -> None:
-        BaseZMQ.exit(self)
         try:
+            BaseZMQ.exit(self)
             self.poller.unregister(self.socket)
             # TODO - there is some issue here while quitting 
             # print("poller exception did not occur 1")
@@ -816,14 +801,7 @@ class BaseZMQClient(BaseZMQ):
         except Exception as ex:
             self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated " +
                              f"socket '{self.id}' of type '{self.__class__}'. Exception message: {str(ex)}")
-        try:
-            if self._terminate_context:
-                self.context.term()
-                self.logger.info("terminated context of socket '{}' of type '{}'".format(self.id, self.__class__))
-        except Exception as ex:
-            self.logger.warning("could not properly terminate context or attempted to terminate an already terminated context" +
-                            "'{}'. Exception message: {}".format(self.id, str(ex)))
-            
+     
     
     def handled_default_message_types(self, response_message: RequestMessage) -> bool:
         """
@@ -902,10 +880,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                         transport=transport, 
                         **kwargs
                     )
-        self._terminate_context = context == None
         self.poller = zmq.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
-        # print("context on client", self.context)
         if handshake:
             self.handshake(kwargs.pop("handshake_timeout", 60000))
     
@@ -1121,7 +1097,6 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         self.poller = zmq.asyncio.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
         self.poller.register(self._monitor_socket, zmq.POLLIN) 
-        self._terminate_context = context == None
         self._handshake_event = asyncio.Event()
         self._handshake_event.clear()
         if handshake:
@@ -1417,7 +1392,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             raise ValueError(f"client for instance name '{server_id}' already present in pool")
         
 
-    def register(self, client: AsyncZMQClient, thing_id: str) -> None:
+    def register(self, client: AsyncZMQClient, thing_id: str | None = None) -> None:
         """
         Register a client with the pool. 
 
@@ -1432,7 +1407,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self.pool[client.id] = client 
         self.poller.register(client.socket, zmq.POLLIN)
         self.poller.register(client._monitor_socket, zmq.POLLIN)
-        self._thing_to_client_map[thing_id] = client.id
+        if thing_id:
+            self._thing_to_client_map[thing_id] = client.id
    
     def get_client_id_from_thing_id(self, thing_id: str) -> typing.Dict[str, AsyncZMQClient]:
         """
@@ -1782,19 +1758,16 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         return iter(self.pool.values())
     
     def exit(self) -> None:
-        BaseZMQ.exit(self)
-        for client in self.pool.values():
-            self.poller.unregister(client.socket)
-            self.poller.unregister(client.socket.get_monitor_socket())
-            client.exit()
-        self.logger.info("all client socket unregistered from pool for '{}'".format(self.__class__))
         try:
-            self.context.term()
-            self.logger.info("context terminated for '{}'".format(self.__class__))        
+            BaseZMQ.exit(self)
+            for client in self.pool.values():
+                self.poller.unregister(client.socket)
+                self.poller.unregister(client.socket.get_monitor_socket())
+                client.exit()
+            self.logger.info("all client socket unregistered from pool for '{}'".format(self.__class__))
         except Exception as ex:
-            self.logger.warning("could not properly terminate context or attempted to terminate an already terminated context" +
-                            "'{}'. Exception message: {}".format(self.identity, str(ex)))
-
+            self.logger.warning("could not properly terminate context or attempted to terminate an already \
+                                terminated context. Exception message: {}".format(str(ex)))
     """
     BaseZMQ
     BaseAsyncZMQ
@@ -1855,7 +1828,6 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         self.logger.info(f"created event publishing socket at {self.socket_address}")
         self.events = set() # type is typing.Set[EventDispatcher] 
         self.event_ids = set() # type: typing.Set[str]
-        self._terminate_context = context == None
        
     def register(self, event) -> None:
         """
@@ -1921,22 +1893,14 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                                                                                         self.socket_address))
         
     def exit(self):
-        if not hasattr(self, 'logger'):
-            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
+            BaseZMQ.exit(self)
             self.socket.close(0)
             self.logger.info("terminated event publishing socket with address '{}'".format(self.socket_address))
         except Exception as E:
             self.logger.warning("could not properly terminate context or attempted to terminate an already terminated context at address '{}'. Exception message: {}".format(
                 self.socket_address, str(E)))
-        try:
-            if self._terminate_context:
-                self.context.term()
-                self.logger.info("terminated context of event publishing socket with address '{}'".format(self.socket_address)) 
-        except Exception as E: 
-            self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated socket of event publishing socket at address '{}'. Exception message: {}".format(
-                self.socket_address, str(E)))
-      
+        
 
 
 class BaseEventConsumer(BaseZMQClient):
@@ -1971,7 +1935,6 @@ class BaseEventConsumer(BaseZMQClient):
                 context: zmq.Context | None = None, 
                 **kwargs
             ) -> None:
-        self._terminate_context = context == None
         if isinstance(self, BaseSyncZMQ):
             self.context = context or global_config.zmq_context(asynch=False)
             self.poller = zmq.Poller()
@@ -1991,13 +1954,14 @@ class BaseEventConsumer(BaseZMQClient):
                         **kwargs
                     )
         self.event_unique_identifier = bytes(event_unique_identifier, encoding='utf-8')
+        short_uuid = uuid4().hex[:8]
         self.interruptor = self.context.socket(zmq.PAIR)
-        self.interruptor.setsockopt_string(zmq.IDENTITY, f'interrupting-server')
-        self.interruptor.bind(f'inproc://{self.id}/interruption')    
+        self.interruptor.setsockopt_string(zmq.IDENTITY, f'interrupting-server-{short_uuid}')
         self.interrupting_peer = self.context.socket(zmq.PAIR)
-        self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f'interrupting-client')
-        self.interrupting_peer.connect(f'inproc://{self.id}/interruption')
-        
+        self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f'interrupting-client-{short_uuid}')
+        self.interruptor.bind(f'inproc://{self.id}-{short_uuid}/interruption')    
+        self.interrupting_peer.connect(f'inproc://{self.id}-{short_uuid}/interruption')
+
 
     def subscribe(self) -> None:
         self.socket.setsockopt(zmq.SUBSCRIBE, self.event_unique_identifier) 
@@ -2019,9 +1983,8 @@ class BaseEventConsumer(BaseZMQClient):
         
 
     def exit(self):
-        if not hasattr(self, 'logger'):
-            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
+            BaseZMQ.exit(self)
             self.poller.unregister(self.socket)
             self.poller.unregister(self.interruptor)
         except Exception as E:
@@ -2035,13 +1998,6 @@ class BaseEventConsumer(BaseZMQClient):
         except:
             self.logger.warning("could not terminate sockets")
 
-        try:
-            if self._terminate_context:
-                self.context.term()
-                self.logger.info("terminated context of event consuming socket with address '{}'".format(self.socket_address)) 
-        except Exception as E: 
-            self.logger.warning("could not properly terminate context or attempted to terminate an already terminated context at address '{}'. Exception message: {}".format(
-                self.socket_address, str(E)))
 
 
 class EventConsumer(BaseEventConsumer, BaseSyncZMQ):

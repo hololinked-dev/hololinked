@@ -113,7 +113,6 @@ class RPCServer(BaseZMQServer):
             kwargs['logger'] = self.logger
         # contexts and poller
         self._run = False # flag to stop all the
-        self._terminate_context = context is None
         self.context = context or global_config.zmq_context(asynch=True)
         
         self.req_rep_server = AsyncZMQServer(
@@ -579,12 +578,8 @@ class RPCServer(BaseZMQServer):
                 self.req_rep_server.exit()
             if self.event_publisher is not None:
                 self.event_publisher.exit()
-        except:
-            pass 
-        if self._terminate_context:
-            self.context.term()
-        self.logger.info("terminated context of socket '{}' of type '{}'".format(self.id, self.__class__))
-
+        except Exception as ex:
+            self.logger.warning(f"Exception occurred while exiting the server - {str(ex)}") 
 
     def __hash__(self):
         return hash(str(self))
@@ -815,7 +810,7 @@ def prepare_rpc_server(
     if context is not None and not isinstance(context, zmq.asyncio.Context):
         raise TypeError("context must be an instance of zmq.asyncio.Context")
     context = context or global_config.zmq_context(asynch=True)
-    
+
     if transports == 'INPROC' or transports == ZMQ_TRANSPORTS.INPROC:
         RPCServer(
             id=instance.id, 
