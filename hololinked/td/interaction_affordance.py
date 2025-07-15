@@ -233,7 +233,11 @@ class InteractionAffordance(Schema):
             return False
         if self.thing_id is None or value.thing_id is None:
             if self.owner is None or value.owner is None:
+                # cannot determine anymore
                 return False
+            # basically you need to have an owner for the interaction affordance
+            # and a name to determine its equality. We should never check the owner
+            # by the name, but by the object, otherwise the equality cannot be gauranteed
             if self.owner == value.owner and self.name == value.name:
                 return True
             return False

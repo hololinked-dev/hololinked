@@ -164,7 +164,7 @@ class BaseAsyncZMQ(BaseZMQ):
         """
         if context and not isinstance(context, zmq.asyncio.Context):
             raise TypeError("async ZMQ message broker accepts only async ZMQ context. supplied type {}".format(type(context)))
-        self.context = context or zmq.asyncio.Context()
+        self.context = context or global_config.zmq_context(asynch=True)
         self.socket, self.socket_address = BaseZMQ.get_socket(id=id, node_type=node_type, context=self.context, 
                                                 transport=transport, socket_type=socket_type, **kwargs)
         self.logger.info("created socket {} with address {} & identity {} and {}".format(get_socket_type_name(socket_type), 
@@ -191,7 +191,7 @@ class BaseSyncZMQ(BaseZMQ):
                 # create sync socket when async context is supplied for sync brokers.
                 # especially useful for INPROC sync client where teh context needs to be shared and the server is async. 
                 socket_class = zmq.Socket
-        self.context = context or zmq.Context()
+        self.context = context or global_config.zmq_context(asynch=False)
         self.socket, self.socket_address = BaseZMQ.get_socket(id=id, node_type=node_type, context=self.context, 
                                                 transport=transport, socket_type=socket_type, socket_class=socket_class, 
                                                 **kwargs)
@@ -601,7 +601,7 @@ class ZMQServerPool(BaseZMQServer):
     """
 
     def __init__(self, *, ids: typing.List[str] | None = None, **kwargs) -> None:
-        self.context = zmq.asyncio.Context()
+        self.context = global_config.zmq_context(asynch=True)
         self.poller = zmq.asyncio.Poller()
         self.pool = dict() # type: typing.Dict[str, AsyncZMQServer]
         if ids:
@@ -1366,7 +1366,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         if len(client_ids) != len(server_ids):
             raise ValueError("client_ids and server_ids must have same length")
         # this class does not call create_socket method
-        self.context = context or zmq.asyncio.Context()
+        self.context = context or global_config.zmq_context(asynch=True)
         self.pool = dict() # type: typing.Dict[str, AsyncZMQClient]
         self.poller = zmq.asyncio.Poller()
         for client_id, server_id in zip(client_ids, server_ids):
@@ -1973,10 +1973,10 @@ class BaseEventConsumer(BaseZMQClient):
             ) -> None:
         self._terminate_context = context == None
         if isinstance(self, BaseSyncZMQ):
-            self.context = context or zmq.Context()
+            self.context = context or global_config.zmq_context(asynch=False)
             self.poller = zmq.Poller()
         elif isinstance(self, BaseAsyncZMQ):
-            self.context = context or zmq.asyncio.Context()
+            self.context = context or global_config.zmq_context(asynch=True)
             self.poller = zmq.asyncio.Poller()
         else:
             raise TypeError("BaseEventConsumer must be subclassed by either BaseSyncZMQ or BaseAsyncZMQ")

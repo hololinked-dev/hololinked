@@ -1,7 +1,6 @@
 import typing 
 import msgspec
 from uuid import uuid4
-from zmq.utils.monitor import parse_monitor_message
 
 from ...constants import JSON, ZMQ_EVENT_MAP, byte_types
 from ...serializers.serializers import Serializers

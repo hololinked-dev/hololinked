@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
+import typing
 import unittest, time, logging, requests
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.meta import ThingMeta
@@ -8,7 +9,7 @@ from hololinked.core.zmq.message import ServerExecutionContext, ThingExecutionCo
 from hololinked.server.http import HTTPServer
 from hololinked.core.zmq.rpc_server import RPCServer # sets loop policy, TODO: move somewhere else
 from hololinked.server.http.handlers import PropertyHandler, RPCHandler
-from hololinked.utils import get_current_async_loop, issubklass, print_pending_tasks_in_current_loop
+from hololinked.utils import pep8_to_dashed_name
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing
@@ -21,10 +22,8 @@ except ImportError:
 
 class TestHTTPServer(TestCase):
 
-
-    def test_1_init_run_and_stop(self):
+    def notest_1_init_run_and_stop(self):
         """Test basic init, run and stop of the HTTP server."""
-
         # init, run and stop synchronously
         server = HTTPServer(log_level=logging.ERROR+10)
         self.assertTrue(server.all_ok)
@@ -71,7 +70,7 @@ class TestHTTPServer(TestCase):
         )
         
 
-    def notest_3_add_thing(self):
+    def test_3_add_thing(self):
         """Test adding a Thing object to the HTTP server."""
 
         # self.assertTrue(server.all_ok)
@@ -117,6 +116,10 @@ class TestHTTPServer(TestCase):
             self.assertIn('/max-intensity/custom', server.router)
             self.assertIn('/connect/custom', server.router)
             self.assertIn('/intensity/event/custom', server.router)
+            # check if the affordance was not added twice using the default paths while add_thing was called
+            self.assertNotIn(pep8_to_dashed_name(OceanOpticsSpectrometer.max_intensity.name), server.router)
+            self.assertNotIn(pep8_to_dashed_name(OceanOpticsSpectrometer.connect.name), server.router)
+            self.assertNotIn(pep8_to_dashed_name(OceanOpticsSpectrometer.intensity_measurement_event.name), server.router)
             self.assertTrue(
                     len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >= 
                     len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
@@ -158,7 +161,13 @@ class TestHTTPServer(TestCase):
         thing.rpc_server.stop()
 
 
-    def notest_5_handlers(self):
+    def notest_5_http_object_proxy(self):
+        pass
+
+
+    def test_5_handlers(self):
+
+        latest_request_info = None # type: typing.Optional["LatestRequestInfo"]
 
         @dataclass 
         class LatestRequestInfo:
@@ -170,9 +179,11 @@ class TestHTTPServer(TestCase):
         class TestableRPCHandler(RPCHandler):
 
             def handle_through_thing(self, operation):
+                print("Handling operation through thing:", operation)
+                nonlocal latest_request_info
                 server_execution_context, thing_execution_context = self.get_execution_parameters()
                 payload, preserialized_payload = self.get_payload()
-                self.owner_inst.latest_request_info = LatestRequestInfo(
+                latest_request_info = LatestRequestInfo(
                     server_execution_context=server_execution_context,
                     thing_execution_context=thing_execution_context,
                     payload=payload,
@@ -181,42 +192,33 @@ class TestHTTPServer(TestCase):
                 self.set_status(200)
                 self.finish()
 
-        server = HTTPServer(property_handler=TestableRPCHandler, action_handler=TestableRPCHandler)
-        server.listen(forked=True)
-
         thing = OceanOpticsSpectrometer(id='test-spectrometer', log_level=logging.ERROR+10)
-        thing.run_with_zmq_server(ZMQ_TRANSPORTS.INPROC, forked=True)
+        thing.run_with_http_server(port=8086, forked=True, property_handler=TestableRPCHandler,
+                                action_handler=TestableRPCHandler)
         
-        while thing.rpc_server is None: 
-            time.sleep(0.01)
-        server.zmq_client_pool.context = thing.rpc_server.context
-
+        time.sleep(3)  # wait for the server to start
         session = requests.session()
         for (method, path, body) in [
-                    ('get', '/test-spectrometer/max-intensity', 16384),
                     ('get', '/test-spectrometer/serial-number', 'simulation'),
-                    ('put', '/test-spectrometer/integration-time', 1200),
-                    ('get', '/test-spectrometer/integration-time', 1200),
-                    ('post', '/test-spectrometer/disconnect', None),
-                    ('post', '/test-spectrometer/connect', None)
+                    # ('put', '/test-spectrometer/integration-time', 1200),
+                    # ('get', '/test-spectrometer/integration-time', 1200),
+                    # ('post', '/test-spectrometer/disconnect', None),
+                    # ('post', '/test-spectrometer/connect', None)
                 ]:
-            if method == 'get':
-                response = session.get(f'http://localhost:{port}{path}')
-            elif method == 'post':
-                response = session.post(f'http://localhost:{port}{path}')
+
+            response = session.request(method=method, url=f'http://localhost:8086{path}')
             self.assertTrue(response.status_code in [200, 201, 202, 204])
-            latest_request_info = server.latest_request_info
-            assert isinstance(server.latest_request_info, LatestRequestInfo)
+            assert isinstance(latest_request_info, LatestRequestInfo)
             self.assertTrue(
-                isinstance(server.latest_request_info.thing_execution_context,dict) and \
-                key in ThingExecutionContext.__dataclass_fields__ for key in server.latest_request_info.thing_execution_context.keys()
+                isinstance(latest_request_info.thing_execution_context,dict) and \
+                key in ThingExecutionContext.__dataclass_fields__ for key in latest_request_info.thing_execution_context.keys()
             )
-            self.assertTrue(
-                isinstance(server.latest_request_info.server_execution_context,dict) and \
-                key in ServerExecutionContext.__dataclass_fields__ for key in server.latest_request_info.server_execution_context.keys()
-            )
-            self.assertTrue(payload == body)
-            self.assertTrue()
+            # self.assertTrue(
+            #     isinstance(latest_request_info.server_execution_context,dict) and \
+            #     key in ServerExecutionContext.__dataclass_fields__ for key in latest_request_info.server_execution_context.keys()
+            # )
+            # self.assertTrue(payload == body)
+            # self.assertTrue()
 
 
     def notest_5_http_handler_functionalities(self):

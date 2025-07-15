@@ -264,7 +264,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         
 
     @forkable # noqa: F405
-    def run_with_http_server(self, port: int = 8080, address: str = '0.0.0.0', 
+    def run_with_http_server(self, 
+                port: int = 8080, address: str = '0.0.0.0', 
                 # host: str = None, 
                 allowed_clients: str | typing.Iterable[str] | None = None,   
                 ssl_context: ssl.SSLContext | None = None, 
@@ -326,6 +327,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         http_server.zmq_client_pool.context = self.rpc_server.context # TODO: issue https://github.com/hololinked-dev/hololinked/issues/84
         http_server.add_thing(dict(INPROC=self.id))
         assert http_server.all_ok
+        http_server.router.print_rules()
         http_server.listen()
 
 

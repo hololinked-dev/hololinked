@@ -31,7 +31,7 @@ import zmq.asyncio
 
 from . import __version__
 from .serializers.serializers import PythonBuiltinJSONSerializer
-
+from .utils import get_current_async_loop
 
 class Configuration:
     """
@@ -92,6 +92,8 @@ class Configuration:
         'VALIDATE_SCHEMA_ON_CLIENT', 'VALIDATE_SCHEMAS',
         # ZMQ
         "ZMQ_CONTEXT"
+        # make debugging easier
+        "DEBUG"
     ]
 
     def __init__(self, use_environment : bool = False):
@@ -111,7 +113,9 @@ class Configuration:
         self.TRACE_MALLOC = False
         self.VALIDATE_SCHEMA_ON_CLIENT = False
         self.VALIDATE_SCHEMAS = True
-        self.ZMQ_CONTEXT = zmq.asyncio.Context()
+        self.ZMQ_ASYNC_CONTEXT = zmq.asyncio.Context()
+        self.ZMQ_SYNC_CONTEXT = zmq.Context()
+        self.DEBUG = False
 
         if not use_environment:
             return 
@@ -142,7 +146,15 @@ class Configuration:
     def asdict(self):
         "returns this config as a regular dictionary"
         return {item: getattr(self, item) for item in self.__slots__}
-
+    
+    def zmq_context(self, asynch: bool = True) -> zmq.Context | zmq.asyncio.Context:
+        """
+        Returns a global ZMQ context based on the asynch flag. 
+        Intended to share the same context across an application.
+        """
+        if asynch:
+            return self.ZMQ_ASYNC_CONTEXT
+        return self.ZMQ_SYNC_CONTEXT
 
 global_config = Configuration()
 

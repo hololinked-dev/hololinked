@@ -451,13 +451,13 @@ class EventHandler(BaseHandler):
         called by GET method and handles the event.
         """
         try:                        
-            event_consumer_cls = EventConsumer if self.owner_inst._zmq_inproc_event_context is not None else AsyncEventConsumer
+            event_consumer_cls = EventConsumer if global_config.zmq_context(asynch=True) is not None else AsyncEventConsumer
             # synchronous context with INPROC pub or asynchronous context with IPC or TCP pub, we handle both in async 
             # fashion as HTTP server should be running purely sync(or normal) python method.
             event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
                                             identity=f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
                                             logger=self.logger, http_serializer=self.serializer, 
-                                            context=self.owner_inst._zmq_inproc_event_context if self.resource.socket_address.startswith('inproc') else None)
+                                            context=global_config.zmq_context(asynch=True))
             event_loop = asyncio.get_event_loop()
             self.set_status(200)
         except Exception as ex:
@@ -487,8 +487,9 @@ class EventHandler(BaseHandler):
                 self.write(self.data_header % self.serializer.dumps(
                     {"exception" : format_exception_as_json(ex)}))
         try:
-            if isinstance(self.owner_inst._zmq_inproc_event_context, zmq.asyncio.Context):
-                event_consumer.exit()
+            # if isinstance(self.owner_inst._zmq_inproc_event_context, zmq.asyncio.Context):
+            # TODO - check if this is bug free
+            event_consumer.exit()
         except Exception as ex:
             self.logger.error(f"error while closing event consumer - {str(ex)}" )
 

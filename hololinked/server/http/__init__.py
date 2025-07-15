@@ -171,9 +171,6 @@ class HTTPServer(Parameterized):
         self._disconnected_things = dict()
         self._registered_things = dict() # type: typing.Dict[typing.Type[ThingMeta], typing.List[str]]
         
-        self._zmq_inproc_socket_context = None 
-        self._zmq_inproc_event_context = None
-
         if self.things is not None:
             self.add_things(*self.things)
     
@@ -216,8 +213,8 @@ class HTTPServer(Parameterized):
         self.tornado_event_loop.start()
         if forked:
             complete_pending_tasks_in_current_loop() # will reach here only when the server is stopped, so complete pending tasks
-       
-        
+
+
     def stop(self, attempt_async_stop: bool = True) -> None:
         """
         Stop the HTTP server - unreliable, use async_stop() if possible. 
@@ -395,7 +392,6 @@ class HTTPServer(Parameterized):
             raise ValueError("http_method should be a single HTTP method")
         if isinstance(action, Action):
             action = action.to_affordance() # type: ActionAffordance
-            # action._build_forms()
         kwargs['resource'] = action
         kwargs['owner_inst'] = self
         self.router.add_rule(
@@ -432,7 +428,6 @@ class HTTPServer(Parameterized):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(event, Event):
             event = event.to_affordance()
-            # event._build_forms()
         kwargs['resource'] = event
         kwargs['owner_inst'] = self
         self.router.add_rule(
@@ -510,7 +505,9 @@ class ApplicationRouter:
                 kwargs: dict,
             ) -> None:              
         """
-        Add rules to the application router. This is a temporary method to add rules to the application router.
+        Add rules to the application router. Note that this method will replace existing rules and can duplicate
+        endpoints for an affordance without checks (i.e. you could technically add two different endpoints for the 
+        same affordance).
         """
         for rule in self.app.wildcard_router.rules:
             if rule.matcher == URL_path:
@@ -524,8 +521,7 @@ class ApplicationRouter:
             if not URL_path.startswith(f'/{affordance.thing_id}'):
                 URL_path = f'/{affordance.thing_id}{URL_path}'
                 warnings.warn(f"URL path {URL_path} does not start with the thing id {affordance.thing_id}," 
-                            + f" adding it to the path, new path = {URL_path}. To disable this behavior, "
-                            + f" please prepend the path with the thing id.")  
+                            + f" adding it to the path, new path = {URL_path}. This warning can be usually safely ignored.")  
             self.app.wildcard_router.add_rules([(URL_path, handler, kwargs)])
         else:
             self._pending_rules.append((URL_path, handler, kwargs))
@@ -591,10 +587,10 @@ class ApplicationRouter:
             item = item.to_affordance()
         if isinstance(item, (PropertyAffordance, ActionAffordance, EventAffordance)):
             for rule in self.app.wildcard_router.rules:
-                if rule.target_kwargs["resource"] == item:
+                if rule.target_kwargs.get("resource", None) == item:
                     return True
             for rule in self._pending_rules:
-                if rule[2]["resource"] == item:
+                if rule[2].get("resource", None) == item:
                     return True
         return False
     
