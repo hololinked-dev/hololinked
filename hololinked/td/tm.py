@@ -7,7 +7,7 @@ from .forms import *
 from .security_definitions import *
 from .metadata import *
 from .interaction_affordance import *
-from ..core.state_machine import StateMachine
+from ..core.state_machine import BoundFSM
 
 
 class ThingModel(Schema):
@@ -75,7 +75,7 @@ class ThingModel(Schema):
                 if (    
                     name == 'state' and affordance == 'properties' and
                     (not hasattr(self.instance, 'state_machine') or 
-                    not isinstance(self.instance.state_machine, StateMachine))
+                    not isinstance(self.instance.state_machine, BoundFSM))
                 ):
                     continue
                 try:

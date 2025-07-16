@@ -156,6 +156,24 @@ class Configuration:
             return self.ZMQ_ASYNC_CONTEXT
         return self.ZMQ_SYNC_CONTEXT
     
+    def set_default_server_execution_context(self, 
+        invokation_timeout: typing.Optional[int] = None,
+        execution_timeout: typing.Optional[int] = None,
+        oneway: bool = False
+    ) -> None:
+        """Sets the default server execution context for the application"""
+        from .core.zmq.message import default_server_execution_context
+        default_server_execution_context.invokationTimeout = invokation_timeout or 5
+        default_server_execution_context.executionTimeout = execution_timeout or 5
+        default_server_execution_context.oneway = oneway
+
+    def set_default_thing_execution_context(self,
+        fetch_execution_logs: bool = False,
+    ) -> None:
+        """Sets the default thing execution context for the application"""
+        from .core.zmq.message import default_thing_execution_context
+        default_thing_execution_context.fetchExecutionLogs = fetch_execution_logs
+    
     def __del__(self):
         for context in [self.ZMQ_ASYNC_CONTEXT, self.ZMQ_SYNC_CONTEXT]:
             try:

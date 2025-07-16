@@ -9,7 +9,8 @@ from tornado.iostream import StreamClosedError
 from ...utils import *
 from ...config import global_config
 from ...core.zmq.brokers import AsyncEventConsumer, EventConsumer
-from ...core.zmq.message import EMPTY_BYTE, ResponseMessage, default_server_execution_context, default_thing_execution_context
+from ...core.zmq.message import (EMPTY_BYTE, ResponseMessage, default_server_execution_context, 
+                            default_thing_execution_context, ThingExecutionContext, ServerExecutionContext)
 from ...constants import JSONSerializable, Operations
 from ...schema_validators import BaseSchemaValidator
 from ...serializers.payloads import PreserializedData, SerializableData
@@ -101,13 +102,12 @@ class BaseHandler(RequestHandler):
                     arguments[key] = self.serializer.loads(value[0]) 
                 else:
                     arguments[key] = [self.serializer.loads(val) for val in value]
-            thing_execution_context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
-            server_execution_context = dict(
-                                            invokation_timeout=arguments.pop('invokation_timeout', None), 
-                                            execution_timeout=arguments.pop('execution_timeout', None),
-                                            oneway=arguments.pop('oneway', False)
-                                        )
-            
+            thing_execution_context = ThingExecutionContext(fetchExecutionLogs=bool(arguments.pop('fetchExecutionLogs', False)))
+            server_execution_context = ServerExecutionContext(
+                invokationTimeout=arguments.pop('invokationTimeout', default_server_execution_context.invokationTimeout),
+                executionTimeout=arguments.pop('executionTimeout', default_server_execution_context.executionTimeout),
+                oneway=arguments.pop('oneway', default_server_execution_context.oneway)
+            )
             # if timeout is not None and timeout < 0:
             #     timeout = None # reinstate logic soon
             # if self.resource.request_as_argument:
