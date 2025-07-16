@@ -77,7 +77,6 @@ class TestSerializer(TestCase):
         # so the length of content types should be the same
         self.assertEqual(len(Serializers.content_types), num_serializers)
 
-        
         # instantiate
         yaml_serializer = self.YAMLSerializer()
         # register with name

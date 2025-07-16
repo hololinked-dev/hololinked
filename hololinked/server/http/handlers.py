@@ -26,7 +26,8 @@ class BaseHandler(RequestHandler):
 
     def initialize(self, 
                 resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance, 
-                owner_inst = None
+                owner_inst = None,
+                metadata: typing.Optional[typing.Dict[str, typing.Any]] = None
             ) -> None:
         """
         Parameters
@@ -46,6 +47,7 @@ class BaseHandler(RequestHandler):
         self.serializer = self.owner_inst.serializer
         self.logger = self.owner_inst.logger
         self.allowed_clients = self.owner_inst.allowed_clients
+        self.metadata = metadata or {}
 
     @property
     def has_access_control(self) -> bool:
@@ -54,15 +56,17 @@ class BaseHandler(RequestHandler):
         web handlers can use this property to check if a client has access control on the server or ``Thing``.
         """
         if len(self.allowed_clients) == 0:
-            self.set_header("Access-Control-Allow-Origin", "*")
+            if global_config.SET_CORS_HEADERS or self.owner_inst.config.get("set_cors_headers", False):
+                self.set_header("Access-Control-Allow-Origin", "*")
             return True
         # For credential login, access control allow origin cannot be '*',
         # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
         origin = self.request.headers.get("Origin")
         if origin is not None and (origin in self.allowed_clients or origin + '/' in self.allowed_clients):
-            self.set_header("Access-Control-Allow-Origin", origin)
+            if global_config.SET_CORS_HEADERS or self.owner_inst.config.get("set_cors_headers", False):
+                self.set_header("Access-Control-Allow-Origin", origin)
             return True
-        self.set_status(401, "authentication invalid or not supported")    
+        self.set_status(401, "authentication invalid")    
         return False
 
     def set_access_control_allow_headers(self) -> None:
@@ -83,7 +87,7 @@ class BaseHandler(RequestHandler):
         raise NotImplementedError("implement set headers in child class to automatically call it" +
                             " while directing the request to Thing")
     
-    def get_execution_parameters(self) -> typing.Tuple[typing.Dict[str, typing.Any], typing.Dict[str, typing.Any]]:
+    def get_execution_parameters(self) -> typing.Tuple[ServerExecutionContext, ThingExecutionContext]:
         """
         merges all arguments to a single JSON body and retrieves execution context (like oneway calls, fetching executing
         logs) and timeouts
@@ -108,7 +112,7 @@ class BaseHandler(RequestHandler):
             return server_execution_context, thing_execution_context
         return default_server_execution_context, default_thing_execution_context
     
-    def get_payload(self) -> typing.Tuple[SerializableData, PreserializedData]:
+    def get_request_payload(self) -> typing.Tuple[SerializableData, PreserializedData]:
         """
         retrieves the payload from the request body and deserializes it. 
         """
@@ -127,20 +131,20 @@ class BaseHandler(RequestHandler):
                 # This error will be raised only when a specified content type is not supported.
         return payload, preserialized_payload
     
-    def get_response_payload(self, zmq_response: ResponseMessage) -> typing.Any:
+    def get_response_payload(self, zmq_response: ResponseMessage) -> PreserializedData | SerializableData:
         """
         cached return value of the last call to the method
         """
         # print("zmq_response - ", zmq_response)
         if zmq_response is None:
             raise RuntimeError("No last response available. Did you make an operation?")
-        payload = zmq_response.payload.value # dont deseriablize, there is no need, just pass it on to the client
-        preserialized_payload = zmq_response.preserialized_payload.value
-        if preserialized_payload != EMPTY_BYTE:
-            if payload is None:
-                return preserialized_payload
-            return payload, preserialized_payload
-        return payload
+        if zmq_response.preserialized_payload.value != EMPTY_BYTE:
+            if zmq_response.payload.value:
+                self.logger.warning("Multiple content types in response payload, only the latter will be written to the wire")
+            # multiple content types are not supported yet, so we return only one payload
+            return zmq_response.preserialized_payload
+            # return payload, preserialized_payload
+        return zmq_response.payload # dont deseriablize, there is no need, just pass it on to the client
     
     async def get(self) -> None:
         """
@@ -179,6 +183,17 @@ class RPCHandler(BaseHandler):
     """
     Handler for property read-write and method calls
     """
+    def is_method_allowed(self, method : str) -> bool:
+        """
+        checks if the method is allowed for the property. 
+        """
+        if not self.has_access_control:
+            return False
+        if method not in self.metadata.get("http_methods", []):
+            self.set_status(405, "method not allowed")
+            self.finish()
+            return False
+        return True
 
     def set_headers(self) -> None:
         """
@@ -190,7 +205,6 @@ class RPCHandler(BaseHandler):
             Access-Control-Allow-Credentials: true
             Access-Control-Allow-Origin: <client>
         """
-        self.set_header("Content-Type" , "application/json")    
         self.set_header("Access-Control-Allow-Credentials", "true")
     
     async def options(self) -> None:
@@ -202,9 +216,7 @@ class RPCHandler(BaseHandler):
             self.set_status(204)
             self.set_access_control_allow_headers()
             self.set_header("Access-Control-Allow-Credentials", "true")
-            self.set_header("Access-Control-Allow-Methods", ', '.join(self.resource.instructions.supported_methods()))
-        else:
-            self.set_status(401, "forbidden")
+            self.set_header("Access-Control-Allow-Methods", ', '.join(self.metadata.get("http_methods", [])))
         self.finish()
     
     async def handle_through_thing(self, operation : str) -> None:
@@ -213,17 +225,16 @@ class RPCHandler(BaseHandler):
         """
         try:
             server_execution_context, thing_execution_context = self.get_execution_parameters()
-            # print(f"server execution context - {server_execution_context}, thing execution context - {thing_execution_context}")
-            payload, preserialized_payload = self.get_payload()
-            # print(f"payload - {payload}, preserialized payload - {preserialized_payload}")
-            if self.schema_validator is not None and global_config.VALIDATE_SCHEMA_ON_CLIENT:
-                self.schema_validator.validate(payload)
+            payload, preserialized_payload = self.get_request_payload()
         except Exception as ex:
             self.set_status(400, "error while decoding request")
             self.set_headers()
             self.finish()
             return 
         try:
+            # TODO - add schema validation here, we are anyway validating at some point within the ZMQ server   
+            # if self.schema_validator is not None and global_config.VALIDATE_SCHEMA_ON_CLIENT:
+            #     self.schema_validator.validate(payload)
             response_message = await self.zmq_client_pool.async_execute(
                                     client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
                                     thing_id=self.resource.thing_id,
@@ -234,9 +245,7 @@ class RPCHandler(BaseHandler):
                                     server_execution_context=server_execution_context,
                                     thing_execution_context=thing_execution_context
                                 )                                 
-            payload = self.get_response_payload(response_message)
-            self.set_status(200, "ok")
-            # print(f"payload {self.request.path} - {payload}")
+            response_payload = self.get_response_payload(response_message)
         except ConnectionAbortedError as ex:
             self.set_status(503, str(ex))
             # event_loop = asyncio.get_event_loop()
@@ -250,28 +259,22 @@ class RPCHandler(BaseHandler):
             self.logger.error(f"error while scheduling RPC call - {str(ex)}")
             self.logger.debug(f"traceback - {ex.__traceback__}")
             self.set_status(500, "error while scheduling RPC call")
-            payload = self.serializer.dumps({"exception" : format_exception_as_json(ex)})
-        self.set_headers()
-        if payload:
-            self.write(payload)
+            response_payload = SerializableData(
+                value=self.serializer.dumps({"exception" : format_exception_as_json(ex)}),
+                content_type="application/json"
+            )
+            response_payload.serialize()
+        else:
+            self.set_status(200, "ok")
+            self.set_header("Content-Type" , response_payload.content_type or "application/json")    
+        self.set_headers() # remaining headers are set here
+        if response_payload.value:
+            self.write(response_payload.value)
         self.finish()
 
 
 
 class PropertyHandler(RPCHandler):
-
-    def is_method_allowed(self, method : str) -> bool:
-        """
-        checks if the method is allowed for the property. 
-        """
-        if not self.has_access_control:
-            return False
-        if (method == 'GET' and self.resource.writeOnly) or \
-            (method == 'POST' or method == 'PUT' and self.resource.readOnly):
-            self.set_status(405, "method not allowed")
-            self.finish()
-            return False
-        return True
 
     async def get(self) -> None:
         """
@@ -307,49 +310,7 @@ class PropertyHandler(RPCHandler):
         
 
 
-class JPEGImageHandler(PropertyHandler):
-
-    def set_headers(self) -> None:
-        """
-        sets default headers for image handling. The general headers are listed as follows:
-
-        ```yaml 
-        Content-Type: image/jpeg
-        Access-Control-Allow-Credentials: true
-        Access-Control-Allow-Origin: <client>
-        ```
-        """
-        self.set_header("Content-Type", "image/jpeg")
-        self.set_header("Access-Control-Allow-Credentials", "true")
-
-
-
-class PNGImageHandler(PropertyHandler):
-
-    def set_headers(self) -> None:
-        """
-        sets default headers for image handling. The general headers are listed as follows:
-
-        ```yaml 
-        Content-Type: image/png
-        Access-Control-Allow-Credentials: true
-        Access-Control-Allow-Origin: <client>
-        ```
-        """
-        self.set_header("Content-Type", "image/png")
-        self.set_header("Access-Control-Allow-Credentials", "true")
-
-
-
 class ActionHandler(RPCHandler):
-
-    def is_method_allowed(self, method : str) -> bool:
-        """
-        checks if the method is allowed for the property. 
-        """
-        if not self.has_access_control:
-            return False
-        return True
     
     async def get(self) -> None:
         """
@@ -417,8 +378,6 @@ class EventHandler(BaseHandler):
         if self.has_access_control:
             self.set_headers()
             await self.handle_datastream()
-        else:
-            self.set_status(401, "forbidden")
         self.finish()
 
     async def options(self):

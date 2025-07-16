@@ -311,9 +311,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self.run_with_zmq_server(
             transports=ZMQ_TRANSPORTS.INPROC, 
             forked=True
-        )
-        while not self.rpc_server or not self.rpc_server.is_running:
-            time.sleep(0.01)       
+        )  
         http_server = HTTPServer(
             [], 
             port=port, 
@@ -325,7 +323,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             **kwargs
         )
         http_server.add_thing(dict(INPROC=self.id))
-        assert http_server.all_ok
         http_server.listen()
 
 

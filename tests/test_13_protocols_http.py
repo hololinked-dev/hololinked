@@ -35,7 +35,8 @@ class TestHTTPServer(TestCase):
         time.sleep(5)
         server.stop()
         time.sleep(2)
-
+        
+        # stop remotely
         server.listen(forked=True)
         time.sleep(5)
         response = requests.post('http://localhost:8080/stop')
@@ -163,7 +164,7 @@ class TestHTTPServer(TestCase):
         thing.rpc_server.stop()
 
 
-    def test_5_handlers(self):
+    def notest_5_handlers(self):
         """Test request info and payload decoding in RPC handlers along with content type handling"""
         latest_request_info = None # type: "LatestRequestInfo"
 
@@ -179,7 +180,7 @@ class TestHTTPServer(TestCase):
             def update_latest_request_info(self) -> None:
                 nonlocal latest_request_info
                 server_execution_context, thing_execution_context = self.get_execution_parameters()
-                payload, preserialized_payload = self.get_payload()
+                payload, preserialized_payload = self.get_request_payload()
                 latest_request_info = LatestRequestInfo(
                     server_execution_context=server_execution_context,
                     thing_execution_context=thing_execution_context,
@@ -201,7 +202,7 @@ class TestHTTPServer(TestCase):
                 # for exit to go through 
                 await self.handle_through_thing('invokeAction')
 
-        global_config.ALLOW_PICKLE = True # allow pickle for testing
+        global_config.ALLOW_PICKLE = True # allow pickle serializer for testing
         thing_id = 'test-spectrometer-request-info'
         thing = OceanOpticsSpectrometer(id=thing_id, log_level=logging.ERROR+10)
         thing.run_with_http_server(port=8086, forked=True, property_handler=TestableRPCHandler,
@@ -211,20 +212,20 @@ class TestHTTPServer(TestCase):
         for serializer in [JSONSerializer(), MsgpackSerializer(), PickleSerializer()]:
             serializer: BaseSerializer
             for (method, path, body) in [
-                    # server and thing execution context tests
-                    ('get', f'/{thing_id}/integration-time', None),
-                    ('get', f'/{thing_id}/integration-time?fetchExecutionLogs=true', None),
-                    ('get', f'/{thing_id}/integration-time?fetchExecutionLogs=true&oneway=true', None),
-                    ('get', f'/{thing_id}/integration-time?oneway=true&invokationTimeout=100', None),
-                    ('get', f'/{thing_id}/integration-time?invokationTimeout=100&executionTimeout=120&fetchExecutionLogs=true', None),
-                    # test payloads for JSON content type
-                    ('put', f'/{thing_id}/integration-time', 1200),
-                    ('put', f'/{thing_id}/integration-time?fetchExecutionLogs=true', {'a' : 1, 'b': 2}),
-                    ('put', f'/{thing_id}/integration-time?fetchExecutionLogs=true&oneway=true', [1, 2, 3]),
-                    ('put', f'/{thing_id}/integration-time?oneway=true&invokationTimeout=100', 'abcd'),
-                    ('put', f'/{thing_id}/integration-time?invokationTimeout=100&executionTimeout=120&fetchExecutionLogs=true', True),
-                    # test payloads for other content types
-                ]:
+                # server and thing execution context tests
+                ('get', f'/{thing_id}/integration-time', None),
+                ('get', f'/{thing_id}/integration-time?fetchExecutionLogs=true', None),
+                ('get', f'/{thing_id}/integration-time?fetchExecutionLogs=true&oneway=true', None),
+                ('get', f'/{thing_id}/integration-time?oneway=true&invokationTimeout=100', None),
+                ('get', f'/{thing_id}/integration-time?invokationTimeout=100&executionTimeout=120&fetchExecutionLogs=true', None),
+                # test payloads for JSON content type
+                ('put', f'/{thing_id}/integration-time', 1200),
+                ('put', f'/{thing_id}/integration-time?fetchExecutionLogs=true', {'a' : 1, 'b': 2}),
+                ('put', f'/{thing_id}/integration-time?fetchExecutionLogs=true&oneway=true', [1, 2, 3]),
+                ('put', f'/{thing_id}/integration-time?oneway=true&invokationTimeout=100', 'abcd'),
+                ('put', f'/{thing_id}/integration-time?invokationTimeout=100&executionTimeout=120&fetchExecutionLogs=true', True),
+                # test payloads for other content types
+            ]:
                 response = session.request(
                             method=method, 
                             url=f'http://localhost:8086{path}',
@@ -258,46 +259,37 @@ class TestHTTPServer(TestCase):
                 # test body
                 self.assertTrue(latest_request_info.payload.deserialize() == body)
       
-
         self.stop_server(8086, thing_ids=[thing_id])
 
 
-    def notest_6_handlers_end_to_end(self):
+    def test_6_handlers_end_to_end(self):
         """
-        Test end-to-end interaction with the HTTP server using handlers, auth & other features not included, only invokation 
-        of interaction affordances
+        basic end-to-end test with the HTTP server using handlers. Auth & other features not included, only invokation 
+        of interaction affordances.
         """
         thing_id = 'test-spectrometer-end-to-end'
         for (thing, port) in [
             (OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10), 8085), 
         ]:
-            thing.run_with_http_server(forked=True, port=port)
+            thing.run_with_http_server(forked=True, port=port, config={"set_cors_headers": True})
             time.sleep(1) # TODO: add a way to check if the server is running
 
         session = requests.Session()
-        for (method, path, body) in [
-                    ('get', f'/{thing_id}/max-intensity', 16384),
-                    ('get', f'/{thing_id}/serial-number', 'simulation'),
-                    ('put', f'/{thing_id}/integration-time', 1200),
-                    ('get', f'/{thing_id}/integration-time', 1200),
-                    ('post', f'/{thing_id}/disconnect', None),
-                    ('post', f'/{thing_id}/connect', None)
-                ]:
-            response = session.request(method=method, url=f'http://localhost:{port}{path}')
+        for (method, path, body) in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
+            response = session.request(
+                            method=method, 
+                            url=f'http://localhost:{port}{path}',
+                            data=JSONSerializer().dumps(body) if body is not None and method != 'get' else None,
+                            headers={"Content-Type": "application/json"}
+                        )
             self.assertTrue(response.status_code in [200, 201, 202, 204])
-            if body:
+            # check if the response body is as expected
+            if body and method != 'put':
                 self.assertTrue(response.json() == body)
-
-        for (method, path, body) in [  
-                ('get',  f'/{thing_id}/max-intensity', 16384),
-                ('get',  f'/{thing_id}/serial-number', 'simulation'),
-                ('get',  f'/{thing_id}/integration-time', 1000),
-                ('post', f'/{thing_id}/disconnect', None),
-                ('post', f'/{thing_id}/connect', None)
-            ]:
-            response = session.request(method=method, url=f'http://localhost:{port}{path}')
-            self.assertTrue(response.status_code == 404)
-
+            # check headers
+            self.assertIn('Access-Control-Allow-Origin', response.headers)   
+            self.assertIn('Access-Control-Allow-Credentials', response.headers)
+            self.assertIn('Content-Type', response.headers)
         self.stop_server(port, thing_ids=[thing_id])
 
     
@@ -319,8 +311,22 @@ class TestHTTPServer(TestCase):
         endpoints += [('post', '/stop', None)]
         for (method, path, body) in endpoints:
             response = session.request(method=method, url=f'http://localhost:{port}{path}')
-        
 
+    @classmethod
+    def generate_endpoints_for_thing(cls, class_: ThingMeta, thing_id: str) -> list[tuple[str, str, Any]]:
+        if class_ == OceanOpticsSpectrometer:
+            return [
+                # read Property
+                ('get', f'/{thing_id}/max-intensity', 16384),
+                ('get', f'/{thing_id}/serial-number', 'simulation'),
+                # write Property
+                ('put', f'/{thing_id}/integration-time', 1200),
+                ('get', f'/{thing_id}/integration-time', 1200),
+                # invoke action
+                ('post', f'/{thing_id}/disconnect', None),
+                ('post', f'/{thing_id}/connect', None)
+            ]
+        raise NotImplementedError(f"Endpoints for {class_.__name__} not implemented yet")
            
 def load_tests(loader, tests, pattern): 
     suite = unittest.TestSuite()

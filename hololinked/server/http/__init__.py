@@ -11,9 +11,11 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 
 from ...param import Parameterized
-from ...param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, String
-from ...constants import HTTP_METHODS, ZMQ_TRANSPORTS, HTTPServerTypes, Operations
-from ...utils import complete_pending_tasks_in_current_loop, complete_pending_tasks_in_current_loop_async, forkable, get_IP_from_interface, get_current_async_loop, issubklass, pep8_to_dashed_name, get_default_logger, print_pending_tasks_in_current_loop, run_callable_somehow
+from ...param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, String, TypedDict
+from ...constants import HTTP_METHODS
+from ...utils import (complete_pending_tasks_in_current_loop, forkable, get_IP_from_interface, 
+                    get_current_async_loop, issubklass, pep8_to_dashed_name, 
+                    get_default_logger, run_callable_somehow)
 from ...serializers.serializers import JSONSerializer
 from ...schema_validators import BaseSchemaValidator, JSONSchemaValidator
 from ...core.property import Property
@@ -22,7 +24,7 @@ from ...core.events import Event
 from ...core.thing import Thing, ThingMeta
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...core.zmq.brokers import AsyncZMQClient, MessageMappedZMQClientPool
-from .handlers import ActionHandler, PropertyHandler, BaseHandler, EventHandler, ThingsHandler, StopHandler
+from .handlers import ActionHandler, PropertyHandler, EventHandler, BaseHandler, ThingsHandler, StopHandler, RPCHandler
 
 
 
@@ -69,15 +71,17 @@ class HTTPServer(Parameterized):
     #                         doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
     #                         therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
     #                         you may leave this field" ) # type: str
-    property_handler = ClassSelector(default=PropertyHandler, class_=(PropertyHandler, BaseHandler), isinstance=False, 
-                            doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, PropertyHandler]
-    action_handler = ClassSelector(default=ActionHandler, class_=(ActionHandler, BaseHandler), isinstance=False, 
-                            doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, ActionHandler]
-    event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, BaseHandler), isinstance=False, 
-                            doc="custom event handler of your choice for handling events") # type: typing.Union[BaseHandler, EventHandler]
+    property_handler = ClassSelector(default=PropertyHandler, class_=(PropertyHandler, RPCHandler), isinstance=False, 
+                            doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[RPCHandler, PropertyHandler]
+    action_handler = ClassSelector(default=ActionHandler, class_=(ActionHandler, RPCHandler), isinstance=False, 
+                            doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[RPCHandler, ActionHandler]
+    event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, RPCHandler), isinstance=False, 
+                            doc="custom event handler of your choice for handling events") # type: typing.Union[RPCHandler, EventHandler]
     schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JSONSchemaValidator, allow_None=True, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
-    
+    config = TypedDict(default=None, allow_None=True, 
+                        doc="""Set CORS headers for the HTTP server. If set to False, CORS headers are not set. 
+                        This is useful when the server is used in a controlled environment where CORS is not needed.""") # type: bool
    
     def __init__(self, 
                 things : typing.List[str] | typing.List[Thing] | typing.List[ThingMeta] | None = None, 
@@ -94,6 +98,7 @@ class HTTPServer(Parameterized):
                 keyfile: str = None, 
                 # protocol_version : int = 1, network_interface : str = 'Ethernet', 
                 allowed_clients: typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   
+                config: typing.Optional[dict[str, typing.Any]] = None,
                 **kwargs
             ) -> None:
         """
@@ -121,7 +126,7 @@ class HTTPServer(Parameterized):
             serves request and sets CORS only from these clients, other clients are reject with 403. Unlike pure CORS
             feature, the server resource is not even executed if the client is not an allowed client.
         **kwargs:
-            rpc_handler: RPCHandler | BaseHandler, optional
+            rpc_handler: RPCHandler | RPCHandler, optional
                 custom web request handler of your choice for property read-write & action execution
             event_handler: EventHandler | BaseHandler, optional
                 custom event handler of your choice for handling events
@@ -143,7 +148,8 @@ class HTTPServer(Parameterized):
             property_handler=kwargs.get('property_handler', PropertyHandler),
             action_handler=kwargs.get('action_handler', ActionHandler),
             event_handler=kwargs.get('event_handler', EventHandler),
-            allowed_clients=allowed_clients if allowed_clients is not None else []
+            allowed_clients=allowed_clients if allowed_clients is not None else [],
+            config=config
         )
 
         self._IP = f"{self.address}:{self.port}"
@@ -352,6 +358,7 @@ class HTTPServer(Parameterized):
             raise ValueError("delete method should be DELETE")
         kwargs['resource'] = property
         kwargs['owner_inst'] = self
+        kwargs['metadata'] = dict(http_methods=http_methods)
         self.router.add_rule(
             affordance=property,
             URL_path=URL_path,
@@ -394,6 +401,7 @@ class HTTPServer(Parameterized):
             action = action.to_affordance() # type: ActionAffordance
         kwargs['resource'] = action
         kwargs['owner_inst'] = self
+        kwargs['metadata'] = dict(http_methods=http_methods)
         self.router.add_rule(
             affordance=action,
             URL_path=URL_path,
