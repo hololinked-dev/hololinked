@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import random
 from types import SimpleNamespace
 from typing import Any
 import typing
@@ -271,11 +272,13 @@ class TestHTTPServer(TestCase):
         for (thing, port) in [
             (OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10), 8085), 
         ]:
-            thing.run_with_http_server(forked=True, port=port, config={"set_cors_headers": True})
+            thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
             time.sleep(1) # TODO: add a way to check if the server is running
 
         session = requests.Session()
+        # test end to end
         for (method, path, body) in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
+            # request will go through the Thing object
             response = session.request(
                             method=method, 
                             url=f'http://localhost:{port}{path}',
@@ -290,6 +293,31 @@ class TestHTTPServer(TestCase):
             self.assertIn('Access-Control-Allow-Origin', response.headers)   
             self.assertIn('Access-Control-Allow-Credentials', response.headers)
             self.assertIn('Content-Type', response.headers)
+
+        # test unsupported HTTP methods
+        for (method, path, body) in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
+            response = session.request(
+                            method='post' if method in ['get', 'put'] else random.choice(['put', 'delete']) \
+                                if method == 'post' else method,
+                            # get and put become post and post becomes put
+                            # i.e swap the default HTTP method with an unsupported one to generate 405
+                            url=f'http://localhost:{port}{path}',
+                            data=JSONSerializer().dumps(body) if body is not None and method != 'get' else None,
+                            headers={"Content-Type": "application/json"}
+                        )
+            self.assertTrue(response.status_code == 405)
+
+        # check options for supported HTTP methods
+        for (method, path, body) in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
+            response = session.options(f'http://localhost:{port}{path}')
+            self.assertTrue(response.status_code in [200, 201, 202, 204])
+            self.assertIn('Access-Control-Allow-Origin', response.headers)
+            self.assertIn('Access-Control-Allow-Credentials', response.headers)
+            self.assertIn('Access-Control-Allow-Headers', response.headers)
+            self.assertIn('Access-Control-Allow-Methods', response.headers)
+            allow_methods = response.headers.get('Access-Control-Allow-Methods', [])
+            self.assertTrue(method.upper() in allow_methods, f"Method {method} not allowed in {allow_methods}")
+    
         self.stop_server(port, thing_ids=[thing_id])
 
     

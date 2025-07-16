@@ -8,6 +8,7 @@ from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 
 from ...param import Parameterized
@@ -24,6 +25,7 @@ from ...core.events import Event
 from ...core.thing import Thing, ThingMeta
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...core.zmq.brokers import AsyncZMQClient, MessageMappedZMQClientPool
+from ..security import SecurityScheme
 from .handlers import ActionHandler, PropertyHandler, EventHandler, BaseHandler, ThingsHandler, StopHandler, RPCHandler
 
 
@@ -79,6 +81,8 @@ class HTTPServer(Parameterized):
                             doc="custom event handler of your choice for handling events") # type: typing.Union[RPCHandler, EventHandler]
     schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JSONSchemaValidator, allow_None=True, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
+    security_schemes = TypedList(default=None, allow_None=True, item_type=SecurityScheme,
+                                doc="List of security schemes to be used by the server") # type: typing.Optional[typing.List[SecurityScheme]]
     config = TypedDict(default=None, allow_None=True, 
                         doc="""Set CORS headers for the HTTP server. If set to False, CORS headers are not set. 
                         This is useful when the server is used in a controlled environment where CORS is not needed.""") # type: bool
@@ -93,6 +97,7 @@ class HTTPServer(Parameterized):
                 log_level: int = logging.INFO, 
                 serializer: typing.Optional[JSONSerializer] = None, 
                 ssl_context: typing.Optional[ssl.SSLContext] = None, 
+                security_schemes: typing.Optional[typing.List[SecurityScheme]] = None,
                 schema_validator: typing.Optional[BaseSchemaValidator] = JSONSchemaValidator,
                 certfile: str = None, 
                 keyfile: str = None, 
@@ -142,6 +147,7 @@ class HTTPServer(Parameterized):
             # protocol_version=1, 
             schema_validator=schema_validator,
             certfile=certfile, 
+            security_schemes=security_schemes,
             keyfile=keyfile,
             ssl_context=ssl_context,
             # network_interface='Ethernet',# network_interface,

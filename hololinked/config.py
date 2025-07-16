@@ -79,7 +79,7 @@ class Configuration:
         # TCP sockets 
         "TCP_SOCKET_SEARCH_START_PORT", "TCP_SOCKET_SEARCH_END_PORT",
         # HTTP server
-        "COOKIE_SECRET", "SET_CORS_HEADERS",
+        "COOKIE_SECRET", "ALLOW_CORS",
         # credentials
         "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST",
         # system view
@@ -120,7 +120,7 @@ class Configuration:
         self.DEBUG = False
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
-        self.SET_CORS_HEADERS = False
+        self.ALLOW_CORS = False
 
         if not use_environment:
             return 

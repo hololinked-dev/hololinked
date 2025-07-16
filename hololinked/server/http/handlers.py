@@ -16,7 +16,7 @@ from ...schema_validators import BaseSchemaValidator
 from ...serializers.payloads import PreserializedData, SerializableData
 from ...serializers import Serializers
 from ...td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
-
+from ..security import BcryptBasicSecurity, SecurityScheme, Argon2BasicSecurity
 
 
 class BaseHandler(RequestHandler):
@@ -52,22 +52,36 @@ class BaseHandler(RequestHandler):
     @property
     def has_access_control(self) -> bool:
         """
-        Checks if a client is an allowed client. Requests from un-allowed clients are reject without execution. Custom
-        web handlers can use this property to check if a client has access control on the server or ``Thing``.
+        Checks if a client is an allowed client. Requests from un-allowed clients are rejected without execution. 
+        Custom web request handlers can use this property to check if a client has access control on the server or ``Thing``
+        and automatically generate a 401.
         """
         if len(self.allowed_clients) == 0:
-            if global_config.SET_CORS_HEADERS or self.owner_inst.config.get("set_cors_headers", False):
+            if global_config.ALLOW_CORS or self.owner_inst.config.get("allow_cors", False):
                 self.set_header("Access-Control-Allow-Origin", "*")
             return True
         # For credential login, access control allow origin cannot be '*',
         # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
-        origin = self.request.headers.get("Origin")
-        if origin is not None and (origin in self.allowed_clients or origin + '/' in self.allowed_clients):
-            if global_config.SET_CORS_HEADERS or self.owner_inst.config.get("set_cors_headers", False):
+        if not self.owner_inst.security_schemes:
+            self.set_status(401, "Unauthorized")    
+            return False
+        authenticated = False
+        authorization_header = self.request.headers.get("Authorization", None) # type: str
+        if authorization_header:
+            for security_scheme in self.owner_inst.security_schemes:
+                if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
+                    authenticated = security_scheme.validate(
+                        username=authorization_header.split()[1].split(':')[0],
+                        password=authorization_header.split()[1].split(':')[1],
+                    )
+                    break
+        if not authenticated:
+            return False
+        if global_config.ALLOW_CORS or self.owner_inst.config.get("allow_cors", False):
+            origin = self.request.headers.get("Origin")
+            if origin is not None and (origin in self.allowed_clients or origin + '/' in self.allowed_clients):
                 self.set_header("Access-Control-Allow-Origin", origin)
-            return True
-        self.set_status(401, "authentication invalid")    
-        return False
+        return True
 
     def set_access_control_allow_headers(self) -> None:
         """
@@ -350,8 +364,12 @@ class EventHandler(BaseHandler):
     """
     handles events emitted by ``Thing`` and tunnels them as HTTP SSE. 
     """
-    def initialize(self, resource, validator: BaseSchemaValidator, owner_inst=None) -> None:
-        super().initialize(resource, validator, owner_inst)
+    def initialize(self, 
+                resource: InteractionAffordance | EventAffordance, 
+                owner_inst = None,
+                metadata: typing.Optional[typing.Dict[str, typing.Any]] = None
+            ) -> None:
+        super().initialize(resource, owner_inst, metadata)
         self.data_header = b'data: %s\n\n'
 
     def set_headers(self) -> None:
@@ -389,25 +407,24 @@ class EventHandler(BaseHandler):
             self.set_access_control_allow_headers()
             self.set_header("Access-Control-Allow-Credentials", "true")
             self.set_header("Access-Control-Allow-Methods", 'GET')
-        else:
-            self.set_status(401, "forbidden")
         self.finish()
 
     def receive_blocking_event(self, event_consumer : EventConsumer):
         return event_consumer.receive(timeout=10000, deserialize=False)
 
     async def handle_datastream(self) -> None:    
-        """
-        called by GET method and handles the event.
-        """
+        """called by GET method and handles the event publishing"""
         try:                        
-            event_consumer_cls = EventConsumer if global_config.zmq_context(asynch=True) is not None else AsyncEventConsumer
+            # event_consumer_cls = EventConsumer if global_config.zmq_context(asynch=True) is not None else 
             # synchronous context with INPROC pub or asynchronous context with IPC or TCP pub, we handle both in async 
             # fashion as HTTP server should be running purely sync(or normal) python method.
-            event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
-                                            identity=f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
-                                            logger=self.logger, http_serializer=self.serializer, 
-                                            context=global_config.zmq_context(asynch=True))
+            event_consumer = AsyncEventConsumer(
+                id=f"{self.resource.name}|HTTPEvent|{uuid.uuid4().hex[:8]}",
+                event_unique_identifier=self.resource.name,
+                socket_address=self.resource.socket_address,
+                context=global_config.zmq_context(asynch=True),
+                logger=self.logger,
+            )
             event_loop = asyncio.get_event_loop()
             self.set_status(200)
         except Exception as ex:
@@ -419,23 +436,21 @@ class EventHandler(BaseHandler):
         while True:
             try:
                 if isinstance(event_consumer, AsyncEventConsumer):
-                    data = await event_consumer.receive(timeout=10000, deserialize=False)
+                    event_message = await event_consumer.receive(timeout=10000, deserialize=False)
                 else:
-                    data = await event_loop.run_in_executor(None, self.receive_blocking_event, event_consumer)
-                if data:
-                    # already JSON serialized 
-                    self.write(self.data_header % data)
-                    await self.flush() # log after flushing just to be sure
-                    self.logger.debug(f"new data sent - {self.resource.name}")
+                    event_message = await event_loop.run_in_executor(None, self.receive_blocking_event, event_consumer)
+                if event_message:
+                    # already serialized 
+                    self.write(self.data_header % event_message.body)
+                    self.logger.debug(f"new data scheduled to flush - {self.resource.name}")
                 else:
                     self.logger.debug(f"found no new data - {self.resource.name}")
-                    await self.flush() # heartbeat - raises StreamClosedError if client disconnects
+                await self.flush() # flushes and handles heartbeat - raises StreamClosedError if client disconnects
             except StreamClosedError:
                 break 
             except Exception as ex:
                 self.logger.error(f"error while pushing event - {str(ex)}")
-                self.write(self.data_header % self.serializer.dumps(
-                    {"exception" : format_exception_as_json(ex)}))
+                self.write(self.data_header % self.serializer.dumps({"exception" : format_exception_as_json(ex)}))
         try:
             # if isinstance(self.owner_inst._zmq_inproc_event_context, zmq.asyncio.Context):
             # TODO - check if this is bug free
