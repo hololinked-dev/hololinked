@@ -97,8 +97,8 @@ class TestSerializer(TestCase):
 
     def test_3_registration_for_objects(self):
         """i.e. test if a new serializer can be registered for a specific property, action or event"""
-        Serializers.register_content_type_for_object(TestThing.base_property, 'application/octet-stream')
-        Serializers.register_content_type_for_object(TestThing.action_echo, 'x-msgpack')
+        Serializers.register_content_type_for_object(TestThing.base_property, 'application/x-pickle')
+        Serializers.register_content_type_for_object(TestThing.action_echo, 'application/msgpack')
         Serializers.register_content_type_for_object(TestThing.test_event, 'application/yaml')
         
         self.assertEqual(Serializers.for_object(None, 'TestThing', 'action_echo'), Serializers.msgpack)
@@ -125,7 +125,7 @@ class TestSerializer(TestCase):
        
         self.assertIn('action_echo', Serializers.object_content_type_map['TestThing'])
         self.assertEqual(Serializers.object_content_type_map['TestThing']['action_echo'],
-                                                            'x-msgpack')
+                                                            'application/msgpack')
         self.assertIn('test_event', Serializers.object_content_type_map['TestThing'])
         self.assertEqual(Serializers.object_content_type_map['TestThing']['test_event'],
                                                             'application/yaml')

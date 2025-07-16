@@ -14,16 +14,9 @@ from ...core.zmq.message import (EMPTY_BYTE, ResponseMessage, default_server_exe
 from ...constants import JSONSerializable, Operations
 from ...schema_validators import BaseSchemaValidator
 from ...serializers.payloads import PreserializedData, SerializableData
+from ...serializers import Serializers
 from ...td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
 
-
-
-__default_supported_content_types__ = [
-    "application/json",
-    "application/x-msgpack",
-    "application/text"
-]
-# octet-stream is not supported
 
 
 class BaseHandler(RequestHandler):
@@ -122,18 +115,16 @@ class BaseHandler(RequestHandler):
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b'')
         if self.request.body:
-            try:
-                if self.request.headers.get("Content-Type", "application/json") in __default_supported_content_types__:
-                    payload.value = self.request.body
-                    payload.content_type = self.request.headers.get("Content-Type", "application/json")
-                else:
-                    preserialized_payload.value = self.request.body
-                    preserialized_payload.content_type = self.request.headers.get("Content-Type", None)
-            except Exception as ex:
-                self.set_status(400, str(ex))
-                self.write(self.serializer.dumps({"exception" : format_exception_as_json(ex)}))
-                self.finish()
-                return None, None
+            if self.request.headers.get("Content-Type", "application/json") in Serializers.allowed_content_types:
+                payload.value = self.request.body
+                payload.content_type = self.request.headers.get("Content-Type", "application/json")
+            elif global_config.ALLOW_UNKNOWN_SERIALIZATION:
+                preserialized_payload.value = self.request.body
+                preserialized_payload.content_type = self.request.headers.get("Content-Type", None)
+            else:
+                raise ValueError("Content-Type not supported")
+                # NOTE that was assume that the content type is JSON even if unspecified in the header.
+                # This error will be raised only when a specified content type is not supported.
         return payload, preserialized_payload
     
     def get_response_payload(self, zmq_response: ResponseMessage) -> typing.Any:

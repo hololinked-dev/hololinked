@@ -93,7 +93,9 @@ class Configuration:
         # ZMQ
         "ZMQ_ASYNC_CONTEXT", "ZMQ_SYNC_CONTEXT",
         # make debugging easier
-        "DEBUG"
+        "DEBUG",    
+        # serializers
+        "ALLOW_PICKLE", "ALLOW_UNKNOWN_SERIALIZATION"
     ]
 
     def __init__(self, use_environment : bool = False):
@@ -116,6 +118,8 @@ class Configuration:
         self.ZMQ_ASYNC_CONTEXT = zmq.asyncio.Context()
         self.ZMQ_SYNC_CONTEXT = zmq.Context()
         self.DEBUG = False
+        self.ALLOW_PICKLE = False
+        self.ALLOW_UNKNOWN_SERIALIZATION = False
 
         if not use_environment:
             return 

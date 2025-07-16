@@ -9,6 +9,7 @@ from hololinked.core.meta import ThingMeta
 from hololinked.core.zmq.message import ServerExecutionContext, ThingExecutionContext, default_server_execution_context
 from hololinked.serializers import JSONSerializer
 from hololinked.serializers.payloads import PreserializedData, SerializableData
+from hololinked.serializers.serializers import MsgpackSerializer, PickleSerializer, BaseSerializer
 from hololinked.server.http import HTTPServer
 from hololinked.core.zmq.rpc_server import RPCServer # sets loop policy, TODO: move somewhere else
 from hololinked.server.http.handlers import PropertyHandler, RPCHandler
@@ -133,13 +134,14 @@ class TestHTTPServer(TestCase):
         server = HTTPServer(log_level=logging.ERROR+10)
         old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
 
-        thing = OceanOpticsSpectrometer(id='test-spectrometer', log_level=logging.ERROR+10)
+        thing_id = 'test-spectrometer-add-over-zmq'
+        thing = OceanOpticsSpectrometer(id=thing_id, log_level=logging.ERROR+10)
         thing.run_with_zmq_server(ZMQ_TRANSPORTS.INPROC, forked=True)
         
         server.add_property('/max-intensity/custom', OceanOpticsSpectrometer.max_intensity)
         server.add_action('/connect/custom', OceanOpticsSpectrometer.connect)
         server.add_event('/intensity/event/custom', OceanOpticsSpectrometer.intensity_measurement_event)
-        server.register_id_for_thing(OceanOpticsSpectrometer, 'test-spectrometer')   
+        server.register_id_for_thing(OceanOpticsSpectrometer, thing_id)   
         server.add_thing({"INPROC": thing.id})
   
         # server.router.print_rules()
@@ -149,13 +151,13 @@ class TestHTTPServer(TestCase):
         #     len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
         # )
         
-        fake_request = SimpleNamespace(path='/test-spectrometer/max-intensity/custom')
+        fake_request = SimpleNamespace(path=f'/{thing_id}/max-intensity/custom')
         self.assertTrue(any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules]))
         fake_request = SimpleNamespace(path='/non-existing-path-that-i-know-will-not-match')
         self.assertFalse(any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules]))
-        fake_request = SimpleNamespace(path='/test-spectrometer/connect/custom')
+        fake_request = SimpleNamespace(path=f'/{thing_id}/connect/custom')
         self.assertTrue(any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules]))
-        fake_request = SimpleNamespace(path='/test-spectrometer/intensity/event/custom')
+        fake_request = SimpleNamespace(path=f'/{thing_id}/intensity/event/custom')
         self.assertTrue(any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules]))
 
         thing.rpc_server.stop()
@@ -199,74 +201,87 @@ class TestHTTPServer(TestCase):
                 # for exit to go through 
                 await self.handle_through_thing('invokeAction')
 
+        global_config.ALLOW_PICKLE = True # allow pickle for testing
         thing_id = 'test-spectrometer-request-info'
         thing = OceanOpticsSpectrometer(id=thing_id, log_level=logging.ERROR+10)
         thing.run_with_http_server(port=8086, forked=True, property_handler=TestableRPCHandler,
                                 action_handler=TestableRPCHandler)
         
         session = requests.session()
-        for (method, path, body) in [
-                    ('get', f'/{thing_id}/serial-number', None),
+        for serializer in [JSONSerializer(), MsgpackSerializer(), PickleSerializer()]:
+            serializer: BaseSerializer
+            for (method, path, body) in [
+                    # server and thing execution context tests
+                    ('get', f'/{thing_id}/integration-time', None),
                     ('get', f'/{thing_id}/integration-time?fetchExecutionLogs=true', None),
                     ('get', f'/{thing_id}/integration-time?fetchExecutionLogs=true&oneway=true', None),
                     ('get', f'/{thing_id}/integration-time?oneway=true&invokationTimeout=100', None),
                     ('get', f'/{thing_id}/integration-time?invokationTimeout=100&executionTimeout=120&fetchExecutionLogs=true', None),
+                    # test payloads for JSON content type
                     ('put', f'/{thing_id}/integration-time', 1200),
-                    # ('post', '/test-spectrometer/disconnect', None),
-                    # ('post', '/test-spectrometer/connect', None)
+                    ('put', f'/{thing_id}/integration-time?fetchExecutionLogs=true', {'a' : 1, 'b': 2}),
+                    ('put', f'/{thing_id}/integration-time?fetchExecutionLogs=true&oneway=true', [1, 2, 3]),
+                    ('put', f'/{thing_id}/integration-time?oneway=true&invokationTimeout=100', 'abcd'),
+                    ('put', f'/{thing_id}/integration-time?invokationTimeout=100&executionTimeout=120&fetchExecutionLogs=true', True),
+                    # test payloads for other content types
                 ]:
-
-            response = session.request(
-                        method=method, 
-                        url=f'http://localhost:8086{path}',
-                        data=JSONSerializer().dumps(body) if body is not None else None
-                    )
-            self.assertTrue(response.status_code in [200, 201, 202, 204])
-            assert isinstance(latest_request_info, LatestRequestInfo)
-            # test ThingExecutionContext 
-            self.assertTrue(isinstance(latest_request_info.thing_execution_context, ThingExecutionContext))
-            self.assertTrue(
-                ('fetchExecutionLogs' in path and latest_request_info.thing_execution_context.fetchExecutionLogs) or \
-                not latest_request_info.thing_execution_context.fetchExecutionLogs
-            ) 
-            # test ServerExecutionContext
-            self.assertTrue(isinstance(latest_request_info.server_execution_context, ServerExecutionContext))
-            self.assertTrue(
-                ('oneway' in path and latest_request_info.server_execution_context.oneway) or \
-                not latest_request_info.server_execution_context.oneway
-            )
-            self.assertTrue(
-                ('invokationTimeout' in path and latest_request_info.server_execution_context.invokationTimeout == 100) or \
-                # assume that in all tests where invokation timeout is specified, it will be 100
-                latest_request_info.server_execution_context.invokationTimeout == default_server_execution_context.invokationTimeout
-            )
-            self.assertTrue(
-                ('executionTimeout' in path and latest_request_info.server_execution_context.executionTimeout == 120) or \
-                # assume that in all tests where execution timeout is specified, it will be 120
-                latest_request_info.server_execution_context.executionTimeout == default_server_execution_context.executionTimeout
-            )
-            # test body
-            self.assertTrue(latest_request_info.payload.deserialize() == body)
+                response = session.request(
+                            method=method, 
+                            url=f'http://localhost:8086{path}',
+                            data=serializer.dumps(body) if body is not None else None,
+                            headers={"Content-Type": serializer.content_type}
+                        )
+                self.assertTrue(response.status_code in [200, 201, 202, 204])
+                assert isinstance(latest_request_info, LatestRequestInfo)
+                # test ThingExecutionContext 
+                self.assertTrue(isinstance(latest_request_info.thing_execution_context, ThingExecutionContext))
+                self.assertTrue(
+                    ('fetchExecutionLogs' in path and latest_request_info.thing_execution_context.fetchExecutionLogs) or \
+                    not latest_request_info.thing_execution_context.fetchExecutionLogs
+                ) 
+                # test ServerExecutionContext
+                self.assertTrue(isinstance(latest_request_info.server_execution_context, ServerExecutionContext))
+                self.assertTrue(
+                    ('oneway' in path and latest_request_info.server_execution_context.oneway) or \
+                    not latest_request_info.server_execution_context.oneway
+                )
+                self.assertTrue(
+                    ('invokationTimeout' in path and latest_request_info.server_execution_context.invokationTimeout == 100) or \
+                    # assume that in all tests where invokation timeout is specified, it will be 100
+                    latest_request_info.server_execution_context.invokationTimeout == default_server_execution_context.invokationTimeout
+                )
+                self.assertTrue(
+                    ('executionTimeout' in path and latest_request_info.server_execution_context.executionTimeout == 120) or \
+                    # assume that in all tests where execution timeout is specified, it will be 120
+                    latest_request_info.server_execution_context.executionTimeout == default_server_execution_context.executionTimeout
+                )
+                # test body
+                self.assertTrue(latest_request_info.payload.deserialize() == body)
       
 
         self.stop_server(8086, thing_ids=[thing_id])
 
 
-    def notest_5_http_handler_functionalities(self):
+    def notest_6_handlers_end_to_end(self):
+        """
+        Test end-to-end interaction with the HTTP server using handlers, auth & other features not included, only invokation 
+        of interaction affordances
+        """
+        thing_id = 'test-spectrometer-end-to-end'
         for (thing, port) in [
-            (OceanOpticsSpectrometer(id='test-spectrometer', serial_number='simulation', log_level=logging.ERROR+10), 8085), 
+            (OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10), 8085), 
         ]:
             thing.run_with_http_server(forked=True, port=port)
             time.sleep(1) # TODO: add a way to check if the server is running
 
         session = requests.Session()
         for (method, path, body) in [
-                    ('get', '/test-spectrometer/max-intensity', 16384),
-                    ('get', '/test-spectrometer/serial-number', 'simulation'),
-                    ('put', '/test-spectrometer/integration-time', 1200),
-                    ('get', '/test-spectrometer/integration-time', 1200),
-                    ('post', '/test-spectrometer/disconnect', None),
-                    ('post', '/test-spectrometer/connect', None)
+                    ('get', f'/{thing_id}/max-intensity', 16384),
+                    ('get', f'/{thing_id}/serial-number', 'simulation'),
+                    ('put', f'/{thing_id}/integration-time', 1200),
+                    ('get', f'/{thing_id}/integration-time', 1200),
+                    ('post', f'/{thing_id}/disconnect', None),
+                    ('post', f'/{thing_id}/connect', None)
                 ]:
             response = session.request(method=method, url=f'http://localhost:{port}{path}')
             self.assertTrue(response.status_code in [200, 201, 202, 204])
@@ -274,14 +289,28 @@ class TestHTTPServer(TestCase):
                 self.assertTrue(response.json() == body)
 
         for (method, path, body) in [  
-                ('get',  '/test-spectrometer/max-intensity', 16384),
-                ('get',  '/test-spectrometer/serial-number', 'simulation'),
-                ('get',  '/test-spectrometer/integration-time', 1000),
-                ('post', '/test-spectrometer/disconnect', None),
-                ('post', '/test-spectrometer/connect', None)
+                ('get',  f'/{thing_id}/max-intensity', 16384),
+                ('get',  f'/{thing_id}/serial-number', 'simulation'),
+                ('get',  f'/{thing_id}/integration-time', 1000),
+                ('post', f'/{thing_id}/disconnect', None),
+                ('post', f'/{thing_id}/connect', None)
             ]:
             response = session.request(method=method, url=f'http://localhost:{port}{path}')
             self.assertTrue(response.status_code == 404)
+
+        self.stop_server(port, thing_ids=[thing_id])
+
+    
+    def notest_7_object_proxy(self):
+        pass 
+
+    def notest_8_CORS_and_access_control(self):
+        # NOTE: CORS and access control is not the same thing
+        # We set CORS headers, that too only upon request, if the client has appropriate credentials to access the server
+        pass 
+
+    def notest_9_forms_generation(self):
+        pass
 
     @classmethod
     def stop_server(self, port, thing_ids: list[str] = []):

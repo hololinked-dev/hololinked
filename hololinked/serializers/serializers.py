@@ -196,7 +196,7 @@ class PickleSerializer(BaseSerializer):
     
     @property
     def content_type(self) -> str:
-        return 'application/octet-stream'
+        return 'application/x-pickle'
     
 
 
@@ -219,7 +219,7 @@ class MsgpackSerializer(BaseSerializer):
     
     @property
     def content_type(self) -> str:
-        return 'x-msgpack'
+        return 'application/msgpack'
     
 
 class TextSerializer(BaseSerializer):
@@ -284,7 +284,7 @@ except ImportError:
 class Serializers(metaclass=MappableSingleton):
     """
     A singleton class that holds all serializers and provides a registry for content types. 
-    All members are class attributes. 
+    All members are class attributes and settings are applied process-wide.  
 
     - For property, the value is serialized using the serializer registered for the property.
     - For action, the return value is serialized using the serializer registered for the action.
@@ -307,12 +307,15 @@ class Serializers(metaclass=MappableSingleton):
                         doc="The default content type for the default serializer") # type: str
 
     content_types = Parameter(default={
-                                'application/json': json.default, # as in the default value of the descriptor
-                                'application/octet-stream': pickle.default,
-                                'x-msgpack': msgpack.default,
-                                'text/plain': text.default
+                                json.default.content_type: json.default, # as in the default value of the descriptor
+                                pickle.default.content_type: pickle.default,
+                                msgpack.default.content_type: msgpack.default,
+                                text.default.content_type: text.default
                             }, doc="A dictionary of content types and their serializers",
                             readonly=True, class_member=True) # type: typing.Dict[str, BaseSerializer]
+    allowed_content_types = Parameter(default=None, class_member=True,
+                                doc="A list of content types that are usually considered safe and will be supported by default without any configuration",
+                                readonly=True) # type: typing.List[str]
     object_content_type_map = Parameter(default=dict(), class_member=True,
                                 doc="A dictionary of content types for specific properties, actions and events",
                                 readonly=True) # type: typing.Dict[str, typing.Dict[str, str]]
@@ -542,7 +545,21 @@ class Serializers(metaclass=MappableSingleton):
         cls.object_serializer_map.clear()
         cls.protocol_serializer_map.clear()
         cls.default = cls.json
-       
+
+    @allowed_content_types.getter
+    def get_allowed_content_types(cls) -> typing.List[str]:
+        """
+        Get a list of all allowed content types for serialization.
+        """
+        try:
+            return cls._allowed_content_types
+        except AttributeError:
+            from ..config import global_config
+            cls._allowed_content_types = list(cls.content_types.keys()) 
+            cls._allowed_content_types.remove(cls.pickle.content_type)
+            if global_config.ALLOW_PICKLE:
+                cls._allowed_content_types.append(cls.pickle.content_type)
+            return cls._allowed_content_types
 
     
     
