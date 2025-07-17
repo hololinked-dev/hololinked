@@ -47,6 +47,7 @@ class BaseHandler(RequestHandler):
         self.serializer = self.owner_inst.serializer
         self.logger = self.owner_inst.logger
         self.allowed_clients = self.owner_inst.allowed_clients
+        self.security_schemes = self.owner_inst.security_schemes
         self.metadata = metadata or {}
 
     @property
@@ -56,32 +57,43 @@ class BaseHandler(RequestHandler):
         Custom web request handlers can use this property to check if a client has access control on the server or ``Thing``
         and automatically generate a 401.
         """
-        if len(self.allowed_clients) == 0:
+        if not self.allowed_clients and not self.security_schemes:
             if global_config.ALLOW_CORS or self.owner_inst.config.get("allow_cors", False):
                 self.set_header("Access-Control-Allow-Origin", "*")
             return True
-        # For credential login, access control allow origin cannot be '*',
-        # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
-        if not self.owner_inst.security_schemes:
-            self.set_status(401, "Unauthorized")    
+        # First check if the client is allowed to access the server
+        origin = self.request.headers.get("Origin")
+        if self.allowed_clients and origin is not None and \
+            (origin not in self.allowed_clients and origin + '/' not in self.allowed_clients):
+            self.set_status(401, "Unauthorized")
             return False
         authenticated = False
-        authorization_header = self.request.headers.get("Authorization", None) # type: str
-        if authorization_header:
-            for security_scheme in self.owner_inst.security_schemes:
-                if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
-                    authenticated = security_scheme.validate(
-                        username=authorization_header.split()[1].split(':')[0],
-                        password=authorization_header.split()[1].split(':')[1],
-                    )
-                    break
-        if not authenticated:
+        # Then check authenticated either if the client is allowed or if there is no such list of allowed clients
+        if not self.security_schemes:
+            authenticated = True    
+        try:
+            authorization_header = self.request.headers.get("Authorization", None) # type: str
+            if authorization_header and 'basic ' in authorization_header.lower():
+                for security_scheme in self.security_schemes:
+                    if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
+                        authenticated = security_scheme.validate_base64(authorization_header.split()[1]) \
+                            if security_scheme.expect_base64 else security_scheme.validate(
+                                    username=authorization_header.split()[1].split(':', 1)[0],
+                                    password=authorization_header.split()[1].split(':', 1)[1]
+                                )
+                        break
+        except Exception as ex:
+            self.set_status(500, "Authentication error")
+            self.logger.error(f"error while authenticating client - {str(ex)}")
             return False
-        if global_config.ALLOW_CORS or self.owner_inst.config.get("allow_cors", False):
-            origin = self.request.headers.get("Origin")
-            if origin is not None and (origin in self.allowed_clients or origin + '/' in self.allowed_clients):
-                self.set_header("Access-Control-Allow-Origin", origin)
-        return True
+        if authenticated:
+            if global_config.ALLOW_CORS or self.owner_inst.config.get("allow_cors", False):
+                # For credential login, access control allow origin cannot be '*',
+                # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+                self.set_header("Access-Control-Allow-Origin", origin or "*")
+            return True
+        self.set_status(401, "Unauthorized")
+        return False # keep False always at the end
 
     def set_access_control_allow_headers(self) -> None:
         """
@@ -205,7 +217,6 @@ class RPCHandler(BaseHandler):
             return False
         if method not in self.metadata.get("http_methods", []):
             self.set_status(405, "method not allowed")
-            self.finish()
             return False
         return True
 
@@ -243,7 +254,6 @@ class RPCHandler(BaseHandler):
         except Exception as ex:
             self.set_status(400, "error while decoding request")
             self.set_headers()
-            self.finish()
             return 
         try:
             # TODO - add schema validation here, we are anyway validating at some point within the ZMQ server   
@@ -284,8 +294,7 @@ class RPCHandler(BaseHandler):
         self.set_headers() # remaining headers are set here
         if response_payload.value:
             self.write(response_payload.value)
-        self.finish()
-
+       
 
 
 class PropertyHandler(RPCHandler):
@@ -294,34 +303,33 @@ class PropertyHandler(RPCHandler):
         """
         runs property or action if accessible by 'GET' method. Default for property reads. 
         """
-        if not self.is_method_allowed('GET'):       
-            return 
-        await self.handle_through_thing(Operations.readProperty)    
+        if self.is_method_allowed('GET'):       
+            await self.handle_through_thing(Operations.readProperty)    
+        self.finish()
        
     async def post(self) -> None:
         """
         runs property or action if accessible by 'POST' method. Default for action execution.
         """
-        if not self.is_method_allowed('POST'):
-            return
-        await self.handle_through_thing(Operations.writeProperty)
-     
+        if self.is_method_allowed('POST'):
+            await self.handle_through_thing(Operations.writeProperty)
+        self.finish()
+
     async def put(self) -> None:
         """
         runs property or action if accessible by 'PUT' method. Default for property writes.
         """
-        if not self.is_method_allowed('PUT'):
-            return
-        await self.handle_through_thing(Operations.writeProperty)
-    
+        if self.is_method_allowed('PUT'):
+            await self.handle_through_thing(Operations.writeProperty)
+        self.finish()
+
     async def delete(self) -> None:
         """
         runs property or action if accessible by 'DELETE' method. Default for property deletes. 
         """
-        if not self.is_method_allowed('DELETE'):
-            return
-        await self.handle_through_thing(Operations.deleteProperty)
-        
+        if self.is_method_allowed('DELETE'):
+            await self.handle_through_thing(Operations.deleteProperty)
+        self.finish()
 
 
 class ActionHandler(RPCHandler):
@@ -330,33 +338,33 @@ class ActionHandler(RPCHandler):
         """
         runs property or action if accessible by 'GET' method. Default for property reads. 
         """
-        if not self.is_method_allowed('GET'):       
-            return 
-        await self.handle_through_thing(Operations.invokeAction)    
-       
+        if self.is_method_allowed('GET'):       
+            await self.handle_through_thing(Operations.invokeAction)    
+        self.finish()
+
     async def post(self) -> None:
         """
         runs property or action if accessible by 'POST' method. Default for action execution.
         """
-        if not self.is_method_allowed('POST'):
-            return
-        await self.handle_through_thing(Operations.invokeAction)
-     
+        if self.is_method_allowed('POST'):
+            await self.handle_through_thing(Operations.invokeAction)
+        self.finish()
+
     async def put(self) -> None:
         """
         runs property or action if accessible by 'PUT' method. Default for property writes.
         """
-        if not self.is_method_allowed('PUT'):
-            return
-        await self.handle_through_thing(Operations.invokeAction)
-    
+        if self.is_method_allowed('PUT'):
+            await self.handle_through_thing(Operations.invokeAction)
+        self.finish()
+
     async def delete(self) -> None:
         """
         runs property or action if accessible by 'DELETE' method. Default for property deletes. 
         """
-        if not self.is_method_allowed('DELETE'):
-            return
-        await self.handle_through_thing(Operations.invokeAction)
+        if self.is_method_allowed('DELETE'):
+            await self.handle_through_thing(Operations.invokeAction)
+        self.finish()
 
 
 
@@ -541,6 +549,7 @@ class StopHandler(BaseHandler):
         assert isinstance(owner_inst, HTTPServer)
         self.owner_inst = owner_inst    
         self.allowed_clients = self.owner_inst.allowed_clients
+        self.security_schemes = self.owner_inst.security_schemes
     
     async def post(self):
         if not self.has_access_control:

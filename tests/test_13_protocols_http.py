@@ -1,3 +1,4 @@
+import base64
 from dataclasses import dataclass
 import random
 from types import SimpleNamespace
@@ -14,6 +15,8 @@ from hololinked.serializers.serializers import MsgpackSerializer, PickleSerializ
 from hololinked.server.http import HTTPServer
 from hololinked.core.zmq.rpc_server import RPCServer # sets loop policy, TODO: move somewhere else
 from hololinked.server.http.handlers import PropertyHandler, RPCHandler
+from hololinked.server.security import Argon2BasicSecurity, BcryptBasicSecurity
+from hololinked.td.security_definitions import SecurityScheme
 from hololinked.utils import pep8_to_dashed_name
 
 try:
@@ -263,19 +266,14 @@ class TestHTTPServer(TestCase):
         self.stop_server(8086, thing_ids=[thing_id])
 
 
-    def test_6_handlers_end_to_end(self):
+    def _test_handlers_end_to_end(self, port: int , thing_id: str, **request_kwargs):
         """
-        basic end-to-end test with the HTTP server using handlers. Auth & other features not included, only invokation 
-        of interaction affordances.
+        basic end-to-end test with the HTTP server using handlers. 
+        Auth & other features not included, only invokation of interaction affordances.
         """
-        thing_id = 'test-spectrometer-end-to-end'
-        for (thing, port) in [
-            (OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10), 8085), 
-        ]:
-            thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
-            time.sleep(1) # TODO: add a way to check if the server is running
-
         session = requests.Session()
+        logging.getLogger("requests").setLevel(logging.CRITICAL)
+        logging.getLogger("urllib3").setLevel(logging.CRITICAL)
         # test end to end
         for (method, path, body) in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
             # request will go through the Thing object
@@ -283,7 +281,7 @@ class TestHTTPServer(TestCase):
                             method=method, 
                             url=f'http://localhost:{port}{path}',
                             data=JSONSerializer().dumps(body) if body is not None and method != 'get' else None,
-                            headers={"Content-Type": "application/json"}
+                            **request_kwargs
                         )
             self.assertTrue(response.status_code in [200, 201, 202, 204])
             # check if the response body is as expected
@@ -303,13 +301,13 @@ class TestHTTPServer(TestCase):
                             # i.e swap the default HTTP method with an unsupported one to generate 405
                             url=f'http://localhost:{port}{path}',
                             data=JSONSerializer().dumps(body) if body is not None and method != 'get' else None,
-                            headers={"Content-Type": "application/json"}
+                            **request_kwargs
                         )
             self.assertTrue(response.status_code == 405)
 
         # check options for supported HTTP methods
         for (method, path, body) in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
-            response = session.options(f'http://localhost:{port}{path}')
+            response = session.options(f'http://localhost:{port}{path}', **request_kwargs)
             self.assertTrue(response.status_code in [200, 201, 202, 204])
             self.assertIn('Access-Control-Allow-Origin', response.headers)
             self.assertIn('Access-Control-Allow-Credentials', response.headers)
@@ -317,10 +315,108 @@ class TestHTTPServer(TestCase):
             self.assertIn('Access-Control-Allow-Methods', response.headers)
             allow_methods = response.headers.get('Access-Control-Allow-Methods', [])
             self.assertTrue(method.upper() in allow_methods, f"Method {method} not allowed in {allow_methods}")
-    
+
+
+    def _test_invalid_auth_end_to_end(self, port: int, thing_id: str, wrong_auth_headers: list[str] = None):
+        # check wrong credentials
+        session = requests.Session()
+        for wrong_auth in wrong_auth_headers:
+            for (method, path, body) in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
+                response = session.request(
+                                method=method,
+                                url=f'http://localhost:{port}{path}',
+                                data=JSONSerializer().dumps(body) if body is not None and method != 'get' else None,
+                                headers=wrong_auth
+                            )
+                self.assertTrue(response.status_code == 401)
+
+
+    def _test_authenticated_end_to_end(
+                self, 
+                security_scheme: SecurityScheme, 
+                auth_headers: dict[str, str] = None,
+                wrong_auth_headers: dict[str, str] = None    
+            ):
+        """Test end-to-end with authentication"""
+        thing_id = f'test-spectrometer-authenticated-end-to-end-{security_scheme.__class__.__name__.lower()}'
+        port = 8087
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
+        thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True},security_schemes=[security_scheme])
+        self._test_handlers_end_to_end(port=port, thing_id=thing_id, headers=auth_headers)
+        self._test_invalid_auth_end_to_end(port=port, thing_id=thing_id, wrong_auth_headers=wrong_auth_headers)      
+        # reinstate correct credentials to stop
+        self.stop_server(port, thing_ids=[thing_id], headers=auth_headers)
+
+
+    def test_6_basic_end_to_end(self):
+        thing_id = 'test-spectrometer-end-to-end'
+        port = 8085
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
+        thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
+        time.sleep(1) # TODO: add a way to check if the server is running
+        self._test_handlers_end_to_end(
+            port=port, 
+            thing_id=thing_id, 
+            headers={"Content-Type": "application/json"}
+        )
         self.stop_server(port, thing_ids=[thing_id])
 
-    
+
+    def test_7_bcrypt_basic_security_end_to_end(self):
+        security_scheme = BcryptBasicSecurity(
+            username='someuser',
+            password='somepassword'
+        )
+        self._test_authenticated_end_to_end(
+            security_scheme=security_scheme,
+            auth_headers={
+                'Content-type': 'application/json',
+                'Authorization': f'Basic {base64.b64encode(b"someuser:somepassword").decode("utf-8")}'
+            },
+            wrong_auth_headers=[
+                {
+                    'Content-type': 'application/json',
+                    'Authorization': f'Basic {base64.b64encode(b"wronguser:wrongpassword").decode("utf-8")}'
+                },
+                {
+                    'Content-type': 'application/json',
+                    'Authorization': f'Basic {base64.b64encode(b"someuser:wrongpassword").decode("utf-8")}'
+                },
+                {
+                    'Content-type': 'application/json',
+                    'Authorization': f'Basic {base64.b64encode(b"wronguser:somepassword").decode("utf-8")}'
+                }
+            ]
+        )
+
+
+    def test_8_argon2_basic_security_end_to_end(self):
+        security_scheme = Argon2BasicSecurity(
+            username='someuserargon2',
+            password='somepasswordargon2'
+        )
+        self._test_authenticated_end_to_end(
+            security_scheme=security_scheme,
+            auth_headers={
+                'Content-type': 'application/json',
+                'Authorization': f'Basic {base64.b64encode(b"someuserargon2:somepasswordargon2").decode("utf-8")}'
+            },
+            wrong_auth_headers=[
+                {
+                    'Content-type': 'application/json',
+                    'Authorization': f'Basic {base64.b64encode(b"wronguserargon2:wrongpasswordargon2").decode("utf-8")}'
+                },
+                {
+                    'Content-type': 'application/json',
+                    'Authorization': f'Basic {base64.b64encode(b"someuserargon2:wrongpasswordargon2").decode("utf-8")}'
+                },
+                {
+                    'Content-type': 'application/json',
+                    'Authorization': f'Basic {base64.b64encode(b"wronguserargon2:somepasswordargon2").decode("utf-8")}'
+                }
+            ]
+        )
+
     def notest_7_object_proxy(self):
         pass 
 
@@ -333,12 +429,12 @@ class TestHTTPServer(TestCase):
         pass
 
     @classmethod
-    def stop_server(self, port, thing_ids: list[str] = []):
+    def stop_server(self, port, thing_ids: list[str] = [], **request_kwargs):
         session = requests.Session()
         endpoints = [( 'post', f'/{thing_id}/exit', None ) for thing_id in thing_ids]
         endpoints += [('post', '/stop', None)]
         for (method, path, body) in endpoints:
-            response = session.request(method=method, url=f'http://localhost:{port}{path}')
+            response = session.request(method=method, url=f'http://localhost:{port}{path}', **request_kwargs)
 
     @classmethod
     def generate_endpoints_for_thing(cls, class_: ThingMeta, thing_id: str) -> list[tuple[str, str, Any]]:
