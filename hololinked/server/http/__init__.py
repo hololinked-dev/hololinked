@@ -155,7 +155,7 @@ class HTTPServer(Parameterized):
             action_handler=kwargs.get('action_handler', ActionHandler),
             event_handler=kwargs.get('event_handler', EventHandler),
             allowed_clients=allowed_clients if allowed_clients is not None else [],
-            config=config
+            config=config or dict()
         )
 
         self._IP = f"{self.address}:{self.port}"

@@ -10,7 +10,7 @@ from .utils import get_summary
 from ..constants import JSON, ResourceTypes
 from ..core.property import Property
 from ..core.actions import Action
-from ..core.events import Event
+from ..core.events import Event, EventDispatcher
 from ..core.thing import Thing, ThingMeta
 
 
@@ -101,23 +101,14 @@ class InteractionAffordance(Schema):
         """`Thing` class owning the interaction affordance"""
         return self._thing_cls
     
-    def build(self, interaction: Property | Action | Event, owner: Thing) -> None:
-        """
-        populate the fields of the schema for the specific interaction affordance
-
-        Parameters
-        ----------
-        interaction: Property | Action | Event
-            interaction object for which the schema is to be built
-        owner: Thing
-            owner of the interaction affordance        
-        """
+    def build(self) -> None:
+        """populate the fields of the schema for the specific interaction affordance"""
         raise NotImplementedError("build must be implemented in subclass of InteractionAffordance")
     
     def build_forms(self, protocol: str, authority: str) -> None:
         """
-        build the forms for the specific protocol for each szupported operation
-        
+        build the forms for the specific protocol for each supported operation
+
         Parameters
         ----------
         protocol: str
@@ -243,6 +234,13 @@ class InteractionAffordance(Schema):
             return False
         return self.thing_id == value.thing_id and self.name == value.name
     
+    def build_non_compliant_metadata(self) -> None:
+        """
+        If by chance, there is additional non standard metadata to be added (i.e. also that is outside LD, or
+        may not even be within the TD), they can be added here.
+        """
+        pass 
+    
 
    
 class PropertyAffordance(InteractionAffordance, DataSchema):
@@ -301,7 +299,8 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         affordance = PropertyAffordance()
         affordance.owner = owner      
         affordance.objekt = property
-        affordance.build()       
+        affordance.build()
+        affordance.build_non_compliant_metadata()       
         return affordance
     
 
@@ -370,6 +369,7 @@ class ActionAffordance(InteractionAffordance):
         affordance.owner = owner
         affordance.objekt = action
         affordance.build()
+        affordance.build_non_compliant_metadata()
         return affordance
 
     
@@ -384,6 +384,8 @@ class EventAffordance(InteractionAffordance):
     # [Supported Fields]() <br>
     subscription: str = None
     data: JSON = None
+    zmq_socket_address: Optional[str] = None
+    zmq_unique_identifier: Optional[str] = None
     
     def __init__(self):
         super().__init__()
@@ -406,7 +408,6 @@ class EventAffordance(InteractionAffordance):
         if event.schema:
             self.data = event.schema
 
-
     # def build_forms(self, protocol, authority):
         # form = Form()
         # form.op = "subscribeevent"
@@ -422,38 +423,13 @@ class EventAffordance(InteractionAffordance):
         affordance.owner = owner
         affordance.objekt = event
         affordance.build()
+        affordance.build_non_compliant_metadata()
         return affordance
     
-
-# @dataclass(**__dataclass_kwargs)
-# class ZMQEvent(ZMQResource):
-#     """
-#     event name and socket address of events to be consumed by clients. 
-  
-#     Attributes
-#     ----------
-#     name : str
-#         name of the event, must be unique
-#     obj_name: str
-#         name of the event variable used to populate the ZMQ client
-#     socket_address : str
-#         address of the socket
-#     unique_identifier: str
-#         unique ZMQ identifier used in PUB-SUB model
-#     what: str, default EVENT
-#         is it a property, method/action or event?
-#     """
-#     friendly_name : str = field(default=UNSPECIFIED)
-#     unique_identifier : str = field(default=UNSPECIFIED)
-#     serialization_specific : bool = field(default=False)
-#     socket_address : str = field(default=UNSPECIFIED)
-
-#     def __init__(self, *, what : str, class_name : str, id : str, obj_name : str,
-#                 friendly_name : str, qualname : str, unique_identifier : str, 
-#                 serialization_specific : bool = False, socket_address : str, doc : str) -> None:
-#         super(ZMQEvent, self).__init__(what=what, class_name=class_name, id=id, obj_name=obj_name,
-#                         qualname=qualname, doc=doc, request_as_argument=False)  
-#         self.friendly_name = friendly_name
-#         self.unique_identifier = unique_identifier
-#         self.serialization_specific = serialization_specific
-#         self.socket_address = socket_address
+    def build_non_compliant_metadata(self):
+        bound_event_dispatcher = getattr(self.owner, self.objekt.name, None) # type: EventDispatcher
+        if not isinstance(bound_event_dispatcher, EventDispatcher) or not bound_event_dispatcher.publisher:
+            return
+        self.zmq_socket_address = bound_event_dispatcher.publisher.socket_address
+        self.zmq_unique_identifier = bound_event_dispatcher._unique_identifier
+     

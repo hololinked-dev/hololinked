@@ -92,9 +92,7 @@ class EventDispatcher:
 
     @property
     def publisher(self) -> "EventPublisher": 
-        """
-        Event publishing PUB socket owning object.
-        """
+        """Event publishing PUB socket owning object"""
         return self._publisher
     
     @publisher.setter

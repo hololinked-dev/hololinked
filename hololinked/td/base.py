@@ -12,7 +12,7 @@ class Schema(BaseModel):
 
     skip_keys: ClassVar = [] # override this to skip some dataclass attributes in the schema
 
-    def json(self, indent: Optional[int] = None) -> dict[str, typing.Any]:
+    def json(self) -> dict[str, typing.Any]:
         """Return the JSON representation of the schema"""
         return self.model_dump(
                         mode="json", 

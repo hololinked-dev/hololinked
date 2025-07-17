@@ -305,7 +305,7 @@ class Parameter(metaclass=ParameterMetaclass):
         
     def __set_name__(self, owner : typing.Any, attrib_name : str) -> None:
         self._internal_name = f"_{attrib_name}_param_value"
-        self.name  = attrib_name
+        self.name = attrib_name
         self.owner = owner
         # This particular order is generally important
 

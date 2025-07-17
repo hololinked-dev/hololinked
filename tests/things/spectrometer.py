@@ -1,6 +1,7 @@
 import datetime
 from enum import StrEnum
 import threading
+import time
 import typing
 import numpy
 from dataclasses import dataclass
@@ -222,12 +223,13 @@ class OceanOpticsSpectrometer(Thing):
                 if max_count is not None and loop > max_count:
                     break 
                 loop += 1               
+                time.sleep(self.integration_time / 1000.0)  # simulate integration time
                 # Following is a blocking command - self.spec.intensities
                 self.logger.debug(f'starting measurement count {loop}')                
                 _current_intensity = [numpy.random.randint(0, self.max_intensity) for i in range(self._pixel_count)]
                 if self.background_correction == 'CUSTOM':
                     if self.custom_background_intensity is None:
-                        self.logger.warn('no background correction possible')
+                        self.logger.warning('no background correction possible')
                         self.state_machine.set_state(self.states.ALARM)
                     else:
                         _current_intensity = _current_intensity - self.custom_background_intensity
@@ -249,7 +251,7 @@ class OceanOpticsSpectrometer(Thing):
                         self.intensity_measurement_event.push(self.last_intensity)
                         self.state_machine.current_state = self.states.MEASURING
                     else:
-                        self.logger.warn('trigger delayed or no trigger or erroneous data - completely black')
+                        self.logger.warning('trigger delayed or no trigger or erroneous data - completely black')
                         self.state_machine.current_state = self.states.ALARM
             if self.state_machine.current_state not in [self.states.FAULT, self.states.ALARM]:        
                 self.state_machine.current_state = self.states.ON

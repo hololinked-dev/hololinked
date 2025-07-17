@@ -1,9 +1,8 @@
 import base64
-from dataclasses import dataclass
 import random
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
-import typing
 import unittest, time, logging, requests
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
@@ -30,7 +29,7 @@ except ImportError:
 
 class TestHTTPServer(TestCase):
 
-    def notest_1_init_run_and_stop(self):
+    def test_1_init_run_and_stop(self):
         """Test basic init, run and stop of the HTTP server."""
         # init, run and stop synchronously
         server = HTTPServer(log_level=logging.ERROR+10)
@@ -48,7 +47,7 @@ class TestHTTPServer(TestCase):
         time.sleep(2)
 
 
-    def notest_2_add_interaction_affordance(self):
+    def test_2_add_interaction_affordance(self):
         """Test adding an interaction affordance to the HTTP server."""
         server = HTTPServer(log_level=logging.ERROR+10)
         self.assertTrue(server.all_ok)
@@ -80,7 +79,7 @@ class TestHTTPServer(TestCase):
         )
         
 
-    def notest_3_add_thing(self):
+    def test_3_add_thing(self):
         """Test adding a Thing object to the HTTP server."""
    
         # add a thing, both class and instance
@@ -134,7 +133,7 @@ class TestHTTPServer(TestCase):
             # also check that it does not create duplicate rules
 
 
-    def notest_4_add_thing_over_zmq_server(self):
+    def test_4_add_thing_over_zmq_server(self):
         """extension of previous two tests to complete adding a thing running over a zmq server"""
         server = HTTPServer(log_level=logging.ERROR+10)
         old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
@@ -168,7 +167,7 @@ class TestHTTPServer(TestCase):
         thing.rpc_server.stop()
 
 
-    def notest_5_handlers(self):
+    def test_5_handlers(self):
         """Test request info and payload decoding in RPC handlers along with content type handling"""
         latest_request_info = None # type: "LatestRequestInfo"
 
@@ -353,7 +352,6 @@ class TestHTTPServer(TestCase):
         port = 8085
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
-        time.sleep(1) # TODO: add a way to check if the server is running
         self._test_handlers_end_to_end(
             port=port, 
             thing_id=thing_id, 
@@ -417,12 +415,42 @@ class TestHTTPServer(TestCase):
             ]
         )
 
-    def notest_7_object_proxy(self):
-        pass 
 
-    def notest_8_CORS_and_access_control(self):
-        # NOTE: CORS and access control is not the same thing
-        # We set CORS headers, that too only upon request, if the client has appropriate credentials to access the server
+    def _test_sse_end_to_end(self, security_scheme: SecurityScheme = None, headers: dict[str, str] = None):
+        """
+        Test end-to-end with Server-Sent Events (SSE).
+        """
+        thing_id = f'test-spectrometer-sse-{security_scheme.__class__.__name__.lower() if security_scheme else "no-security"}'
+        port = 8088
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
+        thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True}, 
+                                security_schemes=[security_scheme] if security_scheme else None)
+        session = requests.Session()
+        response = session.post(f'http://localhost:8088/{thing_id}/start-acquisition', headers=headers)
+        self.assertEqual(response.status_code, 200)
+        sse_gen = self.sse_stream(f"http://localhost:8088/{thing_id}/intensity-measurement-event", headers=headers)
+        for i in range(5):
+            evt = next(sse_gen)
+            self.assertTrue('exception' not in evt)
+        response = session.post(f'http://localhost:8088/{thing_id}/stop-acquisition', headers=headers)
+        self.stop_server(8088, thing_ids=[thing_id], headers=headers)
+
+
+    def test_9_sse(self):
+        """Test Server-Sent Events (SSE)"""
+        for security_scheme in [None, BcryptBasicSecurity(username='someuser', password='somepassword')]:
+            # test SSE with and without security
+            if security_scheme:
+                headers = {
+                    'Content-type': 'application/json',
+                    'Authorization': f'Basic {base64.b64encode(b"someuser:somepassword").decode("utf-8")}'
+                }
+            else:
+                headers = dict()
+            self._test_sse_end_to_end(security_scheme=security_scheme, headers=headers)
+
+
+    def notest_7_object_proxy(self):
         pass 
 
     def notest_9_forms_generation(self):
@@ -435,6 +463,29 @@ class TestHTTPServer(TestCase):
         endpoints += [('post', '/stop', None)]
         for (method, path, body) in endpoints:
             response = session.request(method=method, url=f'http://localhost:{port}{path}', **request_kwargs)
+
+    @classmethod
+    def sse_stream(cls, url, chunk_size=2048, **kwargs):
+        """Generator yielding dicts with the fields of each SSE event"""
+        with requests.get(url, stream=True, **kwargs) as resp:
+            resp.raise_for_status()
+            buffer = ""
+            for chunk in resp.iter_content(chunk_size=chunk_size, decode_unicode=True):
+                buffer += chunk
+                # split events on the SSE separator: two newlines
+                while "\n\n" in buffer:
+                    raw_event, buffer = buffer.split("\n\n", 1)
+                    event = {}
+                    for line in raw_event.splitlines():
+                        # skip comments
+                        if not line or line.startswith(":"):
+                            continue
+                        if ":" in line:
+                            field, value = line.split(":", 1)
+                            event.setdefault(field, "")
+                            # strip leading space after colon
+                            event[field] += value.lstrip()
+                yield event
 
     @classmethod
     def generate_endpoints_for_thing(cls, class_: ThingMeta, thing_id: str) -> list[tuple[str, str, Any]]:

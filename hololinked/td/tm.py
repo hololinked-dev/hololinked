@@ -52,7 +52,7 @@ class ThingModel(Schema):
         return self
     
     def produce(self) -> Thing:
-        raise NotImplementedError("This will be implemented in a future release")
+        raise NotImplementedError("This will be implemented in a future release for an API first approach")
     
     # not the best code and logic, but works for now
     skip_properties: typing.List[str] = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',

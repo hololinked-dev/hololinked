@@ -108,14 +108,3 @@ try:
 
 except ImportError:
     pass
-
-# class KeycloakJWT(SecurityScheme):
-#     OIDC_CLIENT_ID: str 
-#     OIDC_CLIENT_SECRET: str
-
-#     def __init__():
-#         pass 
-
-#     def validate(self, jwt: str):
-#         userinfo = self.keycloak_client.userinfo()
-#

@@ -423,17 +423,16 @@ class EventHandler(BaseHandler):
     async def handle_datastream(self) -> None:    
         """called by GET method and handles the event publishing"""
         try:                        
-            # event_consumer_cls = EventConsumer if global_config.zmq_context(asynch=True) is not None else 
-            # synchronous context with INPROC pub or asynchronous context with IPC or TCP pub, we handle both in async 
-            # fashion as HTTP server should be running purely sync(or normal) python method.
+            if not getattr(self.resource, 'zmq_socket_address', None) or not getattr(self.resource, 'zmq_unique_identifier', None):
+                raise ValueError("Event resource is not initialized properly, missing socket address or unique identifier")
             event_consumer = AsyncEventConsumer(
                 id=f"{self.resource.name}|HTTPEvent|{uuid.uuid4().hex[:8]}",
-                event_unique_identifier=self.resource.name,
-                socket_address=self.resource.socket_address,
+                event_unique_identifier=self.resource.zmq_unique_identifier,
+                socket_address=self.resource.zmq_socket_address,
                 context=global_config.zmq_context(asynch=True),
                 logger=self.logger,
             )
-            event_loop = asyncio.get_event_loop()
+            event_consumer.subscribe()
             self.set_status(200)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
@@ -443,13 +442,10 @@ class EventHandler(BaseHandler):
         
         while True:
             try:
-                if isinstance(event_consumer, AsyncEventConsumer):
-                    event_message = await event_consumer.receive(timeout=10000, deserialize=False)
-                else:
-                    event_message = await event_loop.run_in_executor(None, self.receive_blocking_event, event_consumer)
+                event_message = await event_consumer.receive(timeout=10000)
                 if event_message:
-                    # already serialized 
-                    self.write(self.data_header % event_message.body)
+                    payload = self.get_response_payload(event_message)
+                    self.write(self.data_header % payload.value)
                     self.logger.debug(f"new data scheduled to flush - {self.resource.name}")
                 else:
                     self.logger.debug(f"found no new data - {self.resource.name}")
@@ -459,13 +455,8 @@ class EventHandler(BaseHandler):
             except Exception as ex:
                 self.logger.error(f"error while pushing event - {str(ex)}")
                 self.write(self.data_header % self.serializer.dumps({"exception" : format_exception_as_json(ex)}))
-        try:
-            # if isinstance(self.owner_inst._zmq_inproc_event_context, zmq.asyncio.Context):
-            # TODO - check if this is bug free
-            event_consumer.exit()
-        except Exception as ex:
-            self.logger.error(f"error while closing event consumer - {str(ex)}" )
-
+        event_consumer.exit()
+        
 
 class JPEGImageEventHandler(EventHandler):
     """
