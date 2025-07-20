@@ -61,6 +61,7 @@ except ImportError:
 
 try:
     import argon2
+    
     class Argon2BasicSecurity(SecurityScheme):
         """
         A username and password based security scheme using Argon2.

@@ -67,7 +67,7 @@ class ThingModel(Schema):
         for affordance, items, affordance_cls, skip_list in [
                 ['properties', self.instance.properties.remote_objects.items(), PropertyAffordance, self.skip_properties],
                 ['actions', self.instance.actions.descriptors.items(), ActionAffordance, self.skip_actions],
-                ['events', self.instance.events.descriptors.items(), EventAffordance, self.skip_events],    
+                ['events', self.instance.events.plain.items(), EventAffordance, self.skip_events],    
             ]:
             for name, obj in items:
                 if name in skip_list: 

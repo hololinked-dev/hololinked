@@ -687,6 +687,23 @@ class EventsRegistry(DescriptorRegistry):
                 delattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}{attr}')
             except AttributeError:
                 pass
+
+    @property
+    def plain(self) -> typing.Dict[str, Event]:
+        """dictionary of events that are not change events (i.e., not observable)"""
+        try:
+            return getattr(self, f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_non_change_events')
+        except AttributeError:
+            non_change_events = dict()
+            for name, evt in self.descriptors.items():
+                if not evt._observable:
+                    non_change_events[name] = evt
+            setattr(
+                self,
+                f'_{self._qualified_prefix}_{self.__class__.__name__.lower()}_non_change_events',
+                non_change_events
+            )
+            return non_change_events
     
     @property
     def change_events(self) -> typing.Dict[str, Event]:

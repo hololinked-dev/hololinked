@@ -34,16 +34,16 @@ class Form(Schema):
     Form hypermedia.
     schema - https://www.w3.org/TR/wot-thing-description11/#form
     """
-    href : str 
-    op : str 
-    htv_methodName : str 
-    contentType : typing.Optional[str]
-    additionalResponses : typing.Optional[typing.List[AdditionalExpectedResponse]]
-    contentEncoding : typing.Optional[str]
-    security : typing.Optional[str]
-    scopes : typing.Optional[str]
-    response : typing.Optional[ExpectedResponse]
-    subprotocol : typing.Optional[str]
+    href: str = None
+    op: str = None 
+    htv_methodName: str = Field(default=None, alias='htv:methodName') 
+    contentType: typing.Optional[str] = None
+    additionalResponses: typing.Optional[typing.List[AdditionalExpectedResponse]] = None
+    contentEncoding: typing.Optional[str] = None
+    security: typing.Optional[str] = None
+    scopes: typing.Optional[str] = None
+    response: typing.Optional[ExpectedResponse] = None
+    subprotocol: typing.Optional[str] = None
     
     def __init__(self):
         super().__init__()

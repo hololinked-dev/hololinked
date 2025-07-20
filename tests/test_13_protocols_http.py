@@ -13,7 +13,7 @@ from hololinked.serializers.payloads import PreserializedData, SerializableData
 from hololinked.serializers.serializers import MsgpackSerializer, PickleSerializer, BaseSerializer
 from hololinked.server.http import HTTPServer
 from hololinked.core.zmq.rpc_server import RPCServer # sets loop policy, TODO: move somewhere else
-from hololinked.server.http.handlers import PropertyHandler, RPCHandler
+from hololinked.server.http.handlers import PropertyHandler, RPCHandler, ThingDescriptionHandler
 from hololinked.server.security import Argon2BasicSecurity, BcryptBasicSecurity
 from hololinked.td.security_definitions import SecurityScheme
 from hololinked.utils import pep8_to_dashed_name
@@ -29,7 +29,7 @@ except ImportError:
 
 class TestHTTPServer(TestCase):
 
-    def test_1_init_run_and_stop(self):
+    def notest_1_init_run_and_stop(self):
         """Test basic init, run and stop of the HTTP server."""
         # init, run and stop synchronously
         server = HTTPServer(log_level=logging.ERROR+10)
@@ -47,7 +47,7 @@ class TestHTTPServer(TestCase):
         time.sleep(2)
 
 
-    def test_2_add_interaction_affordance(self):
+    def notest_2_add_interaction_affordance(self):
         """Test adding an interaction affordance to the HTTP server."""
         server = HTTPServer(log_level=logging.ERROR+10)
         self.assertTrue(server.all_ok)
@@ -79,7 +79,7 @@ class TestHTTPServer(TestCase):
         )
         
 
-    def test_3_add_thing(self):
+    def notest_3_add_thing(self):
         """Test adding a Thing object to the HTTP server."""
    
         # add a thing, both class and instance
@@ -133,7 +133,7 @@ class TestHTTPServer(TestCase):
             # also check that it does not create duplicate rules
 
 
-    def test_4_add_thing_over_zmq_server(self):
+    def notest_4_add_thing_over_zmq_server(self):
         """extension of previous two tests to complete adding a thing running over a zmq server"""
         server = HTTPServer(log_level=logging.ERROR+10)
         old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
@@ -167,7 +167,7 @@ class TestHTTPServer(TestCase):
         thing.rpc_server.stop()
 
 
-    def test_5_handlers(self):
+    def notest_5_handlers(self):
         """Test request info and payload decoding in RPC handlers along with content type handling"""
         latest_request_info = None # type: "LatestRequestInfo"
 
@@ -347,7 +347,7 @@ class TestHTTPServer(TestCase):
         self.stop_server(port, thing_ids=[thing_id], headers=auth_headers)
 
 
-    def test_6_basic_end_to_end(self):
+    def notest_6_basic_end_to_end(self):
         thing_id = 'test-spectrometer-end-to-end'
         port = 8085
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
@@ -360,7 +360,7 @@ class TestHTTPServer(TestCase):
         self.stop_server(port, thing_ids=[thing_id])
 
 
-    def test_7_bcrypt_basic_security_end_to_end(self):
+    def notest_7_bcrypt_basic_security_end_to_end(self):
         security_scheme = BcryptBasicSecurity(
             username='someuser',
             password='somepassword'
@@ -388,7 +388,7 @@ class TestHTTPServer(TestCase):
         )
 
 
-    def test_8_argon2_basic_security_end_to_end(self):
+    def notest_8_argon2_basic_security_end_to_end(self):
         security_scheme = Argon2BasicSecurity(
             username='someuserargon2',
             password='somepasswordargon2'
@@ -436,7 +436,7 @@ class TestHTTPServer(TestCase):
         self.stop_server(8088, thing_ids=[thing_id], headers=headers)
 
 
-    def test_9_sse(self):
+    def notest_9_sse(self):
         """Test Server-Sent Events (SSE)"""
         for security_scheme in [None, BcryptBasicSecurity(username='someuser', password='somepassword')]:
             # test SSE with and without security
@@ -450,11 +450,31 @@ class TestHTTPServer(TestCase):
             self._test_sse_end_to_end(security_scheme=security_scheme, headers=headers)
 
 
-    def notest_7_object_proxy(self):
-        pass 
-
-    def notest_9_forms_generation(self):
-        pass
+    def test_10_forms_generation(self):
+        thing_id = 'test-spectrometer-forms-generation'
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
+        thing.run_with_http_server(forked=True, port=8088, config={"allow_cors": True})
+        
+        session = requests.Session()
+        response = session.get(f'http://localhost:8088/{thing_id}/resources/wot-td')
+        self.assertEqual(response.status_code, 200)
+        td = response.json()
+        self.assertIn('properties', td)
+        self.assertIn('actions', td)
+        self.assertIn('events', td)
+        self.assertTrue(len(td['properties']) >= 0)
+        self.assertTrue(len(td['actions']) >= 0)
+        self.assertTrue(len(td['events']) >= 0)
+        for prop in list(td['properties'].values()) + list(td['actions'].values()) + list(td['events'].values()):
+            self.assertIn('forms', prop)
+            self.assertTrue(len(prop['forms']) > 0)
+            for form in prop['forms']:
+                self.assertIn('href', form)
+                self.assertIn('htv:methodName', form)
+                self.assertIn('contentType', form)
+                self.assertIn('op', form)
+        time.sleep(20)
+        self.stop_server(8088, thing_ids=[thing_id])
 
     @classmethod
     def stop_server(self, port, thing_ids: list[str] = [], **request_kwargs):

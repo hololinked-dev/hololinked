@@ -26,7 +26,8 @@ from ...core.thing import Thing, ThingMeta
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...core.zmq.brokers import AsyncZMQClient, MessageMappedZMQClientPool
 from ..security import SecurityScheme
-from .handlers import ActionHandler, PropertyHandler, EventHandler, BaseHandler, ThingsHandler, StopHandler, RPCHandler
+from .handlers import (ActionHandler, PropertyHandler, EventHandler, BaseHandler, 
+                    StopHandler, ThingDescriptionHandler, RPCHandler)
 
 
 
@@ -166,7 +167,6 @@ class HTTPServer(Parameterized):
         
         self.tornado_instance = None
         self.app = Application(handlers=[
-            (r'/things', ThingsHandler, dict(owner_inst=self)),
             (r'/stop', StopHandler, dict(owner_inst=self))
         ])
         self.router = ApplicationRouter(self.app, self)
@@ -192,8 +192,9 @@ class HTTPServer(Parameterized):
         check if all the requirements are met before starting the server, auto invoked by listen().
         """
         # Add only those code here that needs to be redone always before restarting the server.
-        # One time creation must be in init
-        ioloop.IOLoop.clear_current()
+        # One time creation attributes/activities must be in init
+        ioloop.IOLoop.clear_current() # cleat the event in case any pending tasks exist, also restarting with same
+        # event loop is buggy, so we remove it.
         event_loop = get_current_async_loop() # sets async loop for a non-possessing thread as well
         # event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
@@ -533,9 +534,10 @@ class ApplicationRouter:
                         f" replacing it for {affordance.what} {affordance.name}", category=UserWarning)
         if getattr(affordance, 'thing_id', None) is not None:
             if not URL_path.startswith(f'/{affordance.thing_id}'):
-                URL_path = f'/{affordance.thing_id}{URL_path}'
                 warnings.warn(f"URL path {URL_path} does not start with the thing id {affordance.thing_id}," 
-                            + f" adding it to the path, new path = {URL_path}. This warning can be usually safely ignored.")  
+                            + f" adding it to the path, new path = {f'/{affordance.thing_id}{URL_path}'}. "
+                            + " This warning can be usually safely ignored.")  
+                URL_path = f'/{affordance.thing_id}{URL_path}'
             self.app.wildcard_router.add_rules([(URL_path, handler, kwargs)])
         else:
             self._pending_rules.append((URL_path, handler, kwargs))
@@ -643,10 +645,11 @@ class ApplicationRouter:
         for action in actions:
             if action in self:
                 continue
+            name = get_alternate_name(action.name)
             if action.thing_id is not None:
-                path = f'/{action.thing_id}/{pep8_to_dashed_name(action.name)}'
+                path = f'/{action.thing_id}/{pep8_to_dashed_name(name)}'
             else:
-                path = f'/{pep8_to_dashed_name(action.name)}'
+                path = f'/{pep8_to_dashed_name(name)}'
             self.server.add_action(
                 URL_path=path, 
                 action=action,
@@ -664,6 +667,13 @@ class ApplicationRouter:
                 event=event,
                 handler=self.server.event_handler
             )
+        self.server.add_action(
+            URL_path='/resources/wot-td',
+            action=next((action for action in actions if action.name == "get_thing_model"), None),
+            http_method=('GET',),
+            handler=ThingDescriptionHandler
+        )
+   
 
 
     def add_zmq_served_thing(self, *thing_ids: dict[str, typing.Any] | str) -> None:
@@ -732,8 +742,29 @@ class ApplicationRouter:
 
 
     def get_href_for_affordance(self, affordance) -> str:
-        return ""        
+        if affordance not in self:
+            raise ValueError(f"affordance {affordance} not found in the application router")
+        for rule in self.app.wildcard_router.rules:
+            if rule.target_kwargs.get("resource", None) == affordance:
+                protocol = "https" if self.server.ssl_context else "http"
+                port = f':{self.server.port}' if self.server.port != 80 else ''
+                path = str(rule.matcher.regex.pattern).rstrip('$')
+                return f"{protocol}://{socket.gethostname()}{port}{path}"
 
+
+    def get_target_kwargs_for_affordance(self, affordance) -> dict:
+        """
+        Get the target kwargs for the affordance in the application router.
+        """
+        if affordance not in self:
+            raise ValueError(f"affordance {affordance} not found in the application router")
+        for rule in self.app.wildcard_router.rules:
+            if rule.target_kwargs.get("resource", None) == affordance:
+                return rule.target_kwargs
+        for rule in self._pending_rules:
+            if rule[2].get("resource", None) == affordance:
+                return rule[2]
+        raise ValueError(f"affordance {affordance} not found in the application router rules")
 
     def print_rules(self) -> None:
         """
@@ -755,6 +786,12 @@ class ApplicationRouter:
                 print(rule)
             for rule in self._pending_rules:
                 print(rule[0], rule[2]["resource"].name)
+
+    
+def get_alternate_name(interaction_affordance_name: str) -> str:
+    if interaction_affordance_name == 'get_thing_model':
+        return 'resources/thing-model'
+    return interaction_affordance_name
                     
 
 

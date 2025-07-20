@@ -1,10 +1,11 @@
 import copy
 import typing
 import uuid
-import asyncio
-import zmq.asyncio
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
+
+from hololinked.core.actions import Action
+from hololinked.core.thing import Thing
 
 from ...utils import *
 from ...config import global_config
@@ -24,11 +25,12 @@ class BaseHandler(RequestHandler):
     Base request handler for running operations on the Thing
     """
 
-    def initialize(self, 
-                resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance, 
-                owner_inst = None,
-                metadata: typing.Optional[typing.Dict[str, typing.Any]] = None
-            ) -> None:
+    def initialize(
+            self, 
+            resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance, 
+            owner_inst = None,
+            metadata: typing.Optional[typing.Dict[str, typing.Any]] = None
+        ) -> None:
         """
         Parameters
         ----------
@@ -58,21 +60,21 @@ class BaseHandler(RequestHandler):
         and automatically generate a 401.
         """
         if not self.allowed_clients and not self.security_schemes:
-            if global_config.ALLOW_CORS or self.owner_inst.config.get("allow_cors", False):
-                self.set_header("Access-Control-Allow-Origin", "*")
             return True
+        # a flag
+        authenticated = False
         # First check if the client is allowed to access the server
         origin = self.request.headers.get("Origin")
         if self.allowed_clients and origin is not None and \
             (origin not in self.allowed_clients and origin + '/' not in self.allowed_clients):
             self.set_status(401, "Unauthorized")
             return False
-        authenticated = False
-        # Then check authenticated either if the client is allowed or if there is no such list of allowed clients
+        # Then check an authentication scheme either if the client is allowed or if there is no such list of allowed clients
         if not self.security_schemes:
             authenticated = True    
         try:
             authorization_header = self.request.headers.get("Authorization", None) # type: str
+            # will simply pass through if no such header is present
             if authorization_header and 'basic ' in authorization_header.lower():
                 for security_scheme in self.security_schemes:
                     if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
@@ -87,10 +89,6 @@ class BaseHandler(RequestHandler):
             self.logger.error(f"error while authenticating client - {str(ex)}")
             return False
         if authenticated:
-            if global_config.ALLOW_CORS or self.owner_inst.config.get("allow_cors", False):
-                # For credential login, access control allow origin cannot be '*',
-                # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
-                self.set_header("Access-Control-Allow-Origin", origin or "*")
             return True
         self.set_status(401, "Unauthorized")
         return False # keep False always at the end
@@ -99,18 +97,18 @@ class BaseHandler(RequestHandler):
         """
         For credential login, access control allow headers cannot be a wildcard '*'. 
         Some requests require exact list of allowed headers for the client to access the response. 
-        Use this method in set_headers() override if necessary. 
+        Use this method in set_custom_default_headers() override if necessary. 
         """
         headers = ", ".join(self.request.headers.keys())
         if self.request.headers.get("Access-Control-Request-Headers", None):
             headers += ", " + self.request.headers["Access-Control-Request-Headers"]
         self.set_header("Access-Control-Allow-Headers", headers)
 
-    def set_headers(self) -> None:
+    def set_custom_default_headers(self) -> None:
         """
         override this to set custom headers without having to reimplement entire handler
         """
-        raise NotImplementedError("implement set headers in child class to automatically call it" +
+        raise NotImplementedError("implement set_custom_default_headers in child class to automatically call it" +
                             " while directing the request to Thing")
     
     def get_execution_parameters(self) -> typing.Tuple[ServerExecutionContext, ThingExecutionContext]:
@@ -220,7 +218,7 @@ class RPCHandler(BaseHandler):
             return False
         return True
 
-    def set_headers(self) -> None:
+    def set_custom_default_headers(self) -> None:
         """
         sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
 
@@ -231,7 +229,11 @@ class RPCHandler(BaseHandler):
             Access-Control-Allow-Origin: <client>
         """
         self.set_header("Access-Control-Allow-Credentials", "true")
-    
+        if global_config.ALLOW_CORS or self.owner_inst.config.get("allow_cors", False):
+            # For credential login, access control allow origin cannot be '*',
+            # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+            self.set_header("Access-Control-Allow-Origin", "*")
+            
     async def options(self) -> None:
         """
         Options for the resource. Main functionality is to inform the client is a specific HTTP method is supported by 
@@ -239,8 +241,8 @@ class RPCHandler(BaseHandler):
         """
         if self.has_access_control:
             self.set_status(204)
+            self.set_custom_default_headers()
             self.set_access_control_allow_headers()
-            self.set_header("Access-Control-Allow-Credentials", "true")
             self.set_header("Access-Control-Allow-Methods", ', '.join(self.metadata.get("http_methods", [])))
         self.finish()
     
@@ -253,7 +255,7 @@ class RPCHandler(BaseHandler):
             payload, preserialized_payload = self.get_request_payload()
         except Exception as ex:
             self.set_status(400, "error while decoding request")
-            self.set_headers()
+            self.set_custom_default_headers()
             return 
         try:
             # TODO - add schema validation here, we are anyway validating at some point within the ZMQ server   
@@ -291,7 +293,7 @@ class RPCHandler(BaseHandler):
         else:
             self.set_status(200, "ok")
             self.set_header("Content-Type" , response_payload.content_type or "application/json")    
-        self.set_headers() # remaining headers are set here
+        self.set_custom_default_headers() # remaining headers are set here
         if response_payload.value:
             self.write(response_payload.value)
        
@@ -380,7 +382,7 @@ class EventHandler(BaseHandler):
         super().initialize(resource, owner_inst, metadata)
         self.data_header = b'data: %s\n\n'
 
-    def set_headers(self) -> None:
+    def set_custom_default_headers(self) -> None:
         """
         sets default headers for event handling. The general headers are listed as follows:
 
@@ -402,7 +404,7 @@ class EventHandler(BaseHandler):
         events are support only with GET method.
         """
         if self.has_access_control:
-            self.set_headers()
+            self.set_custom_default_headers()
             await self.handle_datastream()
         self.finish()
 
@@ -412,8 +414,8 @@ class EventHandler(BaseHandler):
         """
         if self.has_access_control:
             self.set_status(204)
+            self.set_custom_default_headers()
             self.set_access_control_allow_headers()
-            self.set_header("Access-Control-Allow-Credentials", "true")
             self.set_header("Access-Control-Allow-Methods", 'GET')
         self.finish()
 
@@ -518,14 +520,14 @@ class ThingsHandler(BaseHandler):
                 self.set_status(204, "ok")
             except Exception as ex:
                 self.set_status(500, str(ex))
-            self.set_headers()
+            self.set_custom_default_headers()
         self.finish()
 
     async def options(self):
         if self.has_access_control:
             self.set_status(204)
+            self.set_custom_default_headers()
             self.set_access_control_allow_headers()
-            self.set_header("Access-Control-Allow-Credentials", "true")
             self.set_header("Access-Control-Allow-Methods", 'GET, POST')
         else:
             self.set_status(401, "forbidden")
@@ -558,62 +560,87 @@ class StopHandler(BaseHandler):
 
 class ThingDescriptionHandler(BaseHandler):
 
+    def set_custom_default_headers(self):
+        self.set_header("Access-Control-Allow-Credentials", "true")
+        if global_config.ALLOW_CORS or self.owner_inst.config.get("allow_cors", False):
+            # For credential login, access control allow origin cannot be '*',
+            # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+            self.set_header("Access-Control-Allow-Origin", "*")
+ 
     async def get(self):
-        if not self.has_access_control:
-            return 
-        try:
-            TM = await fetch_tm.async_call()
-            TD = self.generate_td()
-            self.set_status(200, "ok")
-            self.write(self.serializer.dumps(TD))
-        except Exception as ex:
-            self.set_status(500, str(ex))
+        if self.has_access_control:
+            try:
+                response_message = await self.zmq_client_pool.async_execute(
+                                    client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
+                                    thing_id=self.resource.thing_id,
+                                    objekt=self.resource.name,
+                                    operation='invokeAction'
+                                )                  
+                payload = self.get_response_payload(response_message)
+                TM = payload.deserialize()
+                TD = self.generate_td(self.owner_inst, TM)
+                self.set_status(200, "ok")
+                self.set_header("Content-Type", "application/json")
+                self.write(TD)
+            except Exception as ex:
+                self.set_status(500, str(ex).replace('\n', ' '))
+            self.set_custom_default_headers()
         self.finish()
-        
-    def generate_td(self, TM, thing_id: str) -> dict[str, JSONSerializable]:
+
+    @classmethod
+    def generate_td(self, server, TM: dict[str, JSONSerializable]) -> dict[str, JSONSerializable]:
         from ...td.forms import Form
-        fetch_tm = Thing.get_thing_model.to_affordance()
-        fetch_tm = ZMQAction()
+        from . import HTTPServer
+        assert isinstance(server, HTTPServer)
         TD = copy.deepcopy(TM)
-        for name, property in TM["properties"].items():
+        for name in TM["properties"]:
             affordance = PropertyAffordance.from_TD(name, TM)
-            href = self.owner_inst.router.get_href_for_affordance(affordance)
-            TD["properties"][name]["forms"] = []
-            for operation, http_method in [
-                ('readProperty', 'GET'),
-                ('writeProperty', 'PUT'),
-                ('deleteProperty', 'DELETE')
-            ]:
-                if affordance.readOnly and operation != 'readProperty':
+            href = server.router.get_href_for_affordance(affordance)
+            if not TD["properties"][name].get("forms", None):
+                TD["properties"][name]["forms"] = []
+            http_methods = server.router.get_target_kwargs_for_affordance(affordance).get("metadata", {}).get("http_methods", [])
+            for http_method in http_methods:
+                if affordance.readOnly and http_method.upper() != 'GET':
                     break
                 form = Form()
                 form.href = href
                 form.htv_methodName = http_method 
+                form.op = 'readProperty' if http_method.upper() == 'GET' else 'writeProperty' if http_method.upper() in ['POST', 'PUT'] else 'deleteProperty'
                 form.contentType = "application/json"
-                TD["properties"][name]["forms"].append(form.asdict())
-        for name, action in TM["properties"].items():
+                TD["properties"][name]["forms"].append(form.json())
+            if affordance.observable:
+                form = Form()
+                form.href = href
+                form.htv_methodName = 'GET'
+                form.contentType = "application/json"
+                form.op = 'observeProperty'
+                form.subprotocol = 'sse'
+                TD["properties"][name]["forms"].append(form.json())
+        for name in TM["actions"]:
             affordance = ActionAffordance.from_TD(name, TM)
-            href = self.owner_inst.router.get_href_for_affordance(affordance)
-            TD["actions"][name]["forms"] = []
-            for operation, http_method in [
-                ('invokeAction', 'POST'),
-            ]:
+            href = server.router.get_href_for_affordance(affordance)
+            if not TD["actions"][name].get("forms", None):
+                TD["actions"][name]["forms"] = []
+            http_methods = server.router.get_target_kwargs_for_affordance(affordance).get("metadata", {}).get("http_methods", [])
+            for http_method in http_methods:
                 form = Form()
                 form.href = href
                 form.htv_methodName = http_method 
+                form.op = 'invokeAction'
                 form.contentType = "application/json"
-                TD["actions"][name]["forms"].append(form.asdict())
-        for name, event in TM["events"].items():
+                TD["actions"][name]["forms"].append(form.json())
+        for name in TM["events"]:
             affordance = EventAffordance.from_TD(name, TM)
-            href = self.owner_inst.router.get_href_for_affordance(affordance)
-            TD["event"][name]["forms"] = []
-            for operation, http_method in [
-                ('subscribeEvent', 'GET'),
-            ]:
+            href = server.router.get_href_for_affordance(affordance)
+            if not TD["events"][name].get("forms", None):
+                TD["events"][name]["forms"] = []
+            http_methods = server.router.get_target_kwargs_for_affordance(affordance).get("metadata", dict(http_methods=['GET'])).get("http_methods", ['GET'])
+            for http_method in http_methods:
                 form = Form()
                 form.href = href
                 form.htv_methodName = http_method 
+                form.op = 'subscribeEvent'
                 form.contentType = "application/json"
                 form.subprotocol = 'sse'
-                TD["events"][name]["forms"].append(form.asdict())
-        
+                TD["events"][name]["forms"].append(form.json())
+        return TD
