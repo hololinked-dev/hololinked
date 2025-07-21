@@ -104,20 +104,7 @@ class InteractionAffordance(Schema):
     def build(self) -> None:
         """populate the fields of the schema for the specific interaction affordance"""
         raise NotImplementedError("build must be implemented in subclass of InteractionAffordance")
-    
-    def build_forms(self, protocol: str, authority: str) -> None:
-        """
-        build the forms for the specific protocol for each supported operation
-
-        Parameters
-        ----------
-        protocol: str
-            protocol used for the interaction
-        authority: str
-            authority of the interaction
-        """
-        raise NotImplementedError("build_forms must be implemented in subclass of InteractionAffordance")
-    
+     
     def retrieve_form(self, op: str, default: typing.Any = None) -> JSON:
         """
         retrieve form for a certain operation, return default if not found
@@ -266,33 +253,6 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         if property.observable: # does not disturb the default value of None, which will omit the field in the JSON
             self.observable = property.observable
     
-    # def build_forms(self, authority: str) -> None:
-        # property = self.objekt
-        # self.forms = []
-        # for index, method in enumerate(property._remote_info.http_method):
-        #     form = Form()
-        #     # index is the order for http methods for (get, set, delete), generally (GET, PUT, DELETE)
-        #     if (index == 1 and property.readonly) or index >= 2:
-        #         continue # delete property is not a part of WoT, we also mostly never use it, so ignore.
-        #     elif index == 0:
-        #         form.op = 'readproperty'
-        #     elif index == 1:
-        #         form.op = 'writeproperty'
-        #     form.href = f"{authority}{self.owner._qualified_id}{property._remote_info.URL_path}"
-        #     form.htv_methodName = method.upper()
-        #     form.contentType = "application/json"
-        #     self.forms.append(form.asdict())
-
-        # if property._observable:
-        #     self.observable = property._observable
-        #     form = Form()
-        #     form.op = 'observeproperty'
-        #     form.href = f"{authority}{owner._full_URL_path_prefix}{property._observable_event_descriptor.URL_path}"
-        #     form.htv_methodName = "GET"
-        #     form.subprotocol = "sse"
-        #     form.contentType = "text/plain"
-        #     self.forms.append(form.asdict())
-
     @classmethod
     def generate(cls, property, owner = None):
         assert isinstance(property, Property), f"property must be instance of Property, given type {type(property)}"
@@ -332,10 +292,10 @@ class ActionAffordance(InteractionAffordance):
         if action.obj.__doc__:
             title = get_summary(action.obj.__doc__)
             description = self.format_doc(action.obj.__doc__)
-            if title == description:
+            if title and not description.startswith(title):
+                self.title = title
                 self.description = description
             else:
-                self.title = title
                 self.description = description
         if action.execution_info.argument_schema:
             self.input = action.execution_info.argument_schema 
@@ -351,18 +311,7 @@ class ActionAffordance(InteractionAffordance):
             self.synchronous = action.execution_info.synchronous
         if action.execution_info.safe:
             self.safe = action.execution_info.safe 
-
-    # def build_forms(self, protocol: str, authority : str, **protocol_metadata) -> None:
-    #     self.forms = []
-    #     for method in action.execution_info_validator.http_method:
-    #         form = Form()
-    #         form.op = 'invokeaction'
-    #         form.href = f'{authority}/{self.owner.id}/{protocol_metadata.get("path", "")}/{action.name}'
-    #         form.htv_methodName = method.upper()
-    #         form.contentType = 'application/json'
-    #         # form.additionalResponses = [AdditionalExpectedResponse().asdict()]
-    #         self.forms.append(form.asdict())
-    
+   
     @classmethod
     def generate(cls, action: Action, owner, **kwargs) -> "ActionAffordance":
         affordance = ActionAffordance()
@@ -400,22 +349,13 @@ class EventAffordance(InteractionAffordance):
         if event.__doc__:
             title = get_summary(event.doc) 
             description = self.format_doc(event.doc)
-            if title == description:
+            if title and not description.startswith(title):
+                self.title = title
                 self.description = description
             else:
-                self.title = title
                 self.description = description
         if event.schema:
             self.data = event.schema
-
-    # def build_forms(self, protocol, authority):
-        # form = Form()
-        # form.op = "subscribeevent"
-        # form.href = f"{authority}{owner._full_URL_path_prefix}{event.URL_path}"
-        # form.htv_methodName = "GET"
-        # form.contentType = "text/plain"
-        # form.subprotocol = "sse"
-        # self.forms = [form.asdict()]
 
     @classmethod
     def generate(cls, event: Event, owner, **kwargs) -> "EventAffordance":

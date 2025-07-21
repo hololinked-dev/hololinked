@@ -170,8 +170,7 @@ class OceanOpticsSpectrometer(Thing):
             return OceanOpticsSpectrometer.properties["trigger_mode"].default 
         
 
-    integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
-                            observable=True,
+    integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, observable=True,
                             doc="integration time of measurement in milliseconds") # type: float
     
     @integration_time.setter 

@@ -17,7 +17,8 @@ from ...schema_validators import BaseSchemaValidator
 from ...serializers.payloads import PreserializedData, SerializableData
 from ...serializers import Serializers
 from ...td import InteractionAffordance, PropertyAffordance, ActionAffordance, EventAffordance
-from ..security import BcryptBasicSecurity, SecurityScheme, Argon2BasicSecurity
+from ...td.security_definitions import SecurityScheme
+from ..security import BcryptBasicSecurity, Security, Argon2BasicSecurity
 
 
 class BaseHandler(RequestHandler):
@@ -588,11 +589,14 @@ class ThingDescriptionHandler(BaseHandler):
         self.finish()
 
     @classmethod
-    def generate_td(self, server, TM: dict[str, JSONSerializable]) -> dict[str, JSONSerializable]:
+    def generate_td(cls, server, TM: dict[str, JSONSerializable]) -> dict[str, JSONSerializable]:
         from ...td.forms import Form
         from . import HTTPServer
         assert isinstance(server, HTTPServer)
         TD = copy.deepcopy(TM)
+        # sanitize some things
+        TD["id"] = f'{server.router.basepath}/{TD["id"]}'
+        # add forms
         for name in TM["properties"]:
             affordance = PropertyAffordance.from_TD(name, TM)
             href = server.router.get_href_for_affordance(affordance)
@@ -602,10 +606,12 @@ class ThingDescriptionHandler(BaseHandler):
             for http_method in http_methods:
                 if affordance.readOnly and http_method.upper() != 'GET':
                     break
+                if http_method.upper() == 'DELETE':
+                    continue
                 form = Form()
                 form.href = href
                 form.htv_methodName = http_method 
-                form.op = 'readProperty' if http_method.upper() == 'GET' else 'writeProperty' if http_method.upper() in ['POST', 'PUT'] else 'deleteProperty'
+                form.op = 'readproperty' if http_method.upper() == 'GET' else 'writeproperty', # if http_method.upper() in ['POST', 'PUT'] else 'deleteproperty'
                 form.contentType = "application/json"
                 TD["properties"][name]["forms"].append(form.json())
             if affordance.observable:
@@ -613,7 +619,7 @@ class ThingDescriptionHandler(BaseHandler):
                 form.href = href
                 form.htv_methodName = 'GET'
                 form.contentType = "application/json"
-                form.op = 'observeProperty'
+                form.op = 'observeproperty'
                 form.subprotocol = 'sse'
                 TD["properties"][name]["forms"].append(form.json())
         for name in TM["actions"]:
@@ -626,7 +632,7 @@ class ThingDescriptionHandler(BaseHandler):
                 form = Form()
                 form.href = href
                 form.htv_methodName = http_method 
-                form.op = 'invokeAction'
+                form.op = 'invokeaction'
                 form.contentType = "application/json"
                 TD["actions"][name]["forms"].append(form.json())
         for name in TM["events"]:
@@ -639,8 +645,18 @@ class ThingDescriptionHandler(BaseHandler):
                 form = Form()
                 form.href = href
                 form.htv_methodName = http_method 
-                form.op = 'subscribeEvent'
+                form.op = 'subscribeevent'
                 form.contentType = "application/json"
                 form.subprotocol = 'sse'
                 TD["events"][name]["forms"].append(form.json())
+        cls.add_security_definitions(server, TD)
+        return TD 
+    
+    @classmethod
+    def add_security_definitions(self, server, TD: dict[str, JSONSerializable]) -> None:
+        TD["security"] = 'unimplemented'
+        TD["securityDefinitions"] = dict()
+        nosec = SecurityScheme()
+        nosec.build()
+        TD["securityDefinitions"]['unimplemented'] = nosec.json()
         return TD

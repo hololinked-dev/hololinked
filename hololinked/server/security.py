@@ -4,14 +4,14 @@ Implementation of security schemes for a server.
 
 import base64
 
-class SecurityScheme: 
+class Security: 
     """Type definition for security schemes"""
     pass 
 
 try:
     import bcrypt
 
-    class BcryptBasicSecurity(SecurityScheme):
+    class BcryptBasicSecurity(Security):
         """
         A username and password based security scheme using bcrypt.
         The password is stored as a hash and will be deleted from memory after initialization 
@@ -62,7 +62,7 @@ except ImportError:
 try:
     import argon2
     
-    class Argon2BasicSecurity(SecurityScheme):
+    class Argon2BasicSecurity(Security):
         """
         A username and password based security scheme using Argon2.
         The password is stored as a hash and will be deleted from memory after initialization

@@ -51,10 +51,10 @@ class DataSchema(Schema):
             self.default = property.default
         if property.doc:
             self.description = Schema.format_doc(property.doc)
-            if self.title == self.description:
-                del self.title
-                if property.label is not None:
-                    self.title = property.label
+            if self.title and self.description.startswith(self.title):
+                self.description.lstrip(self.title)
+                self.description.lstrip('.').lstrip()
+                self.title = ""
         if property.metadata and property.metadata.get("unit", None) is not None:
             self.unit = property.metadata["unit"]
         if property.allow_None:
@@ -64,6 +64,8 @@ class DataSchema(Schema):
                 self._move_own_type_to_oneOf()          
             if not any(types["type"] in [None, "null"] for types in self.oneOf):
                 self.oneOf.append(dict(type="null"))
+        if not self.title:
+            del self.title
 
     # & _ds prefix is used to avoid name conflicts with PropertyAffordance class
     # you dont know what you are building, whether the data schema or something else when viewed from property affordance

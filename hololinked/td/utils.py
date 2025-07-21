@@ -1,7 +1,7 @@
 from typing import Any, Optional
 from ..utils import pep8_to_dashed_name
 
-def get_summary(docs: Any) -> Optional[str]:
+def get_summary(docs: str) -> Optional[str]:
     """Return the first line of the dosctring of an object
 
     :param obj: Any Python object
@@ -11,7 +11,7 @@ def get_summary(docs: Any) -> Optional[str]:
     if docs:
         return docs.partition("\n")[0].strip()
     else:
-        return None
+        return ""
 
 
 def get_zmq_unique_identifier_from_event_affordance(affordance: Any) -> Optional[str]:

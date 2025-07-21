@@ -25,7 +25,7 @@ from ...core.events import Event
 from ...core.thing import Thing, ThingMeta
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...core.zmq.brokers import AsyncZMQClient, MessageMappedZMQClientPool
-from ..security import SecurityScheme
+from ..security import Security
 from .handlers import (ActionHandler, PropertyHandler, EventHandler, BaseHandler, 
                     StopHandler, ThingDescriptionHandler, RPCHandler)
 
@@ -82,8 +82,8 @@ class HTTPServer(Parameterized):
                             doc="custom event handler of your choice for handling events") # type: typing.Union[RPCHandler, EventHandler]
     schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JSONSchemaValidator, allow_None=True, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
-    security_schemes = TypedList(default=None, allow_None=True, item_type=SecurityScheme,
-                                doc="List of security schemes to be used by the server") # type: typing.Optional[typing.List[SecurityScheme]]
+    security_schemes = TypedList(default=None, allow_None=True, item_type=Security,
+                                doc="List of security schemes to be used by the server") # type: typing.Optional[typing.List[Security]]
     config = TypedDict(default=None, allow_None=True, 
                         doc="""Set CORS headers for the HTTP server. If set to False, CORS headers are not set. 
                         This is useful when the server is used in a controlled environment where CORS is not needed.""") # type: bool
@@ -98,7 +98,7 @@ class HTTPServer(Parameterized):
                 log_level: int = logging.INFO, 
                 serializer: typing.Optional[JSONSerializer] = None, 
                 ssl_context: typing.Optional[ssl.SSLContext] = None, 
-                security_schemes: typing.Optional[typing.List[SecurityScheme]] = None,
+                security_schemes: typing.Optional[typing.List[Security]] = None,
                 schema_validator: typing.Optional[BaseSchemaValidator] = JSONSchemaValidator,
                 certfile: str = None, 
                 keyfile: str = None, 
@@ -750,7 +750,14 @@ class ApplicationRouter:
                 port = f':{self.server.port}' if self.server.port != 80 else ''
                 path = str(rule.matcher.regex.pattern).rstrip('$')
                 return f"{protocol}://{socket.gethostname()}{port}{path}"
-
+            
+    
+    @property
+    def basepath(self):
+        protocol = "https" if self.server.ssl_context else "http"
+        port = f':{self.server.port}' if self.server.port != 80 else ''
+        return f"{protocol}://{socket.gethostname()}{port}"
+            
 
     def get_target_kwargs_for_affordance(self, affordance) -> dict:
         """

@@ -11,10 +11,10 @@ class SecurityScheme(Schema):
     create security scheme. 
     schema - https://www.w3.org/TR/wot-thing-description11/#sec-security-vocabulary-definition
     """
-    scheme: str 
-    description : str 
-    descriptions : typing.Optional[typing.Dict[str, str]]
-    proxy : typing.Optional[str]
+    scheme: str = None 
+    description: str = None
+    descriptions: typing.Optional[typing.Dict[str, str]] = None
+    proxy: typing.Optional[str] = None
 
     def __init__(self):
         super().__init__()

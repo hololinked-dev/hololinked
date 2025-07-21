@@ -12,7 +12,7 @@ from ..core.state_machine import BoundFSM
 
 class ThingModel(Schema):
 
-    context: typing.List[str] | str | typing.Dict[str, str] = "https://www.w3.org/2022/wot/td/v1.1"
+    context: typing.List[str | typing.Dict[str, str]] = Field(["https://www.w3.org/2022/wot/td/v1.1"], alias="@context")
     type: typing.Optional[typing.Union[str, typing.List[str]]] = None
     id: str = None
     title: str = None
@@ -43,6 +43,8 @@ class ThingModel(Schema):
         """create thing model"""
         self.id = self.instance.id
         self.title = self.instance.__class__.__name__
+        self.context = ["https://www.w3.org/2022/wot/td/v1.1"] 
+        # default value of context is not being picked up although we only use exclude_unset=True
         if self.instance.__doc__:
             self.description = Schema.format_doc(self.instance.__doc__)
         self.properties = dict()
@@ -55,12 +57,9 @@ class ThingModel(Schema):
         raise NotImplementedError("This will be implemented in a future release for an API first approach")
     
     # not the best code and logic, but works for now
-    skip_properties: typing.List[str] = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',
-                    'events', 'thing_description', 'GUI', 'object_info' ]
-    skip_actions: typing.List[str] = ['_set_properties', '_get_properties', '_add_property', '_get_properties_in_db', 
-                    'get_postman_collection', 'get_thing_description', 'get_our_temp_thing_description']
+    skip_properties: typing.List[str] = ['expose', 'thing_description', 'GUI', 'object_info' ]
+    skip_actions: typing.List[str] = ['get_postman_collection', 'get_thing_description', 'get_our_temp_thing_description']
     skip_events: typing.List[str] = []
-
 
     def add_interaction_affordances(self):
         """add interaction affordances to thing model"""
