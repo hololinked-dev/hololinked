@@ -105,7 +105,7 @@ class InteractionAffordance(Schema):
         """populate the fields of the schema for the specific interaction affordance"""
         raise NotImplementedError("build must be implemented in subclass of InteractionAffordance")
      
-    def retrieve_form(self, op: str, default: typing.Any = None) -> JSON:
+    def retrieve_form(self, op: str, default: typing.Any = None) -> Form:
         """
         retrieve form for a certain operation, return default if not found
 
@@ -182,7 +182,10 @@ class InteractionAffordance(Schema):
         affordance = cls()
         for field in cls.model_fields:
             if field in affordance_json:
-                setattr(affordance, field, affordance_json[field])
+                if field == "forms":
+                    affordance.forms = [Form.from_TD(form) for form in affordance_json[field]]
+                else:
+                    setattr(affordance, field, affordance_json[field])
         affordance._name = name
         affordance._thing_id = TD["id"]
         return affordance

@@ -28,7 +28,7 @@ class Schema(BaseModel):
                             "allow_loose_schema"
                         ]
                     )
-
+    
     @classmethod
     def format_doc(cls, doc: str):
         """strip tabs, newlines, whitespaces etc. to format the docstring nicely"""

@@ -6,14 +6,13 @@ Classes that contain the client logic for the HTTP protocol.
 """
 import asyncio
 import json
-import logging
-import time
-import urllib.parse as parse
 import tornado.httpclient
 from typing import Any
 from tornado.simple_httpclient import HTTPTimeoutError
-from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
+
+from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
 from ...td.interaction_affordance import ActionAffordance
+from ...td.forms import Form
 from ...serializers import Serializers
 
 
@@ -21,9 +20,55 @@ from ...serializers import Serializers
 class HTTPConsumedAffordanceMixin:
     """Implementation of the protocol client interface for the HTTP protocol."""
 
-    JSON_HEADERS = {"Content-Type": "application/json"}
-    DEFAULT_CON_TIMEOUT = 60
-    DEFAULT_REQ_TIMEOUT = 60
+    def __init__(self,
+                connect_timeout: int = 60,
+                request_timeout: int = 60,
+                invokation_timeout: int = 5,
+                execution_timeout: int = 5,
+                **kwargs
+            ) -> None:
+        super().__init__()
+        self._connect_timeout = connect_timeout
+        self._request_timeout = request_timeout
+        self._invokation_timeout = invokation_timeout
+        self._execution_timeout = execution_timeout
+        self.sync_http_client = tornado.httpclient.HTTPClient()
+        self.async_http_client = tornado.httpclient.AsyncHTTPClient()
+
+    
+    def get_body_from_response(self, 
+                            response: tornado.httpclient.HTTPResponse,
+                            form: Form,   
+                            raise_exception: bool = True
+                            ) -> Any:
+        if response.code >= 200 and response.code < 300:
+            body = response.body
+            if not body:
+                return
+            serializer = Serializers.content_types.get(form.contentType or "application/json")
+            if serializer is None:
+                raise ValueError(f"Unsupported content type: {form.contentType}")
+            body = serializer.loads(body)
+            if isinstance(body, dict) and 'exception' in body:
+                raise_local_exception(body)
+            return body
+        raise Exception(f"status code {response.code}")
+
+    def create_http_request(self, form: Form, default_method: str, body: bytes | None = None) -> tornado.httpclient.HTTPRequest:
+        """Creates an HTTP request for the given form and body."""
+        return tornado.httpclient.HTTPRequest(
+            form.href,
+            method=form.htv_methodName or default_method,
+            body=body,
+            headers={"Content-Type": "application/json"},
+            connect_timeout=self._connect_timeout,
+            request_timeout=self._request_timeout,
+        )
+
+
+      
+
+class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
 
     def __init__(self,
                 resource: ActionAffordance,
@@ -33,107 +78,124 @@ class HTTPConsumedAffordanceMixin:
                 execution_timeout: int = 5,
                 **kwargs
             ) -> None:
-        super().__init__(resource, **kwargs)
-        self._connect_timeout = connect_timeout
-        self._request_timeout = request_timeout
-        self._invokation_timeout = invokation_timeout
-        self._execution_timeout = execution_timeout
-        self.async_http_client = tornado.httpclient.AsyncHTTPClient()
-
-    @classmethod
-    def get_body_from_response(self, response: tornado.httpclient.HTTPResponse):
-        if response.code >= 200 and response.code < 300:
-            if response.body:
-                return response.body
-            return
-        raise Exception(f"status code {response.code}")
-
-      
-
-class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
+        ConsumedThingAction.__init__(self=self, resource=resource, **kwargs)
+        HTTPConsumedAffordanceMixin.__init__(
+                        self=self,
+                        connect_timeout=connect_timeout,
+                        request_timeout=request_timeout,
+                        invokation_timeout=invokation_timeout,
+                        execution_timeout=execution_timeout,
+                        **kwargs
+                    )
 
     async def async_call(self, *args, **kwargs):
-        now = time.time()
-        form = self._resource.retrieve_form(op='invokeAction')
+        form = self._resource.retrieve_form(op='invokeaction')
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
-        serializer = Serializers.content_types.get(form.get("contentType", "application/json"))
         if args: 
             kwargs.update({"__args__": args})
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(kwargs)
+        http_request = self.create_http_request(form, "POST", body)
         try:
-            http_request = tornado.httpclient.HTTPRequest(
-                form["href"] ,
-                method=form.get("htv:methodName", "POST"),
-                body=body,
-                headers=self.JSON_HEADERS,
-                connect_timeout=self._connect_timeout,
-                request_timeout=self._invokation_timeout,
-            )
             response = await self.async_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
-        return self.get_body_from_response(response)
+        return self.get_body_from_response(response, form)
         
+    def __call__(self, *args, **kwargs):
+        form = self._resource.retrieve_form(op='invokeaction')
+        if form is None:
+            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
+        if args: 
+            kwargs.update({"__args__": args})
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
+        body = serializer.dumps(kwargs)
+        http_request = self.create_http_request(form, "POST", body)
+        try:
+            response = self.sync_http_client.fetch(http_request)
+        except HTTPTimeoutError as ex:
+            raise TimeoutError(str(ex)) from None
+        return self.get_body_from_response(response, form)
             
 
 class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
 
-    async def write_property(self, value: Any) -> None:
-        """Updates the value of a Property on a remote Thing.
-        Returns a Future."""
+    def __init__(self,
+                resource: ActionAffordance,
+                connect_timeout: int = 60,
+                request_timeout: int = 60,
+                invokation_timeout: int = 5,
+                execution_timeout: int = 5,
+                **kwargs
+            ) -> None:
+        ConsumedThingProperty.__init__(self=self, resource=resource, **kwargs)
+        HTTPConsumedAffordanceMixin.__init__(
+                        self=self,
+                        connect_timeout=connect_timeout,
+                        request_timeout=request_timeout,
+                        invokation_timeout=invokation_timeout,
+                        execution_timeout=execution_timeout,
+                        **kwargs
+                    )
+        
+    async def set(self, value: Any) -> None:
         if self._resource.readOnly:
             raise NotImplementedError("This property is not writable")
-        form = self._resource.retrieve_form(op='writeProperty')
+        form = self._resource.retrieve_form(op='writeproperty')
         if form is None:
-            raise ValueError(f"No form found for writeProperty operation for {self._resource.name}")
-        serializer = Serializers.content_types.get(form.get("contentType", "application/json"))
-        body = serializer.dumps({"value": value})
+            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
+        body = serializer.dumps(value)
+        http_request = self.create_http_request(form, "PUT", body)
         try:
-            http_request = tornado.httpclient.HTTPRequest(
-                form["href"],
-                method=form.get("htv:methodName", "PUT"),
-                body=body,
-                headers=self.JSON_HEADERS,
-                connect_timeout=self._connect_timeout,
-                request_timeout=self._request_timeout,
-            )
-            response = await self.http_client.fetch(http_request)
+            response = await self.async_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
-        return self.get_body_from_response(response)
+        self.get_body_from_response(response, form) # Just to ensure the request was successful, no body expected.
+        return None
 
-    async def read_property(self, td, name, timeout=None):
-        """Reads the value of a Property on a remote Thing.
-        Returns a Future."""
-
-        con_timeout = timeout if timeout else self._connect_timeout
-        req_timeout = timeout if timeout else self._request_timeout
-
-        href = self.pick_http_href(td, td.get_property_forms(name))
-
-        if href is None:
-            raise ValueError("No href found for readProperty operation")
-
-        http_client = tornado.httpclient.AsyncHTTPClient()
-
+    def set(self, value: Any) -> None:
+        """Synchronous set of the property value."""
+        if self._resource.readOnly:
+            raise NotImplementedError("This property is not writable")
+        form = self._resource.retrieve_form(op='writeproperty')
+        if form is None:
+            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
+        body = serializer.dumps(value)
+        http_request = self.create_http_request(form, "PUT", body)
         try:
-            http_request = tornado.httpclient.HTTPRequest(
-                href,
-                method="GET",
-                connect_timeout=con_timeout,
-                request_timeout=req_timeout,
-            )
+            response = self.sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex))
+            raise TimeoutError(str(ex)) from None
+        self.get_body_from_response(response, form)
+        return None
 
-        response = await http_client.fetch(http_request)
-        result = json.loads(response.body)
-        result = result.get("value", result)
-
-        return result
+    async def get(self):
+        form = self._resource.retrieve_form(op='readproperty')
+        if form is None:
+            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
+        http_request = self.create_http_request(form, "GET", b'')
+        try:
+            response = await self.async_http_client.fetch(http_request)
+        except HTTPTimeoutError as ex:
+            raise TimeoutError(str(ex)) from None
+        return self.get_body_from_response(response, form)
+        
+    def get(self):
+        form = self._resource.retrieve_form(op='readproperty')
+        if form is None:
+            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
+        http_request = self.create_http_request(form, "GET", None)
+        try:
+            response = self.sync_http_client.fetch(http_request)
+        except HTTPTimeoutError as ex:
+            raise TimeoutError(str(ex)) from None
+        return self.get_body_from_response(response, form)
+        
     
-
+   
 class HTTPEvent(ConsumedThingEvent):
 
     def on_event(self, td, name):
@@ -211,12 +273,6 @@ class HTTPEvent(ConsumedThingEvent):
             return unsubscribe
 
         return Observable.create(subscribe)
-
-    def on_td_change(self, url):
-        """Subscribes to Thing Description changes on a remote Thing.
-        Returns an Observable."""
-
-        raise NotImplementedError
 
 
 __all__ = [

@@ -611,7 +611,7 @@ class ThingDescriptionHandler(BaseHandler):
                 form = Form()
                 form.href = href
                 form.htv_methodName = http_method 
-                form.op = 'readproperty' if http_method.upper() == 'GET' else 'writeproperty', # if http_method.upper() in ['POST', 'PUT'] else 'deleteproperty'
+                form.op = 'readproperty' if http_method.upper() == 'GET' else 'writeproperty' # if http_method.upper() in ['POST', 'PUT'] else 'deleteproperty'
                 form.contentType = "application/json"
                 TD["properties"][name]["forms"].append(form.json())
             if affordance.observable:

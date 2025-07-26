@@ -47,3 +47,18 @@ class Form(Schema):
     
     def __init__(self):
         super().__init__()
+
+    @classmethod
+    def from_TD(cls, form_json: typing.Dict[str, typing.Any]) -> 'Form':
+        """
+        Create a Form instance from a Thing Description JSON object.
+        :param form_json: The JSON representation of the form.
+        :return: An instance of Form.
+        """
+        form = cls()
+        for field in cls.model_fields:
+            if field == 'htv_methodName' and 'htv:methodName' in form_json:
+                setattr(form, field, form_json['htv:methodName'])
+            elif field in form_json:
+                setattr(form, field, form_json[field])
+        return form

@@ -6,6 +6,7 @@ from tornado.simple_httpclient import HTTPTimeoutError
 from ..core.zmq import SyncZMQClient, AsyncZMQClient
 from ..core import Thing, Action
 from ..td.interaction_affordance import PropertyAffordance, ActionAffordance, EventAffordance
+from ..serializers import Serializers
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
 from .zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty, WriteMultipleProperties, ReadMultipleProperties
 from .http.client import HTTPProperty, HTTPAction, HTTPEvent
@@ -91,18 +92,23 @@ class ClientFactory:
     @classmethod
     def http(self, url: str, **kwargs):
         from .proxy import ObjectProxy
-        TD = HTTPClient().fetch(HTTPRequest(url))
-        # id = f"{server_id}|{thing_id}|{protocol}|{uuid.uuid4()}" 
-        object_proxy = ObjectProxy(id, **kwargs)
+        response = HTTPClient().fetch(HTTPRequest(url))
+        assert response.code == 200, f"HTTP request failed with status code {response.code}"
+        # assert response.headers.get('Content-Type') == 'application/json'
+        TD = Serializers.json.loads(response.body)
+        id = f"client|{TD['id']}|HTTP|{uuid.uuid4()}" 
+        object_proxy = ObjectProxy(id, td=TD, **kwargs)
         for name in TD["properties"]:
             affordance = PropertyAffordance.from_TD(name, TD)
             consumed_property = HTTPProperty(
                                     resource=affordance, 
+                                    connect_timeout=kwargs.get('connect_timeout', 60),
+                                    request_timeout=kwargs.get('request_timeout', 60),
                                     invokation_timeout=kwargs.get('invokation_timeout', 5),
                                     execution_timeout=kwargs.get('execution_timeout', 5),
                                     owner_inst=object_proxy
                                 )
-            self.add_property(TD, consumed_property)
+            self.add_property(object_proxy, consumed_property)
         for action in TD["actions"]:
             affordance = ActionAffordance.from_TD(action, TD)
             consumed_action = HTTPAction(
@@ -111,7 +117,7 @@ class ClientFactory:
                                     execution_timeout=kwargs.get('execution_timeout', 5),
                                     owner_inst=object_proxy
                                 )
-            self.add_action(TD, consumed_action)
+            self.add_action(object_proxy, consumed_action)
         for event in TD["events"]:
             affordance = EventAffordance.from_TD(event, TD)
             consumed_event = HTTPEvent(
@@ -120,7 +126,8 @@ class ClientFactory:
                                     execution_timeout=kwargs.get('execution_timeout', 5),
                                     owner_inst=object_proxy
                                 )
-            self.add_event(TD, consumed_event)
+            self.add_event(object_proxy, consumed_event)
+        return object_proxy
         
 
     @classmethod

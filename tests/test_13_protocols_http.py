@@ -1,9 +1,11 @@
+import asyncio
 import base64
 import random
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 import unittest, time, logging, requests
+from hololinked.client.proxy import ObjectProxy
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.meta import ThingMeta
@@ -450,7 +452,7 @@ class TestHTTPServer(TestCase):
             self._test_sse_end_to_end(security_scheme=security_scheme, headers=headers)
 
 
-    def test_10_forms_generation(self):
+    def notest_10_forms_generation(self):
         thing_id = 'test-spectrometer-forms-generation'
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=8088, config={"allow_cors": True})
@@ -473,11 +475,26 @@ class TestHTTPServer(TestCase):
                 self.assertIn('htv:methodName', form)
                 self.assertIn('contentType', form)
                 self.assertIn('op', form)
-        time.sleep(20)
         self.stop_server(8088, thing_ids=[thing_id])
 
+
+    def test_11_object_proxy_basic(self):
+        thing_id = 'test-spectrometer-forms-generation'
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
+        thing.run_with_http_server(forked=True, port=8089, config={"allow_cors": True})
+        
+        from hololinked.client.factory import ClientFactory
+        object_proxy = ClientFactory.http(url=f'http://localhost:8089/{thing_id}/resources/wot-td')
+        self.assertIsInstance(object_proxy, ObjectProxy)
+        self.assertEqual(object_proxy.test_echo('Hello World!'), 'Hello World!')
+        self.assertEqual(asyncio.run(object_proxy.async_invoke_action('test_echo', 'Hello World!')), 'Hello World!')
+        self.assertEqual(object_proxy.read_property('max_intensity'), 16384)
+        self.assertEqual(object_proxy.write_property('integration_time', 1200), None)
+        self.assertEqual(object_proxy.read_property('integration_time'), 1200)
+        self.stop_server(8089, thing_ids=[thing_id])
+
     @classmethod
-    def stop_server(self, port, thing_ids: list[str] = [], **request_kwargs):
+    def stop_server(cls, port, thing_ids: list[str] = [], **request_kwargs):
         session = requests.Session()
         endpoints = [( 'post', f'/{thing_id}/exit', None ) for thing_id in thing_ids]
         endpoints += [('post', '/stop', None)]

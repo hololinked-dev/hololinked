@@ -16,13 +16,12 @@ class ThingDescription(ThingModel):
     Refer standard - https://www.w3.org/TR/wot-thing-description11
     Refer schema - https://www.w3.org/TR/wot-thing-description11/#thing
     """
-    links : typing.Optional[typing.List[Link]] 
-    forms : typing.Optional[typing.List[Form]]
-    security : typing.Union[str, typing.List[str]]
-    securityDefinitions : SecurityScheme
-    schemaDefinitions : typing.Optional[typing.List[DataSchema]]
+    links: typing.Optional[typing.List[Link]] 
+    forms: typing.Optional[typing.List[Form]]
+    security: typing.Union[str, typing.List[str]]
+    securityDefinitions: SecurityScheme
+    schemaDefinitions: typing.Optional[typing.List[DataSchema]]
     
-   
     def generate(self) -> "ThingDescription": 
         super().generate()
         # self.forms = NotImplemented
@@ -87,10 +86,6 @@ class ThingDescription(ThingModel):
 #     def add_security_definitions(self):
 #         self.security = 'unimplemented'
 #         self.securityDefinitions = SecurityScheme().build('unimplemented', self.instance)
-
-
-#     def json(self) -> JSON:
-#         return self.asdict()
 
 
 

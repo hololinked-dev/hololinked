@@ -78,7 +78,7 @@ class BaseSerializer(object):
             return bytes(data)
         if isinstance(data, memoryview):
             return data.tobytes()
-        raise TypeError("serializer convert_to_bytes accepts only bytes, bytearray or memoryview")
+        raise TypeError("serializer convert_to_bytes accepts only bytes, bytearray or memoryview, not type {}".format(type(data)))
     
     @property
     def content_type(self) -> str:
