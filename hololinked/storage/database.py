@@ -13,7 +13,7 @@ from ..param import Parameterized
 from ..constants import JSONSerializable
 from ..config import global_config
 from ..utils import pep8_to_dashed_name
-from ..serializers.serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
+from ..serializers.serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer, Serializers
 from ..core.property import Property
 
 
@@ -75,11 +75,12 @@ class BaseDB:
     Implements configuration file reader for all irrespective sync or async DB operation 
     """
 
-    def __init__(self, instance : Parameterized, serializer : typing.Optional[BaseSerializer] = None, 
-                config_file : typing.Union[str, None] = None) -> None:
+    def __init__(self, 
+                instance: Parameterized, 
+                config_file : typing.Union[str, None] = None
+            ) -> None:
         self.thing_instance = instance
         self.id = instance.id
-        self.serializer = serializer
         self.URL = self.create_URL(config_file)
         self._batch_call_context = {}
 
@@ -202,10 +203,11 @@ class BaseSyncDB(BaseDB):
         absolute path to database server configuration file
     """
 
-    def __init__(self, instance : Parameterized, 
-                serializer : typing.Optional[BaseSerializer] = None, 
-                config_file : typing.Union[str, None] = None) -> None:
-        super().__init__(instance=instance, serializer=serializer, config_file=config_file)
+    def __init__(self, 
+                instance : Parameterized, 
+                config_file : typing.Union[str, None] = None
+            ) -> None:
+        super().__init__(instance=instance, config_file=config_file)
         self.engine = create_engine(self.URL)
         self.sync_session = sessionmaker(self.engine, expire_on_commit=True)
         ThingTableBase.metadata.create_all(self.engine)
@@ -277,7 +279,8 @@ class ThingDB(BaseSyncDB):
                 raise DatabaseError("multiple properties with same name found") # Impossible actually
             if not deserialized:
                 return prop[0]
-            return self.serializer.loads(prop[0].serialized_value)
+            serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
+            return serializer.loads(prop[0].serialized_value)
             
 
     def set_property(self, property : typing.Union[str, Property], value : typing.Any) -> None:
@@ -302,14 +305,15 @@ class ThingDB(BaseSyncDB):
             prop = data.scalars().all()
             if len(prop) > 1:
                 raise DatabaseError("multiple properties with same name found") # Impossible actually
+            serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
             if len(prop) == 1:
                 prop = prop[0]
-                prop.serialized_value = self.serializer.dumps(value)
+                prop.serialized_value = serializer.dumps(value)
             else:
                 prop = SerializedProperty(
                         id=self.id, 
                         name=name,
-                        serialized_value=self.serializer.dumps(getattr(self.thing_instance, name))
+                        serialized_value=serializer.dumps(getattr(self.thing_instance, name))
                     )
                 session.add(prop)
             session.commit()
@@ -340,7 +344,8 @@ class ThingDB(BaseSyncDB):
             unserialized_props = data.scalars().all()
             props = dict()
             for prop in unserialized_props:
-                props[prop.name] = prop.serialized_value if not deserialized else self.serializer.loads(prop.serialized_value)
+                serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, prop.name)
+                props[prop.name] = prop.serialized_value if not deserialized else serializer.loads(prop.serialized_value)
             return props
 
 
@@ -371,14 +376,15 @@ class ThingDB(BaseSyncDB):
                 db_prop = list(filter(lambda db_prop: db_prop.name == name, db_props)) # type: typing.List[SerializedProperty]
                 if len(prop) > 1:
                     raise DatabaseError("multiple properties with same name found") # Impossible actually
+                serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
                 if len(db_prop) == 1:
                     db_prop = db_prop[0] # type: SerializedProperty
-                    db_prop.serialized_value = self.serializer.dumps(value)
+                    db_prop.serialized_value = serializer.dumps(value)
                 else:
                     prop = SerializedProperty(
                         id=self.id, 
                         name=name,
-                        serialized_value=self.serializer.dumps(value)
+                        serialized_value=serializer.dumps(value)
                     )
                     session.add(prop)
             session.commit()
@@ -401,7 +407,8 @@ class ThingDB(BaseSyncDB):
                 return existing_props
             props = dict()
             for prop in existing_props:
-                props[prop.name] = self.serializer.loads(prop.serialized_value)
+                serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, prop.name)
+                props[prop.name] = serializer.loads(prop.serialized_value)
             return props
         
         
@@ -426,10 +433,11 @@ class ThingDB(BaseSyncDB):
             existing_props = self.get_all_properties()
             for name, new_prop in properties.items():
                 if name not in existing_props: 
+                    serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
                     prop = SerializedProperty(
                         id=self.id, 
                         name=new_prop.name, 
-                        serialized_value=self.serializer.dumps(getattr(self.thing_instance, 
+                        serialized_value=serializer.dumps(getattr(self.thing_instance, 
                                                                 new_prop.name))
                     )
                     session.add(prop)
@@ -461,28 +469,6 @@ class batch_db_commit:
                 self.db_engine.set_property(name, value)
             except Exception as ex:
                 pass
-
-
-def prepare_object_database(instance, default_db : bool = False, config_file : str = None):
-    if not default_db and not config_file: 
-        return 
-    # 1. create engine 
-    instance.db_engine = ThingDB(instance=instance, config_file=None if default_db else config_file, 
-                                serializer=instance.zmq_serializer) 
-    # 2. create an object metadata to be used by different types of clients
-    object_info = instance.db_engine.fetch_own_info()
-    if object_info is not None:
-        instance._object_info = object_info
-    # 3. enter properties to DB if not already present 
-    if instance.object_info.class_name != instance.__class__.__name__:
-        raise ValueError("Fetched instance name and class name from database not matching with the ", 
-            "current Thing class/subclass. You might be reusing an instance name of another subclass ", 
-            "and did not remove the old data from database. Please clean the database using database tools to ", 
-            "start fresh.")
-    instance.load_properties_from_DB()
-
-
-
 
 
 

@@ -6,7 +6,7 @@ from ..core.property import Property
 from ..param import Parameterized
 
 
-class ThingJsonStorage:
+class ThingJSONStorage:
     """
     JSON-based storage engine composed within ``Thing``. Carries out property operations such as storing and
     retrieving values from a plain JSON file.
@@ -161,5 +161,5 @@ class ThingJsonStorage:
 
 
 __all__ = [
-    ThingJsonStorage.__name__,
+    ThingJSONStorage.__name__,
 ]

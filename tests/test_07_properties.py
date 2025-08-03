@@ -1,5 +1,6 @@
-import logging, unittest
+import logging, unittest, tempfile, os
 from hololinked.core.properties import Number
+from hololinked.storage.database import BaseDB
 
 try:
     from .utils import TestCase, TestRunner
@@ -16,11 +17,6 @@ class TestProperty(TestCase):
     def setUpClass(self):
         super().setUpClass()
         print(f"test property with {self.__name__}")
-
-    @classmethod
-    def tearDownClass(self):
-        print("\ntear down test property")
-        # self.thing_client.exit()
 
 
     def test_1_simple_class_property(self):
@@ -129,50 +125,71 @@ class TestProperty(TestCase):
             instance.not_a_class_prop
 
 
-   
+    def _get_tests_db_operations(self) -> None:
 
-#     def test_7_json_db_operations(self):
-#         with tempfile.NamedTemporaryFile(delete=False) as tf:
-#             filename = tf.name
+        def prekill(thing: TestThing) -> None:
+            self.assertEqual(thing.db_commit_number_prop, 0)
+            thing.db_commit_number_prop = 100
+            self.assertEqual(thing.db_commit_number_prop, 100)
+            self.assertEqual(thing.db_engine.get_property('db_commit_number_prop'), 100)
 
-#         # test db commit property
-#         thing = TestThing(id="test-db-operations", use_json_file=True,
-#                           json_filename=filename, log_level=logging.WARN)
-#         self.assertEqual(thing.db_commit_number_prop, 0)
-#         thing.db_commit_number_prop = 100
-#         self.assertEqual(thing.db_commit_number_prop, 100)
-#         self.assertEqual(thing.db_engine.get_property('db_commit_number_prop'), 100)
+            # test db persist property
+            self.assertEqual(thing.db_persist_selector_prop, 'a')
+            thing.db_persist_selector_prop = 'c'
+            self.assertEqual(thing.db_persist_selector_prop, 'c')
+            self.assertEqual(thing.db_engine.get_property('db_persist_selector_prop'), 'c')
 
-#         # test db persist property
-#         self.assertEqual(thing.db_persist_selector_prop, 'a')
-#         thing.db_persist_selector_prop = 'c'
-#         self.assertEqual(thing.db_persist_selector_prop, 'c')
-#         self.assertEqual(thing.db_engine.get_property('db_persist_selector_prop'), 'c')
+            # test db init property
+            self.assertEqual(thing.db_init_int_prop, 1)
+            thing.db_init_int_prop = 50
+            self.assertEqual(thing.db_init_int_prop, 50)
+            self.assertNotEqual(thing.db_engine.get_property('db_init_int_prop'), 50)
+            self.assertEqual(thing.db_engine.get_property('db_init_int_prop'), TestThing.db_init_int_prop.default)
+            del thing
 
-#         # test db init property
-#         self.assertEqual(thing.db_init_int_prop, 1)
-#         thing.db_init_int_prop = 50
-#         self.assertEqual(thing.db_init_int_prop, 50)
-#         self.assertNotEqual(thing.db_engine.get_property('db_init_int_prop'), 50)
-#         self.assertEqual(thing.db_engine.get_property('db_init_int_prop'), TestThing.db_init_int_prop.default)
-#         del thing
+        def postkill(thing: TestThing) -> None:
+            # deleted thing and reload from database
+            self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
+            self.assertEqual(thing.db_persist_selector_prop, 'c')
+            self.assertNotEqual(thing.db_commit_number_prop, 100)
+            self.assertEqual(thing.db_commit_number_prop, TestThing.db_commit_number_prop.default)
 
-#         # delete thing and reload from database
-#         thing = TestThing(id="test-db-operations", use_json_file=True,
-#                           json_filename=filename, log_level=logging.WARN)
-#         self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
-#         self.assertEqual(thing.db_persist_selector_prop, 'c')
-#         self.assertNotEqual(thing.db_commit_number_prop, 100)
-#         self.assertEqual(thing.db_commit_number_prop, TestThing.db_commit_number_prop.default)
+        return prekill, postkill
 
-#         # check db init prop with a different value in database apart from default
-#         thing.db_engine.set_property('db_init_int_prop', 101)
-#         del thing
-#         thing = TestThing(id="test-db-operations", use_json_file=True,
-#                           json_filename=filename, log_level=logging.WARN)
-#         self.assertEqual(thing.db_init_int_prop, 101)
 
-#         os.remove(filename)
+    def test_06_sqlalchemy_db_operations(self):
+        """Test SQLAlchemy database operations"""
+        thing_id = 'test-db-operations'
+        file_path = f'{BaseDB.get_temp_dir_for_class_name(TestThing.__name__)}/{thing_id}.db'
+        try:
+            os.remove(file_path)
+        except (OSError, FileNotFoundError):
+            pass
+        self.assertTrue(not os.path.exists(file_path))
+    	
+        prekill, postkill = self._get_tests_db_operations()
+
+        thing = TestThing(id=thing_id, use_default_db=True, log_level=logging.WARN)
+        prekill(thing)
+
+        thing = TestThing(id=thing_id, use_default_db=True, log_level=logging.WARN)
+        postkill(thing)
+
+
+    def test_7_json_db_operations(self):
+        with tempfile.NamedTemporaryFile(delete=False) as tf:
+            filename = tf.name
+
+        thing_id = 'test-db-operations-json'
+        prekill, postkill = self._get_tests_db_operations()
+
+        thing = TestThing(id=thing_id, use_json_file=True, json_filename=filename, log_level=logging.WARN)
+        prekill(thing)
+
+        thing = TestThing(id=thing_id, use_json_file=True, json_filename=filename, log_level=logging.WARN)
+        postkill(thing)
+
+        os.remove(filename)
 
 
 if __name__ == '__main__':

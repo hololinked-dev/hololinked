@@ -565,7 +565,8 @@ class PropertiesRegistry(DescriptorRegistry):
         with edit_constant_parameters(self.owner_inst):
             for db_prop, value in self.get_from_DB().items():
                 try:
-                    if db_prop not in missing_properties:
+                    prop_desc = self.descriptors[db_prop] # type: Property
+                    if (prop_desc.db_init or prop_desc.db_persist) and db_prop not in missing_properties:
                         setattr(self.owner_inst, db_prop, value) # type: ignore
                 except Exception as ex:
                     self.owner_inst.logger.error(f"could not set attribute {db_prop} due to error {str(ex)}")
