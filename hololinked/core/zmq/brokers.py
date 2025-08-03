@@ -1547,7 +1547,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                             preserialized_payload: PreserializedData = PreserializedEmptyByte,
                             server_execution_context: ServerExecutionContext = default_server_execution_context,
                             thing_execution_context: ThingExecutionContext  = default_thing_execution_context
-                        ) -> bytes:
+                        ) -> str:
         """
         Send operation to server with instance name. Replies are automatically polled & to be retrieved using 
         ``async_recv_response()``
@@ -1621,7 +1621,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         try:
             event = self.events_map[message_id]
         except KeyError:
-            raise ValueError(f"message id {message_id} unknown.") from None
+            raise KeyError(f"message id {message_id} unknown.") from None
         while True:
             try:
                 await asyncio.wait_for(event.wait(), timeout) 

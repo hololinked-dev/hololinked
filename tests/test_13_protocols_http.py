@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 import unittest, time, logging, requests
+import uuid
 from hololinked.client.proxy import ObjectProxy
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
@@ -19,13 +20,14 @@ from hololinked.server.http.handlers import PropertyHandler, RPCHandler, ThingDe
 from hololinked.server.security import Argon2BasicSecurity, BcryptBasicSecurity
 from hololinked.td.security_definitions import SecurityScheme
 from hololinked.utils import pep8_to_dashed_name
+from hololinked.client.factory import ClientFactory
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing
-    from .utils import TestCase, TestRunner
+    from .utils import TestCase, TestRunner, fake
 except ImportError:
     from things import OceanOpticsSpectrometer, TestThing
-    from utils import TestCase, TestRunner
+    from utils import TestCase, TestRunner, fake
 
 
 
@@ -483,7 +485,6 @@ class TestHTTPServer(TestCase):
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=8089, config={"allow_cors": True})
         
-        from hololinked.client.factory import ClientFactory
         object_proxy = ClientFactory.http(url=f'http://localhost:8089/{thing_id}/resources/wot-td')
         self.assertIsInstance(object_proxy, ObjectProxy)
         self.assertEqual(object_proxy.test_echo('Hello World!'), 'Hello World!')
@@ -539,10 +540,84 @@ class TestHTTPServer(TestCase):
                 ('post', f'/{thing_id}/connect', None)
             ]
         raise NotImplementedError(f"Endpoints for {class_.__name__} not implemented yet")
-           
+    
+
+
+class TestHTTPObjectProxy(TestCase):
+    # later create a TestObjtectProxy class that will test ObjectProxy but just overload the setUp and tearDown methods
+    # with the different protocol
+
+    def setUp(self):
+        thing_id = f'test-spectrometer-{uuid.uuid4().hex[0:8]}'
+        self.thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
+        self.thing.run_with_http_server(forked=True, port=8090, config={"allow_cors": True})
+        self.object_proxy = ClientFactory.http(url=f'http://localhost:8090/{thing_id}/resources/wot-td')
+
+    def tearDown(self):
+        # stop the thing and server
+        TestHTTPServer.stop_server(8090, thing_ids=[self.thing.id])
+        self.object_proxy = None
+
+    def test_01_invoke_action(self):
+        """Test basic functionality of ObjectProxy with HTTP server."""         
+        self.assertIsInstance(self.object_proxy, ObjectProxy)
+        # Test invoke_action method with reply
+        self.assertEqual(self.object_proxy.invoke_action('test_echo', 'Hello World!'), 'Hello World!')
+        # Test invoke_action with dot notation
+        self.assertEqual(self.object_proxy.test_echo(fake.chrome()), fake.last)
+        self.assertEqual(self.object_proxy.test_echo(fake.sha256()), fake.last)
+        self.assertEqual(self.object_proxy.test_echo(fake.address()), fake.last)
+        # Test invoke_action with no reply
+        self.assertEqual(self.object_proxy.invoke_action("test_echo", fake.random_number(), oneway=True), None)
+        # # Test invoke_action in non blocking mode
+        noblock_payload = fake.pylist(20, value_types=[int, float, str, bool])
+        noblock_msg_id = self.object_proxy.invoke_action("test_echo", noblock_payload, noblock=True)
+        self.assertIsInstance(noblock_msg_id, str)
+        self.assertEqual(self.object_proxy.invoke_action("test_echo", fake.pylist(20, value_types=[int, float, str, bool])), fake.last)
+        self.assertEqual(self.object_proxy.invoke_action("test_echo", fake.pylist(10, value_types=[int, float, str, bool])), fake.last)
+        self.assertEqual(self.object_proxy.read_reply(noblock_msg_id), noblock_payload)
+        
+    def test_02_rwd_properties(self):
+        # test read and write properties
+        self.assertEqual(self.object_proxy.read_property('max_intensity'), 16384)
+        self.assertEqual(self.object_proxy.write_property('integration_time', 1200), None)
+        self.assertEqual(self.object_proxy.read_property('integration_time'), 1200)
+        # test read and write properties with dot notation
+        self.assertEqual(self.object_proxy.max_intensity, 16384)
+        self.assertEqual(self.object_proxy.integration_time, 1200)
+        self.object_proxy.integration_time = 1000
+        self.assertEqual(self.object_proxy.integration_time, 1000)
+        # test oneway write property
+        self.assertEqual(self.object_proxy.write_property('integration_time', 800, oneway=True), None)
+        self.assertEqual(self.object_proxy.read_property('integration_time'), 800)
+        # test noblock read property
+        noblock_msg_id = self.object_proxy.read_property('integration_time', noblock=True)
+        self.assertIsInstance(noblock_msg_id, str)
+        self.assertEqual(self.object_proxy.read_property('max_intensity'), 16384)
+        self.assertEqual(self.object_proxy.write_property('integration_time', 1200), None)
+        self.assertEqual(self.object_proxy.read_reply(noblock_msg_id), 800)
+
+
+    def notest_03_rw_multiple_properties(self):
+        """Test reading and writing multiple properties at once."""
+        # test read multiple properties
+        properties = self.object_proxy.read_multiple_properties(['max_intensity', 'integration_time'])
+        self.assertEqual(properties['max_intensity'], 16384)
+        self.assertEqual(properties['integration_time'], 800)
+        
+        # test write multiple properties
+        new_values = {'integration_time': 1200, 'max_intensity': 20000}
+        self.object_proxy.write_multiple_properties(new_values)
+        properties = self.object_proxy.read_multiple_properties(['max_intensity', 'integration_time'])
+        self.assertEqual(properties['max_intensity'], 20000)
+        self.assertEqual(properties['integration_time'], 1200)
+    
+
+
 def load_tests(loader, tests, pattern): 
     suite = unittest.TestSuite()
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPObjectProxy))
     return suite
         
 if __name__ == '__main__':

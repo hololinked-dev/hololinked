@@ -203,9 +203,11 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
         self.assertEqual(await thing.async_read_property("selector_prop"), TestThing.selector_prop.objects[fake.last])
         await thing.async_write_property("observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool]))
         self.assertEqual(await thing.async_read_property("observable_list_prop"), fake.last)
-
         # await complete_pending_tasks_in_current_loop_async()
-      
+
+
+
+
 
 
 def load_tests(loader, tests, pattern):

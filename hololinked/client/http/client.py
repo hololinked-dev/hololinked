@@ -6,8 +6,10 @@ Classes that contain the client logic for the HTTP protocol.
 """
 import asyncio
 import json
+import uuid
 import tornado.httpclient
 from typing import Any
+from copy import deepcopy
 from tornado.simple_httpclient import HTTPTimeoutError
 
 from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
@@ -64,9 +66,18 @@ class HTTPConsumedAffordanceMixin:
             connect_timeout=self._connect_timeout,
             request_timeout=self._request_timeout,
         )
-
-
-      
+    
+    def read_reply(self, form: Form, message_id: str, timeout = None):
+        """Read the reply for a non-blocking action."""
+        form.href = f'{form.href}?messageID={message_id}&timeout={timeout or self._invokation_timeout}'
+        form.htv_methodName = "GET"
+        http_request = self.create_http_request(form, "GET", None)
+        try:
+            response = self.sync_http_client.fetch(http_request)
+        except HTTPTimeoutError as ex:
+            raise TimeoutError(str(ex)) from None
+        return self.get_body_from_response(response, form)
+    
 
 class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
 
@@ -117,8 +128,54 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         return self.get_body_from_response(response, form)
-            
+    
+    def oneway(self, *args, **kwargs):
+        """Invoke the action without waiting for a response."""
+        form = deepcopy(self._resource.retrieve_form(op='invokeaction'))
+        if form is None:
+            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
+        if args: 
+            kwargs.update({"__args__": args})
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
+        body = serializer.dumps(kwargs)
+        form.href = f'{form.href}?oneway=true'
+        http_request = self.create_http_request(form, "POST", body)
+        try:
+            response = self.sync_http_client.fetch(http_request)
+        except HTTPTimeoutError as ex:
+            raise TimeoutError(str(ex)) from None
+        # we still do it like this only to ensure our logic is consistent, oneway actions do not expect a body
+        return self.get_body_from_response(response, form)
+    
+    def noblock(self, *args, **kwargs) -> str:
+        """Invoke the action in non-blocking mode."""
+        form = deepcopy(self._resource.retrieve_form(op='invokeaction'))
+        if form is None:
+            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
+        if args: 
+            kwargs.update({"__args__": args})
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
+        body = serializer.dumps(kwargs)
+        form.href = f'{form.href}?noblock=true'
+        http_request = self.create_http_request(form, "POST", body)
+        try:
+            response = self.sync_http_client.fetch(http_request)
+        except HTTPTimeoutError as ex:
+            raise TimeoutError(str(ex)) from None
+        assert response.headers.get('X-Message-ID', None) is not None, \
+            "The server did not return a message ID for the non-blocking action."
+        message_id = response.headers['X-Message-ID']
+        self._owner_inst._noblock_messages[message_id] = self
+        return message_id
+    
+    def read_reply(self, message_id, timeout = None):
+        form = deepcopy(self._resource.retrieve_form(op='invokeaction'))
+        if form is None:
+            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
+        return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
 
+    
+        
 class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
 
     def __init__(self,
@@ -138,6 +195,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
                         execution_timeout=execution_timeout,
                         **kwargs
                     )
+        self._read_reply_op_map = dict()
         
     async def set(self, value: Any) -> None:
         if self._resource.readOnly:
@@ -193,9 +251,70 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         return self.get_body_from_response(response, form)
-        
     
-   
+    def oneway_set(self, value: Any) -> None:
+        if self._resource.readOnly:
+            raise NotImplementedError("This property is not writable")
+        form = self._resource.retrieve_form(op='writeproperty')
+        if form is None:
+            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
+        body = serializer.dumps(value)
+        form.href = f'{form.href}?oneway=true'
+        http_request = self.create_http_request(form, "PUT", body)
+        try:
+            response = self.sync_http_client.fetch(http_request)
+        except HTTPTimeoutError as ex:
+            raise TimeoutError(str(ex)) from None
+        # we still do it like this only to ensure our logic is consistent, oneway actions do not expect a body
+        return self.get_body_from_response(response, form, raise_exception=False)
+    
+    def noblock_get(self) -> str:
+        form = deepcopy(self._resource.retrieve_form(op='readproperty'))
+        if form is None:
+            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
+        form.href = f'{form.href}?noblock=true'
+        http_request = self.create_http_request(form, "GET", None)
+        try:
+            response = self.sync_http_client.fetch(http_request)
+        except HTTPTimeoutError as ex:
+            raise TimeoutError(str(ex)) from None
+        assert response.headers.get('X-Message-ID', None) is not None, \
+            "The server did not return a message ID for the non-blocking property read."
+        message_id = response.headers['X-Message-ID']
+        self._read_reply_op_map[message_id] = 'readproperty'
+        self._owner_inst._noblock_messages[message_id] = self
+        return message_id
+    
+    def noblock_set(self, value):
+        form = deepcopy(self._resource.retrieve_form(op='writeproperty'))
+        if form is None:
+            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+        if self._resource.readOnly:
+            raise NotImplementedError("This property is not writable")
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
+        body = serializer.dumps(value)
+        form.href = f'{form.href}?noblock=true'
+        http_request = self.create_http_request(form, "PUT", body)
+        try:
+            response = self.sync_http_client.fetch(http_request)
+        except HTTPTimeoutError as ex: 
+            raise TimeoutError(str(ex)) from None
+        assert response.headers.get('X-Message-ID', None) is not None, \
+            "The server did not return a message ID for the non-blocking property write."
+        message_id = response.headers['X-Message-ID']
+        self._owner_inst._noblock_messages[message_id] = self
+        self._read_reply_op_map[message_id] = 'writeproperty'
+        return message_id
+
+    def read_reply(self, message_id, timeout = None):
+        form = deepcopy(self._resource.retrieve_form(op=self._read_reply_op_map.get(message_id, 'readproperty')))
+        if form is None:
+            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
+        return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
+        
+
+
 class HTTPEvent(ConsumedThingEvent):
 
     def on_event(self, td, name):
