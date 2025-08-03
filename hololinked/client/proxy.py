@@ -545,11 +545,7 @@ class ObjectProxy:
         ----------
         name: str
             name of the event 
-        callbacks: Callable | List[Callable]
-            one or more callbacks that will be executed when this event is received
-        thread_callbacks: bool
-            thread the callbacks otherwise the callbacks will be executed serially
-        
+                    
         Raises
         ------
         AttributeError: 

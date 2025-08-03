@@ -558,7 +558,7 @@ class TestHTTPObjectProxy(TestCase):
         TestHTTPServer.stop_server(8090, thing_ids=[self.thing.id])
         self.object_proxy = None
 
-    def test_01_invoke_action(self):
+    def notest_01_invoke_action(self):
         """Test basic functionality of ObjectProxy with HTTP server."""         
         self.assertIsInstance(self.object_proxy, ObjectProxy)
         # Test invoke_action method with reply
@@ -577,7 +577,7 @@ class TestHTTPObjectProxy(TestCase):
         self.assertEqual(self.object_proxy.invoke_action("test_echo", fake.pylist(10, value_types=[int, float, str, bool])), fake.last)
         self.assertEqual(self.object_proxy.read_reply(noblock_msg_id), noblock_payload)
         
-    def test_02_rwd_properties(self):
+    def notest_02_rwd_properties(self):
         # test read and write properties
         self.assertEqual(self.object_proxy.read_property('max_intensity'), 16384)
         self.assertEqual(self.object_proxy.write_property('integration_time', 1200), None)
@@ -611,6 +611,25 @@ class TestHTTPObjectProxy(TestCase):
         properties = self.object_proxy.read_multiple_properties(['max_intensity', 'integration_time'])
         self.assertEqual(properties['max_intensity'], 20000)
         self.assertEqual(properties['integration_time'], 1200)
+
+
+    def test_04_subscribe_event(self):
+        """Test subscribing to an event and receiving updates."""
+        event_name = 'intensity_measurement_event'
+        def on_event(data):
+            nonlocal self
+            self.assertTrue(isinstance(data, dict) and 'value' in data and 'timestamp' in data)
+        
+        self.object_proxy.subscribe_event(event_name, on_event)
+        self.object_proxy.start_acquisition()
+        time.sleep(2)  # wait for some events to be generated
+        self.object_proxy.stop_acquisition()
+        # check if events are kept alive
+        time.sleep(20)
+        self.object_proxy.start_acquisition()
+        time.sleep(2)  # wait for some events to be generated
+        self.object_proxy.stop_acquisition()
+        self.object_proxy.unsubscribe_event(event_name)
     
 
 

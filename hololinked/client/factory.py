@@ -9,7 +9,7 @@ from ..td.interaction_affordance import PropertyAffordance, ActionAffordance, Ev
 from ..serializers import Serializers
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
 from .zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty, WriteMultipleProperties, ReadMultipleProperties
-from .http.client import HTTPProperty, HTTPAction, HTTPEvent
+from .http.consumed_interactions import HTTPProperty, HTTPAction, HTTPEvent
 
 
 class ClientFactory: 
@@ -106,25 +106,32 @@ class ClientFactory:
                                     request_timeout=kwargs.get('request_timeout', 60),
                                     invokation_timeout=kwargs.get('invokation_timeout', 5),
                                     execution_timeout=kwargs.get('execution_timeout', 5),
-                                    owner_inst=object_proxy
+                                    owner_inst=object_proxy,
+                                    logger=object_proxy.logger
                                 )
             self.add_property(object_proxy, consumed_property)
         for action in TD["actions"]:
             affordance = ActionAffordance.from_TD(action, TD)
             consumed_action = HTTPAction(
                                     resource=affordance, 
+                                    connect_timeout=kwargs.get('connect_timeout', 60),
+                                    request_timeout=kwargs.get('request_timeout', 60),
                                     invokation_timeout=kwargs.get('invokation_timeout', 5),
                                     execution_timeout=kwargs.get('execution_timeout', 5),
-                                    owner_inst=object_proxy
+                                    owner_inst=object_proxy,
+                                    logger=object_proxy.logger
                                 )
             self.add_action(object_proxy, consumed_action)
         for event in TD["events"]:
             affordance = EventAffordance.from_TD(event, TD)
             consumed_event = HTTPEvent(
                                     resource=affordance, 
+                                    connect_timeout=None,
+                                    request_timeout=None,
                                     invokation_timeout=kwargs.get('invokation_timeout', 5),
                                     execution_timeout=kwargs.get('execution_timeout', 5),
-                                    owner_inst=object_proxy
+                                    owner_inst=object_proxy,
+                                    logger=object_proxy.logger
                                 )
             self.add_event(object_proxy, consumed_event)
         return object_proxy

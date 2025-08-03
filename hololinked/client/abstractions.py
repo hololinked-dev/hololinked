@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+import logging
 from types import FunctionType, MethodType
 import typing
 import builtins
@@ -296,7 +297,8 @@ class ConsumedThingEvent:
         self._resource = resource
         self._callbacks = None        
         self._thread_callbacks = False
-        self._logger = kwargs.get('logger', None)
+        self._subscribed = False
+        self._logger = kwargs.get('logger', None) # type: logging.Logger
      
     def add_callbacks(self, *callbacks : typing.Union[typing.List[typing.Callable], typing.Callable]) -> None:
         """

@@ -6,14 +6,18 @@ Classes that contain the client logic for the HTTP protocol.
 """
 import asyncio
 import json
+import logging
+import threading
 import uuid
 import tornado.httpclient
-from typing import Any
+from typing import Any, Callable
 from copy import deepcopy
-from tornado.simple_httpclient import HTTPTimeoutError
+from tornado.simple_httpclient import HTTPTimeoutError, HTTPStreamClosedError
 
+
+from ...utils import get_current_async_loop
 from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
-from ...td.interaction_affordance import ActionAffordance
+from ...td.interaction_affordance import ActionAffordance, EventAffordance
 from ...td.forms import Form
 from ...serializers import Serializers
 
@@ -34,8 +38,8 @@ class HTTPConsumedAffordanceMixin:
         self._request_timeout = request_timeout
         self._invokation_timeout = invokation_timeout
         self._execution_timeout = execution_timeout
-        self.sync_http_client = tornado.httpclient.HTTPClient()
-        self.async_http_client = tornado.httpclient.AsyncHTTPClient()
+        self._sync_http_client = tornado.httpclient.HTTPClient()
+        self._async_http_client = tornado.httpclient.AsyncHTTPClient()
 
     
     def get_body_from_response(self, 
@@ -73,7 +77,7 @@ class HTTPConsumedAffordanceMixin:
         form.htv_methodName = "GET"
         http_request = self.create_http_request(form, "GET", None)
         try:
-            response = self.sync_http_client.fetch(http_request)
+            response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         return self.get_body_from_response(response, form)
@@ -109,7 +113,7 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         body = serializer.dumps(kwargs)
         http_request = self.create_http_request(form, "POST", body)
         try:
-            response = await self.async_http_client.fetch(http_request)
+            response = await self._async_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         return self.get_body_from_response(response, form)
@@ -124,7 +128,7 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         body = serializer.dumps(kwargs)
         http_request = self.create_http_request(form, "POST", body)
         try:
-            response = self.sync_http_client.fetch(http_request)
+            response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         return self.get_body_from_response(response, form)
@@ -141,7 +145,7 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         form.href = f'{form.href}?oneway=true'
         http_request = self.create_http_request(form, "POST", body)
         try:
-            response = self.sync_http_client.fetch(http_request)
+            response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         # we still do it like this only to ensure our logic is consistent, oneway actions do not expect a body
@@ -159,7 +163,7 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         form.href = f'{form.href}?noblock=true'
         http_request = self.create_http_request(form, "POST", body)
         try:
-            response = self.sync_http_client.fetch(http_request)
+            response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         assert response.headers.get('X-Message-ID', None) is not None, \
@@ -207,7 +211,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         body = serializer.dumps(value)
         http_request = self.create_http_request(form, "PUT", body)
         try:
-            response = await self.async_http_client.fetch(http_request)
+            response = await self._async_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         self.get_body_from_response(response, form) # Just to ensure the request was successful, no body expected.
@@ -224,7 +228,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         body = serializer.dumps(value)
         http_request = self.create_http_request(form, "PUT", body)
         try:
-            response = self.sync_http_client.fetch(http_request)
+            response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         self.get_body_from_response(response, form)
@@ -236,7 +240,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
             raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
         http_request = self.create_http_request(form, "GET", b'')
         try:
-            response = await self.async_http_client.fetch(http_request)
+            response = await self._async_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         return self.get_body_from_response(response, form)
@@ -247,7 +251,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
             raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
         http_request = self.create_http_request(form, "GET", None)
         try:
-            response = self.sync_http_client.fetch(http_request)
+            response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         return self.get_body_from_response(response, form)
@@ -263,7 +267,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         form.href = f'{form.href}?oneway=true'
         http_request = self.create_http_request(form, "PUT", body)
         try:
-            response = self.sync_http_client.fetch(http_request)
+            response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         # we still do it like this only to ensure our logic is consistent, oneway actions do not expect a body
@@ -276,7 +280,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         form.href = f'{form.href}?noblock=true'
         http_request = self.create_http_request(form, "GET", None)
         try:
-            response = self.sync_http_client.fetch(http_request)
+            response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex:
             raise TimeoutError(str(ex)) from None
         assert response.headers.get('X-Message-ID', None) is not None, \
@@ -297,7 +301,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         form.href = f'{form.href}?noblock=true'
         http_request = self.create_http_request(form, "PUT", body)
         try:
-            response = self.sync_http_client.fetch(http_request)
+            response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex: 
             raise TimeoutError(str(ex)) from None
         assert response.headers.get('X-Message-ID', None) is not None, \
@@ -315,84 +319,128 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         
 
 
-class HTTPEvent(ConsumedThingEvent):
+class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
-    def on_event(self, td, name):
-        """Subscribes to an event on a remote Thing.
-        Returns an Observable."""
+    def __init__(self, 
+                resource: EventAffordance,
+                default_scheduling_mode: str = 'sync',
+                connect_timeout: int = 60,
+                request_timeout: int = 60,
+                invokation_timeout: int = 5,
+                execution_timeout: int = 5,
+                **kwargs
+            ) -> None:
+        ConsumedThingEvent.__init__(self, resource=resource, **kwargs)
+        HTTPConsumedAffordanceMixin.__init__(
+                            self,
+                            connect_timeout=connect_timeout,
+                            request_timeout=request_timeout,
+                            invokation_timeout=invokation_timeout,
+                            execution_timeout=execution_timeout,
+                            **kwargs
+                        )
+        self._default_scheduling_mode = default_scheduling_mode
+        self._thread = None
 
-        href = self.pick_http_href(td, td.get_event_forms(name))
 
-        if href is None:
-            raise FormNotFoundException()
+    def subscribe(self, 
+                callbacks: list[Callable] | Callable, 
+                thread_callbacks: bool = False, 
+                deserialize: bool = True
+            ) -> None:
+        if not self._default_scheduling_mode in ['sync', 'async']:
+            raise ValueError(f"Invalid scheduling mode: {self._default_scheduling_mode}. Must be 'sync' or 'async'.")
+        form = self._resource.retrieve_form(op='subscribeevent')
+        if form is None:
+            raise ValueError(f"No form found for subscribeevent operation for {self._resource.name}")
+        self.add_callbacks(callbacks)
+        self._subscribed = True
+        self._deserialize = deserialize
+        self._thread_callbacks = thread_callbacks
+        if self._default_scheduling_mode == 'sync':
+            self._thread = threading.Thread(target=self.listen)
+            self._thread.start()
+        else:
+            get_current_async_loop().call_soon(lambda: asyncio.create_task(self.async_listen()))
 
-        def subscribe(observer):
-            """Subscription function to observe events using the HTTP protocol."""
+    def listen(self):
+        form = self._resource.retrieve_form(op='subscribeevent')
+        if form is None:
+            raise ValueError(f"No form found for subscribeevent operation for {self._resource.name}")
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
+        buffer = ""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-            state = {"active": True}
+        def on_chunk(chunk: bytes):
+            """process incoming SSE chunks"""
+            nonlocal self, serializer, buffer
 
-            @handle_observer_finalization(observer)
-            async def callback():
-                http_client = tornado.httpclient.AsyncHTTPClient()
-                http_request = tornado.httpclient.HTTPRequest(href, method="GET")
-
-                while state["active"]:
-                    try:
-                        response = await http_client.fetch(http_request)
-                        payload = json.loads(response.body).get("payload")
-                        observer.on_next(EmittedEvent(init=payload, name=name))
-                    except HTTPTimeoutError:
-                        pass
-
-            def unsubscribe():
-                state["active"] = False
-
-            asyncio.create_task(callback())
-
-            return unsubscribe
-
-        return Observable.create(subscribe)
-
-    def on_property_change(self, td, name):
-        """Subscribes to property changes on a remote Thing.
-        Returns an Observable"""
-
-        href = self.pick_http_href(
-            td, td.get_property_forms(name), op=InteractionVerbs.OBSERVE_PROPERTY
+            if not self._subscribed:
+                self._logger.debug("Unsubscribed from the event stream, stopping processing.")
+                self._sync_http_client.close()
+                return
+            
+            buffer += chunk.decode('utf-8')
+            # split events on the SSE separator: two newlines
+            while "\n\n" in buffer:
+                raw_event, buffer = buffer.split("\n\n", 1)
+                event = {}
+                for line in raw_event.splitlines():
+                    # skip comments
+                    if not line or line.startswith(":"):
+                        continue
+                    if ":" in line:
+                        field, value = line.split(":", 1)
+                        event.setdefault(field, "")
+                        # strip leading space after colon
+                        event[field] += value.lstrip()
+                if "data" in event:
+                    # if the event has a data field, it is an event, and its also a string, so we need to cast it to bytes
+                    value = serializer.loads(event["data"].encode('utf-8'))
+                    for cb in self._callbacks: 
+                        if not self._thread_callbacks:
+                            cb(value)
+                        else: 
+                            threading.Thread(target=cb, args=(value,)).start()
+                else:
+                    self._logger.warning(f"Received an invalid SSE event: {raw_event}")
+            
+        request = tornado.httpclient.HTTPRequest(
+            form.href,
+            method="GET",
+            headers={"Accept": "text/event-stream"},
+            request_timeout=self._request_timeout,
+            connect_timeout=self._connect_timeout,  
+            streaming_callback=on_chunk,
         )
-
-        if href is None:
-            raise FormNotFoundException()
-
-        def subscribe(observer):
-            """Subscription function to observe property updates using the HTTP protocol."""
-
-            state = {"active": True}
-
-            @handle_observer_finalization(observer)
-            async def callback():
-                http_client = tornado.httpclient.AsyncHTTPClient()
-                http_request = tornado.httpclient.HTTPRequest(href, method="GET")
-
-                while state["active"]:
-                    try:
-                        response = await http_client.fetch(http_request)
-                        value = json.loads(response.body)
-                        value = value.get("value", value)
-                        init = PropertyChangeEventInit(name=name, value=value)
-                        observer.on_next(PropertyChangeEmittedEvent(init=init))
-                    except HTTPTimeoutError:
-                        pass
-
-            def unsubscribe():
-                state["active"] = False
-
-            asyncio.create_task(callback())
-
-            return unsubscribe
-
-        return Observable.create(subscribe)
-
+        try:
+            while self._subscribed:
+                try:
+                    response = self._sync_http_client.fetch(request, raise_error=False)
+                    if response.code < 200 or response.code >= 300:
+                        raise Exception(f"Failed to subscribe to SSE stream: {response.code}")
+                except HTTPTimeoutError as ex:
+                    pass 
+        except HTTPStreamClosedError as ex:
+            self._logger.debug(f"HTTP stream closed: {str(ex)}")
+        finally:
+            tasks = [task for task in asyncio.all_tasks(loop) if not task.done()]
+            for task in tasks:
+                task.cancel()
+            loop.close()
+            self._sync_http_client.close() # can close twice sometimes, seems to be OK
+            
+    def unsubscribe(self, join_thread: bool = True):
+        """
+        Unsubscribe from the event. 
+        Its inherently a little slower due to the nature of HTTP, please wait until the request timeout is reached.
+        """
+        self._subscribed = False
+        if self._thread and join_thread:
+            self._thread.join()
+            self._thread = None
+  
 
 __all__ = [
     HTTPProperty.__name__,
