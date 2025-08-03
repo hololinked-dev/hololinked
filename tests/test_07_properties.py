@@ -1,5 +1,4 @@
 import logging, unittest
-
 from hololinked.core.properties import Number
 
 try:

@@ -1,19 +1,12 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 Classes that contain the client logic for the HTTP protocol.
 """
 import asyncio
-import json
-import logging
 import threading
-import uuid
 import tornado.httpclient
 from typing import Any, Callable
 from copy import deepcopy
 from tornado.simple_httpclient import HTTPTimeoutError, HTTPStreamClosedError
-
 
 from ...utils import get_current_async_loop
 from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception

@@ -166,14 +166,14 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
     @classmethod
     def setUpThing(self):
         """Set up the thing for the zmq object proxy client"""
-        self.thing = TestThing(id="test-thing", log_level=logging.ERROR+10)
+        self.thing = TestThing(id="test-thing-async", log_level=logging.ERROR+10)
         self.thing.run_with_zmq_server(forked=True)
         self.thing_model = self.thing.get_thing_model(ignore_errors=True).json()
 
 
     async def test_01_creation_and_handshake(self):
         """Test the creation and handshake of the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC")
         self.assertIsInstance(thing, ObjectProxy)
         self.assertTrue(
                 len(thing.properties) + len(thing.actions) + len(thing.events) >=
@@ -181,7 +181,7 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
             )
         
     async def test_02_invoke_action(self):
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC")
         self.assertIsInstance(thing, ObjectProxy)  
         self.assertEqual(await thing.async_invoke_action("action_echo", fake.text(max_nb_chars=100)), fake.last)
         self.assertEqual(await thing.async_invoke_action("action_echo", fake.sentence()), fake.last)
@@ -190,7 +190,7 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
 
     async def test_03_rwd_properties(self):
         """Test the read, write and delete of properties on the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC")
         self.assertIsInstance(thing, ObjectProxy)  
         # Test read_property method
         self.assertIsInstance(await thing.async_read_property("number_prop"), (int, float))
@@ -205,6 +205,9 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
         self.assertEqual(await thing.async_read_property("observable_list_prop"), fake.last)
         # await complete_pending_tasks_in_current_loop_async()
 
+    async def test_04_stop(self):
+        """Test the stop of the zmq object proxy client"""
+        self.thing.rpc_server.stop()
 
 
 

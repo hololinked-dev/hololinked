@@ -403,7 +403,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
             except Exception as ex:
                 import traceback
                 # traceback.print_exc()
-                # TODO: some minor bug here within the umq receive loop when the loop is interrupted
+                # TODO: some minor bug here within the zmq receive loop when the loop is interrupted
                 # uncomment the above line to see the traceback
                 warnings.warn(f"Uncaught exception from {self._resource.name} event - {str(ex)}\n{traceback.print_exc()}", 
                                 category=RuntimeWarning)

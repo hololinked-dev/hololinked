@@ -8,6 +8,7 @@ from .security_definitions import *
 from .metadata import *
 from .interaction_affordance import *
 from ..core.state_machine import BoundFSM
+from ..core import Thing
 
 
 class ThingModel(Schema):
@@ -58,7 +59,14 @@ class ThingModel(Schema):
     
     # not the best code and logic, but works for now
     skip_properties: typing.List[str] = ['expose', 'thing_description', 'GUI', 'object_info' ]
-    skip_actions: typing.List[str] = ['get_postman_collection', 'get_thing_description', 'get_our_temp_thing_description']
+    skip_actions: typing.List[str] = [
+        Thing._add_property.name,
+        Thing._get_properties.name,
+        Thing._get_properties_in_db.name,
+        Thing._set_properties.name,
+        'get_postman_collection', 
+        'get_our_thing_model'
+    ]
     skip_events: typing.List[str] = []
 
     def add_interaction_affordances(self):

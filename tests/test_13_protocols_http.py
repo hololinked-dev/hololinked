@@ -33,7 +33,7 @@ except ImportError:
 
 class TestHTTPServer(TestCase):
 
-    def notest_1_init_run_and_stop(self):
+    def test_01_init_run_and_stop(self):
         """Test basic init, run and stop of the HTTP server."""
         # init, run and stop synchronously
         server = HTTPServer(log_level=logging.ERROR+10)
@@ -51,7 +51,7 @@ class TestHTTPServer(TestCase):
         time.sleep(2)
 
 
-    def notest_2_add_interaction_affordance(self):
+    def test_02_add_interaction_affordance(self):
         """Test adding an interaction affordance to the HTTP server."""
         server = HTTPServer(log_level=logging.ERROR+10)
         self.assertTrue(server.all_ok)
@@ -83,7 +83,7 @@ class TestHTTPServer(TestCase):
         )
         
 
-    def notest_3_add_thing(self):
+    def test_03_add_thing(self):
         """Test adding a Thing object to the HTTP server."""
    
         # add a thing, both class and instance
@@ -137,7 +137,7 @@ class TestHTTPServer(TestCase):
             # also check that it does not create duplicate rules
 
 
-    def notest_4_add_thing_over_zmq_server(self):
+    def test_04_add_thing_over_zmq_server(self):
         """extension of previous two tests to complete adding a thing running over a zmq server"""
         server = HTTPServer(log_level=logging.ERROR+10)
         old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
@@ -171,7 +171,7 @@ class TestHTTPServer(TestCase):
         thing.rpc_server.stop()
 
 
-    def notest_5_handlers(self):
+    def test_05_handlers(self):
         """Test request info and payload decoding in RPC handlers along with content type handling"""
         latest_request_info = None # type: "LatestRequestInfo"
 
@@ -186,7 +186,7 @@ class TestHTTPServer(TestCase):
 
             def update_latest_request_info(self) -> None:
                 nonlocal latest_request_info
-                server_execution_context, thing_execution_context = self.get_execution_parameters()
+                server_execution_context, thing_execution_context, _ = self.get_execution_parameters()
                 payload, preserialized_payload = self.get_request_payload()
                 latest_request_info = LatestRequestInfo(
                     server_execution_context=server_execution_context,
@@ -351,7 +351,7 @@ class TestHTTPServer(TestCase):
         self.stop_server(port, thing_ids=[thing_id], headers=auth_headers)
 
 
-    def notest_6_basic_end_to_end(self):
+    def test_06_basic_end_to_end(self):
         thing_id = 'test-spectrometer-end-to-end'
         port = 8085
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
@@ -364,7 +364,7 @@ class TestHTTPServer(TestCase):
         self.stop_server(port, thing_ids=[thing_id])
 
 
-    def notest_7_bcrypt_basic_security_end_to_end(self):
+    def test_07_bcrypt_basic_security_end_to_end(self):
         security_scheme = BcryptBasicSecurity(
             username='someuser',
             password='somepassword'
@@ -392,7 +392,7 @@ class TestHTTPServer(TestCase):
         )
 
 
-    def notest_8_argon2_basic_security_end_to_end(self):
+    def test_08_argon2_basic_security_end_to_end(self):
         security_scheme = Argon2BasicSecurity(
             username='someuserargon2',
             password='somepasswordargon2'
@@ -440,7 +440,7 @@ class TestHTTPServer(TestCase):
         self.stop_server(8088, thing_ids=[thing_id], headers=headers)
 
 
-    def notest_9_sse(self):
+    def test_09_sse(self):
         """Test Server-Sent Events (SSE)"""
         for security_scheme in [None, BcryptBasicSecurity(username='someuser', password='somepassword')]:
             # test SSE with and without security
@@ -454,7 +454,7 @@ class TestHTTPServer(TestCase):
             self._test_sse_end_to_end(security_scheme=security_scheme, headers=headers)
 
 
-    def notest_10_forms_generation(self):
+    def test_10_forms_generation(self):
         thing_id = 'test-spectrometer-forms-generation'
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=8088, config={"allow_cors": True})
@@ -481,7 +481,7 @@ class TestHTTPServer(TestCase):
 
 
     def test_11_object_proxy_basic(self):
-        thing_id = 'test-spectrometer-forms-generation'
+        thing_id = 'test-spectrometer-object-proxy-basic'
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=8089, config={"allow_cors": True})
         
@@ -558,7 +558,7 @@ class TestHTTPObjectProxy(TestCase):
         TestHTTPServer.stop_server(8090, thing_ids=[self.thing.id])
         self.object_proxy = None
 
-    def notest_01_invoke_action(self):
+    def test_01_invoke_action(self):
         """Test basic functionality of ObjectProxy with HTTP server."""         
         self.assertIsInstance(self.object_proxy, ObjectProxy)
         # Test invoke_action method with reply
@@ -577,7 +577,7 @@ class TestHTTPObjectProxy(TestCase):
         self.assertEqual(self.object_proxy.invoke_action("test_echo", fake.pylist(10, value_types=[int, float, str, bool])), fake.last)
         self.assertEqual(self.object_proxy.read_reply(noblock_msg_id), noblock_payload)
         
-    def notest_02_rwd_properties(self):
+    def test_02_rwd_properties(self):
         # test read and write properties
         self.assertEqual(self.object_proxy.read_property('max_intensity'), 16384)
         self.assertEqual(self.object_proxy.write_property('integration_time', 1200), None)
@@ -635,7 +635,7 @@ class TestHTTPObjectProxy(TestCase):
 
 def load_tests(loader, tests, pattern): 
     suite = unittest.TestSuite()
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPObjectProxy))
     return suite
         

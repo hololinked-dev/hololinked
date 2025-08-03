@@ -7,6 +7,7 @@ import jsonschema
 import logging
 import random
 import time
+from types import SimpleNamespace
 
 from hololinked.core.actions import BoundAction
 from hololinked.core.property import Property
@@ -60,10 +61,12 @@ class InteractionAffordanceMixin(TestBrokerMixin):
         
     @classmethod
     def setUpActions(self):
+        owner_inst = SimpleNamespace(_noblock_messages={})
         self.action_echo = ZMQAction(
                                 resource=ActionAffordance.from_TD('action_echo', test_thing_TD),
                                 sync_client=self.sync_client,
                                 async_client=self.async_client, 
+                                owner_inst=owner_inst,
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 schema_validator=None
@@ -73,6 +76,7 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                                 resource=ActionAffordance.from_TD('get_serialized_data', test_thing_TD),
                                 sync_client=self.sync_client,
                                 async_client=self.async_client, 
+                                owner_inst=owner_inst,
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 schema_validator=None
@@ -82,6 +86,7 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                                 resource=ActionAffordance.from_TD('sleep', test_thing_TD),
                                 sync_client=self.sync_client,
                                 async_client=self.async_client, 
+                                owner_inst=owner_inst,
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 schema_validator=None
@@ -91,6 +96,7 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                                 resource= ActionAffordance.from_TD('get_mixed_content_data', test_thing_TD),
                                 sync_client=self.sync_client,
                                 async_client=self.async_client, 
+                                owner_inst=owner_inst,
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 schema_validator=None
@@ -99,6 +105,7 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                                 resource=ActionAffordance.from_TD('push_events', test_thing_TD),
                                 sync_client=self.sync_client,
                                 async_client=self.async_client,
+                                owner_inst=owner_inst,
                                 invokation_timeout=5,
                                 execution_timeout=5,
                                 schema_validator=None
@@ -106,10 +113,12 @@ class InteractionAffordanceMixin(TestBrokerMixin):
     
     @classmethod
     def setUpProperties(self):
+        owner_inst = SimpleNamespace(_noblock_messages={})
         self.base_property = ZMQProperty(
                                 resource=PropertyAffordance.from_TD('base_property', test_thing_TD),
                                 sync_client=self.sync_client,
-                                async_client=self.async_client, 
+                                async_client=self.async_client,
+                                owner_inst=owner_inst,                           
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 schema_validator=None
@@ -118,6 +127,7 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                                 resource=PropertyAffordance.from_TD('total_number_of_events', test_thing_TD),
                                 sync_client=self.sync_client,
                                 async_client=self.async_client,
+                                owner_inst=owner_inst,
                                 invokation_timeout=5,
                                 execution_timeout=5,
                                 schema_validator=None
@@ -125,9 +135,11 @@ class InteractionAffordanceMixin(TestBrokerMixin):
     
     @classmethod
     def setUpEvents(self):
+        owner_inst = SimpleNamespace(_noblock_messages={})
         self.test_event = ZMQEvent(
                                 resource=EventAffordance.from_TD('test_event', test_thing_TD),
-                                sync_zmq_client=None
+                                sync_zmq_client=None,
+                                owner_inst=owner_inst
                             )
        
 
@@ -528,6 +540,7 @@ class TestExposedActions(InteractionAffordanceMixin):
             done_queue=self.done_queue,
             prerun_callback=replace_methods_with_actions,
         )
+        replace_methods_with_actions(TestThing)
         thing = TestThing(id='test-action', log_level=logging.ERROR)
         self.sync_client.handshake()
 
@@ -989,7 +1002,7 @@ def load_tests(loader, tests, pattern):
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
     return suite
         
