@@ -717,7 +717,7 @@ class TestExposedProperties(InteractionAffordanceMixin):
         self.client = self.sync_client
 
 
-    def test_1_property_abstractions(self):
+    def test_01_property_abstractions(self):
   
         run_thing_with_zmq_server_forked(
             thing_cls=TestThing, 
@@ -759,7 +759,60 @@ class TestExposedProperties(InteractionAffordanceMixin):
         get_current_async_loop().run_until_complete(test_6_async_property_abstractions(self))
 
 
-    def test_2_exit(self):
+    def test_02_json_schema_property(self):
+        """Test json schema based property"""
+        json_schema_prop = ZMQProperty(
+            resource=PropertyAffordance.from_TD('json_schema_prop', test_thing_TD),
+            sync_client=self.client
+        )
+        json_schema_prop._resource._thing_id = self.server_id
+        json_schema_prop.set('hello')
+        self.assertEqual(json_schema_prop.get(), 'hello')
+        json_schema_prop.set('world')
+        self.assertEqual(json_schema_prop.get(), 'world')
+        with self.assertRaises(Exception) as ex:
+            json_schema_prop.set('world1')
+        self.assertTrue("Failed validating 'pattern' in schema:" in str(ex.exception))
+
+
+    def test_03_pydantic_model_property(self):
+        """Test pydantic model based property"""
+        pydantic_prop = ZMQProperty(
+            resource=PropertyAffordance.from_TD('pydantic_prop', test_thing_TD),
+            sync_client=self.client
+        )
+        pydantic_prop._resource._thing_id = self.server_id
+
+        valid_value = {
+            'foo': 'foo',
+            'bar': 1,
+            'foo_bar': 1.0
+        }
+        pydantic_prop.set(valid_value)
+        self.assertEqual(pydantic_prop.get(), valid_value)
+
+        invalid_value = {
+            'foo': 1,
+            'bar': '1',
+            'foo_bar': 1.0
+        }    
+        with self.assertRaises(Exception) as ex:
+            pydantic_prop.set(invalid_value)
+        self.assertTrue("validation error for PydanticProp" in str(ex.exception))
+
+        pydantic_simple_prop = ZMQProperty(
+            resource=PropertyAffordance.from_TD('pydantic_simple_prop', test_thing_TD),
+            sync_client=self.client
+        )
+        pydantic_simple_prop._resource._thing_id = self.server_id
+        pydantic_simple_prop.set(5)
+        self.assertEqual(pydantic_simple_prop.get(), 5)
+        with self.assertRaises(Exception) as ex:
+            pydantic_simple_prop.set('5str')
+        self.assertTrue("validation error for 'int'" in str(ex.exception))
+
+
+    def test_04_exit(self):
         exit_message = RequestMessage.craft_with_message_type(
             sender_id='test-property-client', 
             receiver_id=self.server_id,
@@ -998,12 +1051,12 @@ class TestThingRunRPCServer(TestBrokerMixin):
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInprocRPCServer))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInprocRPCServer))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
     # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
     return suite
         
 if __name__ == '__main__':

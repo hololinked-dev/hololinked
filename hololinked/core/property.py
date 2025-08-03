@@ -199,14 +199,14 @@ class Property(Parameter):
         if self.model:
             if isinstance(self.model, dict):
                 self.validator(value)
-            elif issubklass(self.model, BaseModel):
-                value = self.model(**value)
             elif issubklass(self.model, RootModel):
                 value = self.model(value)
+            elif issubklass(self.model, BaseModel):
+                value = self.model(**value)
         return super().validate_and_adapt(value)
     
 
-    def external_set(self, obj: Parameterized, value : typing.Any) -> None:
+    def external_set(self, obj: Parameterized, value: typing.Any) -> None:
         """
         Set the value of the property from an external source, e.g. a remote client.
         """

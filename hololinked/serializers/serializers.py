@@ -37,6 +37,7 @@ from pydantic import validate_call
 import pickle
 import json as pythonjson
 from msgspec import json as msgspecjson, msgpack, Struct
+
 # default dytypes:
 try:
     import numpy 
@@ -85,7 +86,7 @@ class BaseSerializer(object):
         raise NotImplementedError("serializer must implement a content type")
     
 
-
+    
 dict_keys = type(dict().keys())
 
 class JSONSerializer(BaseSerializer):
@@ -108,6 +109,8 @@ class JSONSerializer(BaseSerializer):
     @classmethod
     def default(cls, obj) -> JSONSerializable:
         "method called if no serialization option was found."
+        if hasattr(obj, 'model_dump'):
+            return obj.model_dump()
         if hasattr(obj, 'json'):
             # alternative to type replacement
             return obj.json()

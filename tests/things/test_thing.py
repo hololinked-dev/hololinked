@@ -435,7 +435,23 @@ test_thing_TD = {
             'description' : 'Total number of events pushed',
             'default' : 100,
             'minimum' : 1
-        }
+        },
+        'json_schema_prop': {
+            'title' : 'json_schema_prop',
+            'description' : 'A property with a json schema to check RW',
+            'type' : "string",
+            'minLength' : 1,
+            'maxLength' : 10,
+            'pattern' : "^[a-z]+$"
+        },
+        'pydantic_prop': {
+            'title' : 'pydantic_prop',
+            'description' : 'A property with a pydantic schema to check RW',
+        }, # actually the data schema is not necessary to trigger an execution on the server, so we are skipping it temporarily
+        'pydantic_simple_prop': {
+            'title' : 'pydantic_simple_prop',
+            'description' : 'A property with a simple pydantic schema to check RW',
+        }, # actually the data schema is not necessary to trigger an execution on the server, so we are skipping it temporarily
     },
     'events' : {
         'test_event': {
