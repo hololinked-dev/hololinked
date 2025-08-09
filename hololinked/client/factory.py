@@ -42,9 +42,9 @@ class ClientFactory:
             sync_client=sync_zmq_client,
             async_client=async_zmq_client,
         )
-        TD = FetchTD(ignore_errors=True)
+        TD = FetchTD(ignore_errors=True) # typing.Dict[str, typing.Any]
         object_proxy.td = TD
-        for name  in TD["properties"]:
+        for name  in TD.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, TD)
             consumed_property = ZMQProperty(
                                     resource=affordance, 
@@ -55,7 +55,18 @@ class ClientFactory:
                                     execution_timeout=object_proxy.execution_timeout,
                                 )
             self.add_property(object_proxy, consumed_property)
-        for action in TD["actions"]:
+            if hasattr(affordance, "observable") and affordance.observable:
+                pass
+            #     consumed_property_event = ZMQEvent(
+            #                         resource=affordance,
+            #                         sync_zmq_client=sync_zmq_client,
+            #                         async_zmq_client=async_zmq_client,
+            #                         owner_inst=object_proxy,
+            #                         invokation_timeout=object_proxy.invokation_timeout,
+            #                         execution_timeout=object_proxy.execution_timeout,
+            #                     )   
+            #     self.add_event(object_proxy, consumed_property_event)
+        for action in TD.get("actions", []):
             affordance = ActionAffordance.from_TD(action, TD)
             consumed_action = ZMQAction(
                                     resource=affordance, 
@@ -66,7 +77,7 @@ class ClientFactory:
                                     execution_timeout=object_proxy.execution_timeout,
                                 )
             self.add_action(object_proxy, consumed_action)
-        for event in TD["events"]:
+        for event in TD.get("events", []):
             affordance = EventAffordance.from_TD(event, TD)
             consumed_event = ZMQEvent(
                                     resource=affordance, 
@@ -98,7 +109,7 @@ class ClientFactory:
         TD = Serializers.json.loads(response.body)
         id = f"client|{TD['id']}|HTTP|{uuid.uuid4()}" 
         object_proxy = ObjectProxy(id, td=TD, **kwargs)
-        for name in TD["properties"]:
+        for name in TD.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, TD)
             consumed_property = HTTPProperty(
                                     resource=affordance, 
@@ -110,7 +121,7 @@ class ClientFactory:
                                     logger=object_proxy.logger
                                 )
             self.add_property(object_proxy, consumed_property)
-        for action in TD["actions"]:
+        for action in TD.get("actions", []):
             affordance = ActionAffordance.from_TD(action, TD)
             consumed_action = HTTPAction(
                                     resource=affordance, 
@@ -122,7 +133,7 @@ class ClientFactory:
                                     logger=object_proxy.logger
                                 )
             self.add_action(object_proxy, consumed_action)
-        for event in TD["events"]:
+        for event in TD.get("events", []):
             affordance = EventAffordance.from_TD(event, TD)
             consumed_event = HTTPEvent(
                                     resource=affordance, 

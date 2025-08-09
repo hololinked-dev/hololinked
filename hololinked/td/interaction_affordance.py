@@ -233,7 +233,7 @@ class InteractionAffordance(Schema):
     
 
    
-class PropertyAffordance(InteractionAffordance, DataSchema):
+class PropertyAffordance(DataSchema, InteractionAffordance):
     """
     Implements property affordance schema from `Property` descriptor object.
 
@@ -253,7 +253,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
     def build(self) -> None:
         property = self.objekt
         self.ds_build_from_property(property)
-        if property.observable: # does not disturb the default value of None, which will omit the field in the JSON
+        if property.observable:
             self.observable = property.observable
     
     @classmethod
@@ -266,7 +266,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         affordance.build_non_compliant_metadata()       
         return affordance
     
-
+   
  
 class ActionAffordance(InteractionAffordance):
     """

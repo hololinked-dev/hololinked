@@ -93,3 +93,32 @@ class ThingModel(Schema):
                         raise ex from None
                     self.instance.logger.error(f"Error while generating schema for {name} - {ex}")
        
+    def model_dump(self, **kwargs) -> dict[str, typing.Any]:
+        """Return the JSON representation of the schema"""
+        def dump_value(value):
+            nonlocal kwargs
+            if hasattr(value, "model_dump"):
+                return value.model_dump(**kwargs)
+            elif isinstance(value, dict):
+                return {k: dump_value(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [dump_value(v) for v in value]
+            elif isinstance(value, tuple):
+                return tuple(dump_value(v) for v in value)
+            else:
+                return value
+
+        result = {}
+        for field in self.model_fields:
+            if field in self.skip_keys:
+                continue
+            if not hasattr(self, field) or getattr(self, field) is None:
+                continue
+            if field in [
+                "instance", "skip_keys", "skip_properties", "skip_actions", "skip_events",
+                "ignore_errors", "allow_loose_schema"
+            ]:
+                continue
+            value = getattr(self, field)
+            result[field] = dump_value(value)
+        return result

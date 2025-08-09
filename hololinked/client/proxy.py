@@ -204,7 +204,7 @@ class ObjectProxy:
         """
         method = getattr(self, name, None) # type: ConsumedThingAction 
         if not isinstance(method, ConsumedThingAction):
-            raise AttributeError(f"No remote method named {method} in Thing {self.td['id']}")
+            raise AttributeError(f"No remote method named {name} in Thing {self.td['id']}")
         oneway = kwargs.pop('oneway', False)
         noblock = kwargs.pop('noblock', False)
         if noblock:
@@ -250,7 +250,7 @@ class ObjectProxy:
         """
         method = getattr(self, name, None) # type: ConsumedThingAction 
         if not isinstance(method, ConsumedThingAction):
-            raise AttributeError(f"No remote method named {method}")
+            raise AttributeError(f"No remote method named {name}")
         return await method.async_call(*args, **kwargs)
 
 
@@ -274,7 +274,7 @@ class ObjectProxy:
         """
         prop = self.__dict__.get(name, None) # type: ConsumedThingProperty
         if not isinstance(prop, ConsumedThingProperty):
-            raise AttributeError(f"No property named {prop}")
+            raise AttributeError(f"No property named {name}")
         if noblock:
             return prop.noblock_get()
         else:
@@ -312,7 +312,7 @@ class ObjectProxy:
         """
         prop = self.__dict__.get(name, None) # type: ConsumedThingProperty
         if not isinstance(prop, ConsumedThingProperty):
-            raise AttributeError(f"No property named {prop}")
+            raise AttributeError(f"No property named {name}")
         if oneway:
             prop.oneway_set(value)
         elif noblock:
@@ -339,7 +339,7 @@ class ObjectProxy:
         """
         prop = self.__dict__.get(name, None) # type: ConsumedThingProperty
         if not isinstance(prop, ConsumedThingProperty):
-            raise AttributeError(f"No property named {prop}")
+            raise AttributeError(f"No property named {name}")
         return await prop.async_get()
     
 
@@ -364,7 +364,7 @@ class ObjectProxy:
         """
         prop = self.__dict__.get(name, None) # type: ConsumedThingProperty
         if not isinstance(prop, ConsumedThingProperty):
-            raise AttributeError(f"No property named {prop}")
+            raise AttributeError(f"No property named {name}")
         await prop.async_set(value)
 
 
@@ -483,7 +483,16 @@ class ObjectProxy:
                     thread_callbacks: bool = False,
                     deserialize: bool = True
                 ) -> None:
-        raise NotImplementedError("observe_property not implemented yet.") 
+        event = getattr(self, f"{name}_change_event", None) # type: ConsumedThingEvent
+        if not isinstance(event, ConsumedThingEvent):
+            raise AttributeError(f"No events for property {name}")
+        self.subscribe_event(
+            name=f"{name}_change_event",
+            callbacks=callbacks,
+            thread_callbacks=thread_callbacks,
+            deserialize=deserialize
+        )
+
 
     def unobserve_property(self, name: str) -> None:
         """
@@ -498,7 +507,10 @@ class ObjectProxy:
         thread_callbacks: bool
             thread the callbacks otherwise the callbacks will be executed serially
         """ 
-        raise NotImplementedError("unobserve_property not implemented yet.")
+        event = getattr(self, f"{name}_change_event", None) # type: ConsumedThingEvent
+        if not isinstance(event, ConsumedThingEvent):
+            raise AttributeError(f"No events for property {name}")
+        event.unsubscribe()
         
 
     def subscribe_event(

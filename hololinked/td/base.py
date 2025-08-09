@@ -1,7 +1,7 @@
 import inspect
-from typing import ClassVar, Optional
 import typing
-from pydantic import BaseModel
+from typing import ClassVar, Optional
+from pydantic import BaseModel, model_serializer
 
 
 class Schema(BaseModel):
@@ -12,22 +12,21 @@ class Schema(BaseModel):
 
     skip_keys: ClassVar = [] # override this to skip some dataclass attributes in the schema
 
-    def json(self) -> dict[str, typing.Any]:
+    def model_dump(self, **kwargs) -> dict[str, typing.Any]:
         """Return the JSON representation of the schema"""
-        return self.model_dump(
-                        mode="json", 
-                        by_alias=True, 
-                        exclude_unset=True, 
-                        exclude=[
-                            "instance", 
-                            "skip_properties", 
-                            "skip_actions",  
-                            "skip_events", 
-                            "instance", 
-                            "ignore_errors",
-                            "allow_loose_schema"
-                        ]
-                    )
+        # we need to override this to work with our JSON serializer
+        kwargs["mode"] = "json"
+        kwargs["by_alias"] = True
+        kwargs["exclude_unset"] = True
+        kwargs["exclude"] = [
+            "instance", "skip_keys", "skip_properties", "skip_actions", "skip_events",
+            "ignore_errors", "allow_loose_schema"
+        ]
+        return super().model_dump(**kwargs)    
+
+    def json(self) -> dict[str, typing.Any]:
+        """same as model_dump"""
+        return self.model_dump()
     
     @classmethod
     def format_doc(cls, doc: str):

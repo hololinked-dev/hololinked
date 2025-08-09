@@ -1051,12 +1051,12 @@ class TestThingRunRPCServer(TestBrokerMixin):
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInprocRPCServer))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInprocRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
     # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
     return suite
         
 if __name__ == '__main__':
