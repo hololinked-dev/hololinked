@@ -91,7 +91,7 @@ class Configuration:
         # Schema
         'VALIDATE_SCHEMA_ON_CLIENT', 'VALIDATE_SCHEMAS',
         # ZMQ
-        "ZMQ_ASYNC_CONTEXT", "ZMQ_SYNC_CONTEXT",
+        "ZMQ_CONTEXT",
         # make debugging easier
         "DEBUG",    
         # serializers
@@ -115,8 +115,7 @@ class Configuration:
         self.TRACE_MALLOC = False
         self.VALIDATE_SCHEMA_ON_CLIENT = False
         self.VALIDATE_SCHEMAS = True
-        self.ZMQ_ASYNC_CONTEXT = zmq.asyncio.Context()
-        self.ZMQ_SYNC_CONTEXT = zmq.Context()
+        self.ZMQ_CONTEXT = zmq.asyncio.Context()
         self.DEBUG = False
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
@@ -152,15 +151,13 @@ class Configuration:
         "returns this config as a regular dictionary"
         return {item: getattr(self, item) for item in self.__slots__}
     
-    def zmq_context(self, asynch: bool = True) -> zmq.Context | zmq.asyncio.Context:
+    def zmq_context(self) -> zmq.asyncio.Context:
         """
-        Returns a global ZMQ context based on the asynch flag. 
-        Intended to share the same context across an application.
-        """
-        if asynch:
-            return self.ZMQ_ASYNC_CONTEXT
-        return self.ZMQ_SYNC_CONTEXT
-    
+        Returns a global ZMQ async context. Use socket_class argument to retrieve 
+        a synchronous socket if necessary.
+        """        
+        return self.ZMQ_CONTEXT
+
     def set_default_server_execution_context(self, 
         invokation_timeout: typing.Optional[int] = None,
         execution_timeout: typing.Optional[int] = None,

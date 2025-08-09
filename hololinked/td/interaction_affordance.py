@@ -1,5 +1,6 @@
-from enum import Enum
 import typing
+import socket
+from enum import Enum
 from typing import ClassVar, Optional
 from pydantic import ConfigDict
 
@@ -373,6 +374,11 @@ class EventAffordance(InteractionAffordance):
         bound_event_dispatcher = getattr(self.owner, self.objekt.name, None) # type: EventDispatcher
         if not isinstance(bound_event_dispatcher, EventDispatcher) or not bound_event_dispatcher.publisher:
             return
-        self.zmq_socket_address = bound_event_dispatcher.publisher.socket_address
+        socket_address = bound_event_dispatcher.publisher.socket_address
+        if socket_address.startswith("tcp://"):
+            socket_address = socket_address.replace("tcp://*", f"tcp://{socket.gethostname()}")
+            socket_address = socket_address.replace("tcp://localhost", f"tcp://{socket.gethostname()}")
+            socket_address = socket_address.replace("tcp://0.0.0.0", f"tcp://{socket.gethostname()}")
+        self.zmq_socket_address = socket_address
         self.zmq_unique_identifier = bound_event_dispatcher._unique_identifier
      

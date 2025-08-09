@@ -113,7 +113,7 @@ class RPCServer(BaseZMQServer):
             kwargs['logger'] = self.logger
         # contexts and poller
         self._run = False # flag to stop all the
-        self.context = context or global_config.zmq_context(asynch=True)
+        self.context = context or global_config.zmq_context()
         
         self.req_rep_server = AsyncZMQServer(
                                 id=self.id, 
@@ -809,7 +809,7 @@ def prepare_rpc_server(
     # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
     if context is not None and not isinstance(context, zmq.asyncio.Context):
         raise TypeError("context must be an instance of zmq.asyncio.Context")
-    context = context or global_config.zmq_context(asynch=True)
+    context = context or global_config.zmq_context()
 
     if transports == 'INPROC' or transports == ZMQ_TRANSPORTS.INPROC:
         RPCServer(

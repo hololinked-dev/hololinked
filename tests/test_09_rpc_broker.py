@@ -2,7 +2,6 @@ import asyncio
 import threading
 import typing
 import unittest
-import zmq.asyncio
 import jsonschema
 import logging
 import random
@@ -18,6 +17,7 @@ from hololinked.core.zmq.rpc_server import RPCServer
 from hololinked.server.zmq import ZMQServer
 from hololinked.td.utils import get_zmq_unique_identifier_from_event_affordance
 from hololinked.utils import get_all_sub_things_recusively, get_current_async_loop
+from hololinked.config import global_config
 from hololinked.td import ActionAffordance, PropertyAffordance, EventAffordance
 from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQProperty, ZMQEvent
 
@@ -189,7 +189,7 @@ class TestRPCServerMixin(InteractionAffordanceMixin):
    
     @classmethod
     def setUpClass(self):
-        self.context = zmq.asyncio.Context()
+        self.context = global_config.zmq_context()
         super().setUpClass()
         print(f"test ZMQ RPC Server {self.__name__}")
 
@@ -1022,7 +1022,6 @@ class TestThingRunRPCServer(TestBrokerMixin):
                                 server_id=self.thing_id, 
                                 logger=self.logger,
                                 handshake=False,
-                                context=self.thing.rpc_server.context,
                                 transport='INPROC'
                             )
         self.async_client = AsyncZMQClient(
@@ -1030,7 +1029,6 @@ class TestThingRunRPCServer(TestBrokerMixin):
                                 server_id=self.thing_id, 
                                 logger=self.logger,
                                 handshake=False,
-                                context=self.thing.rpc_server.context,
                                 transport='INPROC'
                             )
         time.sleep(2)
@@ -1055,7 +1053,7 @@ def load_tests(loader, tests, pattern):
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
     return suite
         

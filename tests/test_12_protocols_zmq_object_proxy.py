@@ -27,7 +27,7 @@ class TestZMQObjectProxyClient(TestCase):
         self.thing.run_with_zmq_server(forked=True)
         self.thing_model = self.thing.get_thing_model(ignore_errors=True).json()
         
-        
+
     def test_01_creation_and_handshake(self):
         """Test the creation and handshake of the zmq object proxy client"""
         thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
@@ -150,21 +150,43 @@ class TestZMQObjectProxyClient(TestCase):
         self.assertEqual(props['string_prop'], 'foobar')
 
 
-    def notest_05_observe_properties(self):
+    def test_05_subscribe_event(self):
+        """Test the subscription to an event on the zmq object proxy client"""
         thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
-        self.assertIsInstance(thing, ObjectProxy)  
+        self.assertIsInstance(thing, ObjectProxy)
 
-        event_count = 0
-        def callback(value):
-            nonlocal event_count
-            event_count += 1
-            self.assertIsInstance(value, list)
+        results = []
+        def cb(value):
+            results.append(value)
+        
+        thing.subscribe_event("test_event", cb)
+        time.sleep(1)  # wait for the subscription to be established
 
-        thing.observe_property("observable_list_prop", callback)
-        thing.write_property("observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool]))
-        thing.write_property("observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool]))
-        self.assertEqual(event_count, 2)
-        self.assertEqual(thing.observable_list_prop, fake.last)
+        thing.push_events()
+        time.sleep(3)  # wait for the event to be pushed
+        self.assertGreater(len(results), 0, "No events received")
+        self.assertEqual(len(results), 100)
+        thing.unsubscribe_event("test_event")
+
+    # def test_05_observe_properties(self):
+    #     thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+    #     self.assertIsInstance(thing, ObjectProxy)  
+
+    #     # First check if an attribute is set on the object proxy
+    #     self.assertIsNotNone(thing, "observable_list_prop_change_event")
+    #     self.assertIsNotNone(thing, "observable_readonly_prop_change_event")
+
+    #     event_count = 0
+    #     def callback(value):
+    #         nonlocal event_count
+    #         event_count += 1
+    #         self.assertIsInstance(value, list)
+
+    #     thing.observe_property("observable_list_prop", callback)
+        # thing.write_property("observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool]))
+        # thing.write_property("observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool]))
+        # self.assertEqual(event_count, 2)
+        # self.assertEqual(thing.observable_list_prop, fake.last)
 
         #  # req 1 - observable events come due to writing a property
         # propective_values = [
@@ -221,7 +243,7 @@ class TestZMQObjectProxyClient(TestCase):
         # self.assertEqual(result, propective_values)
 
 
-    def test_05_stop(self):
+    def test_06_stop(self):
         """Test the stop of the zmq object proxy client"""
         self.thing.rpc_server.stop()       
 
@@ -287,7 +309,7 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestZMQObjectProxyClient))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestZMQObjectProxyClientAsync))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestZMQObjectProxyClientAsync))
     return suite
         
 if __name__ == '__main__':

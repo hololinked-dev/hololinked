@@ -52,9 +52,14 @@ class BaseZMQ:
     
 
     @classmethod
-    def get_socket(cls, *, id: str, node_type: str, context: zmq.asyncio.Context | zmq.Context, 
-                    transport: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC, socket_type: zmq.SocketType = zmq.ROUTER, 
-                    **kwargs) -> typing.Tuple[zmq.Socket, str]:
+    def get_socket(cls, *, 
+                id: str, 
+                node_type: str, 
+                context: zmq.asyncio.Context | zmq.Context, 
+                transport: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC, 
+                socket_type: zmq.SocketType = zmq.ROUTER, 
+                **kwargs
+            ) -> typing.Tuple[zmq.Socket, str]:
         """
         Create a socket with certain specifications. Supported ZeroMQ transports are TCP, IPC & INPROC. 
         For IPC sockets, a file is created under TEMP_DIR of global configuration.
@@ -164,7 +169,7 @@ class BaseAsyncZMQ(BaseZMQ):
         """
         if context and not isinstance(context, zmq.asyncio.Context):
             raise TypeError("async ZMQ message broker accepts only async ZMQ context. supplied type {}".format(type(context)))
-        self.context = context or global_config.zmq_context(asynch=True)
+        self.context = context or global_config.zmq_context()
         self.socket, self.socket_address = BaseZMQ.get_socket(id=id, node_type=node_type, context=self.context, 
                                                 transport=transport, socket_type=socket_type, **kwargs)
         self.logger.info("created socket {} with address {} & identity {} and {}".format(get_socket_type_name(socket_type), 
@@ -183,17 +188,9 @@ class BaseSyncZMQ(BaseZMQ):
         Overloads ``create_socket()`` to create, bind/connect a synchronous socket. A synchronous context is created 
         if none is supplied. 
         """
-        socket_class = None
-        if context: 
-            if not isinstance(context, zmq.Context):
-                raise TypeError("sync ZMQ message broker accepts only sync ZMQ context. supplied type {}".format(type(context)))
-            if isinstance(context, zmq.asyncio.Context):
-                # create sync socket when async context is supplied for sync brokers.
-                # especially useful for INPROC sync client where teh context needs to be shared and the server is async. 
-                socket_class = zmq.Socket
-        self.context = context or global_config.zmq_context(asynch=False)
+        self.context = context or global_config.zmq_context()
         self.socket, self.socket_address = BaseZMQ.get_socket(id=id, node_type=node_type, context=self.context, 
-                                                transport=transport, socket_type=socket_type, socket_class=socket_class, 
+                                                transport=transport, socket_type=socket_type, socket_class=zmq.Socket, 
                                                 **kwargs)
         self.logger.info("created socket {} with address {} & identity {} and {}".format(get_socket_type_name(socket_type), 
                                                         self.socket_address, id, "bound" if node_type == 'server' else "connected"))
@@ -593,7 +590,7 @@ class ZMQServerPool(BaseZMQServer):
     """
 
     def __init__(self, *, ids: typing.List[str] | None = None, **kwargs) -> None:
-        self.context = global_config.zmq_context(asynch=True)
+        self.context = global_config.zmq_context()
         self.poller = zmq.asyncio.Poller()
         self.pool = dict() # type: typing.Dict[str, AsyncZMQServer]
         if ids:
@@ -791,8 +788,13 @@ class BaseZMQClient(BaseZMQ):
                 self.poller.unregister(self._monitor_socket)
                 # print("poller exception did not occur 3")
         except Exception as ex:
-            self.logger.warning(f"unable to deregister from poller - {str(ex)}")
-
+            # raises a weird key error for some reason
+            # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e5028830> - KeyError
+            # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e502a350> - KeyError
+            # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e5080750> - KeyError
+            # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e5082430> - KeyError
+            # self.logger.warning(f"unable to deregister from poller - {str(ex)} - {type(ex).__name__}")
+            pass
         try:
             if self._monitor_socket is not None:
                 self._monitor_socket.close(0)
@@ -1341,7 +1343,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         if len(client_ids) != len(server_ids):
             raise ValueError("client_ids and server_ids must have same length")
         # this class does not call create_socket method
-        self.context = context or global_config.zmq_context(asynch=True)
+        self.context = context or global_config.zmq_context()
         self.pool = dict() # type: typing.Dict[str, AsyncZMQClient]
         self.poller = zmq.asyncio.Poller()
         for client_id, server_id in zip(client_ids, server_ids):
@@ -1941,11 +1943,13 @@ class BaseEventConsumer(BaseZMQClient):
                 **kwargs
             ) -> None:
         if isinstance(self, BaseSyncZMQ):
-            self.context = context or global_config.zmq_context(asynch=False)
+            self.context = context or global_config.zmq_context()
             self.poller = zmq.Poller()
+            socket_class = zmq.Socket
         elif isinstance(self, BaseAsyncZMQ):
-            self.context = context or global_config.zmq_context(asynch=True)
+            self.context = context or global_config.zmq_context()
             self.poller = zmq.asyncio.Poller()
+            socket_class = zmq.asyncio.Socket
         else:
             raise TypeError("BaseEventConsumer must be subclassed by either BaseSyncZMQ or BaseAsyncZMQ")
         super().__init__(id=id, server_id=kwargs.get('server_id', None), **kwargs)
@@ -1960,13 +1964,13 @@ class BaseEventConsumer(BaseZMQClient):
                     )
         self.event_unique_identifier = bytes(event_unique_identifier, encoding='utf-8')
         short_uuid = uuid4().hex[:8]
-        self.interruptor = self.context.socket(zmq.PAIR)
+        self.interruptor = self.context.socket(zmq.PAIR, socket_class=socket_class)
         self.interruptor.setsockopt_string(zmq.IDENTITY, f'interrupting-server-{short_uuid}')
-        self.interrupting_peer = self.context.socket(zmq.PAIR)
+        self.interrupting_peer = self.context.socket(zmq.PAIR, socket_class=socket_class)
         self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f'interrupting-client-{short_uuid}')
         self.interruptor.bind(f'inproc://{self.id}-{short_uuid}/interruption')    
         self.interrupting_peer.connect(f'inproc://{self.id}-{short_uuid}/interruption')
-
+        
 
     def subscribe(self) -> None:
         self.socket.setsockopt(zmq.SUBSCRIBE, self.event_unique_identifier) 
@@ -1993,8 +1997,10 @@ class BaseEventConsumer(BaseZMQClient):
             self.poller.unregister(self.socket)
             self.poller.unregister(self.interruptor)
         except Exception as E:
-            self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message: {}".format(
-                self.socket_address, str(E)))  
+            # self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message: {}".format(
+            #     self.socket_address, str(E)))  
+            # above line prints too many warnings 
+            pass
         try:
             self.socket.close(0)
             self.interruptor.close(0)

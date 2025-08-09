@@ -516,7 +516,7 @@ class EventHandler(BaseHandler):
                 id=f"{self.resource.name}|HTTPEvent|{uuid.uuid4().hex[:8]}",
                 event_unique_identifier=self.resource.zmq_unique_identifier,
                 socket_address=self.resource.zmq_socket_address,
-                context=global_config.zmq_context(asynch=True),
+                context=global_config.zmq_context(),
                 logger=self.logger,
             )
             event_consumer.subscribe()
