@@ -155,11 +155,13 @@ def complete_pending_tasks_in_current_loop():
         asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
     )
 
+
 async def complete_pending_tasks_in_current_loop_async():
     """
     Complete all pending tasks in the current asyncio event loop.
     """
     await asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
+
 
 def print_pending_tasks_in_current_loop():
     """

@@ -54,13 +54,13 @@ class AsyncTestCase(unittest.IsolatedAsyncioTestCase):
     def setUpClass(self):
         print(f"----------------------------------------------------------------------")
 
-    async def asyncSetUp(self):
-        loop = asyncio.get_running_loop()
-        loop.set_debug(False)
-    
     @classmethod
     def tearDownClass(self):
         print(f"\n\ntear down {self.__name__}")
+
+    async def asyncSetUp(self):
+        loop = asyncio.get_running_loop()
+        loop.set_debug(False)
       
     def setUp(self):
         print() # add gaps between results printed by unit test

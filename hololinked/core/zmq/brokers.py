@@ -96,10 +96,7 @@ class BaseZMQ:
             if transport is TCP and a socket connect from client side is requested but a socket address is not supplied
         """
         if kwargs.get('socket_class', None) is not None:
-            socket_class = kwargs.get('socket_class')
-            if not issubclass(socket_class, zmq.Socket):
-                raise TypeError("socket_class must be a subclass of zmq.Socket")
-            socket = context.socket(socket_type, socket_class=socket_class)
+            socket = context.socket(socket_type, socket_class= kwargs.get('socket_class'))
         else:
             socket = context.socket(socket_type)
         socket.setsockopt_string(zmq.IDENTITY, id)

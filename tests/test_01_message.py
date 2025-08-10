@@ -18,11 +18,11 @@ class MessageValidatorMixin(TestCase):
     """A mixin class to validate request and response messages"""
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        self.server_id = 'test-server'
-        self.client_id = 'test-client'
-        self.thing_id = 'test-thing'
+        cls.server_id = f'test-server-{uuid4().hex[:8]}'
+        cls.client_id = f'test-client-{uuid4().hex[:8]}'
+        cls.thing_id = f'test-thing-{uuid4().hex[:8]}'
 
 
     def validate_request_message(self, request_message: RequestMessage) -> None:
@@ -99,11 +99,11 @@ class TestMessagingContract(MessageValidatorMixin):
     """Tests request and response messages"""
 
     @classmethod    
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        print(f"test message contract with {self.__name__}")
-    
-    
+        print(f"test message contract with {cls.__name__}")
+
+
     def test_1_request_message(self):
         """test the request message"""
     
@@ -113,7 +113,7 @@ class TestMessagingContract(MessageValidatorMixin):
                                                         sender_id=self.client_id, 
                                                         thing_id=self.thing_id, 
                                                         objekt='some_prop', 
-                                                        operation='readProperty',
+                                                        operation='readproperty',
                                                     )
         self.validate_request_message(request_message)
         # check message type for the above craft_from_arguments method
@@ -202,7 +202,6 @@ class TestMessagingContract(MessageValidatorMixin):
 
     def test_3_event_message(self):
         """test the event message"""
-        # event messages types are HANDSHAKE, TIMEOUT, INVALID_MESSAGE, ERROR and REPLY
         event_message = EventMessage.craft_from_arguments(
             event_id='test-event',
             sender_id=self.server_id,

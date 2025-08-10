@@ -37,10 +37,10 @@ class TestThingInit(TestCase):
     """Test Thing class which is the bread and butter of this package."""
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        print(f"test Thing instantiation with {self.__name__}")
-        self.thing_cls = Thing
+        print(f"test Thing instantiation with {cls.__name__}")
+        cls.thing_cls = Thing
         # using a variable called thing_cls because same tests are repeated for different thing class
 
     """
@@ -148,9 +148,9 @@ class TestOceanOpticsSpectrometer(TestThingInit):
     """test Thing subclass example"""
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        self.thing_cls = OceanOpticsSpectrometer
+        cls.thing_cls = OceanOpticsSpectrometer
 
     # check docs of the parent class for the test sequence
 
@@ -183,9 +183,9 @@ class TestMetaclass(TestCase):
     """Test ThingMeta metaclass which instantiates a Thing (sub-)class"""
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        print(f"test ThingMeta with {self.__name__}")
+        print(f"test ThingMeta with {cls.__name__}")
 
     """
     Test sequence is as follows:
@@ -266,18 +266,18 @@ class TestRegistry(TestCase):
     # Read the commented section above before proceeding to this test
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        self.setUpRegistryObjects()
-        self.setUpRegistryAttributes()
-        if self.is_abstract_test_class:
+        cls.setUpRegistryObjects()
+        cls.setUpRegistryAttributes()
+        if cls.is_abstract_test_class:
             return
-        print(f"test {self.registry_cls.__name__} with {self.__name__}")
-        
+        print(f"test {cls.registry_cls.__name__} with {cls.__name__}")
+
     @classmethod
-    def setUpRegistryObjects(self):
-        self.registry_cls = None # type: DescriptorRegistry | None 
-        self.registry_object = None # type: type[Property | Action | Event]
+    def setUpRegistryObjects(cls):
+        cls.registry_cls = None # type: DescriptorRegistry | None
+        cls.registry_object = None # type: type[Property | Action | Event]
 
     @property
     def is_abstract_test_class(self):
@@ -288,34 +288,34 @@ class TestRegistry(TestCase):
         return self.registry_cls is None or self.registry_object is None
 
     @classmethod
-    def setUpRegistryAttributes(self):
-        if self.registry_cls is None or self.registry_object is None:
-            return 
-        
+    def setUpRegistryAttributes(cls):
+        if cls.registry_cls is None or cls.registry_object is None:
+            return
+
         # create instances for further tests
-        self.thing = Thing(id=f"test_{self.registry_object.__name__}_registry", log_level=logging.WARN)
-        self.spectrometer = OceanOpticsSpectrometer(
-                                            id=f"test_{self.registry_object.__name__}_registry", 
+        cls.thing = Thing(id=f"test_{cls.registry_object.__name__}_registry", log_level=logging.WARN)
+        cls.spectrometer = OceanOpticsSpectrometer(
+                                            id=f"test_{cls.registry_object.__name__}_registry", 
                                             log_level=logging.WARN
                                         )
-        if self.registry_cls == ActionsRegistry:
+        if cls.registry_cls == ActionsRegistry:
             Thing.class_registry = Thing.actions
             OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.actions
-            self.thing.instance_registry = self.thing.actions
-            self.spectrometer.instance_registry = self.spectrometer.actions
-            self.bound_object = BoundAction	
-        elif self.registry_cls == PropertiesRegistry:
+            cls.thing.instance_registry = cls.thing.actions
+            cls.spectrometer.instance_registry = cls.spectrometer.actions
+            cls.bound_object = BoundAction
+        elif cls.registry_cls == PropertiesRegistry:
             Thing.class_registry = Thing.properties
             OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.properties
-            self.thing.instance_registry = self.thing.properties 
-            self.spectrometer.instance_registry = self.spectrometer.properties
-            self.bound_object = typing.Any
-        elif self.registry_cls == EventsRegistry:
+            cls.thing.instance_registry = cls.thing.properties
+            cls.spectrometer.instance_registry = cls.spectrometer.properties
+            cls.bound_object = typing.Any
+        elif cls.registry_cls == EventsRegistry:
             Thing.class_registry = Thing.events
             OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.events
-            self.thing.instance_registry = self.thing.events
-            self.spectrometer.instance_registry = self.spectrometer.events
-            self.bound_object = EventDispatcher
+            cls.thing.instance_registry = cls.thing.events
+            cls.spectrometer.instance_registry = cls.spectrometer.events
+            cls.bound_object = EventDispatcher
         else:
             raise NotImplementedError("This registry class is not implemented")
 
@@ -464,18 +464,17 @@ class TestActionRegistry(TestRegistry):
     """Test ActionRegistry class"""
 
     @classmethod
-    def setUpRegistryObjects(self):
-        self.registry_cls = ActionsRegistry
-        self.registry_object = Action
-        
+    def setUpRegistryObjects(cls):
+        cls.registry_cls = ActionsRegistry
+        cls.registry_object = Action
+
 
 class TestEventRegistry(TestRegistry):
 
     @classmethod
-    def setUpRegistryObjects(self):
-        self.registry_cls = EventsRegistry
-        self.registry_object = Event
-       
+    def setUpRegistryObjects(cls):
+        cls.registry_cls = EventsRegistry
+        cls.registry_object = Event
 
     def test_2_descriptors(self):
         if self.is_abstract_test_class:
@@ -508,9 +507,9 @@ class TestEventRegistry(TestRegistry):
 class TestPropertiesRegistry(TestRegistry):
 
     @classmethod
-    def setUpRegistryObjects(self):
-        self.registry_cls = PropertiesRegistry
-        self.registry_object = Parameter
+    def setUpRegistryObjects(cls):
+        cls.registry_cls = PropertiesRegistry
+        cls.registry_object = Parameter
 
 
     def test_2_descriptors(self):

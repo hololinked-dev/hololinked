@@ -14,13 +14,13 @@ except ImportError:
 class TestSocket(TestCase):
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        print(f"test ZMQ socket creation with {self.__name__}")
+        print(f"test ZMQ socket creation with {cls.__name__}")
 
 
     def test_1_socket_creation_defaults(self):
-        """check the default settings of socket ceration, IPC socket which is a ROUTER and async"""
+        """check the default settings of socket creation - an IPC socket which is a ROUTER and async"""
         socket, socket_address = BaseZMQ.get_socket(
                                                 id='test-server',
                                                 node_type='server',
@@ -205,7 +205,6 @@ class TestSocket(TestCase):
         self.assertTrue(isinstance(socket, zmq.asyncio.Socket))
         socket.close()
 
-        zmq.asyncio.Context()
         socket, _ = BaseZMQ.get_socket(
                                 id='test-server',
                                 node_type='server',
