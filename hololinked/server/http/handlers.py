@@ -388,7 +388,7 @@ class PropertyHandler(RPCHandler):
             if self.message_id is not None:
                 await self.handle_no_block_response()
             else:  
-                await self.handle_through_thing(Operations.readProperty)    
+                await self.handle_through_thing(Operations.readproperty)    
         self.finish()
        
     async def post(self) -> None:
@@ -396,7 +396,7 @@ class PropertyHandler(RPCHandler):
         runs property or action if accessible by 'POST' method. Default for action execution.
         """
         if self.is_method_allowed('POST'):
-            await self.handle_through_thing(Operations.writeProperty)
+            await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def put(self) -> None:
@@ -404,7 +404,7 @@ class PropertyHandler(RPCHandler):
         runs property or action if accessible by 'PUT' method. Default for property writes.
         """
         if self.is_method_allowed('PUT'):
-            await self.handle_through_thing(Operations.writeProperty)
+            await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def delete(self) -> None:
@@ -412,7 +412,7 @@ class PropertyHandler(RPCHandler):
         runs property or action if accessible by 'DELETE' method. Default for property deletes. 
         """
         if self.is_method_allowed('DELETE'):
-            await self.handle_through_thing(Operations.deleteProperty)
+            await self.handle_through_thing(Operations.deleteproperty)
         self.finish()
 
 
@@ -426,7 +426,7 @@ class ActionHandler(RPCHandler):
             if self.message_id is not None:
                 await self.handle_no_block_response()
             else:
-                await self.handle_through_thing(Operations.invokeAction)    
+                await self.handle_through_thing(Operations.invokeaction)    
         self.finish()
 
     async def post(self) -> None:
@@ -434,7 +434,7 @@ class ActionHandler(RPCHandler):
         runs property or action if accessible by 'POST' method. Default for action execution.
         """
         if self.is_method_allowed('POST'):
-            await self.handle_through_thing(Operations.invokeAction)
+            await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def put(self) -> None:
@@ -442,7 +442,7 @@ class ActionHandler(RPCHandler):
         runs property or action if accessible by 'PUT' method. Default for property writes.
         """
         if self.is_method_allowed('PUT'):
-            await self.handle_through_thing(Operations.invokeAction)
+            await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def delete(self) -> None:
@@ -450,7 +450,7 @@ class ActionHandler(RPCHandler):
         runs property or action if accessible by 'DELETE' method. Default for property deletes. 
         """
         if self.is_method_allowed('DELETE'):
-            await self.handle_through_thing(Operations.invokeAction)
+            await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
 
@@ -504,18 +504,19 @@ class EventHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Methods", 'GET')
         self.finish()
 
-    def receive_blocking_event(self, event_consumer : EventConsumer):
+    def receive_blocking_event(self, event_consumer: EventConsumer):
+        """deprecated, but can make a blocking call in an async loop"""
         return event_consumer.receive(timeout=10000, deserialize=False)
 
     async def handle_datastream(self) -> None:    
         """called by GET method and handles the event publishing"""
         try:                        
-            if not getattr(self.resource, 'zmq_socket_address', None) or not getattr(self.resource, 'zmq_unique_identifier', None):
-                raise ValueError("Event resource is not initialized properly, missing socket address or unique identifier")
+            # if not getattr(self.resource, 'zmq_socket_address', None) or not getattr(self.resource, 'zmq_unique_identifier', None):
+            #     raise ValueError("Event resource is not initialized properly, missing socket address or unique identifier")
             event_consumer = AsyncEventConsumer(
                 id=f"{self.resource.name}|HTTPEvent|{uuid.uuid4().hex[:8]}",
-                event_unique_identifier=self.resource.zmq_unique_identifier,
-                socket_address=self.resource.zmq_socket_address,
+                event_unique_identifier=f'{self.resource.thing_id}/{self.resource.name}',
+                socket_address=f'inproc://{self.resource.thing_id}/event-publisher',  # no not acceptable, TODO
                 context=global_config.zmq_context(),
                 logger=self.logger,
             )
@@ -659,7 +660,7 @@ class ThingDescriptionHandler(BaseHandler):
                                     client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
                                     thing_id=self.resource.thing_id,
                                     objekt=self.resource.name,
-                                    operation='invokeAction'
+                                    operation=Operations.invokeaction
                                 )                  
                 payload = self.get_response_payload(response_message)
                 TM = payload.deserialize()
@@ -681,7 +682,7 @@ class ThingDescriptionHandler(BaseHandler):
         # sanitize some things
         TD["id"] = f'{server.router.basepath}/{TD["id"]}'
         # add forms
-        for name in TM["properties"]:
+        for name in TM.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, TM)
             href = server.router.get_href_for_affordance(affordance)
             if not TD["properties"][name].get("forms", None):
@@ -694,8 +695,8 @@ class ThingDescriptionHandler(BaseHandler):
                     continue
                 form = Form()
                 form.href = href
-                form.htv_methodName = http_method 
-                form.op = 'readproperty' if http_method.upper() == 'GET' else 'writeproperty' # if http_method.upper() in ['POST', 'PUT'] else 'deleteproperty'
+                form.htv_methodName = http_method
+                form.op = Operations.readproperty if http_method.upper() == 'GET' else Operations.writeproperty
                 form.contentType = "application/json"
                 TD["properties"][name]["forms"].append(form.json())
             if affordance.observable:
@@ -703,10 +704,10 @@ class ThingDescriptionHandler(BaseHandler):
                 form.href = href
                 form.htv_methodName = 'GET'
                 form.contentType = "application/json"
-                form.op = 'observeproperty'
+                form.op = Operations.observeproperty
                 form.subprotocol = 'sse'
                 TD["properties"][name]["forms"].append(form.json())
-        for name in TM["actions"]:
+        for name in TM.get("actions", []):
             affordance = ActionAffordance.from_TD(name, TM)
             href = server.router.get_href_for_affordance(affordance)
             if not TD["actions"][name].get("forms", None):
@@ -715,11 +716,11 @@ class ThingDescriptionHandler(BaseHandler):
             for http_method in http_methods:
                 form = Form()
                 form.href = href
-                form.htv_methodName = http_method 
-                form.op = 'invokeaction'
+                form.htv_methodName = http_method
+                form.op = Operations.invokeaction
                 form.contentType = "application/json"
                 TD["actions"][name]["forms"].append(form.json())
-        for name in TM["events"]:
+        for name in TM.get("events", []):
             affordance = EventAffordance.from_TD(name, TM)
             href = server.router.get_href_for_affordance(affordance)
             if not TD["events"][name].get("forms", None):
@@ -728,8 +729,8 @@ class ThingDescriptionHandler(BaseHandler):
             for http_method in http_methods:
                 form = Form()
                 form.href = href
-                form.htv_methodName = http_method 
-                form.op = 'subscribeevent'
+                form.htv_methodName = http_method
+                form.op = Operations.subscribeevent
                 form.contentType = "application/json"
                 form.subprotocol = 'sse'
                 TD["events"][name]["forms"].append(form.json())

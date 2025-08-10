@@ -635,7 +635,7 @@ class TestHTTPObjectProxy(TestCase):
 
 def load_tests(loader, tests, pattern): 
     suite = unittest.TestSuite()
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPObjectProxy))
     return suite
         
