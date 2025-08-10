@@ -563,9 +563,7 @@ def get_all_sub_things_recusively(thing) -> typing.List:
     
 
 def forkable(func):
-    """
-    Decorator to make a function forkable. This is useful for functions that need to be run in a separate thread.
-    """
+    """Decorator to make a function forkable. This is useful for functions that need to be run in a separate thread."""
     @wraps(func)
     def wrapper(*args, **kwargs):
         forked = kwargs.get('forked', False)  # Extract 'fork' argument, default to False

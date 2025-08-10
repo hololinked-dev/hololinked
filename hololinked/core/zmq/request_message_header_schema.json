@@ -52,9 +52,9 @@
             "type": "string",
             "description" : "name of the peration to be performed",
             "enum" : [
-                "readProperty", "writeProperty", "invokeAction", "subscribeEvent", 
-                "unsubscribeEvent", "readMultipleProperties", "writeMultipleProperties"        
-            ]    
+                "readproperty", "writeproperty", "invokeaction", "subscribeevent", "unsubscribeevent", 
+                "readmultipleproperties", "writemultipleproperties", "readallproperties", "writeallproperties"
+            ]
         },
         "payloadContentType" : {
             "type": "string",

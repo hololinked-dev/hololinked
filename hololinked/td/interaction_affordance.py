@@ -243,9 +243,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance):
     """
     # [Supported Fields]() <br>
     observable: Optional[bool] = None
-    zmq_unique_identifier: Optional[str] = None
-    zmq_socket_address: Optional[str] = None
-
+    
     def __init__(self):
         super().__init__()
       
@@ -258,13 +256,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance):
         self.ds_build_from_property(property)
         if property.observable:
             self.observable = property.observable
-            observable_event_descriptor = property._observable_event_descriptor
-            event_dispatcher = getattr(self.owner, observable_event_descriptor.name, None) # type: EventDispatcher
-            if event_dispatcher:
-                self.zmq_unique_identifier = event_dispatcher._unique_identifier
-                self.zmq_socket_address = event_dispatcher.publisher.socket_address
-                
-
+                           
     @classmethod
     def generate(cls, property, owner = None):
         assert isinstance(property, Property), f"property must be instance of Property, given type {type(property)}"
@@ -345,9 +337,7 @@ class EventAffordance(InteractionAffordance):
     # [Supported Fields]() <br>
     subscription: str = None
     data: JSON = None
-    zmq_socket_address: Optional[str] = None
-    zmq_unique_identifier: Optional[str] = None
-    
+   
     def __init__(self):
         super().__init__()
 
@@ -377,16 +367,4 @@ class EventAffordance(InteractionAffordance):
         affordance.build()
         affordance.build_non_compliant_metadata()
         return affordance
-    
-    def build_non_compliant_metadata(self):
-        bound_event_dispatcher = getattr(self.owner, self.objekt.name, None) # type: EventDispatcher
-        if not isinstance(bound_event_dispatcher, EventDispatcher) or not bound_event_dispatcher.publisher:
-            return
-        socket_address = bound_event_dispatcher.publisher.socket_address
-        if socket_address.startswith("tcp://"):
-            socket_address = socket_address.replace("tcp://*", f"tcp://{socket.gethostname()}")
-            socket_address = socket_address.replace("tcp://localhost", f"tcp://{socket.gethostname()}")
-            socket_address = socket_address.replace("tcp://0.0.0.0", f"tcp://{socket.gethostname()}")
-        self.zmq_socket_address = socket_address
-        self.zmq_unique_identifier = bound_event_dispatcher._unique_identifier
      

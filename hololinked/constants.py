@@ -119,16 +119,23 @@ def get_socket_type_name(socket_type):
 
 
 class Operations(StrEnum):
-    readProperty = 'readProperty'
-    writeProperty = 'writeProperty'
-    deleteProperty = 'deleteProperty'
-    observeProperty = 'observeProperty'
-    invokeAction = 'invokeAction'
-    subscribeEvent = 'subscribeEvent'
-    unsubscribeEvent = 'unsubscribeEvent'
+    readproperty = 'readproperty'
+    writeproperty = 'writeproperty'
+    deleteproperty = 'deleteproperty'
+    observeproperty = 'observeproperty'
+
+    readmultipleproperties = 'readmultipleproperties'
+    writemultipleproperties = 'writemultipleproperties'
+    readallproperties = 'readallproperties'
+    writeallproperties = 'writeallproperties'
+
+    invokeaction = 'invokeaction'
+    subscribeevent = 'subscribeevent'
+    unsubscribevent = 'unsubscribevent'
 
 
 __all__ = [
     HTTP_METHODS.__name__,
-    ZMQ_TRANSPORTS.__name__
+    ZMQ_TRANSPORTS.__name__,
+    Operations.__name__
 ]

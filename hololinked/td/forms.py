@@ -10,7 +10,7 @@ class ExpectedResponse(Schema):
     Form property. 
     schema - https://www.w3.org/TR/wot-thing-description11/#expectedresponse
     """
-    contentType : str
+    contentType: str
 
     def __init__(self):
         super().__init__()
@@ -37,7 +37,7 @@ class Form(Schema):
     href: str = None
     op: str = None 
     htv_methodName: str = Field(default=None, alias='htv:methodName') 
-    contentType: typing.Optional[str] = None
+    contentType: typing.Optional[str] = 'application/json'
     additionalResponses: typing.Optional[typing.List[AdditionalExpectedResponse]] = None
     contentEncoding: typing.Optional[str] = None
     security: typing.Optional[str] = None

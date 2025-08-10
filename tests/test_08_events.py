@@ -38,7 +38,7 @@ class TestEvents(TestCase):
         )
         self.assertEqual(
             dispatcher._unique_identifier, 
-            f'{thing._qualified_id}/{descriptor._internal_name}'
+            f'{thing._qualified_id}/{descriptor.name}'
         )
 
       

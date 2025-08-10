@@ -21,5 +21,5 @@ def get_zmq_unique_identifier_from_event_affordance(affordance: Any) -> Optional
     :returns: str: Unique identifier for the object
 
     """
-    return f'{affordance.thing_id}/{pep8_to_dashed_name(affordance.name)}'
+    return f'{affordance.thing_id}/{affordance.name}'
 

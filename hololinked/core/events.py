@@ -46,7 +46,6 @@ class Event:
         self._observable = False
        
     def __set_name__(self, owner: ParameterizedMetaclass, name: str) -> None:
-        self._internal_name = pep8_to_dashed_name(name)
         self.name = name
         self.owner = owner
 
@@ -62,7 +61,7 @@ class Event:
             # from .thing import Thing
             # assert isinstance(obj, Thing)
             return EventDispatcher(
-                unique_identifier=f'{obj._qualified_id}/{self._internal_name}',
+                unique_identifier=f'{obj._qualified_id}/{self.name}',
                 publisher=obj.rpc_server.event_publisher if obj.rpc_server else None,
                 owner_inst=obj,
                 descriptor=self	    

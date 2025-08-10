@@ -770,6 +770,9 @@ class Propertized(Parameterized):
         """container for the property descriptors of the object."""
         return self._properties_registry
     
+    # we need to specification define it as an action to for the possibility of getting an 
+    # Affordance object associated with it i.e _get_properties.to_affordance() function needs to work. 
+    # TODO - fix this anomaly
     @action()
     def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """

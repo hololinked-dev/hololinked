@@ -123,7 +123,15 @@ class BaseZMQ:
                 socket.connect(socket_address)
         elif transport == ZMQ_TRANSPORTS.TCP or transport.lower() == "tcp":
             if bind:
-                if not socket_address:
+                failed = False
+                if socket_address:
+                    try:
+                        socket.bind(socket_address)
+                    except zmq.error.ZMQError as ex:
+                        if not ex.strerror.startswith('Address in use'):
+                            raise ex from None
+                        failed = True
+                if failed or not socket_address:
                     for i in range(global_config.TCP_SOCKET_SEARCH_START_PORT, global_config.TCP_SOCKET_SEARCH_END_PORT):
                         socket_address = "tcp://0.0.0.0:{}".format(i)
                         try:
@@ -131,9 +139,7 @@ class BaseZMQ:
                             break 
                         except zmq.error.ZMQError as ex:
                             if not ex.strerror.startswith('Address in use'):
-                                raise ex from None
-                else:                   
-                    socket.bind(socket_address)
+                                raise ex from None           
             elif socket_address: 
                 socket.connect(socket_address)
             else:
@@ -172,7 +178,7 @@ class BaseAsyncZMQ(BaseZMQ):
         self.context = context or global_config.zmq_context()
         self.socket, self.socket_address = BaseZMQ.get_socket(id=id, node_type=node_type, context=self.context, 
                                                 transport=transport, socket_type=socket_type, **kwargs)
-        self.logger.info("created socket {} with address {} & identity {} and {}".format(get_socket_type_name(socket_type), 
+        self.logger.info("created socket type: {} with address: {} & identity: {} and {}".format(get_socket_type_name(socket_type), 
                                                         self.socket_address, id, "bound" if node_type == 'server' else "connected"))
        
         
@@ -192,7 +198,7 @@ class BaseSyncZMQ(BaseZMQ):
         self.socket, self.socket_address = BaseZMQ.get_socket(id=id, node_type=node_type, context=self.context, 
                                                 transport=transport, socket_type=socket_type, socket_class=zmq.Socket, 
                                                 **kwargs)
-        self.logger.info("created socket {} with address {} & identity {} and {}".format(get_socket_type_name(socket_type), 
+        self.logger.info("created socket type: {} with address: {} & identity: {} and {}".format(get_socket_type_name(socket_type), 
                                                         self.socket_address, id, "bound" if node_type == 'server' else "connected"))
       
 
@@ -1832,7 +1838,6 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         super().__init__(id=id, **kwargs)
         self.create_socket(id=id, node_type='server', context=context,
                            transport=transport, socket_type=zmq.PUB, **kwargs)
-        self.logger.info(f"created event publishing socket at {self.socket_address}")
         self.events = set() # type is typing.Set[EventDispatcher] 
         self.event_ids = set() # type: typing.Set[str]
        

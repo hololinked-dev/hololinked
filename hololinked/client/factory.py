@@ -36,13 +36,14 @@ class ClientFactory:
                                     )
         assert isinstance(Thing.get_thing_model, Action)
         FetchTDAffordance = Thing.get_thing_model.to_affordance()
+        FetchTDAffordance._name = 'get_thing_description'
         FetchTDAffordance._thing_id = thing_id
         FetchTD = ZMQAction(
             resource=FetchTDAffordance,
             sync_client=sync_zmq_client,
             async_client=async_zmq_client,
         )
-        TD = FetchTD(ignore_errors=True) # typing.Dict[str, typing.Any]
+        TD = FetchTD(ignore_errors=True, protocol=protocol) # typing.Dict[str, typing.Any]
         object_proxy.td = TD
         for name  in TD.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, TD)
@@ -56,25 +57,26 @@ class ClientFactory:
                                 )
             self.add_property(object_proxy, consumed_property)
             if hasattr(affordance, "observable") and affordance.observable:
+                form = affordance.retrieve_form('observeproperty', None)
+                if not form: 
+                    raise ValueError(f"No socket address found for observable property {affordance.name}")
                 sync_event_client = EventConsumer(
                                     id=f"{TD['id']}|{affordance.name}|sync", 
-                                    event_unique_identifier=affordance.zmq_unique_identifier,
-                                    socket_address=affordance.zmq_socket_address,
+                                    event_unique_identifier=f'{TD["id"]}/{affordance.name}',
+                                    socket_address=form.href,
                                     logger=object_proxy.logger
                                 )
                 async_event_client = AsyncEventConsumer(
                                     id=f"{TD['id']}|{affordance.name}|async", 
-                                    event_unique_identifier=affordance.zmq_unique_identifier,
-                                    socket_address=affordance.zmq_socket_address,
+                                    event_unique_identifier=f'{TD["id"]}/{affordance.name}',
+                                    socket_address=form.href,
                                     logger=object_proxy.logger
                                 )
                 consumed_observable = ZMQEvent(
                                     resource=affordance,
                                     sync_zmq_client=sync_event_client,
                                     async_zmq_client=async_event_client,
-                                    owner_inst=object_proxy,
-                                    invokation_timeout=object_proxy.invokation_timeout,
-                                    execution_timeout=object_proxy.execution_timeout,
+                                    owner_inst=object_proxy
                                 )
                 self.add_event(object_proxy, consumed_observable)
         for action in TD.get("actions", []):
@@ -90,20 +92,19 @@ class ClientFactory:
             self.add_action(object_proxy, consumed_action)
         for event in TD.get("events", []):
             affordance = EventAffordance.from_TD(event, TD)
-            zmq_socket_address = affordance.zmq_socket_address
-            # if protocol.lower() == "ipc":
-            #     zmq_socket_address = affordance.zmq_socket_address.replace("inproc://", "ipc://")
-            #     zmq_socket_address = f'{zmq_socket_address}.ipc'
+            form = affordance.retrieve_form('subscribeevent', None)
+            if not form: 
+                raise ValueError(f"No socket address found for event {affordance.name}")
             sync_event_client = EventConsumer(
                                     id=f"{TD['id']}|{affordance.name}|sync", 
-                                    event_unique_identifier=affordance.zmq_unique_identifier,
-                                    socket_address=zmq_socket_address,
+                                    event_unique_identifier=f'{TD["id"]}/{affordance.name}',
+                                    socket_address=form.href,
                                     logger=object_proxy.logger
                                 )
             async_event_client = AsyncEventConsumer(
                                     id=f"{TD['id']}|{affordance.name}|async", 
-                                    event_unique_identifier=affordance.zmq_unique_identifier,
-                                    socket_address=zmq_socket_address,
+                                    event_unique_identifier=f'{TD["id"]}/{affordance.name}',
+                                    socket_address=form.href,
                                     logger=object_proxy.logger
                                 )
             consumed_event = ZMQEvent(

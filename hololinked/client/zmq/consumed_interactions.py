@@ -5,11 +5,12 @@ import threading
 import warnings
 import traceback
 
+
 from ...utils import get_current_async_loop
 from ...constants import Operations
-from ...serializers import BaseSerializer, Serializers
-from ...serializers.payloads import SerializableData, PreserializedData
+from ...serializers.payloads import SerializableData
 from ...td import PropertyAffordance, ActionAffordance, EventAffordance
+from ...td.forms import Form
 from ...client.abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
 from ...core.zmq.message import ResponseMessage
 from ...core.zmq.message import EMPTY_BYTE, REPLY, TIMEOUT, ERROR, INVALID_MESSAGE
@@ -98,7 +99,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         """
         ConsumedThingAction.__init__(self, resource=resource, owner_inst=owner_inst)
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
-        self._resource # type: ActionAffordance
+        self._resource = resource
 
     last_return_value = property(fget=ZMQConsumedAffordanceMixin.get_last_return_value,
                                 doc="cached return value of the last call to the method")
@@ -108,14 +109,15 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
+        form = self._resource.retrieve_form(Operations.invokeaction, Form()) 
+        # works over ThingModel, there can be a default empty form
         self._last_zmq_response = self._sync_zmq_client.execute(
                                             thing_id=self._resource.thing_id,
                                             objekt=self._resource.name,
-                                            operation=Operations.invokeAction,
+                                            operation=Operations.invokeaction,
                                             payload=SerializableData(
                                                 value=kwargs, 
-                                                content_type=self._resource.retrieve_form('invokeAction', {}).get(
-                                                                                'contentType', 'application/json') 
+                                                content_type=form.contentType or 'application/json' 
                                             ),
                                             server_execution_context=dict(
                                                 invokation_timeout=self._invokation_timeout, 
@@ -135,11 +137,10 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         self._last_zmq_response = await self._async_zmq_client.async_execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
-                                                operation=Operations.invokeAction,
+                                                operation=Operations.invokeaction,
                                                 payload=SerializableData(
                                                     value=kwargs, 
-                                                    content_type=self._resource.retrieve_form('invokeAction', {}).get(
-                                                                                'contentType', 'application/json')
+                                                    content_type=self._resource.retrieve_form(Operations.invokeaction, Form()).contentType or 'application/json'
                                                 ),
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout, 
@@ -157,11 +158,10 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         self._sync_zmq_client.send_request(
                                     thing_id=self._resource.thing_id, 
                                     objekt=self._resource.name,
-                                    operation=Operations.invokeAction,
+                                    operation=Operations.invokeaction,
                                     payload=SerializableData(
                                         value=kwargs, 
-                                        content_type=self._resource.retrieve_form('invokeAction', {}).get(
-                                                                        'contentType', 'application/json') 
+                                        content_type=self._resource.retrieve_form(Operations.invokeaction, Form()).contentType or 'application/json'
                                     ), 
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
@@ -179,11 +179,10 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         msg_id = self._sync_zmq_client.send_request(
                                     thing_id=self._resource.thing_id, 
                                     objekt=self._resource.name,
-                                    operation=Operations.invokeAction,
+                                    operation=Operations.invokeaction,
                                     payload=SerializableData(
                                         value=kwargs, 
-                                        content_type=self._resource.retrieve_form('invokeAction', {}).get(
-                                                                        'contentType', 'application/json')
+                                        content_type=self._resource.retrieve_form(Operations.invokeaction, Form()).contentType or 'application/json'
                                     ),
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
@@ -220,8 +219,8 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         """
         ConsumedThingProperty.__init__(self, resource=resource, owner_inst=owner_inst) 
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
-        self._resource # type: PropertyAffordance
-        
+        self._resource = resource
+
     last_read_value = property(fget=ZMQConsumedAffordanceMixin.get_last_return_value,
                                 doc="cached return value of the last call to the method")
 
@@ -229,11 +228,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self._last_zmq_response = self._sync_zmq_client.execute(
                                                 thing_id=self._resource.thing_id, 
                                                 objekt=self._resource.name,
-                                                operation=Operations.writeProperty,
+                                                operation=Operations.writeproperty,
                                                 payload=SerializableData(
-                                                    value=value, 
-                                                    content_type=self._resource.retrieve_form('writeProperty', {}).get(
-                                                                                    'contentType', 'application/json')
+                                                    value=value,
+                                                    content_type=self._resource.retrieve_form(Operations.writeproperty, Form()).contentType or 'application/json'
                                                 ),
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout,
@@ -247,7 +245,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self._last_zmq_response = self._sync_zmq_client.execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
-                                                operation=Operations.readProperty,
+                                                operation=Operations.readproperty,
                                                 server_execution_context=dict(
                                                     invocation_timeout=self._invokation_timeout,
                                                     execution_timeout=self._execution_timeout
@@ -262,11 +260,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self._last_zmq_response = await self._async_zmq_client.async_execute(
                                                         thing_id=self._resource.thing_id,
                                                         objekt=self._resource.name,
-                                                        operation=Operations.writeProperty,
+                                                        operation=Operations.writeproperty,
                                                         payload=SerializableData(
-                                                            value=value, 
-                                                            content_type=self._resource.retrieve_form('writeProperty', {}).get(
-                                                                                            'contentType', 'application/json')
+                                                            value=value,
+                                                            content_type=self._resource.retrieve_form(Operations.writeproperty, Form()).contentType or 'application/json'
                                                         ),
                                                         server_execution_context=dict(
                                                             invokation_timeout=self._invokation_timeout, 
@@ -281,7 +278,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self._last_zmq_response = await self._async_zmq_client.async_execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
-                                                operation=Operations.readProperty,
+                                                operation=Operations.readproperty,
                                                 server_execution_context=dict(
                                                     invokation_timeout=self._invokation_timeout, 
                                                     execution_timeout=self._execution_timeout
@@ -294,11 +291,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self._sync_zmq_client.send_request(
                                     thing_id=self._resource.thing_id,
                                     objekt=self._resource.name,
-                                    operation=Operations.writeProperty,
+                                    operation=Operations.writeproperty,
                                     payload=SerializableData(
                                         value=value, 
-                                        content_type=self._resource.retrieve_form('writeProperty', {}).get(
-                                                                            'contentType', 'application/json')
+                                        content_type=self._resource.retrieve_form(Operations.writeproperty, Form()).contentType or 'application/json'
                                     ),
                                     server_execution_context=dict(
                                         invokation_timeout=self._invokation_timeout, 
@@ -311,7 +307,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         msg_id = self._sync_zmq_client.send_request(
                                             thing_id=self._resource.thing_id,
                                             objekt=self._resource.name,
-                                            operation=Operations.readProperty,
+                                            operation=Operations.readproperty,
                                             server_execution_context=dict(
                                                 invokation_timeout=self._invokation_timeout, 
                                                 execution_timeout=self._execution_timeout
@@ -325,11 +321,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         msg_id = self._sync_zmq_client.send_request(
                                             thing_id=self._resource.thing_id,
                                             objekt=self._resource.name,
-                                            operation=Operations.writeProperty,
+                                            operation=Operations.writeproperty,
                                             payload=SerializableData(
                                                 value=value, 
-                                                content_type=self._resource.retrieve_form('writeProperty', {}).get(
-                                                                                'contentType', 'application/json')
+                                                content_type=self._resource.retrieve_form(Operations.writeproperty, Form()).contentType or 'application/json'
                                             ),
                                             server_execution_context=dict(
                                                 invokation_timeout=self._invokation_timeout, 

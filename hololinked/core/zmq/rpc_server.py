@@ -1,3 +1,5 @@
+import copy
+import socket
 import zmq
 import zmq.asyncio
 import sys 
@@ -11,7 +13,7 @@ from collections import deque
 
 
 from ...exceptions import *
-from ...constants import ZMQ_TRANSPORTS
+from ...constants import ZMQ_TRANSPORTS, Operations
 from ...utils import format_exception_as_json, get_all_sub_things_recusively, get_current_async_loop, get_default_logger
 from ...config import global_config
 from ...serializers import Serializers
@@ -65,10 +67,11 @@ class RPCServer(BaseZMQServer):
     being default is that, the `RPCServer` is the only server implementing the operations directly on the `Thing` 
     instances. All other protocols like HTTP, MQTT, CoAP etc. will be used to send requests to the `RPCServer` only 
     and do not directly operate on the `Thing` instances. Instead, the incoming requests in other protocols are converted 
-    to the above stated "Operation Information" which are in JSON. `INPROC` is the fastest and most efficient way to communicate between
+    to the above stated "Operation Information" which are in JSON format. 
+    `INPROC` is the fastest and most efficient way to communicate between
     multiple independently running loops, whether the loop belongs to a specific protocol's request listener or 
     the `RPCServer` itself. The same `INPROC` messaging contract is also used for `IPC` and `TCP`, thus eliminating the 
-    need to separately implement messaging contracts at different layers of communication.
+    need to separately implement messaging contracts at different layers of communication for ZMQ.
 
     Therefore, if a `Thing` instance is to be served by a well known protocol, say HTTP, the server behaves like HTTP-RPC. 
    
@@ -107,12 +110,15 @@ class RPCServer(BaseZMQServer):
         for thing in things:
             self.things[thing.id] = thing
 
+        if isinstance(transport, str):
+            transport = transport.upper()
+
         if self.logger is None:
             self.logger =  get_default_logger('{}|{}|{}|{}'.format(self.__class__.__name__, 
                                                 'RPC', 'MIXED', self.id), kwargs.get('log_level', logging.INFO))
             kwargs['logger'] = self.logger
-        # contexts and poller
-        self._run = False # flag to stop all the
+      
+        self._run = False # flag to stop all the servers
         self.context = context or global_config.zmq_context()
         
         self.req_rep_server = AsyncZMQServer(
@@ -320,6 +326,7 @@ class RPCServer(BaseZMQServer):
             # sleep added to resolve some issue with logging related IO bound tasks in asyncio - not really clear what it is.
             # This loop crashes for log levels above ERROR without the following statement
             await asyncio.sleep(0.001) 
+            # TODO - investigate and fix it
         scheduler = scheduler or self.schedulers[instance.id]
         eventloop = get_current_async_loop()
         
@@ -425,8 +432,9 @@ class RPCServer(BaseZMQServer):
         self.logger.info("stopped running thing {}".format(instance.id))
 
 
-    @classmethod
-    async def execute_operation(cls, 
+    
+    async def execute_operation(
+                        self, 
                         instance: Thing, 
                         objekt: str, 
                         operation: str,
@@ -449,38 +457,42 @@ class RPCServer(BaseZMQServer):
         preserialized_payload: bytes
             preserialized payload to be used for the operation
         """
-        if operation == 'readProperty':
+        if operation == Operations.readproperty:
             prop = instance.properties[objekt] # type: Property
             return getattr(instance, prop.name) 
-        elif operation == 'writeProperty':
+        elif operation == Operations.writeproperty:
             prop = instance.properties[objekt] # type: Property
             if preserialized_payload != EMPTY_BYTE:
                 prop_value = preserialized_payload
             else:
                 prop_value = payload
             return prop.external_set(instance, prop_value)
-        elif operation == 'deleteProperty':
+        elif operation == Operations.deleteproperty:
             prop = instance.properties[objekt] # type: Property
             del prop # raises NotImplementedError when deletion is not implemented which is mostly the case
-        elif operation == 'invokeAction':
-            action = instance.actions[objekt] # type: BoundAction
+        elif operation == Operations.invokeaction:
             if payload is None:
                 payload = dict()
             args = payload.pop('__args__', tuple())
             # payload then become kwargs
             if preserialized_payload != EMPTY_BYTE:
                 args = (preserialized_payload,) + args
+            # special case
+            if objekt == 'get_thing_description':
+                return self.get_thing_description(instance, *args, **payload)
+            # normal Thing action
+            action = instance.actions[objekt] # type: BoundAction
             if action.execution_info.iscoroutine:
                 # the actual scheduling as a purely async task is done by the scheduler, not here, 
                 # this will be a blocking call
                 return await action.external_call(*args, **payload)
             return action.external_call(*args, **payload) 
-        elif operation == 'readMultipleProperties' or operation == 'readAllProperties':
+        elif operation == Operations.readmultipleproperties or operation == Operations.readallproperties:
             if objekt is None:
-                return instance._get_properties()
-            return instance._get_properties(names=objekt)
-        elif operation == 'writeMultipleProperties' or operation == 'writeAllProperties':
-            return instance._set_properties(payload)
+                return instance.properties.get()
+            return instance.properties.get(names=objekt)
+        elif operation == Operations.writemultipleproperties or operation == Operations.writeallproperties:
+            return instance.properties.set(payload)
         raise NotImplementedError("Unimplemented execution path for Thing {} for operation {}".format(
                                                                             instance.id, operation))
 
@@ -590,9 +602,97 @@ class RPCServer(BaseZMQServer):
         return self.id == other.id
     
     def __str__(self):
-        return f"RPCServer({self.id})"
+        return f"RPCServer({self.id}, req-rep: {self.req_rep_server.socket_address}, pub-sub: {self.event_publisher.socket_address})"
+
+
+    def get_thing_description(self, instance: Thing, protocol: str, ignore_errors: bool = False) -> dict[str, typing.Any]:
+        """
+        Get the Thing Description (TD) for a specific Thing instance.
+
+        Parameters
+        ----------
+        instance: Thing
+            The Thing instance for which to retrieve the TD.
+
+        Returns
+        -------
+        JSON
+            The Thing Description in JSON format.
+        """
+        TM = instance.get_thing_model(ignore_errors=ignore_errors).json() # type: dict[str, typing.Any]
+        TD = copy.deepcopy(TM)
+        from ...td import PropertyAffordance, ActionAffordance, EventAffordance
+        from ...td.forms import Form
+        
+        if protocol.lower() == 'inproc':
+            req_rep_socket_address = self.req_rep_server.socket_address
+            pub_sub_socket_address = self.event_publisher.socket_address
+        elif protocol.lower() == 'ipc':
+            if not hasattr(self, 'ipc_server'):
+                raise RuntimeError("This server cannot generate TD for IPC protocol, consider using thing model directly.")
+            req_rep_socket_address = self.ipc_server.socket_address
+            pub_sub_socket_address = self.ipc_event_publisher.socket_address
+        elif protocol.lower() == 'tcp':
+            if not hasattr(self, 'tcp_server'):
+                raise RuntimeError("This server cannot generate TD for TCP protocol, consider using thing model directly.")
+            req_rep_socket_address = self.tcp_server.socket_address # type: str
+            req_rep_socket_address = req_rep_socket_address.replace('*', socket.gethostname()).replace('0.0.0.0', socket.gethostname())
+            pub_sub_socket_address = self.tcp_event_publisher.socket_address # type: str
+            pub_sub_socket_address = pub_sub_socket_address.replace('*', socket.gethostname()).replace('0.0.0.0', socket.gethostname())
+        else:
+            raise ValueError(f"Unsupported protocol '{protocol}' for ZMQ.")
+        
+        
+        for name in TM.get("properties", []):
+            affordance = PropertyAffordance.from_TD(name, TM)
+            if not TD["properties"][name].get("forms", None):
+                TD["properties"][name]["forms"] = []
+
+            form = Form()
+            form.href = req_rep_socket_address
+            form.op = Operations.readproperty
+            form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+            TD["properties"][name]["forms"].append(form.json())
+
+            if not affordance.readOnly:
+                form = Form()
+                form.href = req_rep_socket_address
+                form.op = Operations.writeproperty
+                form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+                TD["properties"][name]["forms"].append(form.json())
+
+            if affordance.observable:   
+                form = Form()
+                form.href = pub_sub_socket_address
+                form.op = Operations.observeproperty
+                form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+                TD["properties"][name]["forms"].append(form.json())
+
+        for name in TM.get("actions", []):
+            affordance = ActionAffordance.from_TD(name, TM)
+            if not TD["actions"][name].get("forms", None):
+                TD["actions"][name]["forms"] = []
+            
+            form = Form()
+            form.href = req_rep_socket_address
+            form.op = Operations.invokeaction
+            form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+            TD["actions"][name]["forms"].append(form.json())
+
+        for name in TM.get("events", []):
+            affordance = EventAffordance.from_TD(name, TM)
+            if not TD["events"][name].get("forms", None):
+                TD["events"][name]["forms"] = []
+
+            form = Form()
+            form.href = pub_sub_socket_address
+            form.op = Operations.subscribeevent
+            form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+            TD["events"][name]["forms"].append(form.json())
+
+        return TD
     
-   
+
 
 class Scheduler:
     """

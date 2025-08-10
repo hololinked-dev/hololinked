@@ -28,9 +28,11 @@ class ZMQServer(RPCServer):
             transports = [transports]
         elif not isinstance(transports, list): 
             raise TypeError(f"unsupported transport type : {type(transports)}")
+        for index, transport in enumerate(transports):
+            transports[index] = transport.upper() if isinstance(transport, str) else transport
+
         tcp_socket_address = kwargs.pop('tcp_socket_address', None)
-       
-        
+
         # initialise every externally visible protocol          
         if ZMQ_TRANSPORTS.TCP in transports or "TCP" in transports:
             self.tcp_server = AsyncZMQServer(
@@ -40,8 +42,8 @@ class ZMQServer(RPCServer):
                                 socket_address=tcp_socket_address,
                                 **kwargs
                             )        
-            host, port = tcp_socket_address.rsplit(':', 1)
-            new_port = int(port) + 1
+            host, port = self.tcp_server.socket_address.rsplit(':', 1)
+            new_port = int(port) + 1 # try the next port for the event publisher
             tcp_socket_address = f"{host}:{new_port}"
             self.tcp_event_publisher = EventPublisher(
                                             id=f'{self.id}/event-publisher',
@@ -133,4 +135,20 @@ class ZMQServer(RPCServer):
         except Exception as ex:
             self.logger.warning(f"Exception occurred while exiting the server - {str(ex)}")
             
+
+    def __str__(self):
+        parts = [f"ZMQServer(\n\tid: {self.id}"]
+        for name in [
+            "ipc_server", "tcp_server", "req_rep_server", "ipc_event_publisher",
+            "tcp_event_publisher", "event_publisher", "inproc_events_proxy"
+        ]:
+            obj = getattr(self, name, None)
+            if obj is not None:
+                type_name = type(obj).__name__
+                parts.append(f"{name}: {getattr(obj, 'socket_address', None)} ({type_name})")
+            else:
+                parts.append(f"{name}: None")
+        paths = "\n\t".join(parts)
+        paths += "\n)"
+        return paths
 
