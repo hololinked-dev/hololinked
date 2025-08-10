@@ -958,15 +958,15 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                     response_message = ResponseMessage(raw_message)
                 except zmq.Again:
                     pass 
-            if response_message: 
-                if self.handled_default_message_types(response_message):
-                    continue
-                if message_id != response_message.id:
-                    self._response_cache[response_message.id] = response_message
-                    self.logger.debug("cached response with msg-id {}".format(response_message.id))
-                else:
-                    self.logger.debug("received response with msg-id {}".format(response_message.id))
-                    return response_message
+                if response_message: 
+                    if self.handled_default_message_types(response_message):
+                        continue
+                    if message_id != response_message.id:
+                        self._response_cache[response_message.id] = response_message
+                        self.logger.debug("cached response with msg-id {}".format(response_message.id))
+                    else:
+                        self.logger.debug("received response with msg-id {}".format(response_message.id))
+                        return response_message
            
           
     def execute(self, 
@@ -1147,6 +1147,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                         self._response_cache[response_message.id] = response_message
             else:
                 self.logger.info('got no response for handshake')
+        self.poller.register(self._monitor_socket, zmq.POLLIN)
         self._handshake_event.set()
 
     async def handshake_complete(self):
@@ -1244,16 +1245,16 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                     raw_message = await socket.recv_multipart(zmq.NOBLOCK)
                     response_message = ResponseMessage(raw_message)
                 except zmq.Again:
-                    pass 
-            if response_message: 
-                if self.handled_default_message_types(response_message):
-                    continue
-                if message_id != response_message.id:
-                    self._response_cache[response_message.id] = response_message
-                    self.logger.debug("cached response with msg-id {}".format(response_message.id))
-                else:
-                    self.logger.debug(f"received response with msg-id {response_message.id}")
-                    return response_message
+                    continue 
+                if response_message: 
+                    if self.handled_default_message_types(response_message):
+                        continue
+                    if message_id != response_message.id:
+                        self._response_cache[response_message.id] = response_message
+                        self.logger.debug("cached response with msg-id {}".format(response_message.id))
+                    else:
+                        self.logger.debug(f"received response with msg-id {response_message.id}")
+                        return response_message
             
     async def async_execute(self, 
                         thing_id: str, 

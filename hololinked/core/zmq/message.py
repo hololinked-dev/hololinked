@@ -377,6 +377,9 @@ class RequestMessage:
         ]
         return message
     
+    def __str__(self) -> str:
+        return f"RequestMessage(id={self.id}, type={self.type}, header={self.header})"
+
 
 class ResponseMessage:
     """
@@ -604,8 +607,11 @@ class ResponseMessage:
             preserialized_payload.value
         ]
         return message
-        
-   
+    
+    def __str__(self) -> str:
+        return f"ResponseMessage(id={self.id}, type={self.type}, header={self.header})"
+
+
 class EventMessage(ResponseMessage):
 
     @classmethod
@@ -662,4 +668,7 @@ class EventMessage(ResponseMessage):
             self._header = EventHeader(**Serializers.json.loads(self._bytes[INDEX_HEADER]))
         else:
             raise ValueError(f"header must be of type ResponseHeader or bytes, not {type(self._bytes[INDEX_HEADER])}")
+
+    def __str__(self) -> str:
+        return f"EventMessage(id={self.id}, type={self.type}, header={self.header})"
 

@@ -25,10 +25,10 @@ class TestBrokerMixin(MessageValidatorMixin):
     """Tests Individual ZMQ Server"""
 
     @classmethod
-    def setUpServer(self):
-        self.server = AsyncZMQServer(
-                                id=self.server_id,
-                                logger=self.logger
+    def setUpServer(cls):
+        cls.server = AsyncZMQServer(
+                                id=cls.server_id,
+                                logger=cls.logger
                             )
     """
     Base class: BaseZMQ, BaseAsyncZMQ, BaseSyncZMQ
@@ -37,54 +37,54 @@ class TestBrokerMixin(MessageValidatorMixin):
     """
 
     @classmethod
-    def setUpClient(self):
-        self.sync_client = None 
-        self.async_client = None
+    def setUpClient(cls):
+        cls.sync_client = None
+        cls.async_client = None
 
     @classmethod
-    def setUpThing(self):
-        self.thing = TestThing(
-                            id=self.thing_id,
-                            logger=self.logger,
+    def setUpThing(cls):
+        cls.thing = TestThing(
+                            id=cls.thing_id,
+                            logger=cls.logger,
                             remote_accessible_logger=True
                         )
        
     @classmethod
-    def startServer(self):
-        self._server_thread = threading.Thread(
+    def startServer(cls):
+        cls._server_thread = threading.Thread(
                                             target=run_zmq_server, 
-                                            args=(self.server, self, self.done_queue),
+                                            args=(cls.server, cls, cls.done_queue),
                                             daemon=True
                                         )
-        self._server_thread.start()
+        cls._server_thread.start()
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        print(f"test ZMQ message brokers {self.__name__}")
-        self.logger = get_default_logger('test-message-broker', logging.ERROR)        
-        self.done_queue = multiprocessing.Queue()
-        self.last_server_message = None
-        self.setUpThing()
-        self.setUpServer()
-        self.setUpClient()
-        self.startServer()
+        print(f"test ZMQ message brokers {cls.__name__}")
+        cls.logger = get_default_logger('test-message-broker', logging.ERROR)
+        cls.done_queue = multiprocessing.Queue()
+        cls.last_server_message = None
+        cls.setUpThing()
+        cls.setUpServer()
+        cls.setUpClient()
+        cls.startServer()
 
 
 
 class TestBasicServerAndClient(TestBrokerMixin):
 
     @classmethod
-    def setUpClient(self):
+    def setUpClient(cls):
         super().setUpClient()
-        self.sync_client = SyncZMQClient(
-                                id=self.client_id,
-                                server_id=self.server_id, 
-                                logger=self.logger,
+        cls.sync_client = SyncZMQClient(
+                                id=cls.client_id,
+                                server_id=cls.server_id, 
+                                logger=cls.logger,
                                 handshake=False
                             )
-        self.client = self.sync_client
-        
+        cls.client = cls.sync_client
+
 
     def test_1_handshake_complete(self):
         """
@@ -93,6 +93,7 @@ class TestBasicServerAndClient(TestBrokerMixin):
         """
         self.client.handshake()
         self.assertTrue(self.client._monitor_socket is not None)
+        self.assertTrue(self.client._monitor_socket in self.client.poller)
         # both directions
         # HANDSHAKE = 'HANDSHAKE' # 1 - find out if the server is alive
 
@@ -201,21 +202,24 @@ class TestBasicServerAndClient(TestBrokerMixin):
         self.assertEqual(self.server.poll_timeout, 1000)        
         self.client.handshake()
 
-
-    def test_4_exit(self):
+    @classmethod
+    def tearDownClass(cls):
         """
         Test if exit reaches to server
         """
         # EXIT = b'EXIT' # 7 - exit the server
         request_message = RequestMessage.craft_with_message_type(
-                                                            receiver_id=self.server_id,
-                                                            sender_id=self.client_id,
+                                                            receiver_id=cls.server_id,
+                                                            sender_id=cls.client_id,
                                                             message_type=EXIT
                                                         )
-        self.client.socket.send_multipart(request_message.byte_array)
-        self.assertTrue(self.done_queue.get())
-        self._server_thread.join()        
-        
+        cls.client.socket.send_multipart(request_message.byte_array)
+        done = cls.done_queue.get(timeout=3)
+        if done:
+            cls._server_thread.join()
+        else: 
+            print("Server did not properly process exit request")
+        super().tearDownClass()
 
     # def test_5_server_disconnected(self):
       
@@ -237,20 +241,19 @@ class TestBasicServerAndClient(TestBrokerMixin):
 class TestAsyncZMQClient(TestBrokerMixin):
 
     @classmethod
-    def setUpClient(self):
-        self.async_client = AsyncZMQClient(
-                                id=self.client_id,
-                                server_id=self.server_id, 
-                                logger=self.logger,
+    def setUpClient(cls):
+        cls.async_client = AsyncZMQClient(
+                                id=cls.client_id,
+                                server_id=cls.server_id, 
+                                logger=cls.logger,
                                 handshake=False
                             )
-        self.client = self.async_client
+        cls.client = cls.async_client
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        self.client = self.async_client
-
+        
 
     def test_1_handshake_complete(self):
         """
@@ -261,6 +264,7 @@ class TestAsyncZMQClient(TestBrokerMixin):
             self.client.handshake()
             await self.client.handshake_complete()
             self.assertTrue(self.client._monitor_socket is not None)
+            self.assertTrue(self.client._monitor_socket in self.client.poller)
         get_current_async_loop().run_until_complete(test())
         # both directions
         # HANDSHAKE = 'HANDSHAKE' # 1 - find out if the server is alive    
@@ -286,12 +290,12 @@ class TestAsyncZMQClient(TestBrokerMixin):
             # EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
             # INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
             await self.server._handle_timeout(request_message, timeout_type='invokation') # 5
-            await self.server._handle_invalid_message(request_message, SerializableData(Exception('test')))
+            await self.server._handle_invalid_message(request_message, SerializableData(Exception('test1')))
             await self.server._handshake(request_message)
-            await self.server._handle_error_message(request_message, Exception('test'))
+            await self.server._handle_error_message(request_message, Exception('test2'))
             await self.server.async_send_response(request_message)
             await self.server.async_send_response_with_message_type(request_message, ERROR, 
-                                                                    SerializableData(Exception('test')))
+                                                                    SerializableData(Exception('test3')))
         
         async def handle_message_types_client():
             """
@@ -347,31 +351,36 @@ class TestAsyncZMQClient(TestBrokerMixin):
         )
         
 
-    def test_3_exit(self):
+    @classmethod
+    def tearDownClass(cls):
         """
         Test if exit reaches to server
         """
         # EXIT = b'EXIT' # 7 - exit the server
         request_message = RequestMessage.craft_with_message_type(
-                                                            receiver_id=self.server_id,
-                                                            sender_id=self.client_id,
+                                                            receiver_id=cls.server_id,
+                                                            sender_id=cls.client_id,
                                                             message_type=EXIT
                                                         )
-        self.client.socket.send_multipart(request_message.byte_array)
-        self.assertTrue(self.done_queue.get())
-        self._server_thread.join()
-        
-    	
+        cls.client.socket.send_multipart(request_message.byte_array)
+        done = cls.done_queue.get(timeout=3)
+        if done:
+            cls._server_thread.join()
+        else:
+            print("Server did not properly process exit request")
+        super().tearDownClass()
+
+
 
 class TestMessageMappedClientPool(TestBrokerMixin):
 
     @classmethod
-    def setUpClient(self):
-        self.client = MessageMappedZMQClientPool(
+    def setUpClient(cls):
+        cls.client = MessageMappedZMQClientPool(
                                     id='client-pool',
-                                    client_ids=[self.client_id],
-                                    server_ids=[self.server_id], 
-                                    logger=self.logger,
+                                    client_ids=[cls.client_id],
+                                    server_ids=[cls.server_id], 
+                                    logger=cls.logger,
                                     handshake=False
                                 )
       
@@ -386,6 +395,7 @@ class TestMessageMappedClientPool(TestBrokerMixin):
             await self.client.handshake_complete()
             for client in self.client.pool.values():
                 self.assertTrue(client._monitor_socket is not None)
+                self.assertTrue(client._monitor_socket in self.client.poller)
         get_current_async_loop().run_until_complete(test())
         # both directions
         # HANDSHAKE = 'HANDSHAKE' # 1 - find out if the server is alive    
@@ -492,20 +502,24 @@ class TestMessageMappedClientPool(TestBrokerMixin):
         self.assertEqual(self.client.poll_timeout, 1000)
         
 
-    def test_4_exit(self):
+    @classmethod
+    def tearDownClass(cls):
         """
         Test if exit reaches to server
         """
         # EXIT = b'EXIT' # 7 - exit the server
         request_message = RequestMessage.craft_with_message_type(
-                                                            receiver_id=self.server_id,
-                                                            sender_id=self.client_id,
+                                                            receiver_id=cls.server_id,
+                                                            sender_id=cls.client_id,
                                                             message_type=EXIT
                                                         )
-        self.client[self.client_id].socket.send_multipart(request_message.byte_array)
-        self.assertTrue(self.done_queue.get())
-        self._server_thread.join()
-        
+        cls.client[cls.client_id].socket.send_multipart(request_message.byte_array)
+        done = cls.done_queue.get(timeout=3)
+        if done:
+            cls._server_thread.join()
+        else:
+            print("Server did not process exit message correctly")
+        super().tearDownClass()
 
 
 def load_tests(loader, tests, pattern):
