@@ -22,10 +22,10 @@ except ImportError:
 class TestAction(TestCase):
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
         super().setUpClass()
-        print(f"test action with {self.__name__}")
-       
+        print(f"test action with {cls.__name__}")
+
 
     def test_1_allowed_actions(self):
         """Test if methods can be decorated with action"""
@@ -307,6 +307,7 @@ class TestAction(TestCase):
         self.assertTrue(str(ex.exception).startswith("Only 'safe', 'idempotent', 'synchronous' are allowed"))
 
 
+    # TODO - rename this test
     def test_5_thing_cls_actions(self):
         """Test class and instance level action access"""
         thing = TestThing(id='test-action', log_level=logging.ERROR)

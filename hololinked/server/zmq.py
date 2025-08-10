@@ -91,7 +91,7 @@ class ZMQServer(RPCServer):
         if not self.inproc_events_proxy:
             return
         self.inproc_events_proxy.subscribe()
-        while True:
+        while self._run:
             try:
                 event = await self.inproc_events_proxy.receive(raise_interrupt_as_exception=True)
                 if self.ipc_event_publisher is not None:
@@ -104,7 +104,6 @@ class ZMQServer(RPCServer):
                 break
             except Exception as e:
                 self.logger.error(f"error in tunneling events from inproc: {e}")
-                break
 
 
     def stop(self) -> None:
@@ -113,7 +112,7 @@ class ZMQServer(RPCServer):
         if self.tcp_server is not None:
             self.tcp_server.stop_polling()
         if self.inproc_events_proxy is not None:
-            get_current_async_loop().call_soon(lambda : asyncio.create_task(self.inproc_events_proxy.interrupt()))
+            get_current_async_loop().call_soon(lambda: asyncio.create_task(self.inproc_events_proxy.interrupt()))
         super().stop()
 
 

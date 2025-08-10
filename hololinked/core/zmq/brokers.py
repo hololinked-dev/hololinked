@@ -95,13 +95,14 @@ class BaseZMQ:
         RuntimeError
             if transport is TCP and a socket connect from client side is requested but a socket address is not supplied
         """
+        assert node_type.lower() in ['server', 'client'], f"Invalid node_type: {node_type}"
         if kwargs.get('socket_class', None) is not None:
             socket = context.socket(socket_type, socket_class= kwargs.get('socket_class'))
         else:
             socket = context.socket(socket_type)
         socket.setsockopt_string(zmq.IDENTITY, id)
         socket_address = kwargs.get('socket_address', None)
-        bind = node_type == 'server'
+        bind = node_type.lower() == 'server'
         if transport == ZMQ_TRANSPORTS.IPC or transport.lower() == "ipc":
             if socket_address is None or not socket_address.endswith('.ipc'):
                 if not socket_address:
@@ -1474,6 +1475,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                 while True:
                     try:
                         raw_response = await socket.recv_multipart(zmq.NOBLOCK)              
+                        response_message = ResponseMessage(raw_response)        
                     except zmq.Again:
                         # errors in handle_message should reach the client. 
                         break
@@ -1486,14 +1488,13 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                                     " Unregistering from poller temporarily until server comes back.")
                                 break
                     else:
-                        response_message = ResponseMessage(raw_response)        
                         if self.handled_default_message_types(response_message):
                             continue             
                         message_id = response_message.id
                         self.logger.debug(f"received response from server '{response_message.sender_id}' with msg-ID '{message_id}'")
                         if message_id in self.cancelled_messages:
                             self.cancelled_messages.remove(message_id)
-                            self.logger.debug(f"msg-ID '{message_id}' cancelled")
+                            self.logger.debug(f"msg-ID '{message_id}' was previously cancelled. dropping...")
                             continue
                         self.message_map[message_id] = response_message
                         event = self.events_map.get(message_id, None) 
@@ -2099,6 +2100,7 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
+        # TODO - use raise_interrupt_as_exception
         while True:
             sockets = await self.poller.poll(timeout) 
             if len(sockets) > 1: 

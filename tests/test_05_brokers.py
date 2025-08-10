@@ -202,6 +202,7 @@ class TestBasicServerAndClient(TestBrokerMixin):
         self.assertEqual(self.server.poll_timeout, 1000)        
         self.client.handshake()
 
+
     @classmethod
     def tearDownClass(cls):
         """
@@ -214,6 +215,15 @@ class TestBasicServerAndClient(TestBrokerMixin):
                                                             message_type=EXIT
                                                         )
         cls.client.socket.send_multipart(request_message.byte_array)
+
+        # TODO - fix the following, somehow socket is not closing fully, 
+        # although we have previously tested this and its known to work. 
+        # try:
+        #     cls.client.recv_response(message_id=b'not-necessary')
+        #     assert False, "Expected ConnectionAbortedError"
+        # except ConnectionAbortedError as ex:
+        #     assert str(ex).startswith(f"server disconnected for {cls.client_id}"), f"Unexpected error message: {str(ex)}"
+
         done = cls.done_queue.get(timeout=3)
         if done:
             cls._server_thread.join()
@@ -221,20 +231,10 @@ class TestBasicServerAndClient(TestBrokerMixin):
             print("Server did not properly process exit request")
         super().tearDownClass()
 
-    # def test_5_server_disconnected(self):
-      
-    #     self.server.exit() # exit causes the server socket to send a ZMQ builtin termination message to the client
-    #     # we need to complete all the tasks before we can exit other some loosely hanging tasks (which will anyway complete 
-    #     # before the script quits) has invalid sockets because of the exit
-
-    #     # SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' # socket died - zmq's builtin event
-    #     with self.assertRaises(ConnectionAbortedError) as ex:
-    #         self.client.recv_response(message_id=b'not-necessary')
-    #     self.assertTrue(str(ex.exception).startswith(f"server disconnected for {self.client_id}")) 
-        
-        # peer to peer
-        # INTERRUPT = b'INTERRUPT' # interrupt a socket while polling 
-        # first test the length 
+    # TODO  
+    # peer to peer
+    # INTERRUPT = b'INTERRUPT' # interrupt a socket while polling 
+    # first test the length 
 
 
 
@@ -364,6 +364,9 @@ class TestAsyncZMQClient(TestBrokerMixin):
                                                         )
         cls.client.socket.send_multipart(request_message.byte_array)
         done = cls.done_queue.get(timeout=3)
+
+        # TODO - check server disconnected like previous test
+
         if done:
             cls._server_thread.join()
         else:
@@ -520,6 +523,7 @@ class TestMessageMappedClientPool(TestBrokerMixin):
         else:
             print("Server did not process exit message correctly")
         super().tearDownClass()
+
 
 
 def load_tests(loader, tests, pattern):

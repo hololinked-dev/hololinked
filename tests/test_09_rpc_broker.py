@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import threading
 import typing
 import unittest
@@ -25,12 +26,12 @@ try:
     from .test_05_brokers import TestBrokerMixin
     from .test_06_actions import replace_methods_with_actions
     from .utils import TestRunner, TestCase
-    from .things import run_thing_with_zmq_server_forked, test_thing_TD, TestThing
+    from .things import run_thing_with_zmq_server_forked, test_thing_TD as test_thing_original_TD, TestThing
 except ImportError:
     from tests.test_05_brokers import TestBrokerMixin
     from tests.test_06_actions import replace_methods_with_actions
     from utils import TestRunner, TestCase
-    from things import run_thing_with_zmq_server_forked, test_thing_TD, TestThing
+    from things import run_thing_with_zmq_server_forked, test_thing_TD as test_thing_original_TD, TestThing
 
 
 
@@ -60,51 +61,53 @@ class InteractionAffordanceMixin(TestBrokerMixin):
         self.setUpEvents()
         
     @classmethod
-    def setUpActions(self):
+    def setUpActions(cls):
         owner_inst = SimpleNamespace(_noblock_messages={})
-        self.action_echo = ZMQAction(
+        test_thing_TD = copy.deepcopy(test_thing_original_TD)
+        test_thing_TD["id"] = cls.thing_id
+        cls.action_echo = ZMQAction(
                                 resource=ActionAffordance.from_TD('action_echo', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client, 
-                                owner_inst=owner_inst,
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                schema_validator=None
-                            )
-    
-        self.action_get_serialized_data = ZMQAction(
-                                resource=ActionAffordance.from_TD('get_serialized_data', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client, 
-                                owner_inst=owner_inst,
-                                invokation_timeout=5, 
-                                execution_timeout=5, 
-                                schema_validator=None
-                            )
-        
-        self.action_sleep = ZMQAction(
-                                resource=ActionAffordance.from_TD('sleep', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client, 
+                                sync_client=cls.sync_client,
+                                async_client=cls.async_client, 
                                 owner_inst=owner_inst,
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 schema_validator=None
                             )
 
-        self.action_get_mixed_content_data = ZMQAction(
-                                resource= ActionAffordance.from_TD('get_mixed_content_data', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client, 
+        cls.action_get_serialized_data = ZMQAction(
+                                resource=ActionAffordance.from_TD('get_serialized_data', test_thing_TD),
+                                sync_client=cls.sync_client,
+                                async_client=cls.async_client, 
                                 owner_inst=owner_inst,
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 schema_validator=None
                             )
-        self.action_push_events = ZMQAction(
+        
+        cls.action_sleep = ZMQAction(
+                                resource=ActionAffordance.from_TD('sleep', test_thing_TD),
+                                sync_client=cls.sync_client,
+                                async_client=cls.async_client, 
+                                owner_inst=owner_inst,
+                                invokation_timeout=5, 
+                                execution_timeout=5, 
+                                schema_validator=None
+                            )
+
+        cls.action_get_mixed_content_data = ZMQAction(
+                                resource= ActionAffordance.from_TD('get_mixed_content_data', test_thing_TD),
+                                sync_client=cls.sync_client,
+                                async_client=cls.async_client, 
+                                owner_inst=owner_inst,
+                                invokation_timeout=5, 
+                                execution_timeout=5, 
+                                schema_validator=None
+                            )
+        cls.action_push_events = ZMQAction(
                                 resource=ActionAffordance.from_TD('push_events', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client,
+                                sync_client=cls.sync_client,
+                                async_client=cls.async_client,
                                 owner_inst=owner_inst,
                                 invokation_timeout=5,
                                 execution_timeout=5,
@@ -112,21 +115,23 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                             )
     
     @classmethod
-    def setUpProperties(self):
+    def setUpProperties(cls):
         owner_inst = SimpleNamespace(_noblock_messages={})
-        self.base_property = ZMQProperty(
+        test_thing_TD = copy.deepcopy(test_thing_original_TD)
+        test_thing_TD["id"] = cls.thing_id
+        cls.base_property = ZMQProperty(
                                 resource=PropertyAffordance.from_TD('base_property', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client,
+                                sync_client=cls.sync_client,
+                                async_client=cls.async_client,
                                 owner_inst=owner_inst,                           
                                 invokation_timeout=5, 
                                 execution_timeout=5, 
                                 schema_validator=None
                             )
-        self.total_number_of_events = ZMQProperty(
+        cls.total_number_of_events = ZMQProperty(
                                 resource=PropertyAffordance.from_TD('total_number_of_events', test_thing_TD),
-                                sync_client=self.sync_client,
-                                async_client=self.async_client,
+                                sync_client=cls.sync_client,
+                                async_client=cls.async_client,
                                 owner_inst=owner_inst,
                                 invokation_timeout=5,
                                 execution_timeout=5,
@@ -134,9 +139,11 @@ class InteractionAffordanceMixin(TestBrokerMixin):
                             )      
     
     @classmethod
-    def setUpEvents(self):
+    def setUpEvents(cls):
         owner_inst = SimpleNamespace(_noblock_messages={})
-        self.test_event = ZMQEvent(
+        test_thing_TD = copy.deepcopy(test_thing_original_TD)
+        test_thing_TD["id"] = cls.thing_id
+        cls.test_event = ZMQEvent(
                                 resource=EventAffordance.from_TD('test_event', test_thing_TD),
                                 sync_zmq_client=None,
                                 owner_inst=owner_inst
@@ -147,51 +154,56 @@ class InteractionAffordanceMixin(TestBrokerMixin):
 class TestRPCServerMixin(InteractionAffordanceMixin):
 
     @classmethod
-    def setUpThing(self):
+    def setUpThing(cls):
         replace_methods_with_actions(TestThing)
         super().setUpThing()
         
     @classmethod
-    def setUpServer(self):
-        self.server = RPCServer(
-                            id=self.server_id,
-                            things=[self.thing],
-                            logger=self.logger,
-                            context=self.context
+    def setUpServer(cls):
+        cls.server = RPCServer(
+                            id=cls.server_id,
+                            things=[cls.thing],
+                            logger=cls.logger,
+                            context=cls.context
                         )
 
     @classmethod
-    def setUpClient(self):
-        self.async_client = AsyncZMQClient(
-                                id=self.client_id,
-                                server_id=self.server_id, 
-                                logger=self.logger,
-                                context=self.context,
+    def setUpClient(cls):
+        cls.async_client = AsyncZMQClient(
+                                id=cls.client_id,
+                                server_id=cls.server_id,
+                                logger=cls.logger,
+                                context=cls.context,
                                 handshake=False,
                                 transport='INPROC'
                             )
-        self.sync_client = SyncZMQClient(
-                                id=self.client_id+'-sync',
-                                server_id=self.server_id,
-                                logger=self.logger,
-                                context=self.context,
+        cls.sync_client = SyncZMQClient(
+                                id=cls.client_id+'-sync',
+                                server_id=cls.server_id,
+                                logger=cls.logger,
+                                context=cls.context,
                                 handshake=False,
                                 transport='INPROC'
                             ) 
     
     @classmethod
-    def startServer(self):
-        self._server_thread = threading.Thread(
-                                            target=self.server.run, 
+    def startServer(cls):
+        cls._server_thread = threading.Thread(
+                                            target=cls.server.run, 
                                             daemon=False # to test exit daemon must be False
                                         )
-        self._server_thread.start()
-   
+        cls._server_thread.start()
+
     @classmethod
-    def setUpClass(self):
-        self.context = global_config.zmq_context()
+    def setUpClass(cls):
+        cls.context = global_config.zmq_context()
         super().setUpClass()
-        print(f"test ZMQ RPC Server {self.__name__}")
+        print(f"test ZMQ RPC Server {cls.__name__}")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.stop()
+        return super().tearDownClass()
 
 
 
@@ -394,51 +406,51 @@ class TestInprocRPCServer(TestRPCServerMixin):
         """test if server can be stopped"""
         self.server.stop()
        
-        
+
 
 class TestRPCServer(TestInprocRPCServer):
 
     @classmethod
-    def setUpServer(self):
-        self.server = ZMQServer(
-                            id=self.server_id,
-                            things=[self.thing],
-                            logger=self.logger,
-                            context=self.context,
+    def setUpServer(cls):
+        cls.server = ZMQServer(
+                            id=cls.server_id,
+                            things=[cls.thing],
+                            logger=cls.logger,
+                            context=cls.context,
                             transports=['INPROC', 'IPC', 'TCP'],
                             tcp_socket_address='tcp://*:59000'
                         )
         
 
     @classmethod
-    def setUpClient(self):
+    def setUpClient(cls):
         super().setUpClient()
-        self.sync_ipc_client = SyncZMQClient(
-                                id=self.client_id+"-sync", 
-                                server_id=self.server_id, 
-                                logger=self.logger,
+        cls.sync_ipc_client = SyncZMQClient(
+                                id=cls.client_id+"-sync", 
+                                server_id=cls.server_id, 
+                                logger=cls.logger,
                                 handshake=False,
                                 transport='IPC'
                             )
-        self.sync_tcp_client = SyncZMQClient(
-                                id=self.client_id+"-sync",
-                                server_id=self.server_id, 
-                                logger=self.logger,
+        cls.sync_tcp_client = SyncZMQClient(
+                                id=cls.client_id+"-sync",
+                                server_id=cls.server_id, 
+                                logger=cls.logger,
                                 handshake=False,
                                 transport='TCP',
                                 socket_address='tcp://localhost:59000'
                             )
-        self.async_ipc_client = AsyncZMQClient(
-                                id=self.client_id+"-async", 
-                                server_id=self.server_id, 
-                                logger=self.logger,
+        cls.async_ipc_client = AsyncZMQClient(
+                                id=cls.client_id+"-async", 
+                                server_id=cls.server_id, 
+                                logger=cls.logger,
                                 handshake=False,
                                 transport='IPC'
                             )
-        self.async_tcp_client = AsyncZMQClient(
-                                id=self.client_id+"-async",
-                                server_id=self.server_id, 
-                                logger=self.logger,
+        cls.async_tcp_client = AsyncZMQClient(
+                                id=cls.client_id+"-async",
+                                server_id=cls.server_id, 
+                                logger=cls.logger,
                                 handshake=False,
                                 transport='TCP',
                                 socket_address='tcp://localhost:59000'
@@ -535,7 +547,7 @@ class TestExposedActions(InteractionAffordanceMixin):
         """
         run_thing_with_zmq_server_forked(
             thing_cls=TestThing, 
-            id='test-action', 
+            id=self.server_id,
             log_level=logging.ERROR+10, 
             done_queue=self.done_queue,
             prerun_callback=replace_methods_with_actions,
@@ -761,6 +773,8 @@ class TestExposedProperties(InteractionAffordanceMixin):
 
     def test_02_json_schema_property(self):
         """Test json schema based property"""
+        test_thing_TD = copy.deepcopy(test_thing_original_TD)
+        test_thing_TD["id"] = self.server_id
         json_schema_prop = ZMQProperty(
             resource=PropertyAffordance.from_TD('json_schema_prop', test_thing_TD),
             sync_client=self.client
@@ -777,6 +791,8 @@ class TestExposedProperties(InteractionAffordanceMixin):
 
     def test_03_pydantic_model_property(self):
         """Test pydantic model based property"""
+        test_thing_TD = copy.deepcopy(test_thing_original_TD)
+        test_thing_TD["id"] = self.server_id
         pydantic_prop = ZMQProperty(
             resource=PropertyAffordance.from_TD('pydantic_prop', test_thing_TD),
             sync_client=self.client
@@ -838,6 +854,8 @@ class TestExposedEvents(TestRPCServerMixin):
 
     @classmethod
     def setUpEvents(self):
+        test_thing_TD = copy.deepcopy(test_thing_original_TD)
+        test_thing_TD["id"] = self.server_id
         self.event_names = ['test_event', 'test_binary_payload_event', 'test_event_with_json_schema']
         for event_name in self.event_names:
             event_affordance = EventAffordance.from_TD(event_name, test_thing_TD)
@@ -973,6 +991,8 @@ class TestExposedEvents(TestRPCServerMixin):
 
 
     def test_4_other_transports(self):
+        test_thing_TD = copy.deepcopy(test_thing_original_TD)
+        test_thing_TD["id"] = self.server_id
         for publisher in [self.server.ipc_event_publisher, self.server.tcp_event_publisher]:
             self.assertIsInstance(publisher, EventPublisher)
             self.assertTrue(publisher.socket_address.startswith('tcp://') or publisher.socket_address.startswith('ipc://'))
@@ -1003,7 +1023,7 @@ class TestExposedEvents(TestRPCServerMixin):
 
 
 class TestThingRunRPCServer(TestBrokerMixin):
-    """Finally check if the thing can be run with a ZMQ server"""
+    """Finally check if the thing can be run with a ZMQ server directly"""
 
     @classmethod
     def setUpThing(self):
@@ -1049,12 +1069,12 @@ class TestThingRunRPCServer(TestBrokerMixin):
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInprocRPCServer))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInprocRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
     # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
     return suite
         
 if __name__ == '__main__':

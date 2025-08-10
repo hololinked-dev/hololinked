@@ -24,10 +24,7 @@ class TestEvents(TestCase):
         super().setUpClass()
         print(f"test events with {cls.__name__}")
 
-    @classmethod
-    def tearDownClass(cls):
-        print("\ntear down test events")
-
+   
     def _test_dispatcher(self, descriptor: Event, dispatcher: EventDispatcher, thing: TestThing):
         """pass the event descriptor and the dispatcher to test the dispatcher"""
         self.assertIsInstance(dispatcher, EventDispatcher) # instance access returns dispatcher

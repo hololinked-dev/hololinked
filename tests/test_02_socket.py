@@ -231,3 +231,10 @@ class TestSocket(TestCase):
 
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())
+
+
+"""
+TODO:
+1. check node_type values
+2. check if TCP socket search happens
+"""

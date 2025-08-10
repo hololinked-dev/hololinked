@@ -142,6 +142,7 @@ def run_zmq_server(server: AsyncZMQServer, owner, done_queue: multiprocessing.Qu
                 owner.last_server_message = messages[0]
                 for message in messages:
                     if message.type == EXIT:
+                        server.exit()
                         return
                 await asyncio.sleep(0.01)
             except BreakLoop:

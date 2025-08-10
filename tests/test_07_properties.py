@@ -19,7 +19,7 @@ class TestProperty(TestCase):
         print(f"test property with {self.__name__}")
 
 
-    def test_1_simple_class_property(self):
+    def test_01_simple_class_property(self):
         """Test basic class property functionality"""
         # Test class-level access
         self.assertEqual(TestThing.simple_class_prop, 42)
@@ -38,7 +38,7 @@ class TestProperty(TestCase):
         self.assertEqual(instance2.simple_class_prop, 200)
 
 
-    def test_2_managed_class_property(self):
+    def test_02_managed_class_property(self):
         """Test class property with custom getter/setter"""
         # Test initial value
         self.assertEqual(TestThing.managed_class_prop, 0)        
@@ -62,7 +62,7 @@ class TestProperty(TestCase):
         self.assertEqual(instance.managed_class_prop, 100)
 
 
-    def test_3_readonly_class_property(self):
+    def test_03_readonly_class_property(self):
         """Test read-only class property behavior"""
         # Test reading the value
         self.assertEqual(TestThing.readonly_class_prop, "read-only-value")
@@ -81,7 +81,7 @@ class TestProperty(TestCase):
         self.assertEqual(instance.readonly_class_prop, "read-only-value")
 
 
-    def test_4_deletable_class_property(self):
+    def test_04_deletable_class_property(self):
         """Test class property deletion"""
         # Test initial value
         self.assertEqual(TestThing.deletable_class_prop, 100)
@@ -103,7 +103,7 @@ class TestProperty(TestCase):
         self.assertEqual(TestThing.deletable_class_prop, 100)  # Should return to default
 
 
-    def test_5_descriptor_access(self):
+    def test_05_descriptor_access(self):
         """Test descriptor access for class properties"""
         # Test direct access through descriptor
         instance = TestThing(id='test6', log_level=logging.WARN)
@@ -125,9 +125,9 @@ class TestProperty(TestCase):
             instance.not_a_class_prop
 
 
-    def _get_tests_db_operations(self) -> None:
+    def _generate_db_ops_tests(self) -> None:
 
-        def prekill(thing: TestThing) -> None:
+        def test_prekill(thing: TestThing) -> None:
             self.assertEqual(thing.db_commit_number_prop, 0)
             thing.db_commit_number_prop = 100
             self.assertEqual(thing.db_commit_number_prop, 100)
@@ -147,14 +147,14 @@ class TestProperty(TestCase):
             self.assertEqual(thing.db_engine.get_property('db_init_int_prop'), TestThing.db_init_int_prop.default)
             del thing
 
-        def postkill(thing: TestThing) -> None:
+        def test_postkill(thing: TestThing) -> None:
             # deleted thing and reload from database
             self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
             self.assertEqual(thing.db_persist_selector_prop, 'c')
             self.assertNotEqual(thing.db_commit_number_prop, 100)
             self.assertEqual(thing.db_commit_number_prop, TestThing.db_commit_number_prop.default)
 
-        return prekill, postkill
+        return test_prekill, test_postkill
 
 
     def test_06_sqlalchemy_db_operations(self):
@@ -166,28 +166,28 @@ class TestProperty(TestCase):
         except (OSError, FileNotFoundError):
             pass
         self.assertTrue(not os.path.exists(file_path))
-    	
-        prekill, postkill = self._get_tests_db_operations()
+
+        test_prekill, test_postkill = self._generate_db_ops_tests()
 
         thing = TestThing(id=thing_id, use_default_db=True, log_level=logging.WARN)
-        prekill(thing)
+        test_prekill(thing)
 
         thing = TestThing(id=thing_id, use_default_db=True, log_level=logging.WARN)
-        postkill(thing)
+        test_postkill(thing)
 
 
-    def test_7_json_db_operations(self):
+    def test_07_json_db_operations(self):
         with tempfile.NamedTemporaryFile(delete=False) as tf:
             filename = tf.name
 
         thing_id = 'test-db-operations-json'
-        prekill, postkill = self._get_tests_db_operations()
+        test_prekill, test_postkill = self._generate_db_ops_tests()
 
         thing = TestThing(id=thing_id, use_json_file=True, json_filename=filename, log_level=logging.WARN)
-        prekill(thing)
+        test_prekill(thing)
 
         thing = TestThing(id=thing_id, use_json_file=True, json_filename=filename, log_level=logging.WARN)
-        postkill(thing)
+        test_postkill(thing)
 
         os.remove(filename)
 
