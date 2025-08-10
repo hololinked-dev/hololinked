@@ -55,28 +55,28 @@ class ClientFactory:
                                     execution_timeout=object_proxy.execution_timeout,
                                 )
             self.add_property(object_proxy, consumed_property)
-            # if hasattr(affordance, "observable") and affordance.observable:
-            #     sync_event_client = EventConsumer(
-            #                         id=f"{TD['id']}|{affordance.name}|sync", 
-            #                         event_unique_identifier=affordance.zmq_unique_identifier,
-            #                         socket_address=affordance.zmq_socket_address,
-            #                         logger=object_proxy.logger
-            #                     )
-            #     async_event_client = AsyncEventConsumer(
-            #                         id=f"{TD['id']}|{affordance.name}|async", 
-            #                         event_unique_identifier=affordance.zmq_unique_identifier,
-            #                         socket_address=affordance.zmq_socket_address,
-            #                         logger=object_proxy.logger
-            #                     )
-            #     consumed_observable = ZMQEvent(
-            #                         resource=affordance,
-            #                         sync_zmq_client=sync_event_client,
-            #                         async_zmq_client=async_event_client,
-            #                         owner_inst=object_proxy,
-            #                         invokation_timeout=object_proxy.invokation_timeout,
-            #                         execution_timeout=object_proxy.execution_timeout,
-            #                     )
-            #     self.add_event(object_proxy, consumed_observable)
+            if hasattr(affordance, "observable") and affordance.observable:
+                sync_event_client = EventConsumer(
+                                    id=f"{TD['id']}|{affordance.name}|sync", 
+                                    event_unique_identifier=affordance.zmq_unique_identifier,
+                                    socket_address=affordance.zmq_socket_address,
+                                    logger=object_proxy.logger
+                                )
+                async_event_client = AsyncEventConsumer(
+                                    id=f"{TD['id']}|{affordance.name}|async", 
+                                    event_unique_identifier=affordance.zmq_unique_identifier,
+                                    socket_address=affordance.zmq_socket_address,
+                                    logger=object_proxy.logger
+                                )
+                consumed_observable = ZMQEvent(
+                                    resource=affordance,
+                                    sync_zmq_client=sync_event_client,
+                                    async_zmq_client=async_event_client,
+                                    owner_inst=object_proxy,
+                                    invokation_timeout=object_proxy.invokation_timeout,
+                                    execution_timeout=object_proxy.execution_timeout,
+                                )
+                self.add_event(object_proxy, consumed_observable)
         for action in TD.get("actions", []):
             affordance = ActionAffordance.from_TD(action, TD)
             consumed_action = ZMQAction(

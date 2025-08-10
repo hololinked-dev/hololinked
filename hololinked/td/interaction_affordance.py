@@ -243,6 +243,8 @@ class PropertyAffordance(DataSchema, InteractionAffordance):
     """
     # [Supported Fields]() <br>
     observable: Optional[bool] = None
+    zmq_unique_identifier: Optional[str] = None
+    zmq_socket_address: Optional[str] = None
 
     def __init__(self):
         super().__init__()
@@ -256,7 +258,13 @@ class PropertyAffordance(DataSchema, InteractionAffordance):
         self.ds_build_from_property(property)
         if property.observable:
             self.observable = property.observable
-    
+            observable_event_descriptor = property._observable_event_descriptor
+            event_dispatcher = getattr(self.owner, observable_event_descriptor.name, None) # type: EventDispatcher
+            if event_dispatcher:
+                self.zmq_unique_identifier = event_dispatcher._unique_identifier
+                self.zmq_socket_address = event_dispatcher.publisher.socket_address
+                
+
     @classmethod
     def generate(cls, property, owner = None):
         assert isinstance(property, Property), f"property must be instance of Property, given type {type(property)}"
