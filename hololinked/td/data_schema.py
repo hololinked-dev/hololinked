@@ -204,10 +204,10 @@ class StringSchema(DataSchema):
     def ds_build_fields_from_property(self, property) -> None:
         """generates the schema"""
         self.type = 'string' 
-        super().ds_build_fields_from_property(property)
         if isinstance(property, String): 
             if property.regex is not None:
                 self.pattern = property.regex
+        super().ds_build_fields_from_property(property)
 
     def _move_own_type_to_oneOf(self):
         if not hasattr(self, 'type') or self.type is None:
@@ -242,7 +242,6 @@ class NumberSchema(DataSchema):
             self.type = 'integer'
         elif isinstance(property, Number): # dont change order - one is subclass of other
             self.type = 'number' 
-        super().ds_build_fields_from_property(property)
         if property.bounds is not None:      
             if isinstance(property.bounds[0], (int, float)): # i.e. value is not None which is allowed by param
                 if not property.inclusive_bounds[0]:
@@ -256,6 +255,7 @@ class NumberSchema(DataSchema):
                     self.maximum = property.bounds[1]
         if property.step:
             self.multipleOf = property.step
+        super().ds_build_fields_from_property(property)
 
     def _move_own_type_to_oneOf(self):
         if not hasattr(self, 'type') or self.type is None:
@@ -287,7 +287,6 @@ class ArraySchema(DataSchema):
     def ds_build_fields_from_property(self, property) -> None:
         """generates the schema"""
         self.type = 'array'
-        super().ds_build_fields_from_property(property)
         self.items = []
         if isinstance(property, (List, Tuple, TypedList)) and property.item_type is not None:
             if property.bounds:
@@ -309,7 +308,8 @@ class ArraySchema(DataSchema):
         if len(self.items) == 0:
             del self.items
         elif len(self.items) > 1:
-            self.items = dict(oneOf=self.items)
+            self.items = dict(oneOf=self.items) # just adds the key 'oneOf' to items if there is more than one item type
+        super().ds_build_fields_from_property(property)
 
     def _move_own_type_to_oneOf(self):
         if not hasattr(self, 'type') or self.type is None:
@@ -443,6 +443,8 @@ class EnumSchema(OneOfSchema):
         assert isinstance(property, Selector), f"EnumSchema compatible property is only Selector, not {property.__class__}"
         self.enum = list(property.objects)
         super().ds_build_fields_from_property(property)
+
+    # def _move_own_type_to_oneOf(self):
 
 
 

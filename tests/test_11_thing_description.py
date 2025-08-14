@@ -6,7 +6,7 @@ from hololinked.td.data_schema import (DataSchema, NumberSchema, StringSchema, B
                                 ArraySchema, EnumSchema)
 from hololinked.td.interaction_affordance import (PropertyAffordance, InteractionAffordance,
                                                 ActionAffordance, EventAffordance)
-from hololinked.core.properties import Property, Number, String, Boolean
+from hololinked.core.properties import Property, Number, String, Boolean, List, Selector
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing
@@ -57,6 +57,7 @@ class TestInteractionAffordance(TestCase):
         self.assertTrue(affordance.thing_cls is None)
 
         # req. 8. Only the corresponding object can be set for each affordance type
+        # i.e. ActionAffordance accepts only an Action as its Objekt, same for property and same for event
         affordance = ActionAffordance()
         with self.assertRaises(ValueError) as ex: 
             affordance.objekt = OceanOpticsSpectrometer.integration_time
@@ -104,17 +105,19 @@ class TestDataSchema(TestCase):
 
     def test_2_number_schema(self):
 
-        # test implicit generation before actual testing
+        # test implicit generation before actual testing 
         schema = OceanOpticsSpectrometer.integration_time.to_affordance(owner_inst=self.thing)
         self.assertIsInstance(schema, PropertyAffordance)
         self.assertEqual(schema.type, 'number') 
-        
+        # this is because we will use a Property directly so that we can generate dataschema 
+        # based on different parameters of the property. See below
+
         integration_time = Number(bounds=(1, 1000), default=100, crop_to_bounds=True, step=1,
                                 doc="integration time in milliseconds", metadata=dict(unit="ms"))
         integration_time.__set_name__(OceanOpticsSpectrometer, 'integration_time')
         # req. 1. Schema can be created 
         schema = integration_time.to_affordance(owner_inst=self.thing)
-        # print(schema.json(indent=4))
+        # print(schema.json())
         self.assertIsInstance(schema, PropertyAffordance)
         self.assertEqual(schema.type, 'number') 
         # req. 2. Test number schema specific attributes
@@ -140,7 +143,14 @@ class TestDataSchema(TestCase):
         self.assertTrue(any(subtype["type"] == 'number' for subtype in schema.oneOf))
         self.assertTrue(len(schema.oneOf), 2)
         self.assertTrue(not hasattr(schema, "type") or schema.type is None)
-        # print(schema.json(indent=4))    
+        # when oneOf was used, make sure the entire dataschema is found within the number subtype
+        number_schema = next(subtype for subtype in schema.oneOf if subtype["type"] == 'number')
+        self.assertEqual(number_schema["exclusiveMinimum"], integration_time.bounds[0])
+        self.assertEqual(number_schema["exclusiveMaximum"], integration_time.bounds[1])
+        self.assertRaises(KeyError, lambda: number_schema["minimum"])
+        self.assertRaises(KeyError, lambda: number_schema["maximum"])
+        self.assertRaises(KeyError, lambda: number_schema["multipleOf"])
+        # print(schema.json())
         # Test some standard data schema values
         self.assertEqual(schema.default, integration_time.default)
         self.assertEqual(schema.unit, integration_time.metadata['unit'])
@@ -156,7 +166,7 @@ class TestDataSchema(TestCase):
         status.__set_name__(OceanOpticsSpectrometer, 'status')
         # req. 1. Schema can be created from the string property
         schema = status.to_affordance(owner_inst=self.thing) 
-        # print(schema.json(indent=4))
+        # print(schema.json())
         self.assertIsInstance(schema, PropertyAffordance)
         self.assertEqual(schema.type, 'string')
         # req. 2. Test string schema specific attributes
@@ -168,7 +178,10 @@ class TestDataSchema(TestCase):
         self.assertTrue(any(subtype["type"] == 'string' for subtype in schema.oneOf))
         self.assertTrue(len(schema.oneOf), 2)
         self.assertTrue(not hasattr(schema, "type") or schema.type is None)
-        # print(schema.json(indent=4))
+        # when oneOf was used, make sure the entire dataschema is found within the string subtype
+        string_schema = next(subtype for subtype in schema.oneOf if subtype["type"] == 'string')
+        self.assertEqual(string_schema["pattern"], status.regex)
+        # print(schema.json())
         # Test some standard data schema values
         self.assertEqual(schema.default, status.default)
 
@@ -182,7 +195,7 @@ class TestDataSchema(TestCase):
         nonlinearity_correction = Boolean(default=True, doc="nonlinearity correction enabled")
         nonlinearity_correction.__set_name__(OceanOpticsSpectrometer, 'nonlinearity_correction')
         schema = nonlinearity_correction.to_affordance(owner_inst=self.thing)
-        # print(schema.json(indent=4))
+        # print(schema.json())
         self.assertIsInstance(schema, PropertyAffordance)
         self.assertEqual(schema.type, 'boolean')
         # req. 2. Test boolean schema specific attributes
@@ -194,29 +207,89 @@ class TestDataSchema(TestCase):
         self.assertTrue(any(subtype["type"] == 'boolean' for subtype in schema.oneOf))
         self.assertTrue(len(schema.oneOf), 2)
         self.assertTrue(not hasattr(schema, "type") or schema.type is None)
-        # print(schema.json(indent=4))
+        # print(schema.json())
         # Test some standard data schema values
         self.assertEqual(schema.default, nonlinearity_correction.default)
         
     
-    # def test_5_array_schema(self):
+    def test_5_array_schema(self):
 
-    #     # req. 1. Schema can be created from the array property and is a array schema based property affordance
-    #     schema = OceanOpticsSpectrometer.wavelengths.to_affordance(owner_inst=self.thing)
-    #     self.assertIsInstance(schema, BaseModel)
-    #     self.assertIsInstance(schema, DataSchema)
-    #     self.assertIsInstance(schema, PropertyAffordance)
-    #     # print(schema.json(indent=4))
-    #     self.assertEqual(schema.type, 'array')
-    #     # req. 2. Test array schema specific attributes
-    #     self.assertEqual(schema.items.type, 'number')
-    #     # req. 3. Test some standard data schema values
-    #     # self.assertEqual(schema.default, OceanOpticsSpectrometer.custom_background_intensity.default)
+        schema = OceanOpticsSpectrometer.wavelengths.to_affordance(owner_inst=self.thing)
+        assert isinstance(schema, PropertyAffordance)
 
+        wavelengths = List(default=[], item_type=(float, int), readonly=True, allow_None=False, 
+                            doc="wavelength bins of measurement")
+        wavelengths.__set_name__(OceanOpticsSpectrometer, "wavelengths")
+        schema = wavelengths.to_affordance(owner_inst=self.thing)
+        # req. 1. Schema can be created from the array property and is a array schema based property affordance
+        self.assertIsInstance(schema, BaseModel)
+        self.assertIsInstance(schema, DataSchema)
+        self.assertIsInstance(schema, PropertyAffordance)
+        self.assertEqual(schema.type, 'array')
+        # req. 2. Test array schema specific attributes
+        for types in schema.items["oneOf"]:
+            self.assertTrue(
+                types["type"] == 'number' or types["type"] == 'integer'
+            )
+        # req. 3. Test some standard data schema values
+        if OceanOpticsSpectrometer.wavelengths.default is not None:
+            self.assertEqual(schema.default, OceanOpticsSpectrometer.wavelengths.default)
+        # req. 4. oneOf for allow_None to be True
+        OceanOpticsSpectrometer.wavelengths.allow_None = True
+        schema = OceanOpticsSpectrometer.wavelengths.to_affordance(owner_inst=self.thing)
+        self.assertTrue(any(subtype["type"] == 'null' for subtype in schema.oneOf))
+        self.assertTrue(any(subtype["type"] == 'array' for subtype in schema.oneOf))
+        self.assertTrue(len(schema.oneOf), 2)
+        self.assertTrue(not hasattr(schema, "type") or schema.type is None)
+        # when oneOf was used, make sure the entire dataschema is found within the array subtype
+        array_schema = next(subtype for subtype in schema.oneOf if subtype["type"] == 'array')
+        for types in array_schema["items"]["oneOf"]: # we know that there are two item types in this array
+            self.assertTrue(
+                types["type"] == 'number' or types["type"] == 'integer'
+            )
+        # req. 5 check for length constraints
+        for bounds in [(5, 1000), (None, 100), (50, None), (51, 101)]:
+            wavelengths.bounds = bounds
+            wavelengths.allow_None = False
+            schema = wavelengths.to_affordance(owner_inst=self.thing)
+            if bounds[0] is not None:
+                self.assertEqual(schema.minItems, bounds[0])
+            else:
+                self.assertTrue(not hasattr(schema, "minItems") or schema.minItems is None)
+            if bounds[1] is not None:
+                self.assertEqual(schema.maxItems, bounds[1])
+            else:
+                self.assertTrue(not hasattr(schema, "maxItems") or schema.maxItems is None)
+            # check if min & max items within allow_None and oneOf
+            wavelengths.bounds = bounds
+            wavelengths.allow_None = True
+            schema = wavelengths.to_affordance(owner_inst=self.thing)
+            subtype = next(subtype for subtype in schema.oneOf if subtype["type"] == 'array')
+            if bounds[0] is not None:
+                self.assertEqual(subtype["minItems"], bounds[0])
+            else:
+                self.assertRaises(KeyError, lambda: subtype["minItems"])
+            if bounds[1] is not None:
+                self.assertEqual(subtype["maxItems"], bounds[1])
+            else:
+                self.assertRaises(KeyError, lambda: subtype["maxItems"])
 
-    # def test_6_enum_schema(self):
-    #     pass 
+    def test_6_enum_schema(self):
+        
+        schema = OceanOpticsSpectrometer.trigger_mode.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
 
+        trigger_mode = Selector(objects=[0, 1, 2, 3, 4], default=0, observable=True,
+                        doc="""0 = normal/free running, 1 = Software trigger, 2 = Ext. Trigger Level,
+                        3 = Ext. Trigger Synchro/ Shutter mode, 4 = Ext. Trigger Edge""") 
+        trigger_mode.__set_name__(OceanOpticsSpectrometer, 'trigger_mode')
+        schema = trigger_mode.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        # self.assertEqual(schema.type, 'string')
+        self.assertEqual(schema.default, 0)
+        self.assertTrue(schema.observable)
+        # check if enum is equal to objects
+        self.assertEqual(schema.enum, trigger_mode.objects)
 
 
 class TestThingDescription(TestCase):
@@ -225,16 +298,19 @@ class TestThingDescription(TestCase):
         
         thing = TestThing(id="test-thing-model", log_level=logging.ERROR+10)
         self.assertIsInstance(thing.get_thing_model(ignore_errors=True).json(), dict)
-        # print(json.dumps(thing.get_thing_model(ignore_errors=True).json(), indent=4))
-        # self.assertIsInstance(thing.get_our_thing_model().json(), dict)
-     
+       
         # start_thing_forked(self.thing_cls, id='test-gui-resource-generation', log_level=logging.WARN)
         # thing_client = ObjectProxy('test-gui-resource-generation')
         # self.assertIsInstance(thing_client.get_our_temp_thing_description(), dict)
         # thing_client.exit()
 
 
-
+def load_tests(loader, tests, pattern):
+    suite = unittest.TestSuite()
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInteractionAffordance))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestDataSchema))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingDescription))
+    return suite
 
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())
