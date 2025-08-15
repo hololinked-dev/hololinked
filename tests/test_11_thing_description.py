@@ -2,11 +2,11 @@ import logging
 import unittest
 from pydantic import BaseModel
 from hololinked.constants import ResourceTypes
-from hololinked.td.data_schema import (DataSchema, NumberSchema, StringSchema, BooleanSchema, ObjectSchema, 
-                                ArraySchema, EnumSchema)
+from hololinked.td.data_schema import DataSchema
 from hololinked.td.interaction_affordance import (PropertyAffordance, InteractionAffordance,
                                                 ActionAffordance, EventAffordance)
-from hololinked.core.properties import Property, Number, String, Boolean, List, Selector
+from hololinked.core.properties import Property, Number, String, Boolean, List, Selector, ClassSelector
+from tests.things.spectrometer import Intensity
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing
@@ -274,6 +274,7 @@ class TestDataSchema(TestCase):
             else:
                 self.assertRaises(KeyError, lambda: subtype["maxItems"])
 
+
     def test_6_enum_schema(self):
         
         schema = OceanOpticsSpectrometer.trigger_mode.to_affordance(owner_inst=self.thing)
@@ -296,11 +297,32 @@ class TestDataSchema(TestCase):
         trigger_mode.objects = [0, 1, 2, 3, 4, '0', '1', '2', '3', '4']
         schema = trigger_mode.to_affordance(owner_inst=self.thing)
         self.assertIsInstance(schema, PropertyAffordance)
+        self.assertTrue(not hasattr(schema, "type") or schema.type is None)
         self.assertEqual(schema.default, 3)
         enum_subschema = next(subtype for subtype in schema.oneOf if (subtype.get("type", None) != 'null' or len(subtype.get("oneOf", [])) > 1))
         self.assertIsInstance(enum_subschema, dict)
         self.assertEqual(enum_subschema["enum"], trigger_mode.objects)
 
+
+    def test_7_class_selector_custom_schema(self):
+        """"""
+        last_intensity = ClassSelector(default=Intensity([], []), allow_None=False, class_=Intensity, 
+                        doc="last measurement intensity (in arbitrary units)")
+        last_intensity.__set_name__(OceanOpticsSpectrometer, 'last_intensity')
+        schema = last_intensity.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        # Intensity contains an object schema
+        self.assertEqual(schema.type, 'object')
+        self.assertEqual(schema.properties, Intensity.schema["properties"])
+        
+        last_intensity.allow_None = True 
+        schema = last_intensity.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        self.assertTrue(not hasattr(schema, "type") or schema.type is None)
+        subschema = next(subtype for subtype in schema.oneOf if subtype.get("type", None) == 'object')
+        self.assertIsInstance(subschema, dict)
+        self.assertTrue(subschema["type"], 'object')
+        self.assertEqual(subschema["properties"], Intensity.schema["properties"])
 
 
 class TestThingDescription(TestCase):

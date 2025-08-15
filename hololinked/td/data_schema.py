@@ -92,7 +92,7 @@ class DataSchema(Schema):
         elif isinstance(property, (TypedDict, TypedKeyMappingsDict)):
             data_schema = ObjectSchema()       
         elif isinstance(property, ClassSelector):
-            data_schema = OneOfSchema()
+            data_schema = SelectorSchema()
         elif self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
             data_schema = self._custom_schema_generators[property]()
         elif isinstance(property, Property) and property.model is not None:
@@ -361,9 +361,9 @@ class ObjectSchema(DataSchema):
             self.oneOf.append(schema)
 
 
-class OneOfSchema(DataSchema):
+class SelectorSchema(DataSchema):
     """
-    custom schema to deal with ClassSelector to fill oneOf field correctly
+    custom schema to deal with ClassSelector & Selector to fill oneOf field correctly
     https://www.w3.org/TR/wot-thing-description11/#dataschema
     """
     properties: Optional[JSON] = None
@@ -390,7 +390,7 @@ class OneOfSchema(DataSchema):
         elif isinstance(property, Selector):
             objects = list(property.objects)
         else:
-            raise TypeError(f"EnumSchema and OneOfSchema supported only for Selector and ClassSelector. Given Type - {property}")
+            raise TypeError(f"EnumSchema and SelectorSchema supported only for Selector and ClassSelector. Given Type - {property}")
         for obj in objects:
             if any(types["type"] == JSONSchema._replacements.get(type(obj), None) for types in self.oneOf):
                 continue 
@@ -406,6 +406,7 @@ class OneOfSchema(DataSchema):
                 if JSONSchema.get_type(type(obj)) == "null":
                     continue
                 self.oneOf.append(dict(type=JSONSchema.get_type(type(obj))))
+
         super().ds_build_fields_from_property(property)
        
         if len(self.oneOf) == 1:
@@ -429,7 +430,7 @@ class OneOfSchema(DataSchema):
         pass 
        
 
-class EnumSchema(OneOfSchema):
+class EnumSchema(SelectorSchema):
     """
     custom schema to fill enum field of property affordance correctly
     https://www.w3.org/TR/wot-thing-description11/#dataschema
