@@ -305,7 +305,7 @@ class TestDataSchema(TestCase):
 
 
     def test_7_class_selector_custom_schema(self):
-        """"""
+        
         last_intensity = ClassSelector(default=Intensity([], []), allow_None=False, class_=Intensity, 
                         doc="last measurement intensity (in arbitrary units)")
         last_intensity.__set_name__(OceanOpticsSpectrometer, 'last_intensity')
@@ -323,6 +323,30 @@ class TestDataSchema(TestCase):
         self.assertIsInstance(subschema, dict)
         self.assertTrue(subschema["type"], 'object')
         self.assertEqual(subschema["properties"], Intensity.schema["properties"])
+
+
+    def test_8_json_schema_properties(self):
+
+        # req. 1. test if all values of a model are found in the property affordance schema        
+        json_schema_prop = TestThing.json_schema_prop # type: Property
+        json_schema_prop.allow_None = False
+        schema = json_schema_prop.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        for key in json_schema_prop.model:
+            self.assertEqual(getattr(schema, key, NotImplemented), json_schema_prop.model[key])
+        
+        # req. 2. test the schema even if allow None is True
+        json_schema_prop.allow_None = True
+        schema = json_schema_prop.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        subschema = next(subtype for subtype in schema.oneOf if (subtype.get("type", None) != 'null' or len(subtype.get("oneOf", [])) > 1))
+        self.assertIsInstance(subschema, dict)
+        for key in json_schema_prop.model:
+            self.assertEqual(subschema.get(key, NotImplemented), json_schema_prop.model[key])
+       
+
+    def test_9_pydantic_properties(self):
+        pass
 
 
 class TestThingDescription(TestCase):

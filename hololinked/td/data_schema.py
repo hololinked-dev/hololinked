@@ -79,7 +79,25 @@ class DataSchema(Schema):
         if not isinstance(property, Property):
             raise TypeError(f"Property affordance schema can only be generated for Property. "
                             f"Given type {type(property)}")
-        if isinstance(property, (String, Filename, Foldername, Path)):
+        if self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
+            data_schema = self._custom_schema_generators[property]()
+        elif isinstance(property, Property) and property.model is not None:
+            base_data_schema = DataSchema()
+            if isinstance(property.model, dict):
+                given_data_schema = property.model
+            elif isinstance(property.model, (BaseModel, RootModel)):
+                from .pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
+                given_data_schema = type_to_dataschema(property.model).model_dump(mode='json', exclude_none=True)
+            if property.allow_None:
+                base_data_schema.oneOf = []
+                base_data_schema.oneOf.append(dict(type="null"))
+            if base_data_schema.oneOf: # allow_None = True
+                base_data_schema.oneOf.append(given_data_schema)
+            else:
+                for key, value in given_data_schema.items():
+                    setattr(base_data_schema, key, value)
+            data_schema = base_data_schema
+        elif isinstance(property, (String, Filename, Foldername, Path)):
             data_schema = StringSchema()
         elif isinstance(property, (Number, Integer)):
             data_schema = NumberSchema()
@@ -93,24 +111,6 @@ class DataSchema(Schema):
             data_schema = ObjectSchema()       
         elif isinstance(property, ClassSelector):
             data_schema = SelectorSchema()
-        elif self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
-            data_schema = self._custom_schema_generators[property]()
-        elif isinstance(property, Property) and property.model is not None:
-            from .pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
-            base_data_schema = DataSchema()
-            base_data_schema.ds_build_from_property(property=property)
-            if isinstance(property.model, dict):
-                given_data_schema = property.model
-            elif isinstance(property.model, (BaseModel, RootModel)):
-                given_data_schema = type_to_dataschema(property.model).model_dump(mode='json', exclude_none=True)
-            
-            if base_data_schema.oneOf: # allow_None = True
-                base_data_schema.oneOf.append(given_data_schema)
-            else:
-                for key, value in given_data_schema.items():
-                    setattr(base_data_schema, key, value)
-            data_schema = base_data_schema
-
         else:
             raise TypeError(f"WoT schema generator for this descriptor/property is not implemented. name {property.name} & type {type(property)}")     
 
@@ -123,7 +123,7 @@ class DataSchema(Schema):
 
     def _move_own_type_to_oneOf(self):
         """move type to oneOf"""
-        raise NotImplementedError("Implement this method in subclass for each data type")
+        pass 
     
     def _model_to_dataschema():
         
@@ -296,15 +296,15 @@ class ArraySchema(DataSchema):
                     self.maxItems = property.bounds[1]
             if isinstance(property.item_type, (list, tuple)):
                 for typ in property.item_type:
-                    self.items.append(dict(type=JSONSchema.get_type(typ)))
+                    self.items.append(dict(type=JSONSchema.get_base_type(typ)))
             elif property.item_type is not None: 
-                self.items.append(dict(type=JSONSchema.get_type(property.item_type)))
+                self.items.append(dict(type=JSONSchema.get_base_type(property.item_type)))
         elif isinstance(property, TupleSelector):
             objects = list(property.objects)
             for obj in objects:
                 if any(types["type"] == JSONSchema._replacements.get(type(obj), None) for types in self.items):
                     continue 
-                self.items.append(dict(type=JSONSchema.get_type(type(obj))))
+                self.items.append(dict(type=JSONSchema.get_base_type(type(obj))))
         if len(self.items) == 0:
             del self.items
         elif len(self.items) > 1:
@@ -398,14 +398,14 @@ class SelectorSchema(DataSchema):
                 if not JSONSchema.is_allowed_type(obj):
                     raise TypeError(f"Object for wot-td has invalid type for JSON conversion. Given type - {obj}. " +
                                 "Use JSONSchema.register_replacements on hololinked.wot.td.JSONSchema object to recognise the type.")
-                subschema = dict(type=JSONSchema.get_type(obj))
-                if JSONSchema.is_supported(obj):
-                    subschema.update(JSONSchema.get(obj))
+                subschema = dict(type=JSONSchema.get_base_type(obj))
+                if JSONSchema.has_additional_schema_definitions(obj):
+                    subschema.update(JSONSchema.get_additional_schema_definitions(obj))
                 self.oneOf.append(subschema)
             elif isinstance(property, Selector):
-                if JSONSchema.get_type(type(obj)) == "null":
+                if JSONSchema.get_base_type(type(obj)) == "null":
                     continue
-                self.oneOf.append(dict(type=JSONSchema.get_type(type(obj))))
+                self.oneOf.append(dict(type=JSONSchema.get_base_type(type(obj))))
 
         super().ds_build_fields_from_property(property)
        

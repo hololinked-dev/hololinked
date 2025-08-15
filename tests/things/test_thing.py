@@ -173,10 +173,10 @@ class TestThing(Thing):
                         doc="A property with a simple pydantic model to check RW")
 
     schema = {
-        "type" : "string",
-        "minLength" : 1,
-        "maxLength" : 10,
-        "pattern" : "^[a-z]+$"
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 10,
+        "pattern": "^[a-z]+$"
     }
 
     json_schema_prop = Property(default=None, allow_None=True, model=schema, 
