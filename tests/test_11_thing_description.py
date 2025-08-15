@@ -2,10 +2,12 @@ import logging
 import unittest
 from pydantic import BaseModel
 from hololinked.constants import ResourceTypes
+from hololinked.schema_validators.json_schema import JSONSchema
 from hololinked.td.data_schema import DataSchema
 from hololinked.td.interaction_affordance import (PropertyAffordance, InteractionAffordance,
                                                 ActionAffordance, EventAffordance)
 from hololinked.core.properties import Property, Number, String, Boolean, List, Selector, ClassSelector
+from hololinked.utils import issubklass
 from tests.things.spectrometer import Intensity
 
 try:
@@ -347,13 +349,42 @@ class TestDataSchema(TestCase):
 
     def test_9_pydantic_properties(self):
 
-        # req. 1. test if all values of a model are found in the property affordance schema
+        # req. 1. test if all values of a model are found in the property affordance schema for a BaseModel
         pydantic_prop = TestThing.pydantic_prop # type: Property
         pydantic_prop.allow_None = False
         schema = pydantic_prop.to_affordance(owner_inst=self.thing)
         self.assertIsInstance(schema, PropertyAffordance)
         # TODO, this is an inherently harder test case
-        
+        if issubklass(pydantic_prop.model, BaseModel):
+            self.assertEqual(schema.type, 'object')
+            for field in pydantic_prop.model.model_fields:                
+                self.assertIn(field, schema.properties)
+
+        # req. 2 test if all values of a model are found in the property affordance for a BaseModel when allow_None = True
+        pydantic_prop.allow_None = True
+        schema = pydantic_prop.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        subschema = next(subtype for subtype in schema.oneOf if subtype.get("type", None) == 'object')
+        self.assertIsInstance(subschema, dict)
+        for key in pydantic_prop.model.model_fields:
+            self.assertIn(key, subschema.get("properties", {}))
+
+        # req. 3. test if base python types can be used in pydantic property
+        pydantic_simple_prop = TestThing.pydantic_simple_prop # type: Property # its an integer
+        pydantic_simple_prop.allow_None = False
+        schema = pydantic_simple_prop.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        self.assertEqual(schema.type, 'integer')
+
+        pydantic_simple_prop.allow_None = True
+        schema = pydantic_simple_prop.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        subschema = next(subtype for subtype in schema.oneOf if subtype.get("type", None) == 'integer')
+        self.assertEqual(subschema["type"], 'integer')
+        subschema = next(subtype for subtype in schema.oneOf if subtype.get("type", None) == 'null')
+        self.assertEqual(subschema["type"], 'null')
+
+
 class TestThingDescription(TestCase):
 
     def test_1_thing_model_generation(self):
