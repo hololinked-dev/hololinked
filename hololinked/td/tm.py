@@ -32,12 +32,14 @@ class ThingModel(Schema):
     def __init__(self, 
                 instance: "Thing", 
                 allow_loose_schema: typing.Optional[bool] = False, 
-                ignore_errors: bool = False
+                ignore_errors: bool = False,
+                skip_names: typing.Optional[list[str]] = None
             ) -> None:
         super().__init__()
         self.instance = instance
         self.allow_loose_schema = allow_loose_schema
         self.ignore_errors = ignore_errors
+        self.skip_names = skip_names or []
 
 
     def generate(self) -> "ThingModel": 
@@ -77,7 +79,7 @@ class ThingModel(Schema):
                 ['events', self.instance.events.plain.items(), EventAffordance, self.skip_events],    
             ]:
             for name, obj in items:
-                if name in skip_list: 
+                if name in skip_list or name in self.skip_names: 
                     continue
                 if (    
                     name == 'state' and affordance == 'properties' and

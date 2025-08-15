@@ -176,7 +176,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         
 
     @action()
-    def get_thing_model(self, ignore_errors: bool = False):
+    def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = None):
         """
         generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object. 
         The model is a JSON that describes the object's properties, actions, events and their metadata, without the 
@@ -185,8 +185,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         Parameters
         ----------
         ignore_errors: bool, optional, Default False
-            if True, offending interaction affordances will be removed from the JSON. 
-            This is useful to build partial but always working ThingModel.             `
+            if True, offending interaction affordances will be removed from the JSON.
+            This is useful to build partial but always working ThingModel.
+        skip_names: list[str], optional
+            List of affordances names (of any type) to skip in the generated model.
 
         Returns
         -------
@@ -200,7 +202,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from ..td.tm import ThingModel
         return ThingModel(
                         instance=self, 
-                        ignore_errors=ignore_errors
+                        ignore_errors=ignore_errors,
+                        skip_names=skip_names
                     ).generate()
     
     thing_model = property(get_thing_model, doc=get_thing_model.__doc__) 
