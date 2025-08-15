@@ -58,11 +58,11 @@ class DataSchema(Schema):
         if property.metadata and property.metadata.get("unit", None) is not None:
             self.unit = property.metadata["unit"]
         if property.allow_None:
+            if (hasattr(self, 'type') and self.type is not None) or (hasattr(self, 'oneOf') and self.oneOf):
+                self._move_own_type_to_oneOf()          
             if not hasattr(self, 'oneOf') or self.oneOf is None:
                 self.oneOf = []
-            if hasattr(self, 'type') and self.type is not None:
-                self._move_own_type_to_oneOf()          
-            if not any(types["type"] in [None, "null"] for types in self.oneOf):
+            if not any(types.get("type", NotImplemented) in [None, "null"] for types in self.oneOf):
                 self.oneOf.append(dict(type="null"))
         if not self.title:
             del self.title
@@ -381,8 +381,8 @@ class OneOfSchema(DataSchema):
         self.oneOf = []
         if isinstance(property, ClassSelector):
             if not property.isinstance:
-                raise NotImplementedError("WoT TD for ClassSelector with isinstance set to True is not supported yet. "  +
-                                          "Consider user this property in a different way.")
+                raise NotImplementedError("WoT TD/TM for ClassSelector with isinstance set to True is not supported yet. "  +
+                                          "Consider using this property in a different way if you want in the TD/TM.")
             if isinstance(property.class_, (list, tuple)):
                 objects = list(property.class_)
             else:
@@ -407,9 +407,7 @@ class OneOfSchema(DataSchema):
                     continue
                 self.oneOf.append(dict(type=JSONSchema.get_type(type(obj))))
         super().ds_build_fields_from_property(property)
-        self.cleanup()
-
-    def cleanup(self):
+       
         if len(self.oneOf) == 1:
             oneOf = self.oneOf[0]
             self.type = oneOf["type"]
@@ -427,6 +425,9 @@ class OneOfSchema(DataSchema):
                     self.maxItems = oneOf["maxItems"]
             del self.oneOf
 
+    def _move_own_type_to_oneOf(self):
+        pass 
+       
 
 class EnumSchema(OneOfSchema):
     """
@@ -444,7 +445,21 @@ class EnumSchema(OneOfSchema):
         self.enum = list(property.objects)
         super().ds_build_fields_from_property(property)
 
-    # def _move_own_type_to_oneOf(self):
-
+    def _move_own_type_to_oneOf(self):
+        if hasattr(self, 'type') and self.type is not None:
+            schema = dict(type=self.type)
+            del self.type
+        elif hasattr(self, 'oneOf') and self.oneOf:
+            schema = dict(oneOf=self.oneOf)
+            del self.oneOf
+        else:
+            schema = dict()
+        if self.enum is not None:
+            schema["enum"] = self.enum
+            del self.enum
+        if not hasattr(self, 'oneOf') or self.oneOf is None: # recreate for the null type
+            self.oneOf = []
+        if len(schema) > 0: # i.e. the dict is populated
+            self.oneOf.append(schema)
 
 

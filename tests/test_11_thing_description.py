@@ -285,11 +285,22 @@ class TestDataSchema(TestCase):
         trigger_mode.__set_name__(OceanOpticsSpectrometer, 'trigger_mode')
         schema = trigger_mode.to_affordance(owner_inst=self.thing)
         self.assertIsInstance(schema, PropertyAffordance)
-        # self.assertEqual(schema.type, 'string')
+        self.assertEqual(schema.type, 'integer')
         self.assertEqual(schema.default, 0)
-        self.assertTrue(schema.observable)
         # check if enum is equal to objects
         self.assertEqual(schema.enum, trigger_mode.objects)
+
+        # check if allow_None is handled
+        trigger_mode.allow_None = True
+        trigger_mode.default = 3
+        trigger_mode.objects = [0, 1, 2, 3, 4, '0', '1', '2', '3', '4']
+        schema = trigger_mode.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        self.assertEqual(schema.default, 3)
+        enum_subschema = next(subtype for subtype in schema.oneOf if (subtype.get("type", None) != 'null' or len(subtype.get("oneOf", [])) > 1))
+        self.assertIsInstance(enum_subschema, dict)
+        self.assertEqual(enum_subschema["enum"], trigger_mode.objects)
+
 
 
 class TestThingDescription(TestCase):
