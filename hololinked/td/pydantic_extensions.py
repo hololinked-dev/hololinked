@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from enum import Enum
-from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, ValidationError
+from pydantic import BaseModel, TypeAdapter
 from pydantic.json_schema import GenerateJsonSchema
 from pydantic._internal._core_utils import is_core_schema, CoreSchemaOrField
 from typing import Optional, Sequence, Union, Any, Mapping, List, Dict
-from ..serializers.serializers import JSONSerializer
+
 
 JSONSchema = dict[str, Any]  # A type to represent JSONSchema
 
@@ -17,16 +17,6 @@ Titles = Optional[Dict[str, str]]
 Security = Union[List[str], str]
 Scopes = Union[List[str], str]
 TypeDeclaration = Union[str, List[str]]
-
-
-class Type(Enum):
-    boolean = "boolean"
-    integer = "integer"
-    number = "number"
-    string = "string"
-    object = "object"
-    array = "array"
-    null = "null"
 
 
 
@@ -197,6 +187,34 @@ def jsonschema_to_dataschema(
     return output
 
 
+def type_to_dataschema(t: Union[type, BaseModel], **kwargs) -> dict:
+    """Convert a Python type to a Thing Description DataSchema
+
+    This makes use of pydantic's `schema_of` function to create a
+    json schema, then applies some fixes to make a DataSchema
+    as per the Thing Description (because Thing Description is
+    almost but not quite compatible with JSONSchema).
+
+    Additional keyword arguments are added to the DataSchema,
+    and will override the fields generated from the type that
+    is passed in. Typically you'll want to use this for the
+    `title` field.
+    """
+    if isinstance(t, BaseModel):
+        json_schema = t.model_json_schema(schema_generator=GenerateJsonSchemaWithoutDefaultTitles)
+    else:
+        json_schema = TypeAdapter(t).json_schema(schema_generator=GenerateJsonSchemaWithoutDefaultTitles)
+    schema_dict = jsonschema_to_dataschema(json_schema)
+    # Definitions of referenced ($ref) schemas are put in a
+    # key called "definitions" or "$defs" by pydantic. We should delete this.
+    # TODO: find a cleaner way to do this
+    # This shouldn't be a severe problem: we will fail with a
+    # validation error if other junk is left in the schema.
+    for k in ["definitions", "$defs"]:
+        if k in schema_dict:
+            del schema_dict[k]
+    schema_dict.update(kwargs)
+    return schema_dict
     
 
 class GenerateJsonSchemaWithoutDefaultTitles(GenerateJsonSchema):

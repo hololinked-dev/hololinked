@@ -346,9 +346,14 @@ class TestDataSchema(TestCase):
        
 
     def test_9_pydantic_properties(self):
-        pass
 
-
+        # req. 1. test if all values of a model are found in the property affordance schema
+        pydantic_prop = TestThing.pydantic_prop # type: Property
+        pydantic_prop.allow_None = False
+        schema = pydantic_prop.to_affordance(owner_inst=self.thing)
+        self.assertIsInstance(schema, PropertyAffordance)
+        # TODO, this is an inherently harder test case
+        
 class TestThingDescription(TestCase):
 
     def test_1_thing_model_generation(self):

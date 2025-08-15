@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field, ConfigDict, RootModel
 
 from .base import Schema
 from .utils import get_summary
+from ..utils import issubklass
 from ..constants import JSON, JSONSerializable
 from ..schema_validators.json_schema import JSONSchema
 from ..core.properties import (String, Number, Integer, Boolean, 
@@ -85,9 +86,9 @@ class DataSchema(Schema):
             base_data_schema = DataSchema()
             if isinstance(property.model, dict):
                 given_data_schema = property.model
-            elif isinstance(property.model, (BaseModel, RootModel)):
-                from .pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
-                given_data_schema = type_to_dataschema(property.model).model_dump(mode='json', exclude_none=True)
+            elif issubklass(property.model, (BaseModel, RootModel)):
+                from .pydantic_extensions import type_to_dataschema
+                given_data_schema = type_to_dataschema(property.model)
             if property.allow_None:
                 base_data_schema.oneOf = []
                 base_data_schema.oneOf.append(dict(type="null"))
@@ -124,47 +125,7 @@ class DataSchema(Schema):
     def _move_own_type_to_oneOf(self):
         """move type to oneOf"""
         pass 
-    
-    def _model_to_dataschema():
-        
-        def type_to_dataschema(t: Union[type, BaseModel], **kwargs) -> DataSchema:
-            """Convert a Python type to a Thing Description DataSchema
-
-            This makes use of pydantic's `schema_of` function to create a
-            json schema, then applies some fixes to make a DataSchema
-            as per the Thing Description (because Thing Description is
-            almost but not quite compatible with JSONSchema).
-
-            Additional keyword arguments are added to the DataSchema,
-            and will override the fields generated from the type that
-            is passed in. Typically you'll want to use this for the
-            `title` field.
-            """
-            if isinstance(t, BaseModel):
-                json_schema = t.model_json_schema()
-            else:
-                json_schema = TypeAdapter(t).json_schema()
-            schema_dict = jsonschema_to_dataschema(json_schema)
-            # Definitions of referenced ($ref) schemas are put in a
-            # key called "definitions" or "$defs" by pydantic. We should delete this.
-            # TODO: find a cleaner way to do this
-            # This shouldn't be a severe problem: we will fail with a
-            # validation error if other junk is left in the schema.
-            for k in ["definitions", "$defs"]:
-                if k in schema_dict:
-                    del schema_dict[k]
-            schema_dict.update(kwargs)
-            try:
-                return DataSchema(**schema_dict)
-            except ValidationError as ve:
-                print(
-                    "Error while constructing DataSchema from the "
-                    "following dictionary:\n"
-                    + JSONSerializer().dumps(schema_dict, indent=2)
-                    + "Before conversion, the JSONSchema was:\n"
-                    + JSONSerializer().dumps(json_schema, indent=2)
-                )
-        raise ve
+       
 
 
 class BooleanSchema(DataSchema):
