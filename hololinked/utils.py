@@ -578,6 +578,16 @@ def forkable(func):
     return wrapper
 
 
+def set_global_event_loop_policy():
+    if sys.platform.lower().startswith('win'):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    from .config import global_config
+    if global_config.USE_UVLOOP and sys.platform.lower() in ['linux', 'darwin', 'linux2']:
+        import uvloop
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
+
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
@@ -595,5 +605,6 @@ __all__ = [
     get_return_type_from_signature.__name__,
     getattr_without_descriptor_read.__name__,
     forkable.__name__,
+    set_global_event_loop_policy.__name__
 ]
 

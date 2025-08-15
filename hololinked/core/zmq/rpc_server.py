@@ -14,7 +14,8 @@ from collections import deque
 
 from ...exceptions import *
 from ...constants import ZMQ_TRANSPORTS, Operations
-from ...utils import format_exception_as_json, get_all_sub_things_recusively, get_current_async_loop, get_default_logger
+from ...utils import (format_exception_as_json, get_all_sub_things_recusively, get_current_async_loop,
+                    get_default_logger, set_global_event_loop_policy)
 from ...config import global_config
 from ...serializers import Serializers
 from .message import EMPTY_BYTE, ERROR, REPLY, PreserializedData, RequestMessage, SerializableData
@@ -30,23 +31,13 @@ from ..logger import ListHandler
 if global_config.TRACE_MALLOC:
     tracemalloc.start()
 
-def set_event_loop_policy():
-    if sys.platform.lower().startswith('win'):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    if global_config.USE_UVLOOP:
-        if sys.platform.lower() in ['linux', 'darwin', 'linux2']:
-            import uvloop
-            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-        else:
-            warnings.warn("uvloop not supported for windows, using default windows selector loop.", RuntimeWarning)
-
-set_event_loop_policy()
-
+set_global_event_loop_policy()
 
 Undefined = NotImplemented
 
 RemoteObject = Thing # reading convenience
+
+
 
 class RPCServer(BaseZMQServer):
     """

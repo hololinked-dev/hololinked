@@ -385,9 +385,11 @@ class Serializers(metaclass=MappableSingleton):
             if thing in cls.object_serializer_map:
                 if objekt in cls.object_serializer_map[thing]:
                     return cls.object_serializer_map[thing][objekt]
+                return cls.object_serializer_map[thing][thing]
             if thing in cls.object_content_type_map:
                 if objekt in cls.object_content_type_map[thing]:
                     return cls.content_types[cls.object_content_type_map[thing][objekt]]
+                return cls.object_content_type_map[thing][thing]
         return cls.default # JSON is default serializer
 
 
@@ -423,7 +425,8 @@ class Serializers(metaclass=MappableSingleton):
         if owner not in cls.object_content_type_map:
             cls.object_content_type_map[owner] = dict()
         if issubklass(objekt, Thing):
-            cls.object_content_type_map[owner] = content_type
+            cls.object_content_type_map[owner][objekt.__name__] = content_type
+            # its a redundant key, TODO - may be there is a better way to structure this map
         else:
             cls.object_content_type_map[owner][objekt.name] = content_type    
 
@@ -471,7 +474,8 @@ class Serializers(metaclass=MappableSingleton):
         """
         if content_type not in cls.content_types:
             raise ValueError("content type {} unsupported".format(content_type))
-        cls.object_content_type_map[thing_id] = content_type
+        cls.object_content_type_map[thing_id][thing_id] = content_type
+        # remember, its a redundant key, TODO
 
     # @validate_call
     @classmethod
@@ -501,7 +505,7 @@ class Serializers(metaclass=MappableSingleton):
         if owner not in cls.object_serializer_map:
             cls.object_serializer_map[owner] = dict()
         if issubklass(objekt, Thing):
-            cls.object_serializer_map[owner] = serializer
+            cls.object_serializer_map[owner][objekt.__name__] = serializer
         else:
             cls.object_serializer_map[owner][objekt.name] = serializer
 
@@ -536,7 +540,9 @@ class Serializers(metaclass=MappableSingleton):
         serializer: BaseSerializer
             the serializer to be used
         """
-        cls.object_serializer_map[thing_id] = serializer
+        if thing_id not in cls.object_serializer_map:
+            cls.object_serializer_map[thing_id] = dict()
+        cls.object_serializer_map[thing_id][thing_id] = serializer
 
 
     @classmethod
@@ -571,6 +577,7 @@ __all__ = [
     PickleSerializer.__name__, 
     MsgpackSerializer.__name__, 
     TextSerializer.__name__,
+    PythonBuiltinJSONSerializer.__name__,
     BaseSerializer.__name__,
     Serializers.__name__
 ]

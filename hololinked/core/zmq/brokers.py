@@ -1889,7 +1889,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         # from ...core.events import EventDispatcher
         # assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
         if event._unique_identifier in self.event_ids:
-            payload = SerializableData(data, serializer=Serializers.for_object(event._owner_inst.id, event._owner_inst.__class__.__name__, event._descriptor)) if not isinstance(data, bytes) else SerializableNone
+            payload = SerializableData(data, serializer=Serializers.for_object(event._owner_inst.id, event._owner_inst.__class__.__name__, event._descriptor.name)) if not isinstance(data, bytes) else SerializableNone
             preserialized_payload = PreserializedData(data) if isinstance(data, bytes) else PreserializedEmptyByte
             event_message = EventMessage.craft_from_arguments(
                                             event._unique_identifier, self.id, 

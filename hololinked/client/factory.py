@@ -10,7 +10,11 @@ from ..serializers import Serializers
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
 from .zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty, WriteMultipleProperties, ReadMultipleProperties
 from .http.consumed_interactions import HTTPProperty, HTTPAction, HTTPEvent
+from ..utils import set_global_event_loop_policy
 
+
+
+set_global_event_loop_policy()
 
 class ClientFactory: 
             
