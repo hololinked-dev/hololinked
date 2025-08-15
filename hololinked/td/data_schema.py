@@ -13,7 +13,6 @@ from ..core.properties import (String, Number, Integer, Boolean,
 from ..core import Property
 
 
-
 class DataSchema(Schema):
     """
     implements data schema
@@ -120,7 +119,7 @@ class DataSchema(Schema):
             field_value = getattr(data_schema, field_name, NotImplemented)
             if field_value is not NotImplemented:
                 setattr(self, field_name, field_value)
-    
+
 
     def _move_own_type_to_oneOf(self):
         """move type to oneOf"""

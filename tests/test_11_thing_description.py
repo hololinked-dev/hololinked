@@ -393,10 +393,6 @@ class TestThingDescription(TestCase):
         thing = TestThing(id="test-thing-model", log_level=logging.ERROR+10)
         self.assertIsInstance(thing.get_thing_model(skip_names=['base_property']).json(), dict)
        
-        # start_thing_forked(self.thing_cls, id='test-gui-resource-generation', log_level=logging.WARN)
-        # thing_client = ObjectProxy('test-gui-resource-generation')
-        # self.assertIsInstance(thing_client.get_our_temp_thing_description(), dict)
-        # thing_client.exit()
 
 
 def load_tests(loader, tests, pattern):

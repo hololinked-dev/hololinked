@@ -1,8 +1,8 @@
 import typing
-import socket
 from enum import Enum
 from typing import ClassVar, Optional
 from pydantic import ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, RootModel
 
 from .base import Schema
 from .data_schema import DataSchema
@@ -13,7 +13,7 @@ from ..core.property import Property
 from ..core.actions import Action
 from ..core.events import Event, EventDispatcher
 from ..core.thing import Thing, ThingMeta
-
+from .pydantic_extensions import type_to_dataschema
 
 
 class InteractionAffordance(Schema):
@@ -302,9 +302,19 @@ class ActionAffordance(InteractionAffordance):
             else:
                 self.description = description
         if action.execution_info.argument_schema:
-            self.input = action.execution_info.argument_schema 
+            if isinstance(action.execution_info.argument_schema, dict):
+                self.input = action.execution_info.argument_schema
+            elif isinstance(action.execution_info.argument_schema, (BaseModel, RootModel)):
+                self.input = type_to_dataschema(action.execution_info.argument_schema)
+            else:
+                raise ValueError(f"unknown schema definition for action input, given type: {type(action.execution_info.argument_schema)}")
         if action.execution_info.return_value_schema: 
-            self.output = action.execution_info.return_value_schema 
+            if isinstance(action.execution_info.return_value_schema, dict):
+                self.output = action.execution_info.return_value_schema
+            elif isinstance(action.execution_info.return_value_schema, (BaseModel, RootModel)):
+                self.output = type_to_dataschema(action.execution_info.return_value_schema)
+            else:
+                raise ValueError(f"unknown schema definition for action output, given type: {type(action.execution_info.return_value_schema)}")
         if (
             not (hasattr(self.owner, 'state_machine') and self.owner.state_machine is not None and 
                 self.owner.state_machine.contains_object(action)) and 
@@ -357,7 +367,12 @@ class EventAffordance(InteractionAffordance):
             else:
                 self.description = description
         if event.schema:
-            self.data = event.schema
+            if isinstance(event.schema, dict):
+                self.data = event.schema
+            elif isinstance(event.schema, (BaseModel, RootModel)):
+                self.data = type_to_dataschema(event.schema)
+            else:
+                raise ValueError(f"unknown schema definition for event data, given type: {type(event.schema)}")
 
     @classmethod
     def generate(cls, event: Event, owner, **kwargs) -> "EventAffordance":
