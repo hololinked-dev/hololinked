@@ -4,6 +4,7 @@ import warnings
 import zmq
 import zmq.asyncio
 import asyncio
+import threading
 import logging
 import typing
 from uuid import uuid4
@@ -830,7 +831,12 @@ class BaseZMQClient(BaseZMQ):
                     raise ConnectionAbortedError(f"server disconnected for {self.id}")
                 return True # True should simply continue polling
             except RuntimeError as ex:
-                raise RuntimeError(f'message received from monitor socket cannot be deserialized for {self.id}') from None
+                self.logger.warning(f'message received from monitor socket cannot be deserialized for {self.id}, assuming its irrelevant and skipping, {response_message.byte_array}')
+                return True
+        elif len(response_message.byte_array) != ResponseMessage.length: # empty message, not our message
+            self.logger.warning(f"received unknown message from server '{self.server_id}' for client '{self.id}' " +
+                                f" - message length: {len(response_message.byte_array)}, message: {response_message.byte_array}")
+            return True
         if response_message.type == HANDSHAKE:
             return True
         return False
@@ -888,6 +894,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                     )
         self.poller = zmq.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
+        self._poller_lock = threading.Lock()
         if handshake:
             self.handshake(kwargs.pop("handshake_timeout", 60000))
     
@@ -947,29 +954,38 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             if True, any exceptions raised during execution inside ``Thing`` instance will be raised on the client.
             See docs of ``raise_local_exception()`` for info on exception 
         """
-        self._stop = False
-        while not self._stop:
-            if message_id in self._response_cache:
-                return self._response_cache.pop(message_id)
-            sockets = self.poller.poll(self.poll_timeout)
-            response_message = None # type: ResponseMessage
-            for socket, _ in sockets:
-                try:    
-                    raw_message = socket.recv_multipart(zmq.NOBLOCK)
-                    response_message = ResponseMessage(raw_message)
-                except zmq.Again:
-                    pass 
-                if response_message: 
-                    if self.handled_default_message_types(response_message):
-                        continue
-                    if message_id != response_message.id:
-                        self._response_cache[response_message.id] = response_message
-                        self.logger.debug("cached response with msg-id {}".format(response_message.id))
-                    else:
-                        self.logger.debug("received response with msg-id {}".format(response_message.id))
-                        return response_message
-           
-          
+        try:
+            self._stop = False
+            while not self._stop:
+                if message_id in self._response_cache:
+                    return self._response_cache.pop(message_id)
+                if not self._poller_lock.acquire(timeout=self.poll_timeout/1000 if self.poll_timeout else -1):
+                    continue
+                sockets = self.poller.poll(self.poll_timeout)
+                response_message = None # type: ResponseMessage
+                for socket, _ in sockets:
+                    try:    
+                        raw_message = socket.recv_multipart(zmq.NOBLOCK)
+                        response_message = ResponseMessage(raw_message)
+                    except zmq.Again:
+                        pass 
+                    if response_message: 
+                        if self.handled_default_message_types(response_message):
+                            continue
+                        if message_id != response_message.id:
+                            self._response_cache[response_message.id] = response_message
+                            self.logger.debug("cached response with msg-id {}".format(response_message.id))
+                        else:
+                            self.logger.debug("received response with msg-id {}".format(response_message.id))
+                            return response_message
+        finally:
+            try:
+                self._poller_lock.release()
+            except Exception:
+                # no need to release an unacquired lock, which can happen if another thread polling 
+                # put the expected message in response message cache
+                pass 
+
     def execute(self, 
             thing_id: bytes, 
             objekt: str,
@@ -1103,6 +1119,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         self.poller = zmq.asyncio.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
         self.poller.register(self._monitor_socket, zmq.POLLIN) 
+        self._poller_lock = asyncio.Lock()
         self._handshake_event = asyncio.Event()
         self._handshake_event.clear()
         if handshake:
@@ -1235,28 +1252,36 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         deserialize_response: bool
             deserializes the data field of the message
         """
-        self._stop = False
-        while not self._stop:
-            if message_id in self._response_cache:
-                return self._response_cache.pop(message_id)
-            sockets = await self.poller.poll(self._poll_timeout)
-            response_message = None
-            for socket, _ in sockets:
-                try:    
-                    raw_message = await socket.recv_multipart(zmq.NOBLOCK)
-                    response_message = ResponseMessage(raw_message)
-                except zmq.Again:
-                    continue 
-                if response_message: 
-                    if self.handled_default_message_types(response_message):
-                        continue
-                    if message_id != response_message.id:
-                        self._response_cache[response_message.id] = response_message
-                        self.logger.debug("cached response with msg-id {}".format(response_message.id))
-                    else:
-                        self.logger.debug(f"received response with msg-id {response_message.id}")
-                        return response_message
-            
+        try:
+            self._stop = False
+            while not self._stop:
+                if message_id in self._response_cache:
+                    return self._response_cache.pop(message_id)
+                if not (await self._poller_lock.acquire()):
+                    continue
+                sockets = await self.poller.poll(self._poll_timeout)
+                response_message = None
+                for socket, _ in sockets:
+                    try:    
+                        raw_message = await socket.recv_multipart(zmq.NOBLOCK)
+                        response_message = ResponseMessage(raw_message)
+                    except zmq.Again:
+                        continue 
+                    if response_message: 
+                        if self.handled_default_message_types(response_message):
+                            continue
+                        if message_id != response_message.id:
+                            self._response_cache[response_message.id] = response_message
+                            self.logger.debug("cached response with msg-id {}".format(response_message.id))
+                        else:
+                            self.logger.debug(f"received response with msg-id {response_message.id}")
+                            return response_message
+        finally:
+            try:
+                self._poller_lock.release()
+            except Exception:
+                pass
+
     async def async_execute(self, 
                         thing_id: str, 
                         objekt: str, 
@@ -1465,6 +1490,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         """
         Poll for replies from server. Since the client is message mapped, this method should be independently started
         in the event loop. Sending message and retrieving a message mapped is still carried out by other methods.
+        Do not duplicate this method call as there are no checks how many pollers exist and messages will become malformed
+        if multiple pollers are active.
         """
         self.logger.info("client polling started for sockets for {}".format(list(self.pool.keys())))
         self.stop_poll = False 
@@ -1839,6 +1866,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                            transport=transport, socket_type=zmq.PUB, **kwargs)
         self.events = set() # type is typing.Set[EventDispatcher] 
         self.event_ids = set() # type: typing.Set[str]
+        self._send_lock = threading.Lock()
        
     def register(self, event) -> None:
         """
@@ -1888,21 +1916,33 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         # uncomment for type definitions
         # from ...core.events import EventDispatcher
         # assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
-        if event._unique_identifier in self.event_ids:
-            payload = SerializableData(data, serializer=Serializers.for_object(event._owner_inst.id, event._owner_inst.__class__.__name__, event._descriptor.name)) if not isinstance(data, bytes) else SerializableNone
-            preserialized_payload = PreserializedData(data) if isinstance(data, bytes) else PreserializedEmptyByte
-            event_message = EventMessage.craft_from_arguments(
-                                            event._unique_identifier, self.id, 
-                                            payload=payload,
-                                            preserialized_payload=preserialized_payload 
-                                        )
-            self.socket.send_multipart(event_message.byte_array)
-            self.logger.debug("published event with unique identifier {}".format(event._unique_identifier))
-            # print("published event with unique identifier {}".format(event._unique_identifier))
-        else:
-            raise AttributeError("event name {} not yet registered with socket {}".format(event._unique_identifier, 
-                                                                                        self.socket_address))
-        
+        try:
+            self._send_lock.acquire()
+            if event._unique_identifier in self.event_ids:
+                payload = SerializableData(
+                    data,
+                    serializer=Serializers.for_object(event._owner_inst.id, event._owner_inst.__class__.__name__, event._descriptor.name)
+                ) if not isinstance(data, bytes) else SerializableNone
+                preserialized_payload = PreserializedData(data) if isinstance(data, bytes) else PreserializedEmptyByte
+                event_message = EventMessage.craft_from_arguments(
+                                                event._unique_identifier, 
+                                                self.id, 
+                                                payload=payload,
+                                                preserialized_payload=preserialized_payload 
+                                            )
+                self.socket.send_multipart(event_message.byte_array)
+                self.logger.debug("published event with unique identifier {}".format(event._unique_identifier))
+                # print("published event with unique identifier {}".format(event._unique_identifier))
+            else:
+                raise AttributeError("event name {} not yet registered with socket {}".format(event._unique_identifier, 
+                                                                                            self.socket_address))
+        finally:
+            try:
+                self._send_lock.release()
+            except Exception:
+                pass 
+
+
     def exit(self):
         try:
             BaseZMQ.exit(self)
@@ -1950,10 +1990,12 @@ class BaseEventConsumer(BaseZMQClient):
             self.context = context or global_config.zmq_context()
             self.poller = zmq.Poller()
             socket_class = zmq.Socket
+            self._poller_lock = threading.Lock()
         elif isinstance(self, BaseAsyncZMQ):
             self.context = context or global_config.zmq_context()
             self.poller = zmq.asyncio.Poller()
             socket_class = zmq.asyncio.Socket
+            self._poller_lock = asyncio.Lock()
         else:
             raise TypeError("BaseEventConsumer must be subclassed by either BaseSyncZMQ or BaseAsyncZMQ")
         super().__init__(id=id, server_id=kwargs.get('server_id', None), **kwargs)
@@ -2044,22 +2086,31 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
-        while True:
-            sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
-            if len(sockets) > 1:
-                # if there is an interrupt message as well as an event,
-                # give preference to interrupt message.
-                if socket[0] == self.interrupting_peer:
-                    sockets = [socket[0]]
-                elif sockets[1] == self.interrupting_peer:
-                    sockets = [socket[1]]
-            for socket, _ in sockets:
-                try:
-                    raw_message = socket.recv_multipart(zmq.NOBLOCK) 
-                    return EventMessage(raw_message)
-                except zmq.Again:
-                    pass
-        
+        try:
+            while not self._poller_lock.acquire(timeout=timeout/1000 if timeout else -1):
+                pass
+            while True:
+                sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
+                if len(sockets) > 1:
+                    # if there is an interrupt message as well as an event,
+                    # give preference to interrupt message.
+                    if sockets[0][0] == self.interrupting_peer:
+                        sockets = [sockets[0]] # we still need the socket, poll event  tuple
+                    elif sockets[1][0] == self.interrupting_peer:
+                        sockets = [sockets[1]]
+                for socket, _ in sockets:
+                    try:
+                        raw_message = socket.recv_multipart(zmq.NOBLOCK) 
+                        return EventMessage(raw_message)
+                    except zmq.Again:
+                        pass    
+                    # if not self.handled_default_message_types(event_message):
+        finally:
+            try:
+                self._poller_lock.release()
+            except Exception:
+                pass
+            
 
     def interrupt(self):
         """
@@ -2101,22 +2152,29 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
         # TODO - use raise_interrupt_as_exception
-        while True:
-            sockets = await self.poller.poll(timeout) 
-            if len(sockets) > 1: 
-                # if there is an interrupt message as well as an event,
-                # give preference to interrupt message.
-                if socket[0] == self.interrupting_peer:
-                    sockets = [socket[0]]
-                elif sockets[1] == self.interrupting_peer:
-                    sockets = [socket[1]]
-            for socket, _ in sockets:
-                try:
-                    raw_message = await socket.recv_multipart(zmq.NOBLOCK)
-                    return EventMessage(raw_message)
-                except zmq.Again:
-                    pass     
-        
+        try:
+            while not (await self._poller_lock.acquire()):
+                pass
+            while True:
+                sockets = await self.poller.poll(timeout) 
+                if len(sockets) > 1: 
+                    # if there is an interrupt message as well as an event,
+                    # give preference to interrupt message.
+                    if sockets[0][0] == self.interrupting_peer:
+                        sockets = [sockets[0]]
+                    elif sockets[1][0] == self.interrupting_peer:
+                        sockets = [sockets[1]]
+                for socket, _ in sockets:
+                    try:
+                        raw_message = await socket.recv_multipart(zmq.NOBLOCK)
+                        return EventMessage(raw_message)
+                    except zmq.Again:
+                        pass     
+        finally:
+            try:
+                self._poller_lock.release()
+            except Exception:
+                pass
 
     async def interrupt(self):
         """

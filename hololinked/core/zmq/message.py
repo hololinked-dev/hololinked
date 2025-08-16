@@ -29,6 +29,7 @@ SUCCESS     = 'SUCCESS'
 
 
 EMPTY_BYTE = b''
+
 """
 Message indices 
 
@@ -39,9 +40,10 @@ Message indices
 """
 # CM = Client Message
 INDEX_ADDRESS = 0
-INDEX_HEADER= 1
-INDEX_BODY = 2
-INDEX_PRESERIALIZED_BODY = 3
+INDEX_DELIMITER = 1
+INDEX_HEADER= 2
+INDEX_BODY = 3
+INDEX_PRESERIALIZED_BODY = 4
 
 
 class ServerExecutionContext(msgspec.Struct):
@@ -174,7 +176,7 @@ class RequestMessage:
 
     For detailed schema, visit [here](https://hololinked.readthedocs.io/en/latest/protocols/zmq/message.json).
     """
-    length = Integer(default=4, readonly=True, 
+    length = Integer(default=5, readonly=True, class_member=True,
                     doc="length of the message") # type: int
 
     def __init__(self, msg : typing.List[bytes]) -> None:
@@ -249,7 +251,7 @@ class RequestMessage:
     
     @property
     def qualified_operation(self) -> str:
-        """qualified objekt"""
+        """qualified objekt - a possibly unique string for the operation"""
         return f"{self.header['thingID']}.{self.header['objekt']}.{self.header['operation']}"
 
     def parse_header(self) -> None:
@@ -326,6 +328,7 @@ class RequestMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(receiver_id, encoding='utf-8'),
+            bytes(),
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value
@@ -371,6 +374,7 @@ class RequestMessage:
         ]
         message._bytes = [
             bytes(receiver_id, encoding='utf-8'),
+            bytes(),
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value
@@ -407,8 +411,7 @@ class ResponseMessage:
     For detailed schema, visit [here](https://hololinked.readthedocs.io/en/latest/protocols/zmq/response-message-header.json).
     """
 
-    length = Integer(default=4, readonly=True, 
-                    doc="length of the message") # type: int
+    length = Integer(default=5, readonly=True, class_member=True, doc="length of the message") # type: int
 
     def __init__(self, msg: typing.List[bytes]):
         self._bytes = msg
@@ -473,7 +476,7 @@ class ResponseMessage:
             self._header = ResponseHeader(**Serializers.json.loads(self._bytes[INDEX_HEADER]))
         else:
             raise ValueError(f"header must be of type ResponseHeader or bytes, not {type(self._bytes[INDEX_HEADER])}")
-
+        
     def parse_body(self) -> None:
         """parse the body"""
         self._body = [
@@ -523,6 +526,7 @@ class ResponseMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(receiver_id, encoding='utf-8'),
+            bytes(),
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value
@@ -565,7 +569,8 @@ class ResponseMessage:
         )
         message._body = [payload, preserialized_payload]
         message._bytes = [
-            bytes(request_message.sender_id, encoding='utf-8'),    
+            bytes(request_message.sender_id, encoding='utf-8'),
+            bytes(),
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value
@@ -602,6 +607,7 @@ class ResponseMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(request_message.sender_id, encoding='utf-8'),
+            bytes(),
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value
@@ -649,6 +655,7 @@ class EventMessage(ResponseMessage):
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(event_id, encoding='utf-8'),
+            bytes(),
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value

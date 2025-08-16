@@ -42,15 +42,15 @@ class ZMQConsumedAffordanceMixin:
         self._thing_execution_context = dict(fetch_execution_logs=False) 
         self._last_zmq_response = None # type: typing.Optional[ResponseMessage]
 
-    def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
+    def get_last_return_value(self, response: ResponseMessage, raise_exception: bool = False) -> typing.Any:
         """
         cached return value of the last call to the method
         """
-        if self._last_zmq_response is None:
+        if response is None:
             raise RuntimeError("No last response available. Did you make an operation?")
-        payload = self._last_zmq_response.payload.deserialize()
-        preserialized_payload = self._last_zmq_response.preserialized_payload.value
-        if self._last_zmq_response.type in __error_message_types__ and raise_exception:
+        payload = response.payload.deserialize()
+        preserialized_payload = response.preserialized_payload.value
+        if response.type in __error_message_types__ and raise_exception:
             raise_local_exception(payload)
         if preserialized_payload != EMPTY_BYTE:
             if payload is None:
@@ -111,7 +111,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             self._schema_validator.validate(kwargs)
         form = self._resource.retrieve_form(Operations.invokeaction, Form()) 
         # works over ThingModel, there can be a default empty form
-        self._last_zmq_response = self._sync_zmq_client.execute(
+        response = self._sync_zmq_client.execute(
                                             thing_id=self._resource.thing_id,
                                             objekt=self._resource.name,
                                             operation=Operations.invokeaction,
@@ -125,7 +125,8 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
                                             ),
                                             thing_execution_context=self._thing_execution_context
                                         )
-        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
+        self._last_zmq_response = response
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
     
     async def async_call(self, *args, **kwargs) -> typing.Any:
         if not self._async_zmq_client:
@@ -134,7 +135,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             kwargs["__args__"] = args
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
-        self._last_zmq_response = await self._async_zmq_client.async_execute(
+        response = await self._async_zmq_client.async_execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
                                                 operation=Operations.invokeaction,
@@ -148,8 +149,9 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
                                                 ),
                                                 thing_execution_context=self._thing_execution_context
                                             )
-        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
-    
+        self._last_zmq_response = response
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
+
     def oneway(self, *args, **kwargs) -> None:
         if len(args) > 0: 
             kwargs["__args__"] = args
@@ -225,7 +227,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
                                 doc="cached return value of the last call to the method")
 
     def set(self, value: typing.Any) -> None:
-        self._last_zmq_response = self._sync_zmq_client.execute(
+        response = self._sync_zmq_client.execute(
                                                 thing_id=self._resource.thing_id, 
                                                 objekt=self._resource.name,
                                                 operation=Operations.writeproperty,
@@ -239,10 +241,11 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
                                                 ),
                                                 thing_execution_context=self._thing_execution_context
                                             )
-        ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
-     
+        self._last_zmq_response = response
+        ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
+
     def get(self) -> typing.Any:
-        self._last_zmq_response = self._sync_zmq_client.execute(
+        response = self._sync_zmq_client.execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
                                                 operation=Operations.readproperty,
@@ -252,12 +255,13 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
                                                 ),
                                                 thing_execution_context=self._thing_execution_context
                                             )
-        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True) 
-    
+        self._last_zmq_response = response
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
+
     async def async_set(self, value: typing.Any) -> None:
         if not self._async_zmq_client:
             raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
-        self._last_zmq_response = await self._async_zmq_client.async_execute(
+        response = await self._async_zmq_client.async_execute(
                                                         thing_id=self._resource.thing_id,
                                                         objekt=self._resource.name,
                                                         operation=Operations.writeproperty,
@@ -275,7 +279,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
     async def async_get(self) -> typing.Any:
         if not self._async_zmq_client:
             raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
-        self._last_zmq_response = await self._async_zmq_client.async_execute(
+        response = await self._async_zmq_client.async_execute(
                                                 thing_id=self._resource.thing_id,
                                                 objekt=self._resource.name,
                                                 operation=Operations.readproperty,
@@ -285,8 +289,9 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
                                                 ),
                                                 thing_execution_context=self._thing_execution_context
                                             )
-        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True) 
-        
+        self._last_zmq_response = response
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
+
     def oneway_set(self, value: typing.Any) -> None:
         self._sync_zmq_client.send_request(
                                     thing_id=self._resource.thing_id,
@@ -387,7 +392,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
             try:
                 event_message = self._sync_zmq_client.receive()
                 self._last_zmq_response = event_message
-                value = self.get_last_return_value(raise_exception=True)
+                value = self.get_last_return_value(event_message, raise_exception=True)
                 if value == 'INTERRUPT':
                     break
                 for cb in self._callbacks: 
@@ -409,7 +414,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
             try:
                 event_message = await self._async_zmq_client.receive()
                 self._last_zmq_response = event_message
-                value = self.get_last_return_value(raise_exception=True)
+                value = self.get_last_return_value(event_message, raise_exception=True)
                 if value == 'INTERRUPT':
                     break
                 for cb in self._callbacks: 
