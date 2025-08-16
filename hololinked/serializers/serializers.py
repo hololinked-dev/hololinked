@@ -306,7 +306,7 @@ class Serializers(metaclass=MappableSingleton):
                         doc="Text serializer, converts string or string compatible types to bytes and vice versa") # type: BaseSerializer
     default = ClassSelector(default=json.default, class_=BaseSerializer, class_member=True, 
                         doc="The default serialization to be used") # type: BaseSerializer
-    default_content_type = String(default=default.default.content_type, class_member=True,
+    default_content_type = String(fget=lambda self: self.default.content_type, class_member=True,
                         doc="The default content type for the default serializer") # type: str
 
     content_types = Parameter(default={
@@ -385,11 +385,11 @@ class Serializers(metaclass=MappableSingleton):
             if thing in cls.object_serializer_map:
                 if objekt in cls.object_serializer_map[thing]:
                     return cls.object_serializer_map[thing][objekt]
-                return cls.object_serializer_map[thing][thing]
+                return cls.object_serializer_map[thing].get(thing, cls.default)
             if thing in cls.object_content_type_map:
                 if objekt in cls.object_content_type_map[thing]:
                     return cls.content_types[cls.object_content_type_map[thing][objekt]]
-                return cls.object_content_type_map[thing][thing]
+                return cls.content_types[cls.object_content_type_map[thing].get(thing, cls.default_content_type)]
         return cls.default # JSON is default serializer
 
 

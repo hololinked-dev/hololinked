@@ -196,7 +196,7 @@ class TestMessagingContract(MessageValidatorMixin):
         )
         self.validate_response_message(response_message)
         self.assertEqual(response_message.type, REPLY)
-        self.assertEqual(Serializers.json.loads(response_message._bytes[2]), None)
+        self.assertEqual(Serializers.json.loads(response_message._bytes[3]), None) # INDEX_BODY = 3
         self.assertEqual(request_message.id, response_message.id)
 
 
