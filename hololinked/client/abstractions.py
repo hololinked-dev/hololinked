@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import logging
-from types import FunctionType, MethodType
 import typing
 import builtins
+from types import FunctionType, MethodType
 
 from ..td import PropertyAffordance, ActionAffordance, EventAffordance
 

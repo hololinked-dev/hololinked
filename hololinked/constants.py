@@ -1,7 +1,7 @@
 import zmq
 import logging
 import typing
-from enum import StrEnum, IntEnum, Enum
+from enum import StrEnum, IntEnum
 
 
 # types
