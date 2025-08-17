@@ -2,16 +2,15 @@ name: Unit Tests For Development
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-      - main-next-release
-  push:
-    branches:
-      - main
-      - main-next-release
+  # pull_request:
+  #   branches:
+  #     - main
+  # push:
+  #   branches:
+  #     - main
 
 jobs:
+
   test:
     strategy:
       matrix:
@@ -29,7 +28,7 @@ jobs:
             python-version: 3.13
 
     runs-on: ${{ matrix.os }}
-
+ 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -46,7 +45,7 @@ jobs:
         run: |
           uv venv .venv 
           source .venv/bin/activate 
-          uv pip sync tests/uv.lock
+          uv sync --all-extras --no-install-project
           uv pip install coverage
 
       - name: Run unit tests and generate coverage report
@@ -59,3 +58,9 @@ jobs:
         uses: codecov/codecov-action@v4.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+    
+    
+
+              
+ 

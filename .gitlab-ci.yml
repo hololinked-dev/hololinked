@@ -1,0 +1,9 @@
+rules:
+  - if: '$CI_COMMIT_BRANCH == "main-next-release"'
+
+codestyle:
+  image: python:3.11
+  stage: test
+  script:
+    - pip install uv 
+    - uvx ruff check hololinked\core\thing.py

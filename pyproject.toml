@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hololinked"
-version = "0.2.12"
+version = "0.3.0"
 authors = [
     {name = "Vignesh Vaidyanathan", email = "vignesh.vaidyanathan@hololinked.dev"},
 ]
@@ -37,6 +37,7 @@ dependencies = [
     "pyzmq>=25.1.0,<26.2",
     "SQLAlchemy>2.0.21",
     "SQLAlchemy_Utils==0.41.1",
+    "pydantic>=2.8.0,<3.0.0",
     "tornado==6.3.3",
     "jsonschema==4.22.0"
 ]
@@ -46,7 +47,17 @@ Documentation = "https://hololinked.readthedocs.io/en/latest/index.html"
 Repository = "https://github.com/hololinked-dev/hololinked"  # Update with actual repository URL
 
 [tool.setuptools]
-packages = ["hololinked", "hololinked.server", "hololinked.rpc", "hololinked.client", "hololinked.param"]
+packages = [
+    "hololinked", 
+    "hololinked.server", "hololinked.server.http",
+    "hololinked.client", "hololinked.client.http", "hololinked.client.zmq",
+    "hololinked.param", 
+    "hololinked.schema_validators", 
+    "hololinked.serializers", 
+    "hololinked.storage", 
+    "hololinked.td", 
+    "hololinked.core", "hololinked.core.zmq"
+]
 
 [project.optional-dependencies]
 dev = [
@@ -55,17 +66,18 @@ dev = [
     "ipython==8.12.3",
     "numpy==2.1.2",
     "pandas==2.2.3",
-    "pydantic>=2.8.0,<3.0.0",
+    "faker>=37.5.0",
     "serpent==1.41",
+    "bcrypt==4.3.0"
 ]
-
 test = [
     "requests==2.32.3",
     "numpy>=2.0.0",
-    "pydantic>=2.8.0,<3.0.0",
-    "coverage==7.8.0"
-]
-    
+    "faker>=37.5.0",
+    "coverage==7.8.0",
+    "bcrypt==4.3.0",
+    "fastjsonschema==2.20.0"
+]   
 linux = [
     "uvloop==0.20.0"
 ]
