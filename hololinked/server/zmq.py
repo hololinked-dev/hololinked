@@ -24,14 +24,20 @@ class ZMQServer(RPCServer):
         self.ipc_event_publisher = self.tcp_event_publisher = self.inproc_events_proxy = None
         super().__init__(id=id, things=things, context=context, **kwargs)
 
+        tcp_socket_address = None
+
         if isinstance(access_points, str): 
             access_points = [access_points]
         elif not isinstance(access_points, list): 
             raise TypeError(f"unsupported transport type : {type(access_points)}")
         for index, transport in enumerate(access_points):
-            access_points[index] = transport.upper() if isinstance(transport, str) else transport
-
-        tcp_socket_address = kwargs.pop('tcp_socket_address', None)
+            if (isinstance(transport, str) and len(transport) in [3,6]):
+                access_points[index] = transport.upper()
+            elif transport.lower().startswith("tcp://"):
+                access_points[index] = "TCP"
+                tcp_socket_address = transport
+            else:
+                access_points[index] = transport
 
         # initialise every externally visible protocol          
         if ZMQ_TRANSPORTS.TCP in access_points or "TCP" in access_points:

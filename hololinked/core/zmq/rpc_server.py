@@ -921,7 +921,6 @@ def prepare_rpc_server(
             things=[instance],
             context=context, 
             access_points=access_points,
-            tcp_socket_address=kwargs.get('tcp_socket_address', None),
             logger=instance.logger
         )
 

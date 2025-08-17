@@ -225,7 +225,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     
     @forkable # noqa: F405
     def run_with_zmq_server(self, 
-            transports: typing.Sequence[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC, 
+            access_points: typing.Sequence[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC, 
             forked: bool = False, # used by decorator 
             # expose_eventloop : bool = False,
             **kwargs: typing.Dict[str, typing.Any]
@@ -255,14 +255,12 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             `["TCP", "IPC"]` or `["IPC", "INPROC"]`.
         
         **kwargs:
-            - tcp_socket_address: `str`, optional,
-                socket address for TCP access, for example: tcp://0.0.0.0:61234
             - context: `zmq.asyncio.Context`, optional,
                 ZMQ context object to be used for creating sockets. If not supplied, a new context is created.
                 For INPROC clients, you need to provide the same context used here.
         """
         from .zmq.rpc_server import prepare_rpc_server
-        prepare_rpc_server(instance=self, transports=transports, **kwargs)
+        prepare_rpc_server(instance=self, access_points=access_points, **kwargs)
         self.rpc_server.run()
         
 

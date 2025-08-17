@@ -1,36 +1,49 @@
-# only client side tests, server tests already carried out
-import time, unittest, logging
+# an end to end through the zmq object proxy client with IPC protocol which is assumed to be most stable
+import time
+import unittest
+import logging
+from uuid import uuid4
 from hololinked.client.factory import ClientFactory
 from hololinked.client.proxy import ObjectProxy
-from hololinked.utils import complete_pending_tasks_in_current_loop_async
 
 try:
-    from .things import OceanOpticsSpectrometer, TestThing
+    from .things import TestThing
     from .utils import TestCase, TestRunner, fake, AsyncTestCase
 except ImportError:
-    from things import OceanOpticsSpectrometer, TestThing
+    from things import TestThing
     from utils import TestCase, TestRunner, fake, AsyncTestCase
 
 
 
-class TestZMQObjectProxyClient(TestCase):
+class TestRPCEndToEnd(TestCase):
     """Test the zmq object proxy client"""
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
+        cls.thing_id = f'test-thing-{uuid4().hex[:8]}'
+        cls.server_id = cls.thing_id
         super().setUpClass()
-        self.setUpThing()
+        cls.setUpThing()
+        print("Test ZMQ IPC End to End")
 
     @classmethod
-    def setUpThing(self):
+    def setUpThing(cls):
         """Set up the thing for the zmq object proxy client"""
-        self.thing = TestThing(id="test-thing", log_level=logging.ERROR+10)
-        self.thing.run_with_zmq_server(forked=True)
-        self.thing_model = self.thing.get_thing_model(ignore_errors=True).json()
-        
+        cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR+10)
+        cls.thing.run_with_zmq_server(forked=True)
+        cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
+
+    @classmethod
+    def tearDownClass(cls):
+        """Test the stop of the zmq object proxy client"""
+        cls.thing.rpc_server.stop()
+        super().tearDownClass()
+
+    def get_client(self):
+        return ClientFactory.zmq(self.server_id, self.thing_id, "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
 
     def test_01_creation_and_handshake(self):
         """Test the creation and handshake of the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+        thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)
         self.assertTrue(
                 len(thing.properties) + len(thing.actions) + len(thing.events) >=
@@ -40,7 +53,7 @@ class TestZMQObjectProxyClient(TestCase):
         
     def test_02_invoke_action(self):
         """Test the invocation of an action on the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+        thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)  
         # Test invoke_action method with reply
         self.assertEqual(thing.invoke_action("action_echo", fake.text(max_nb_chars=100)), fake.last)
@@ -64,7 +77,7 @@ class TestZMQObjectProxyClient(TestCase):
 
     def test_03_rwd_properties(self):
         """Test the read, write and delete of properties on the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+        thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)  
         # Test read_property method
         self.assertIsInstance(thing.read_property("number_prop"), (int, float))
@@ -122,7 +135,7 @@ class TestZMQObjectProxyClient(TestCase):
         
         # TD is not well defined for this yet, although both client and server separately work.
         # Test partial list of read write properties
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+        thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)  
         # Test read_multiple_properties method
         thing.write_multiple_properties(
@@ -152,7 +165,7 @@ class TestZMQObjectProxyClient(TestCase):
 
     def test_05_subscribe_event(self):
         """Test the subscription to an event on the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+        thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)
 
         results = []
@@ -170,7 +183,7 @@ class TestZMQObjectProxyClient(TestCase):
 
 
     def test_06_observe_properties(self):
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+        thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)
 
         # First check if an attribute is set on the object proxy
@@ -233,14 +246,9 @@ class TestZMQObjectProxyClient(TestCase):
         for res in result:
             self.assertIn(res, propective_values)
       
+ 
 
-    def test_07_stop(self):
-        """Test the stop of the zmq object proxy client"""
-        self.thing.rpc_server.stop()       
-
-
-
-class TestZMQObjectProxyClientAsync(AsyncTestCase):
+class TestRPCEndToEndAsync(AsyncTestCase):
 
     @classmethod
     def setUpClass(self):
@@ -254,10 +262,17 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
         self.thing.run_with_zmq_server(forked=True)
         self.thing_model = self.thing.get_thing_model(ignore_errors=True).json()
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.thing.rpc_server.stop()
+        super().tearDownClass()
+
+    def get_client(self):
+        return ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
 
     async def test_01_creation_and_handshake(self):
         """Test the creation and handshake of the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+        thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)
         self.assertTrue(
                 len(thing.properties) + len(thing.actions) + len(thing.events) >=
@@ -265,7 +280,7 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
             )
         
     async def test_02_invoke_action(self):
-        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+        thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)  
         self.assertEqual(await thing.async_invoke_action("action_echo", fake.text(max_nb_chars=100)), fake.last)
         self.assertEqual(await thing.async_invoke_action("action_echo", fake.sentence()), fake.last)
@@ -274,8 +289,8 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
 
     async def test_03_rwd_properties(self):
         """Test the read, write and delete of properties on the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
-        self.assertIsInstance(thing, ObjectProxy)  
+        thing = self.get_client()
+        self.assertIsInstance(thing, ObjectProxy)
         # Test read_property method
         self.assertIsInstance(await thing.async_read_property("number_prop"), (int, float))
         self.assertIsInstance(await thing.async_read_property("string_prop"), str)
@@ -289,16 +304,12 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
         self.assertEqual(await thing.async_read_property("observable_list_prop"), fake.last)
         # await complete_pending_tasks_in_current_loop_async()
 
-    async def test_04_stop(self):
-        """Test the stop of the zmq object proxy client"""
-        self.thing.rpc_server.stop()
-
-
+    
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestZMQObjectProxyClient))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestZMQObjectProxyClientAsync))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCEndToEnd))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCEndToEndAsync))
     return suite
         
 if __name__ == '__main__':
