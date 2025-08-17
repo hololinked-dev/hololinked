@@ -11,7 +11,7 @@ from tornado.simple_httpclient import HTTPTimeoutError, HTTPStreamClosedError
 from ...utils import get_current_async_loop
 from ...constants import Operations
 from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
-from ...td.interaction_affordance import ActionAffordance, EventAffordance
+from ...td.interaction_affordance import ActionAffordance, EventAffordance, PropertyAffordance
 from ...td.forms import Form
 from ...serializers import Serializers
 
@@ -253,7 +253,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
     def oneway_set(self, value: Any) -> None:
         if self._resource.readOnly:
             raise NotImplementedError("This property is not writable")
-        form = self._resource.retrieve_form(Operations.writeproperty, None)
+        form = deepcopy(self._resource.retrieve_form(Operations.writeproperty, None))
         if form is None:
             raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
         serializer = Serializers.content_types.get(form.contentType or "application/json")
@@ -298,8 +298,9 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
             response = self._sync_http_client.fetch(http_request)
         except HTTPTimeoutError as ex: 
             raise TimeoutError(str(ex)) from None
+        assert response.code == 204, "noblock did not return 204"
         assert response.headers.get('X-Message-ID', None) is not None, \
-            "The server did not return a message ID for the non-blocking property write."
+            f"The server did not return a message ID for the non-blocking property write. response headers: {response.headers}, code {response.code}"
         message_id = response.headers['X-Message-ID']
         self._owner_inst._noblock_messages[message_id] = self
         self._read_reply_op_map[message_id] = 'writeproperty'
@@ -316,7 +317,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
 class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
     def __init__(self, 
-                resource: EventAffordance,
+                resource: EventAffordance | PropertyAffordance,
                 default_scheduling_mode: str = 'sync',
                 connect_timeout: int = 60,
                 request_timeout: int = 60,
@@ -344,9 +345,10 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             ) -> None:
         if not self._default_scheduling_mode in ['sync', 'async']:
             raise ValueError(f"Invalid scheduling mode: {self._default_scheduling_mode}. Must be 'sync' or 'async'.")
-        form = self._resource.retrieve_form(Operations.subscribeevent, None)
+        op = Operations.observeproperty if isinstance(self._resource, PropertyAffordance) else Operations.subscribeevent
+        form = self._resource.retrieve_form(op, None)
         if form is None:
-            raise ValueError(f"No form found for subscribeevent operation for {self._resource.name}")
+            raise ValueError(f"No form found for {op} operation for {self._resource.name}")
         self.add_callbacks(callbacks)
         self._subscribed = True
         self._deserialize = deserialize
@@ -358,9 +360,11 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             get_current_async_loop().call_soon(lambda: asyncio.create_task(self.async_listen()))
 
     def listen(self):
-        form = self._resource.retrieve_form(Operations.subscribeevent, None)
+        op = Operations.observeproperty if isinstance(self._resource, PropertyAffordance) else Operations.subscribeevent
+        form = self._resource.retrieve_form(op, None)
         if form is None:
-            raise ValueError(f"No form found for subscribeevent operation for {self._resource.name}")
+            raise ValueError(f"No form found for {op} operation for {self._resource.name}")
+
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         buffer = ""
         loop = asyncio.new_event_loop()

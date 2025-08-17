@@ -664,7 +664,8 @@ class ThingDescriptionHandler(BaseHandler):
                                     client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
                                     thing_id=self.resource.thing_id,
                                     objekt=self.resource.name,
-                                    operation=Operations.invokeaction
+                                    operation=Operations.invokeaction,
+                                    payload=SerializableData(value=dict(ignore_errors=True))
                                 )                  
                 payload = self.get_response_payload(response_message)
                 TM = payload.deserialize()
@@ -705,7 +706,7 @@ class ThingDescriptionHandler(BaseHandler):
                 TD["properties"][name]["forms"].append(form.json())
             if affordance.observable:
                 form = Form()
-                form.href = href
+                form.href = f'{href}/change-event'
                 form.htv_methodName = 'GET'
                 form.contentType = "application/json"
                 form.op = Operations.observeproperty

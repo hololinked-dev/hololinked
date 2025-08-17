@@ -192,34 +192,58 @@ class ClientFactory:
     @classmethod
     def http(self, url: str, **kwargs):
         from .proxy import ObjectProxy
+        
+        # config
+        skip_interaction_affordances = kwargs.get('skip_interaction_affordances', [])
+        invokation_timeout = kwargs.get('invokation_timeout', 5.0)
+        execution_timeout = kwargs.get('execution_timeout', 5.0)
+        connect_timeout = kwargs.get('connect_timeout', 60.0)
+        request_timeout = kwargs.get('request_timeout', 60.0)
+         
+        # fetch TD
         response = HTTPClient().fetch(HTTPRequest(url))
         assert response.code >= 200 and response.code < 300, f"Fetch TD HTTP request failed with status code {response.code}"
         # assert response.headers.get('Content-Type') == 'application/json'
+
         TD = Serializers.json.loads(response.body)
         id = f"client|{TD['id']}|HTTP|{uuid.uuid4()}" 
-        object_proxy = ObjectProxy(id, td=TD, **kwargs)
+        log_level = kwargs.get('log_level', logging.INFO)
+        logger = get_default_logger(id, log_level=log_level)
+        object_proxy = ObjectProxy(id, td=TD, logger=logger, **kwargs)
+
         for name in TD.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, TD)
             consumed_property = HTTPProperty(
                                     resource=affordance, 
-                                    connect_timeout=kwargs.get('connect_timeout', 60),
-                                    request_timeout=kwargs.get('request_timeout', 60),
-                                    invokation_timeout=kwargs.get('invokation_timeout', 5),
-                                    execution_timeout=kwargs.get('execution_timeout', 5),
+                                    connect_timeout=connect_timeout,
+                                    request_timeout=request_timeout,
+                                    invokation_timeout=invokation_timeout,
+                                    execution_timeout=execution_timeout,
                                     owner_inst=object_proxy,
-                                    logger=object_proxy.logger
+                                    logger=logger
                                 )
             self.add_property(object_proxy, consumed_property)
+            if affordance.observable:
+                consumed_event = HTTPEvent(
+                    resource=affordance,
+                    connect_timeout=None,
+                    request_timeout=None,
+                    invokation_timeout=invokation_timeout,
+                    execution_timeout=execution_timeout,
+                    owner_inst=object_proxy,
+                    logger=logger
+                )
+                self.add_event(object_proxy, consumed_event)
         for action in TD.get("actions", []):
             affordance = ActionAffordance.from_TD(action, TD)
             consumed_action = HTTPAction(
                                     resource=affordance, 
-                                    connect_timeout=kwargs.get('connect_timeout', 60),
-                                    request_timeout=kwargs.get('request_timeout', 60),
-                                    invokation_timeout=kwargs.get('invokation_timeout', 5),
-                                    execution_timeout=kwargs.get('execution_timeout', 5),
+                                    connect_timeout=connect_timeout,
+                                    request_timeout=request_timeout,
+                                    invokation_timeout=invokation_timeout,
+                                    execution_timeout=execution_timeout,
                                     owner_inst=object_proxy,
-                                    logger=object_proxy.logger
+                                    logger=logger
                                 )
             self.add_action(object_proxy, consumed_action)
         for event in TD.get("events", []):
@@ -228,12 +252,13 @@ class ClientFactory:
                                     resource=affordance, 
                                     connect_timeout=None,
                                     request_timeout=None,
-                                    invokation_timeout=kwargs.get('invokation_timeout', 5),
-                                    execution_timeout=kwargs.get('execution_timeout', 5),
+                                    invokation_timeout=invokation_timeout,
+                                    execution_timeout=execution_timeout,
                                     owner_inst=object_proxy,
-                                    logger=object_proxy.logger
+                                    logger=logger
                                 )
             self.add_event(object_proxy, consumed_event)
+
         return object_proxy
         
 

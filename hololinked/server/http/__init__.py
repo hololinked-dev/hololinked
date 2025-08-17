@@ -429,7 +429,7 @@ class HTTPServer(Parameterized):
     
     def add_event(self, 
                 URL_path: str, 
-                event: Event | EventAffordance, 
+                event: Event | EventAffordance | PropertyAffordance, 
                 handler: BaseHandler | EventHandler = EventHandler, 
                 **kwargs
             ) -> None:
@@ -447,7 +447,7 @@ class HTTPServer(Parameterized):
         kwargs: dict
             additional keyword arguments to be passed to the handler's __init__
         """
-        if not isinstance(event, (Event, EventAffordance)):
+        if not isinstance(event, (Event, EventAffordance)) and (not isinstance(event, PropertyAffordance) or not event.observable):
             raise TypeError(f"event should be of type Event or EventAffordance, given type {type(event)}")
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
@@ -641,6 +641,12 @@ class ApplicationRouter:
                 http_methods=('GET') if property.readOnly else ('GET', 'PUT'), # if prop.fdel is None else ('GET', 'PUT', 'DELETE'),
                 handler=self.server.property_handler
             )
+            if property.observable:
+                self.server.add_event(
+                    URL_path=f'{path}/change-event',
+                    event=property,
+                    handler=self.server.event_handler
+                )
         for action in actions:
             if action in self:
                 continue

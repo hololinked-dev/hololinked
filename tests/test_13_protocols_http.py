@@ -29,9 +29,11 @@ from hololinked.td.security_definitions import SecurityScheme
 try:
     from .things import OceanOpticsSpectrometer, TestThing
     from .utils import TestCase, TestRunner, fake
+    from .test_11_rpc_e2e import TestRPCEndToEnd
 except ImportError:
     from things import OceanOpticsSpectrometer, TestThing
     from utils import TestCase, TestRunner, fake
+    from test_11_rpc_e2e import TestRPCEndToEnd
 
 
 
@@ -40,7 +42,7 @@ class TestHTTPServer(TestCase):
     def test_01_init_run_and_stop(self):
         """Test basic init, run and stop of the HTTP server."""
         # init, run and stop synchronously
-        server = HTTPServer(log_level=logging.ERROR+10)
+        server = HTTPServer(log_level=logging.ERROR+10, port=8080)
         self.assertTrue(server.all_ok)
         server.listen(forked=True)
         time.sleep(5)
@@ -50,7 +52,7 @@ class TestHTTPServer(TestCase):
         # stop remotely
         server.listen(forked=True)
         time.sleep(5)
-        response = requests.post('http://localhost:8080/stop')
+        response = requests.post(f'http://localhost:{server.port}/stop')
         self.assertIn(response.status_code, [200, 201, 202, 204])
         time.sleep(2)
 
@@ -215,9 +217,11 @@ class TestHTTPServer(TestCase):
 
         global_config.ALLOW_PICKLE = True # allow pickle serializer for testing
         thing_id = f'test-request-info-{uuid.uuid4().hex[0:8]}'
+        port = 9001
+
         thing = OceanOpticsSpectrometer(id=thing_id, log_level=logging.ERROR+10)
         thing.run_with_http_server(
-            port=8086, 
+            port=port, 
             forked=True, 
             property_handler=TestableRPCHandler,
             action_handler=TestableRPCHandler
@@ -243,7 +247,7 @@ class TestHTTPServer(TestCase):
             ]:
                 response = session.request(
                             method=method, 
-                            url=f'http://localhost:8086{path}',
+                            url=f'http://localhost:{port}{path}',
                             data=serializer.dumps(body) if body is not None else None,
                             headers={"Content-Type": serializer.content_type}
                         )
@@ -274,7 +278,7 @@ class TestHTTPServer(TestCase):
                 # test body
                 self.assertTrue(latest_request_info.payload.deserialize() == body)
 
-        self.stop_server(8086, thing_ids=[thing_id])
+        self.stop_server(port=port, thing_ids=[thing_id])
 
 
     def _test_handlers_end_to_end(self, port: int , thing_id: str, **request_kwargs):
@@ -350,18 +354,18 @@ class TestHTTPServer(TestCase):
             ):
         """Test end-to-end with authentication"""
         thing_id = f'test-sec-{uuid.uuid4().hex[0:8]}'
-        port = 8087
+        port = 9002
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True},security_schemes=[security_scheme])
         self._test_handlers_end_to_end(port=port, thing_id=thing_id, headers=auth_headers)
         self._test_invalid_auth_end_to_end(port=port, thing_id=thing_id, wrong_auth_headers=wrong_auth_headers)      
         # reinstate correct credentials to stop
-        self.stop_server(port, thing_ids=[thing_id], headers=auth_headers)
+        self.stop_server(port=port, thing_ids=[thing_id], headers=auth_headers)
 
 
     def test_06_basic_end_to_end(self):
         thing_id = f'test-sec-{uuid.uuid4().hex[0:8]}'
-        port = 8085
+        port = 9003
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
         self._test_handlers_end_to_end(
@@ -433,19 +437,19 @@ class TestHTTPServer(TestCase):
         Test end-to-end with Server-Sent Events (SSE).
         """
         thing_id = f'test-sse-{uuid.uuid4().hex[0:8]}'
-        port = 8088
+        port = 9004
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True}, 
                                 security_schemes=[security_scheme] if security_scheme else None)
         session = requests.Session()
-        response = session.post(f'http://localhost:8088/{thing_id}/start-acquisition', headers=headers)
+        response = session.post(f'http://localhost:{port}/{thing_id}/start-acquisition', headers=headers)
         self.assertEqual(response.status_code, 200)
-        sse_gen = self.sse_stream(f"http://localhost:8088/{thing_id}/intensity-measurement-event", headers=headers)
+        sse_gen = self.sse_stream(f"http://localhost:{port}/{thing_id}/intensity-measurement-event", headers=headers)
         for i in range(5):
             evt = next(sse_gen)
             self.assertTrue('exception' not in evt)
-        response = session.post(f'http://localhost:8088/{thing_id}/stop-acquisition', headers=headers)
-        self.stop_server(8088, thing_ids=[thing_id], headers=headers)
+        response = session.post(f'http://localhost:{port}/{thing_id}/stop-acquisition', headers=headers)
+        self.stop_server(port=port, thing_ids=[thing_id], headers=headers)
 
 
     def test_09_sse(self):
@@ -464,11 +468,12 @@ class TestHTTPServer(TestCase):
 
     def test_10_forms_generation(self):
         thing_id = f'test-forms-{uuid.uuid4().hex[0:8]}'
+        port = 9004
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
-        thing.run_with_http_server(forked=True, port=8088, config={"allow_cors": True})
-        
+        thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
+
         session = requests.Session()
-        response = session.get(f'http://localhost:8088/{thing_id}/resources/wot-td')
+        response = session.get(f'http://localhost:{port}/{thing_id}/resources/wot-td')
         self.assertEqual(response.status_code, 200)
         td = response.json()
         self.assertIn('properties', td)
@@ -485,22 +490,23 @@ class TestHTTPServer(TestCase):
                 self.assertIn('htv:methodName', form)
                 self.assertIn('contentType', form)
                 self.assertIn('op', form)
-        self.stop_server(8088, thing_ids=[thing_id])
+        self.stop_server(port=port, thing_ids=[thing_id])
 
 
     def test_11_object_proxy_basic(self):
         thing_id = f'test-obj-proxy-{uuid.uuid4().hex[0:8]}'
+        port = 9005
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
-        thing.run_with_http_server(forked=True, port=8089, config={"allow_cors": True})
-        
-        object_proxy = ClientFactory.http(url=f'http://localhost:8089/{thing_id}/resources/wot-td')
+        thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
+
+        object_proxy = ClientFactory.http(url=f'http://localhost:{port}/{thing_id}/resources/wot-td')
         self.assertIsInstance(object_proxy, ObjectProxy)
         self.assertEqual(object_proxy.test_echo('Hello World!'), 'Hello World!')
         self.assertEqual(asyncio.run(object_proxy.async_invoke_action('test_echo', 'Hello World!')), 'Hello World!')
         self.assertEqual(object_proxy.read_property('max_intensity'), 16384)
         self.assertEqual(object_proxy.write_property('integration_time', 1200), None)
         self.assertEqual(object_proxy.read_property('integration_time'), 1200)
-        self.stop_server(8089, thing_ids=[thing_id])
+        self.stop_server(port=port, thing_ids=[thing_id])
 
     @classmethod
     def stop_server(cls, port, thing_ids: list[str] = [], **request_kwargs):
@@ -555,16 +561,20 @@ class TestHTTPObjectProxy(TestCase):
     # later create a TestObjtectProxy class that will test ObjectProxy but just overload the setUp and tearDown methods
     # with the different protocol
 
-    def setUp(self):
-        thing_id = f'test-obj-proxy-{uuid.uuid4().hex[0:8]}'
-        self.thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
-        self.thing.run_with_http_server(forked=True, port=8090, config={"allow_cors": True})
-        self.object_proxy = ClientFactory.http(url=f'http://localhost:8090/{thing_id}/resources/wot-td')
+    @classmethod
+    def setUpClass(cls):
+        cls.thing_id = f'test-obj-proxy-{uuid.uuid4().hex[0:8]}'
+        cls.port = 9000
+        cls.thing = OceanOpticsSpectrometer(id=cls.thing_id, serial_number='simulation', log_level=logging.ERROR+10)
+        cls.thing.run_with_http_server(forked=True, port=cls.port, config={"allow_cors": True})
+        cls.object_proxy = ClientFactory.http(url=f'http://localhost:{cls.port}/{cls.thing_id}/resources/wot-td')
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         # stop the thing and server
-        TestHTTPServer.stop_server(8090, thing_ids=[self.thing.id])
-        self.object_proxy = None
+        TestHTTPServer.stop_server(cls.port, thing_ids=[cls.thing.id])
+        cls.object_proxy = None
+
 
     def test_01_invoke_action(self):
         """Test basic functionality of ObjectProxy with HTTP server."""         
@@ -585,6 +595,7 @@ class TestHTTPObjectProxy(TestCase):
         self.assertEqual(self.object_proxy.invoke_action("test_echo", fake.pylist(10, value_types=[int, float, str, bool])), fake.last)
         self.assertEqual(self.object_proxy.read_reply(noblock_msg_id), noblock_payload)
         
+
     def test_02_rwd_properties(self):
         # test read and write properties
         self.assertEqual(self.object_proxy.read_property('max_intensity'), 16384)
@@ -638,13 +649,44 @@ class TestHTTPObjectProxy(TestCase):
         time.sleep(2)  # wait for some events to be generated
         self.object_proxy.stop_acquisition()
         self.object_proxy.unsubscribe_event(event_name)
-    
+
+
+class TestHTTPEndToEnd(TestRPCEndToEnd):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.http_port = 9010
+        super().setUpClass()
+        print("Test HTTP Object Proxy End to End")
+
+    @classmethod
+    def setUpThing(cls):
+        """Set up the thing for the http object proxy client"""
+        cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR+10)
+        cls.thing.run_with_http_server(forked=True, port=cls.http_port, config={"allow_cors": True})
+        cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
+
+    @classmethod
+    def tearDownClass(cls):
+        """Test the stop of the http object proxy client"""
+        TestHTTPServer.stop_server(port=cls.http_port, thing_ids=[cls.thing_id])
+        super().tearDownClass()
+
+    @classmethod
+    def get_client(cls):
+        return ClientFactory.http(
+            url=f'http://localhost:{cls.http_port}/{cls.thing_id}/resources/wot-td'
+        )
+
+    def test_04_RW_multiple_properties(self):
+        pass 
 
 
 def load_tests(loader, tests, pattern): 
     suite = unittest.TestSuite()
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPObjectProxy))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPEndToEnd))
     return suite
         
 if __name__ == '__main__':
