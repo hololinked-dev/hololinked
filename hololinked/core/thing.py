@@ -323,7 +323,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             # network_interface=network_interface, 
             **kwargs
         )
-        http_server.add_thing(dict(INPROC=self.id))
+        http_server.add_things(dict(INPROC=self.id))
         http_server.listen()
 
 

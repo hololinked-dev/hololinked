@@ -392,6 +392,8 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         while self._subscribed:
             try:
                 event_message = self._sync_zmq_client.receive()
+                if not event_message:
+                    continue
                 self._last_zmq_response = event_message
                 value = self.get_last_return_value(event_message, raise_exception=True)
                 if value == 'INTERRUPT':
@@ -414,6 +416,8 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         while self._subscribed:
             try:
                 event_message = await self._async_zmq_client.receive()
+                if not event_message:
+                    continue
                 self._last_zmq_response = event_message
                 value = self.get_last_return_value(event_message, raise_exception=True)
                 if value == 'INTERRUPT':

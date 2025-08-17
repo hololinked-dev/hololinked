@@ -1188,13 +1188,15 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         self.poller.register(self._monitor_socket, zmq.POLLIN)
         self._handshake_event.set()
 
-    async def handshake_complete(self):
+    async def handshake_complete(self, timeout: float | int | None = 60000) -> None:
         """
         wait for handshake to complete
         """
-        await self._handshake_event.wait()
-       
-    async def async_send_request(self, 
+        await asyncio.wait_for(self._handshake_event.wait(), int(timeout/1000) if timeout else None)
+        if not self._handshake_event.is_set():
+            raise TimeoutError(f"Handshake with server '{self.server_id}' timed out after {timeout} ms")
+
+    async def async_send_request(self,
                                 thing_id: str, 
                                 objekt: str, 
                                 operation: str, 
@@ -1439,7 +1441,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                     )
             client._monitor_socket = client.socket.get_monitor_socket()
             self.poller.register(client._monitor_socket, zmq.POLLIN)
-            self.pool[server_id] = client
+            self.pool[id] = client
         else: 
             raise ValueError(f"client for instance name '{server_id}' already present in pool")
         
@@ -2089,7 +2091,7 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         server_id: str
             instance name of the Thing publishing the event
     """
-    def receive(self, timeout: typing.Optional[float] = None) -> EventMessage:
+    def receive(self, timeout: typing.Optional[float] = 1000) -> EventMessage:
         """
         receive event with given timeout
 
@@ -2100,11 +2102,11 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
-        try:
-            while not self._poller_lock.acquire(timeout=timeout/1000 if timeout else -1):
-                # this loop always returns so its sufficient if the poller lock is at top level and not per iteration
-                pass
-            while True:
+        self._stop = False
+        while not self._stop:
+            try:
+                if not self._poller_lock.acquire(timeout=timeout/1000 if timeout else -1):
+                    continue
                 sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
                 if len(sockets) > 1:
                     # if there is an interrupt message as well as an event,
@@ -2120,11 +2122,11 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
                     except zmq.Again:
                         pass    
                     # if not self.handled_default_message_types(event_message):
-        finally:
-            try:
-                self._poller_lock.release()
-            except Exception:
-                pass
+            finally:
+                try:
+                    self._poller_lock.release()
+                except Exception:
+                    pass
             
 
     def interrupt(self):
@@ -2153,7 +2155,7 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         server_id: str
             instance name of the Thing publishing the event
     """
-    async def receive(self, timeout: typing.Optional[float] = None, raise_interrupt_as_exception: bool = False) -> EventMessage:
+    async def receive(self, timeout: typing.Optional[float] = 1000, raise_interrupt_as_exception: bool = False) -> EventMessage:
         """
         receive event with given timeout
 
@@ -2165,8 +2167,9 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
         # TODO - use raise_interrupt_as_exception
-        try:
-            while True:
+        self._stop = False
+        while not self._stop:
+            try:
                 try: 
                     await asyncio.wait_for(self._poller_lock.acquire(), timeout=timeout/1000 if timeout else None)
                 except TimeoutError:
@@ -2185,11 +2188,11 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
                         return EventMessage(raw_message)
                     except zmq.Again:
                         pass     
-        finally:
-            try:
-                self._poller_lock.release()
-            except Exception:
-                pass
+            finally:
+                try:
+                    self._poller_lock.release()
+                except Exception:
+                    pass
 
     async def interrupt(self):
         """

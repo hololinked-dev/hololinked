@@ -62,3 +62,6 @@ class Form(Schema):
             elif field in form_json:
                 setattr(form, field, form_json[field])
         return form
+    
+    def __str__(self) -> str:
+        return f"Form(href={self.href}, op={self.op}, htv_methodName={self.htv_methodName}, contentType={self.contentType})"

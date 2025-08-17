@@ -99,6 +99,8 @@ class ZMQServer(RPCServer):
         while self._run:
             try:
                 event = await self.inproc_events_proxy.receive(raise_interrupt_as_exception=True)
+                if not event:
+                    continue
                 if self.ipc_event_publisher is not None:
                     self.ipc_event_publisher.socket.send_multipart(event.byte_array)
                     # print(f"sent event to ipc publisher {event.byte_array}")
@@ -117,11 +119,7 @@ class ZMQServer(RPCServer):
         if self.tcp_server is not None:
             self.tcp_server.stop_polling()
         if self.inproc_events_proxy is not None:
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.inproc_events_proxy.interrupt())
-            except RuntimeError:
-                asyncio.run(self.inproc_events_proxy.interrupt())
+            self.inproc_events_proxy.stop()
         super().stop()
 
 

@@ -1,26 +1,30 @@
 import asyncio
 import base64
 import random
+import uuid
+import unittest
+import time
+import logging
+import requests
+from typing import Any
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any
-import unittest, time, logging, requests
-import uuid
-from hololinked.client.proxy import ObjectProxy
+
+from hololinked.utils import pep8_to_dashed_name
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
-from hololinked.core.meta import ThingMeta
 from hololinked.core.zmq.message import ServerExecutionContext, ThingExecutionContext, default_server_execution_context
 from hololinked.serializers import JSONSerializer
 from hololinked.serializers.payloads import PreserializedData, SerializableData
 from hololinked.serializers.serializers import MsgpackSerializer, PickleSerializer, BaseSerializer
-from hololinked.server.http import HTTPServer
+from hololinked.core.meta import ThingMeta
 from hololinked.core.zmq.rpc_server import RPCServer # sets loop policy, TODO: move somewhere else
+from hololinked.client.proxy import ObjectProxy
+from hololinked.client.factory import ClientFactory
+from hololinked.server.http import HTTPServer
 from hololinked.server.http.handlers import PropertyHandler, RPCHandler, ThingDescriptionHandler
 from hololinked.server.security import Argon2BasicSecurity, BcryptBasicSecurity
 from hololinked.td.security_definitions import SecurityScheme
-from hololinked.utils import pep8_to_dashed_name
-from hololinked.client.factory import ClientFactory
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing
@@ -90,10 +94,10 @@ class TestHTTPServer(TestCase):
         server = HTTPServer(log_level=logging.ERROR+10)
         for thing in [
                     OceanOpticsSpectrometer(id='test', log_level=logging.ERROR+10),
-                    # TestThing(id='test-thing', log_level=logging.ERROR+10)
+                    TestThing(id='test-thing', log_level=logging.ERROR+10)
                 ]:
             old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
-            server.add_thing(thing)
+            server.add_things(thing)
             # self.assertTrue(
             #     len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >= 
             #     len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
@@ -103,9 +107,9 @@ class TestHTTPServer(TestCase):
         # adding a metaclass does not raise error, but warns and does nothing
         old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
         for thing_meta in [OceanOpticsSpectrometer, TestThing]:
-            self.assertWarns(
-                UserWarning,
-                server.add_thing,
+            self.assertRaises(
+                ValueError,
+                server.add_things,
                 thing_meta
             )
         self.assertTrue(len(server.app.wildcard_router.rules)+len(server.router._pending_rules) == old_number_of_rules)
@@ -113,7 +117,7 @@ class TestHTTPServer(TestCase):
         # dont overwrite already given routes
         for thing in [
                     OceanOpticsSpectrometer(id='test', log_level=logging.ERROR+10),
-                    # TestThing(id='test-thing', log_level=logging.ERROR+10)
+                    TestThing(id='test-thing', log_level=logging.ERROR+10)
                 ]:
             # create new server to compute number of rules
             server = HTTPServer(log_level=logging.ERROR+10)
@@ -122,14 +126,14 @@ class TestHTTPServer(TestCase):
             server.add_property('/max-intensity/custom', OceanOpticsSpectrometer.max_intensity)
             server.add_action('/connect/custom', OceanOpticsSpectrometer.connect)
             server.add_event('/intensity/event/custom', OceanOpticsSpectrometer.intensity_measurement_event)
-            server.add_thing(thing)
+            server.add_things(thing)
             self.assertIn('/max-intensity/custom', server.router)
             self.assertIn('/connect/custom', server.router)
             self.assertIn('/intensity/event/custom', server.router)
             # check if the affordance was not added twice using the default paths while add_thing was called
-            # self.assertNotIn(f'/{pep8_to_dashed_name(OceanOpticsSpectrometer.max_intensity.name)}', server.router)
-            # self.assertNotIn(f'/{pep8_to_dashed_name(OceanOpticsSpectrometer.connect.name)}', server.router)
-            # self.assertNotIn(f'/{pep8_to_dashed_name(OceanOpticsSpectrometer.intensity_measurement_event.name)}', server.router)
+            self.assertNotIn(f'/{pep8_to_dashed_name(OceanOpticsSpectrometer.max_intensity.name)}', server.router)
+            self.assertNotIn(f'/{pep8_to_dashed_name(OceanOpticsSpectrometer.connect.name)}', server.router)
+            self.assertNotIn(f'/{pep8_to_dashed_name(OceanOpticsSpectrometer.intensity_measurement_event.name)}', server.router)
             # self.assertTrue(
             #         len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >= 
             #         len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
@@ -142,7 +146,7 @@ class TestHTTPServer(TestCase):
         server = HTTPServer(log_level=logging.ERROR+10)
         old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
 
-        thing_id = 'test-spectrometer-add-over-zmq'
+        thing_id = f'test-add-zmq-{uuid.uuid4().hex[0:8]}'
         thing = OceanOpticsSpectrometer(id=thing_id, log_level=logging.ERROR+10)
         thing.run_with_zmq_server(ZMQ_TRANSPORTS.INPROC, forked=True)
         
@@ -150,7 +154,7 @@ class TestHTTPServer(TestCase):
         server.add_action('/connect/custom', OceanOpticsSpectrometer.connect)
         server.add_event('/intensity/event/custom', OceanOpticsSpectrometer.intensity_measurement_event)
         server.register_id_for_thing(OceanOpticsSpectrometer, thing_id)   
-        server.add_thing({"INPROC": thing.id})
+        server.add_things({"INPROC": thing.id})
   
         # server.router.print_rules()
         # print(thing.properties.remote_objects.keys(), thing.actions.descriptors.keys(), thing.events.descriptors.keys())
@@ -207,13 +211,17 @@ class TestHTTPServer(TestCase):
             
             async def post(self):
                 # for exit to go through 
-                await self.handle_through_thing('invokeAction')
+                await self.handle_through_thing('invokeaction')
 
         global_config.ALLOW_PICKLE = True # allow pickle serializer for testing
-        thing_id = 'test-spectrometer-request-info'
+        thing_id = f'test-request-info-{uuid.uuid4().hex[0:8]}'
         thing = OceanOpticsSpectrometer(id=thing_id, log_level=logging.ERROR+10)
-        thing.run_with_http_server(port=8086, forked=True, property_handler=TestableRPCHandler,
-                                action_handler=TestableRPCHandler)
+        thing.run_with_http_server(
+            port=8086, 
+            forked=True, 
+            property_handler=TestableRPCHandler,
+            action_handler=TestableRPCHandler
+        )
         
         session = requests.session()
         for serializer in [JSONSerializer(), MsgpackSerializer(), PickleSerializer()]:
@@ -265,7 +273,7 @@ class TestHTTPServer(TestCase):
                 )
                 # test body
                 self.assertTrue(latest_request_info.payload.deserialize() == body)
-      
+
         self.stop_server(8086, thing_ids=[thing_id])
 
 
@@ -341,7 +349,7 @@ class TestHTTPServer(TestCase):
                 wrong_auth_headers: dict[str, str] = None    
             ):
         """Test end-to-end with authentication"""
-        thing_id = f'test-spectrometer-authenticated-end-to-end-{security_scheme.__class__.__name__.lower()}'
+        thing_id = f'test-sec-{uuid.uuid4().hex[0:8]}'
         port = 8087
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True},security_schemes=[security_scheme])
@@ -352,7 +360,7 @@ class TestHTTPServer(TestCase):
 
 
     def test_06_basic_end_to_end(self):
-        thing_id = 'test-spectrometer-end-to-end'
+        thing_id = f'test-sec-{uuid.uuid4().hex[0:8]}'
         port = 8085
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
@@ -363,7 +371,7 @@ class TestHTTPServer(TestCase):
         )
         self.stop_server(port, thing_ids=[thing_id])
 
-
+    
     def test_07_bcrypt_basic_security_end_to_end(self):
         security_scheme = BcryptBasicSecurity(
             username='someuser',
@@ -424,7 +432,7 @@ class TestHTTPServer(TestCase):
         """
         Test end-to-end with Server-Sent Events (SSE).
         """
-        thing_id = f'test-spectrometer-sse-{security_scheme.__class__.__name__.lower() if security_scheme else "no-security"}'
+        thing_id = f'test-sse-{uuid.uuid4().hex[0:8]}'
         port = 8088
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True}, 
@@ -455,7 +463,7 @@ class TestHTTPServer(TestCase):
 
 
     def test_10_forms_generation(self):
-        thing_id = 'test-spectrometer-forms-generation'
+        thing_id = f'test-forms-{uuid.uuid4().hex[0:8]}'
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=8088, config={"allow_cors": True})
         
@@ -481,7 +489,7 @@ class TestHTTPServer(TestCase):
 
 
     def test_11_object_proxy_basic(self):
-        thing_id = 'test-spectrometer-object-proxy-basic'
+        thing_id = f'test-obj-proxy-{uuid.uuid4().hex[0:8]}'
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         thing.run_with_http_server(forked=True, port=8089, config={"allow_cors": True})
         
@@ -548,7 +556,7 @@ class TestHTTPObjectProxy(TestCase):
     # with the different protocol
 
     def setUp(self):
-        thing_id = f'test-spectrometer-{uuid.uuid4().hex[0:8]}'
+        thing_id = f'test-obj-proxy-{uuid.uuid4().hex[0:8]}'
         self.thing = OceanOpticsSpectrometer(id=thing_id, serial_number='simulation', log_level=logging.ERROR+10)
         self.thing.run_with_http_server(forked=True, port=8090, config={"allow_cors": True})
         self.object_proxy = ClientFactory.http(url=f'http://localhost:8090/{thing_id}/resources/wot-td')
@@ -635,7 +643,7 @@ class TestHTTPObjectProxy(TestCase):
 
 def load_tests(loader, tests, pattern): 
     suite = unittest.TestSuite()
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPObjectProxy))
     return suite
         

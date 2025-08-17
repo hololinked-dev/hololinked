@@ -276,19 +276,25 @@ class HTTPServer(Parameterized):
             if isinstance(thing, Thing): 
                 self.router.add_thing_instance(thing)
             elif isinstance(thing, ThingMeta):
-                warnings.warn(f"ThingMeta {thing} is not a thing instance, no need to add it to the server." + 
-                            f" Just supply a thing instance to the server. skipping...", category=UserWarning)
+                raise ValueError(f"class {thing} is not a thing instance, no need to add it to the server." + 
+                            f" Just supply a thing instance to the server. skipping...")
             elif isinstance(thing, (dict, str)):
                 if isinstance(thing, str):
-                    self.router.add_zmq_thing_instance(thing)
+                    # if protocol not given, try INPROC first
+                    self.router.add_zmq_thing_instance(thing, thing, access_point='INPROC')
+                    if not self.zmq_client_pool.get_client_id_from_thing_id(thing):
+                        self.router.add_zmq_thing_instance(thing, thing, access_point='IPC')
+                    self.router._resolve_rules_per_thing_id(thing)
                 else:
                     for address, thing_id in thing.items():
-                        self.router.add_zmq_thing_instance(server_id_or_address=address, thing_id=thing_id)
+                        self.router.add_zmq_thing_instance(server_id=thing_id, thing_id=thing_id, access_point=address)
             elif issubklass(thing, ThingMeta):
-                raise TypeError(f"thing should be of type Thing, given type {type(thing)}")
+                raise TypeError(f"thing should be of type Thing, not ThingMeta")
+            else:
+                raise TypeError(f"thing should be of type Thing, unknown type given - {type(thing)}")
 
-    
-    def add_thing(self, thing: Thing | ThingMeta | dict | str) -> None:
+
+    def add_thing(self, server_id: str, thing: Thing | str, access_point: str) -> None:
         """
         Add thing to be served by the HTTP server
 
@@ -297,7 +303,7 @@ class HTTPServer(Parameterized):
         thing: str | Thing | ThingMeta
             id of the thing or the thing instance or thing class to be served
         """
-        self.add_things(thing)
+        self.router.add_zmq_thing_instance(server_id=server_id, thing_id=thing if isinstance(thing, str) else thing.id, access_point=access_point)
 
 
     def register_id_for_thing(
@@ -620,6 +626,7 @@ class ApplicationRouter:
             properties: typing.Iterable[PropertyAffordance], 
             actions: typing.Iterable[ActionAffordance], 
             events: typing.Iterable[EventAffordance],
+            thing_id: str = None
         ) -> None:
         for property in properties:
             if property in self:
@@ -660,22 +667,39 @@ class ApplicationRouter:
                 handler=self.server.event_handler
             )
         self.server.add_action(
-            URL_path='/resources/wot-td',
+            URL_path=f'/{thing_id}/resources/wot-td' if thing_id else '/resources/wot-td',
             action=next((action for action in actions if action.name == "get_thing_model"), None),
             http_method=('GET',),
             handler=ThingDescriptionHandler
         )
    
 
-    def add_thing_instance(self, thing: Thing | ThingMeta) -> None:
+    def add_thing_instance(self, thing: Thing) -> None:
         """
         internal method to add a thing instance to be served by the HTTP server. Iterates through the 
         interaction affordances and adds a route for each property, action and event.
         """
+        # Prepare affordance lists with error handling (single loop)
+        properties, actions, events = [], [], []
+        affordances = [
+            (thing.properties.remote_objects.values(), properties, "property"),
+            (thing.actions.descriptors.values(), actions, "action"),
+            (thing.events.descriptors.values(), events, "event"),
+        ]
+        for objs, target_list, affordance_type in affordances:
+            for obj in objs:
+                try:
+                    target_list.append(obj.to_affordance(thing))
+                except Exception as ex:
+                    self.server.logger.error(
+                        f"Failed to convert {affordance_type} {getattr(obj, 'name', obj)} to affordance: {ex}"
+                    )
+
         self.add_interaction_affordances(
-            [obj.to_affordance(thing) for obj in thing.properties.remote_objects.values()], 
-            [obj.to_affordance(thing) for obj in thing.actions.descriptors.values()], 
-            [obj.to_affordance(thing) for obj in thing.events.descriptors.values()],
+            properties,
+            actions,
+            events,
+            thing_id=thing.id if isinstance(thing.id, str) else None
         )
 
 
@@ -689,10 +713,20 @@ class ApplicationRouter:
         Add a thing served by ZMQ server to the HTTP server. Mostly useful for INPROC transport which behaves like a local object.  
         Iterates through the interaction affordances and adds a route for each property, action and event.
         """
-        async def update_server_with_TD(
+        run_callable_somehow(
+            self.async_add_zmq_thing_instance(
+                thing_id=thing_id,
+                server_id=server_id,
+                access_point=access_point
+            )
+        )
+
+    
+    async def async_add_zmq_thing_instance(
+                self,
+                server_id: str,
                 thing_id: str, 
-                transport: str = None,
-                socket_address: str = None
+                access_point: str = None,
             ) -> None:
             try:
                 from ...client.zmq.consumed_interactions import ZMQAction 
@@ -700,53 +734,44 @@ class ApplicationRouter:
                 # create client
                 client = AsyncZMQClient(
                             id=self.server._IP, 
-                            server_id=thing_id,
-                            handshake=False,
-                            transport=transport,
-                            socket_address=socket_address, 
+                            server_id=server_id,
+                            access_point=access_point,
                             context=self.server.zmq_client_pool.context,
                             poll_timeout=self.server.zmq_client_pool.poll_timeout,
+                            handshake=False,
                             logger=self.server.logger    
                         )
                 # connect client
-                client.handshake(timeout=10000)
-                await client.handshake_complete()
-                self.server.zmq_client_pool.register(client, thing_id)
+                client.handshake(10000)
+                await client.handshake_complete(10000)
                 # fetch TD
                 assert isinstance(Thing.get_thing_model, Action) # type definition
                 FetchTMAffordance = Thing.get_thing_model.to_affordance()
-                FetchTMAffordance._thing_id = thing_id
-                fetch_tm = ZMQAction(
+                FetchTMAffordance.override_defaults(thing_id=thing_id, name='get_thing_description')
+                fetch_td = ZMQAction(
                     resource=FetchTMAffordance,
                     sync_client=None,
                     async_client=client
                 )
-                TM = await fetch_tm.async_call() # type: typing.Dict[str, typing.Any]
+                if (isinstance(access_point, str) and len(access_point) in [3, 6]):
+                    access_point = access_point.upper() 
+                elif access_point.lower().startswith("tcp://"):
+                    access_point = "TCP"
+                TD = await fetch_td.async_call(ignore_errors=True, protocol=access_point) # type: typing.Dict[str, typing.Any]
                 # Add to server
                 self.add_interaction_affordances(
-                    [PropertyAffordance.from_TD(name, TM) for name in TM["properties"].keys()],
-                    [ActionAffordance.from_TD(name, TM) for name in TM["actions"].keys()],
-                    [EventAffordance.from_TD(name, TM) for name in TM["events"].keys()]
+                    [PropertyAffordance.from_TD(name, TD) for name in TD["properties"].keys()],
+                    [ActionAffordance.from_TD(name, TD) for name in TD["actions"].keys()],
+                    [EventAffordance.from_TD(name, TD) for name in TD["events"].keys()],
+                    thing_id=thing_id
                 )
                 # Resolve any rules that could have been locally added
                 self._resolve_rules_per_thing_id(thing_id)
+                self.server.zmq_client_pool.register(client, thing_id)
             except ConnectionError:
-                self.server.logger.warning(f"could not connect to {thing_id} using {transport or socket_address} transport")
+                self.server.logger.warning(f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}")
             except Exception as ex:
-                self.server.logger.error(f"could not connect to {thing_id} using {transport or socket_address} transport. error: {str(ex)}")
-
-        coroutines = []
-        for thing_id in thing_ids:
-            if isinstance(thing_id, str):
-                for transport in ['INPROC', 'IPC']:
-                    coroutines.append(update_server_with_TD(thing_id, transport, None))
-            elif isinstance(thing_id, dict):
-                for socket_address_or_transport, thing_id in thing_id.items():
-                    if socket_address_or_transport.startswith('tcp://'):
-                        coroutines.append(update_server_with_TD(thing_id, None, socket_address_or_transport))
-                    else:
-                        coroutines.append(update_server_with_TD(thing_id, socket_address_or_transport, None))
-        get_current_async_loop().run_until_complete(asyncio.gather(*coroutines))
+                self.server.logger.error(f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}. error: {str(ex)}")
 
 
     def get_href_for_affordance(self, affordance) -> str:
@@ -759,7 +784,6 @@ class ApplicationRouter:
                 path = str(rule.matcher.regex.pattern).rstrip('$')
                 return f"{protocol}://{socket.gethostname()}{port}{path}"
             
-    
     @property
     def basepath(self):
         protocol = "https" if self.server.ssl_context else "http"
@@ -780,6 +804,7 @@ class ApplicationRouter:
             if rule[2].get("resource", None) == affordance:
                 return rule[2]
         raise ValueError(f"affordance {affordance} not found in the application router rules")
+
 
     def print_rules(self) -> None:
         """

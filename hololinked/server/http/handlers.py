@@ -513,10 +513,14 @@ class EventHandler(BaseHandler):
         try:                        
             # if not getattr(self.resource, 'zmq_socket_address', None) or not getattr(self.resource, 'zmq_unique_identifier', None):
             #     raise ValueError("Event resource is not initialized properly, missing socket address or unique identifier")
+            if isinstance(self.resource, EventAffordance):
+                form = self.resource.retrieve_form(Operations.subscribeevent)
+            else:
+                form = self.resource.retrieve_form(Operations.observeproperty)
             event_consumer = AsyncEventConsumer(
-                id=f"{self.resource.name}|HTTPEvent|{uuid.uuid4().hex[:8]}",
+                id=f"{self.resource.name}|HTTPEventTunnel|{uuid.uuid4().hex[:8]}",
                 event_unique_identifier=f'{self.resource.thing_id}/{self.resource.name}',
-                socket_address=f'inproc://{self.resource.thing_id}/event-publisher',  # no not acceptable, TODO
+                access_point=form.href,  # no not acceptable, TODO
                 context=global_config.zmq_context(),
                 logger=self.logger,
             )
