@@ -45,7 +45,7 @@ jobs:
         run: |
           uv venv .venv 
           source .venv/bin/activate 
-          uv pip sync tests/uv.lock
+          uv sync --all-extras --no-install-project
           uv pip install coverage
 
       - name: Run unit tests and generate coverage report
