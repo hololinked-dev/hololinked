@@ -77,7 +77,7 @@ class RPCServer(BaseZMQServer):
                 id: str, 
                 things: typing.List[Thing],
                 context: zmq.asyncio.Context | None = None, 
-                transport: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.INPROC,
+                access_point: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.INPROC,
                 **kwargs: typing.Dict[str, typing.Any]
             ) -> None:
         """
@@ -90,7 +90,7 @@ class RPCServer(BaseZMQServer):
         context: Optional, zmq.asyncio.Context
             ZeroMQ async Context object to use. All sockets except those created by event publisher share this context. 
             Automatically created when None is supplied.
-        transport: ZMQ_TRANSPORTS
+        access_point: ZMQ_TRANSPORTS
             transport layer to be used for the server, default is `INPROC`
         **kwargs:
             tcp_socket_address: str
@@ -101,8 +101,8 @@ class RPCServer(BaseZMQServer):
         for thing in things:
             self.things[thing.id] = thing
 
-        if isinstance(transport, str):
-            transport = transport.upper()
+        if isinstance(access_point, str):
+            access_point = access_point.upper()
 
         if self.logger is None:
             self.logger =  get_default_logger('{}|{}|{}|{}'.format(self.__class__.__name__, 
@@ -115,14 +115,14 @@ class RPCServer(BaseZMQServer):
         self.req_rep_server = AsyncZMQServer(
                                 id=self.id, 
                                 context=self.context, 
-                                transport=transport,
+                                access_point=access_point,
                                 poll_timeout=1000,
                                 **kwargs
                             )        
         self.event_publisher = EventPublisher(
                                 id=f'{self.id}/event-publisher',
                                 context=self.context,
-                                transport=transport,
+                                access_point=access_point,
                                 **kwargs
                             )        
         self.schedulers = dict()
@@ -596,7 +596,12 @@ class RPCServer(BaseZMQServer):
         return f"RPCServer({self.id}, req-rep: {self.req_rep_server.socket_address}, pub-sub: {self.event_publisher.socket_address})"
 
 
-    def get_thing_description(self, instance: Thing, protocol: str, ignore_errors: bool = False) -> dict[str, typing.Any]:
+    def get_thing_description(self, 
+                            instance: Thing, 
+                            protocol: str, 
+                            ignore_errors: bool = False, 
+                            skip_names: list[str] = []
+                        ) -> dict[str, typing.Any]:
         """
         Get the Thing Description (TD) for a specific Thing instance.
 
@@ -610,7 +615,7 @@ class RPCServer(BaseZMQServer):
         JSON
             The Thing Description in JSON format.
         """
-        TM = instance.get_thing_model(ignore_errors=ignore_errors).json() # type: dict[str, typing.Any]
+        TM = instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json() # type: dict[str, typing.Any]
         TD = copy.deepcopy(TM)
         from ...td import PropertyAffordance, ActionAffordance, EventAffordance
         from ...td.forms import Form
@@ -890,7 +895,7 @@ class ThreadedScheduler(Scheduler):
      
 def prepare_rpc_server(
                     instance: Thing, 
-                    transports: ZMQ_TRANSPORTS, 
+                    access_points: str = ZMQ_TRANSPORTS.IPC,
                     context: zmq.asyncio.Context | None = None,
                     **kwargs
                 ) -> None:
@@ -902,7 +907,7 @@ def prepare_rpc_server(
         raise TypeError("context must be an instance of zmq.asyncio.Context")
     context = context or global_config.zmq_context()
 
-    if transports == 'INPROC' or transports == ZMQ_TRANSPORTS.INPROC:
+    if access_points == 'INPROC' or access_points == ZMQ_TRANSPORTS.INPROC:
         RPCServer(
             id=instance.id, 
             things=[instance],
@@ -915,7 +920,7 @@ def prepare_rpc_server(
             id=instance.id, 
             things=[instance],
             context=context, 
-            transports=transports, 
+            access_points=access_points,
             tcp_socket_address=kwargs.get('tcp_socket_address', None),
             logger=instance.logger
         )

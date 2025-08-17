@@ -68,11 +68,12 @@ class ZMQConsumedAffordanceMixin:
     def read_reply(self, message_id: str, timeout: int = None) -> typing.Any:
         if self._owner_inst._noblock_messages.get(message_id) != self:
             raise RuntimeError(f"Message ID {message_id} does not belong to this property.")
-        self._last_zmq_response = self._sync_zmq_client.recv_response(message_id=message_id)
-        if not self._last_zmq_response:
+        response = self._sync_zmq_client.recv_response(message_id=message_id)
+        if not response:
             raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
-        return ZMQConsumedAffordanceMixin.get_last_return_value(self, True)
-    
+        self._last_zmq_response = response
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
+
 
 class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
     
@@ -101,7 +102,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
         self._resource = resource
 
-    last_return_value = property(fget=ZMQConsumedAffordanceMixin.get_last_return_value,
+    last_return_value = property(fget=lambda self: ZMQConsumedAffordanceMixin.get_last_return_value(self, self._last_zmq_response, True),
                                 doc="cached return value of the last call to the method")
     
     def __call__(self, *args, **kwargs) -> typing.Any:
@@ -223,7 +224,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
         self._resource = resource
 
-    last_read_value = property(fget=ZMQConsumedAffordanceMixin.get_last_return_value,
+    last_read_value = property(fget=lambda self: ZMQConsumedAffordanceMixin.get_last_return_value(self, self._last_zmq_response, True),
                                 doc="cached return value of the last call to the method")
 
     def set(self, value: typing.Any) -> None:

@@ -22,7 +22,8 @@ class TestSocket(TestCase):
     def test_1_socket_creation_defaults(self):
         """check the default settings of socket creation - an IPC socket which is a ROUTER and async"""
         socket, socket_address = BaseZMQ.get_socket(
-                                                id='test-server',
+                                                server_id='test-server',
+                                                socket_id='test-server',
                                                 node_type='server',
                                                 context=zmq.asyncio.Context()
                                             )
@@ -41,7 +42,8 @@ class TestSocket(TestCase):
         """
         context = zmq.Context()
         socket, _ = BaseZMQ.get_socket(
-                                id='test-server',
+                                server_id='test-server',
+                                socket_id='test-server',
                                 node_type='server',
                                 context=context
                             )
@@ -52,7 +54,8 @@ class TestSocket(TestCase):
 
         context = zmq.asyncio.Context()
         socket, _ = BaseZMQ.get_socket(
-                                id='test-server',
+                                server_id='test-server',
+                                socket_id='test-server',
                                 node_type='server',
                                 context=context
                             )       
@@ -66,11 +69,11 @@ class TestSocket(TestCase):
         """check only three transport options are supported"""
         context = zmq.asyncio.Context()
         socket, socket_address = BaseZMQ.get_socket(
-                                        id='test-server',
+                                        server_id='test-server',
+                                        socket_id='test-server',
                                         node_type='server',
                                         context=context,
-                                        transport='TCP',
-                                        socket_address='tcp://*:5555'
+                                        access_point='tcp://*:5555'
                                     )
         for sock_addr in [socket_address, socket.getsockopt_string(zmq.LAST_ENDPOINT)]:
             self.assertTrue(sock_addr.startswith('tcp://'))
@@ -78,10 +81,11 @@ class TestSocket(TestCase):
         socket.close()
 
         socket, socket_address = BaseZMQ.get_socket(
-                                        id='test-server',
+                                        server_id='test-server',
+                                        socket_id='test-server',
                                         node_type='server',
                                         context=context,
-                                        transport='IPC',
+                                        access_point='IPC',
                                     )
        
         self.assertEqual(socket_address, socket.getsockopt_string(zmq.LAST_ENDPOINT))
@@ -90,10 +94,11 @@ class TestSocket(TestCase):
         socket.close()
 
         socket, socket_address = BaseZMQ.get_socket(
-                                        id='test-server',
+                                        server_id='test-server',
+                                        socket_id='test-server',
                                         node_type='server',
                                         context=context,
-                                        transport='INPROC',
+                                        access_point='INPROC',
                                     )        
         self.assertEqual(socket_address, socket.getsockopt_string(zmq.LAST_ENDPOINT))
         self.assertTrue(socket_address.startswith('inproc://'))
@@ -104,44 +109,50 @@ class TestSocket(TestCase):
         # Specify transport as enum and do the same tests
         context = zmq.Context()
         socket, socket_address = BaseZMQ.get_socket(
-                                        id='test-server',
+                                        server_id='test-server',
+                                        socket_id='test-server',
                                         node_type='server',
                                         context=context,
-                                        transport=ZMQ_TRANSPORTS.INPROC,
+                                        access_point=ZMQ_TRANSPORTS.INPROC,
                                     )
         self.assertTrue(socket_address.startswith('inproc://'))
         self.assertTrue(socket_address.endswith('test-server'))
         socket.close()
 
         socket, socket_address = BaseZMQ.get_socket(
-                                        id='test-server',
+                                        server_id='test-server',
+                                        socket_id='test-server',
                                         node_type='server',
                                         context=context,
-                                        transport=ZMQ_TRANSPORTS.IPC,
+                                        access_point=ZMQ_TRANSPORTS.IPC,
                                     )
         self.assertTrue(socket_address.startswith('ipc://'))
         self.assertTrue(socket_address.endswith('.ipc'))
         socket.close()
 
         socket, socket_address = BaseZMQ.get_socket(
-                                        id='test-server',
+                                        server_id='test-server',
+                                        socket_id='test-server',
                                         node_type='server',
                                         context=context,
-                                        transport=ZMQ_TRANSPORTS.TCP,
-                                        socket_address='tcp://*:5556'
+                                        access_point=ZMQ_TRANSPORTS.TCP,
                                     )
         self.assertTrue(socket_address.startswith('tcp://'))
-        self.assertTrue(socket_address.endswith(':5556'))
+        # Strip the port number from TCP address and check if it's a valid port integer
+        host, port_str = socket_address.rsplit(':', 1)
+        self.assertTrue(port_str.isdigit())
+        self.assertTrue(0 < int(port_str) < 65536)
         socket.close()
         context.term()
 
         # check that other transport options raise error
         context = zmq.asyncio.Context()
         self.assertRaises(NotImplementedError, lambda: BaseZMQ.get_socket(
-                                                                    id='test-server',
+                                                                    server_id='test-server',
+                                                                    socket_id='test-server',
                                                                     node_type='server',
                                                                     context=context,
-                                                                    transport='PUB',
+                                                                    access_point='PUB',
                                                                 ))
         context.term()
         
@@ -151,7 +162,8 @@ class TestSocket(TestCase):
         context = zmq.asyncio.Context()
 
         socket, _ = BaseZMQ.get_socket(
-                                id='test-server',
+                                server_id='test-server',
+                                socket_id='test-server',
                                 node_type='server',
                                 context=context,
                                 socket_type=zmq.ROUTER
@@ -162,7 +174,8 @@ class TestSocket(TestCase):
         socket.close()
 
         socket, _ = BaseZMQ.get_socket(
-                                id='test-server',
+                                server_id='test-server',
+                                socket_id='test-server',
                                 node_type='server',
                                 context=context,
                                 socket_type=zmq.DEALER
@@ -173,7 +186,8 @@ class TestSocket(TestCase):
         socket.close()
 
         socket, _ = BaseZMQ.get_socket(
-                                id='test-server',
+                                server_id='test-server',
+                                socket_id='test-server',
                                 node_type='server',
                                 context=context,
                                 socket_type=zmq.PUB
@@ -184,7 +198,8 @@ class TestSocket(TestCase):
         socket.close()
 
         socket, _ = BaseZMQ.get_socket(
-                                id='test-server',
+                                server_id='test-server',
+                                socket_id='test-server',
                                 node_type='server',
                                 context=context,
                                 socket_type=zmq.SUB
@@ -195,7 +210,8 @@ class TestSocket(TestCase):
         socket.close()
 
         socket, _ = BaseZMQ.get_socket(
-                                id='test-server',
+                                server_id='test-server',
+                                socket_id='test-server',
                                 node_type='server',
                                 context=context,
                                 socket_type=zmq.PAIR
@@ -206,7 +222,8 @@ class TestSocket(TestCase):
         socket.close()
 
         socket, _ = BaseZMQ.get_socket(
-                                id='test-server',
+                                server_id='test-server',
+                                socket_id='test-server',
                                 node_type='server',
                                 context=context,
                                 socket_type=zmq.PUSH
@@ -217,7 +234,8 @@ class TestSocket(TestCase):
         socket.close()
         
         socket, _ = BaseZMQ.get_socket(
-                                id='test-server',
+                                server_id='test-server',
+                                socket_id='test-server',
                                 node_type='server',
                                 context=context,
                                 socket_type=zmq.PULL

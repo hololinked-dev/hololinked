@@ -163,8 +163,8 @@ class TestRPCServerMixin(InteractionAffordanceMixin):
         cls.server = RPCServer(
                             id=cls.server_id,
                             things=[cls.thing],
-                            logger=cls.logger,
-                            context=cls.context
+                            context=cls.context,
+                            logger=cls.logger
                         )
 
     @classmethod
@@ -172,20 +172,20 @@ class TestRPCServerMixin(InteractionAffordanceMixin):
         cls.async_client = AsyncZMQClient(
                                 id=cls.client_id,
                                 server_id=cls.server_id,
-                                logger=cls.logger,
                                 context=cls.context,
-                                handshake=False,
-                                transport='INPROC'
+                                access_point='INPROC',
+                                logger=cls.logger,
+                                handshake=False
                             )
         cls.sync_client = SyncZMQClient(
                                 id=cls.client_id+'-sync',
                                 server_id=cls.server_id,
-                                logger=cls.logger,
                                 context=cls.context,
+                                access_point='INPROC',
+                                logger=cls.logger,
                                 handshake=False,
-                                transport='INPROC'
-                            ) 
-    
+                            )
+
     @classmethod
     def startServer(cls):
         cls._server_thread = threading.Thread(
@@ -415,10 +415,10 @@ class TestRPCServer(TestInprocRPCServer):
         cls.server = ZMQServer(
                             id=cls.server_id,
                             things=[cls.thing],
-                            logger=cls.logger,
                             context=cls.context,
-                            transports=['INPROC', 'IPC', 'TCP'],
-                            tcp_socket_address='tcp://*:59000'
+                            access_points=['INPROC', 'IPC', 'TCP'],
+                            tcp_socket_address='tcp://*:59000',
+                            logger=cls.logger
                         )
         
 
@@ -430,30 +430,28 @@ class TestRPCServer(TestInprocRPCServer):
                                 server_id=cls.server_id, 
                                 logger=cls.logger,
                                 handshake=False,
-                                transport='IPC'
+                                access_point='IPC'
                             )
         cls.sync_tcp_client = SyncZMQClient(
                                 id=cls.client_id+"-sync",
                                 server_id=cls.server_id, 
                                 logger=cls.logger,
                                 handshake=False,
-                                transport='TCP',
-                                socket_address='tcp://localhost:59000'
+                                access_point='tcp://localhost:59000'
                             )
         cls.async_ipc_client = AsyncZMQClient(
                                 id=cls.client_id+"-async", 
                                 server_id=cls.server_id, 
                                 logger=cls.logger,
                                 handshake=False,
-                                transport='IPC'
+                                access_point='IPC'
                             )
         cls.async_tcp_client = AsyncZMQClient(
                                 id=cls.client_id+"-async",
                                 server_id=cls.server_id, 
                                 logger=cls.logger,
                                 handshake=False,
-                                transport='TCP',
-                                socket_address='tcp://localhost:59000'
+                                access_point='tcp://localhost:59000'
                             )
 
 
@@ -868,7 +866,7 @@ class TestExposedEvents(TestRPCServerMixin):
                             things=[cls.thing],
                             logger=cls.logger,
                             context=cls.context,
-                            transports=['INPROC', 'IPC', 'TCP'],
+                            access_points=['INPROC', 'IPC', 'TCP'],
                             tcp_socket_address='tcp://*:59005'
                         )
 
@@ -882,14 +880,14 @@ class TestExposedEvents(TestRPCServerMixin):
             sync_event_client = EventConsumer(
                                     id=f"{event_affordance.thing_id}|{event_affordance.name}|sync", 
                                     event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
-                                    socket_address=cls.server.event_publisher.socket_address,
+                                    access_point=cls.server.event_publisher.socket_address,
                                     logger=cls.logger,
                                     context=cls.context
                                 )
             async_event_client = AsyncEventConsumer(
                                     id=f"{event_affordance.thing_id}|{event_affordance.name}|async", 
                                     event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
-                                    socket_address=cls.server.event_publisher.socket_address,
+                                    access_point=cls.server.event_publisher.socket_address,
                                     logger=cls.logger,
                                     context=cls.context
                                 )
@@ -898,7 +896,7 @@ class TestExposedEvents(TestRPCServerMixin):
                         sync_zmq_client=sync_event_client,
                         async_zmq_client=async_event_client,
                     )
-            setattr(self, event_name, event)
+            setattr(cls, event_name, event)
       
 
     def test_1_creation_defaults(self):
@@ -1022,13 +1020,13 @@ class TestExposedEvents(TestRPCServerMixin):
                 sync_event_client = EventConsumer(
                                         id=f"{event_affordance.thing_id}|{event_affordance.name}|sync", 
                                         event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
-                                        socket_address=publisher.socket_address.replace('*', 'localhost'),
+                                        access_point=publisher.socket_address.replace('*', 'localhost'),
                                         logger=self.logger
                                     )
                 async_event_client = AsyncEventConsumer(
                                         id=f"{event_affordance.thing_id}|{event_affordance.name}|async", 
                                         event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(event_affordance),
-                                        socket_address=publisher.socket_address.replace('*', 'localhost'),
+                                        access_point=publisher.socket_address.replace('*', 'localhost'),
                                         logger=self.logger           
                                     )
                 event._sync_zmq_client = sync_event_client
@@ -1062,14 +1060,14 @@ class TestThingRunRPCServer(TestBrokerMixin):
                                 server_id=self.thing_id, 
                                 logger=self.logger,
                                 handshake=False,
-                                transport='INPROC'
+                                access_point='INPROC'
                             )
         self.async_client = AsyncZMQClient(
                                 id=self.client_id+'async',
                                 server_id=self.thing_id, 
                                 logger=self.logger,
                                 handshake=False,
-                                transport='INPROC'
+                                access_point='INPROC'
                             )
         time.sleep(2)
 

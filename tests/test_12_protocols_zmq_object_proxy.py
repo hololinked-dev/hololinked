@@ -30,7 +30,7 @@ class TestZMQObjectProxyClient(TestCase):
 
     def test_01_creation_and_handshake(self):
         """Test the creation and handshake of the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
         self.assertIsInstance(thing, ObjectProxy)
         self.assertTrue(
                 len(thing.properties) + len(thing.actions) + len(thing.events) >=
@@ -40,7 +40,7 @@ class TestZMQObjectProxyClient(TestCase):
         
     def test_02_invoke_action(self):
         """Test the invocation of an action on the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
         self.assertIsInstance(thing, ObjectProxy)  
         # Test invoke_action method with reply
         self.assertEqual(thing.invoke_action("action_echo", fake.text(max_nb_chars=100)), fake.last)
@@ -64,7 +64,7 @@ class TestZMQObjectProxyClient(TestCase):
 
     def test_03_rwd_properties(self):
         """Test the read, write and delete of properties on the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
         self.assertIsInstance(thing, ObjectProxy)  
         # Test read_property method
         self.assertIsInstance(thing.read_property("number_prop"), (int, float))
@@ -122,7 +122,7 @@ class TestZMQObjectProxyClient(TestCase):
         
         # TD is not well defined for this yet, although both client and server separately work.
         # Test partial list of read write properties
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
         self.assertIsInstance(thing, ObjectProxy)  
         # Test read_multiple_properties method
         thing.write_multiple_properties(
@@ -152,7 +152,7 @@ class TestZMQObjectProxyClient(TestCase):
 
     def test_05_subscribe_event(self):
         """Test the subscription to an event on the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
+        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
         self.assertIsInstance(thing, ObjectProxy)
 
         results = []
@@ -170,8 +170,8 @@ class TestZMQObjectProxyClient(TestCase):
 
 
     def test_06_observe_properties(self):
-        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC")
-        self.assertIsInstance(thing, ObjectProxy)  
+        thing = ClientFactory.zmq("test-thing", "test-thing", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+        self.assertIsInstance(thing, ObjectProxy)
 
         # First check if an attribute is set on the object proxy
         self.assertIsNotNone(thing, "observable_list_prop_change_event")
@@ -257,7 +257,7 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
 
     async def test_01_creation_and_handshake(self):
         """Test the creation and handshake of the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC")
+        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
         self.assertIsInstance(thing, ObjectProxy)
         self.assertTrue(
                 len(thing.properties) + len(thing.actions) + len(thing.events) >=
@@ -265,7 +265,7 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
             )
         
     async def test_02_invoke_action(self):
-        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC")
+        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
         self.assertIsInstance(thing, ObjectProxy)  
         self.assertEqual(await thing.async_invoke_action("action_echo", fake.text(max_nb_chars=100)), fake.last)
         self.assertEqual(await thing.async_invoke_action("action_echo", fake.sentence()), fake.last)
@@ -274,7 +274,7 @@ class TestZMQObjectProxyClientAsync(AsyncTestCase):
 
     async def test_03_rwd_properties(self):
         """Test the read, write and delete of properties on the zmq object proxy client"""
-        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC")
+        thing = ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
         self.assertIsInstance(thing, ObjectProxy)  
         # Test read_property method
         self.assertIsInstance(await thing.async_read_property("number_prop"), (int, float))

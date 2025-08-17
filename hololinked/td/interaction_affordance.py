@@ -230,10 +230,26 @@ class InteractionAffordance(Schema):
         If by chance, there is additional non standard metadata to be added (i.e. also that is outside LD, or
         may not even be within the TD), they can be added here.
         """
-        pass 
-    
+        pass
 
-   
+    def override_defaults(self, **kwargs):
+        """
+        Override default values with provided keyword arguments, especially thing_id, owner name, object name etc.
+        """
+        for key, value in kwargs.items():
+            if key == 'name':
+                self._name = value
+            elif key == 'thing_id':
+                self._thing_id = value
+            elif key == 'owner':
+                self._owner = value
+            elif key == 'thing_cls':
+                self._thing_cls = value
+            elif hasattr(self, key) or key in self.model_fields:
+                setattr(self, key, value)
+
+
+
 class PropertyAffordance(DataSchema, InteractionAffordance):
     """
     Implements property affordance schema from `Property` descriptor object.

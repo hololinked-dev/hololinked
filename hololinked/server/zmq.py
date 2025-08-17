@@ -17,29 +17,28 @@ class ZMQServer(RPCServer):
                 id: str, 
                 things: typing.List["Thing"],
                 context: zmq.asyncio.Context | None = None, 
-                transports: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC,
+                access_points: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC,
                 **kwargs
             ) -> None:
         self.ipc_server = self.tcp_server = None
         self.ipc_event_publisher = self.tcp_event_publisher = self.inproc_events_proxy = None
         super().__init__(id=id, things=things, context=context, **kwargs)
 
-        if isinstance(transports, str): 
-            transports = [transports]
-        elif not isinstance(transports, list): 
-            raise TypeError(f"unsupported transport type : {type(transports)}")
-        for index, transport in enumerate(transports):
-            transports[index] = transport.upper() if isinstance(transport, str) else transport
+        if isinstance(access_points, str): 
+            access_points = [access_points]
+        elif not isinstance(access_points, list): 
+            raise TypeError(f"unsupported transport type : {type(access_points)}")
+        for index, transport in enumerate(access_points):
+            access_points[index] = transport.upper() if isinstance(transport, str) else transport
 
         tcp_socket_address = kwargs.pop('tcp_socket_address', None)
 
         # initialise every externally visible protocol          
-        if ZMQ_TRANSPORTS.TCP in transports or "TCP" in transports:
+        if ZMQ_TRANSPORTS.TCP in access_points or "TCP" in access_points:
             self.tcp_server = AsyncZMQServer(
                                 id=self.id, 
                                 context=self.context, 
-                                transport=ZMQ_TRANSPORTS.TCP,
-                                socket_address=tcp_socket_address,
+                                access_point=tcp_socket_address or ZMQ_TRANSPORTS.TCP,
                                 **kwargs
                             )        
             host, port = self.tcp_server.socket_address.rsplit(':', 1)
@@ -52,24 +51,24 @@ class ZMQServer(RPCServer):
                                             socket_address=tcp_socket_address,
                                             **kwargs
                                         )       
-        if ZMQ_TRANSPORTS.IPC in transports or "IPC" in transports: 
+        if ZMQ_TRANSPORTS.IPC in access_points or "IPC" in access_points: 
             self.ipc_server = AsyncZMQServer(
                                 id=self.id, 
                                 context=self.context, 
-                                transport=ZMQ_TRANSPORTS.IPC,
+                                access_point=ZMQ_TRANSPORTS.IPC,
                                 **kwargs
                             )        
             self.ipc_event_publisher = EventPublisher(
                                             id=f'{self.id}/event-publisher',
                                             context=self.context,
-                                            transport=ZMQ_TRANSPORTS.IPC,
+                                            access_point=ZMQ_TRANSPORTS.IPC,
                                             **kwargs
                                         )
         if self.ipc_event_publisher is not None or self.tcp_event_publisher is not None:
             self.inproc_events_proxy = AsyncEventConsumer(
                                             id=f'{self.id}/event-proxy',
                                             event_unique_identifier="",
-                                            socket_address=self.event_publisher.socket_address,
+                                            access_point=self.event_publisher.socket_address,
                                             context=self.context,
                                             **kwargs
                                         )

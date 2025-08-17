@@ -176,7 +176,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         
 
     @action()
-    def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = None):
+    def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = []):
         """
         generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object. 
         The model is a JSON that describes the object's properties, actions, events and their metadata, without the 

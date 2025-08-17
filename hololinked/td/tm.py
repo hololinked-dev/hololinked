@@ -33,7 +33,7 @@ class ThingModel(Schema):
                 instance: "Thing", 
                 allow_loose_schema: typing.Optional[bool] = False, 
                 ignore_errors: bool = False,
-                skip_names: typing.Optional[list[str]] = None
+                skip_names: typing.Optional[list[str]] = []
             ) -> None:
         super().__init__()
         self.instance = instance
@@ -117,7 +117,7 @@ class ThingModel(Schema):
             if not hasattr(self, field) or getattr(self, field) is None:
                 continue
             if field in [
-                "instance", "skip_keys", "skip_properties", "skip_actions", "skip_events",
+                "instance", "skip_keys", "skip_properties", "skip_actions", "skip_events", "skip_names",
                 "ignore_errors", "allow_loose_schema"
             ]:
                 continue

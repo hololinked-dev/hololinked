@@ -279,7 +279,11 @@ class HTTPServer(Parameterized):
                 warnings.warn(f"ThingMeta {thing} is not a thing instance, no need to add it to the server." + 
                             f" Just supply a thing instance to the server. skipping...", category=UserWarning)
             elif isinstance(thing, (dict, str)):
-                self.router.add_zmq_served_thing(thing)
+                if isinstance(thing, str):
+                    self.router.add_zmq_thing_instance(thing)
+                else:
+                    for address, thing_id in thing.items():
+                        self.router.add_zmq_thing_instance(server_id_or_address=address, thing_id=thing_id)
             elif issubklass(thing, ThingMeta):
                 raise TypeError(f"thing should be of type Thing, given type {type(thing)}")
 
@@ -611,18 +615,6 @@ class ApplicationRouter:
         return False
     
 
-    def add_thing_instance(self, thing: Thing | ThingMeta) -> None:
-        """
-        internal method to add a thing instance to be served by the HTTP server. Iterates through the 
-        interaction affordances and adds a route for each property, action and event.
-        """
-        self.add_interaction_affordances(
-            [obj.to_affordance(thing) for obj in thing.properties.remote_objects.values()], 
-            [obj.to_affordance(thing) for obj in thing.actions.descriptors.values()], 
-            [obj.to_affordance(thing) for obj in thing.events.descriptors.values()],
-        )
-        
-
     def add_interaction_affordances(
             self, 
             properties: typing.Iterable[PropertyAffordance], 
@@ -675,8 +667,24 @@ class ApplicationRouter:
         )
    
 
+    def add_thing_instance(self, thing: Thing | ThingMeta) -> None:
+        """
+        internal method to add a thing instance to be served by the HTTP server. Iterates through the 
+        interaction affordances and adds a route for each property, action and event.
+        """
+        self.add_interaction_affordances(
+            [obj.to_affordance(thing) for obj in thing.properties.remote_objects.values()], 
+            [obj.to_affordance(thing) for obj in thing.actions.descriptors.values()], 
+            [obj.to_affordance(thing) for obj in thing.events.descriptors.values()],
+        )
 
-    def add_zmq_served_thing(self, *thing_ids: dict[str, typing.Any] | str) -> None:
+
+    def add_zmq_thing_instance(
+                            self, 
+                            server_id: str,
+                            thing_id: str,
+                            access_point: str        
+                        ) -> None:
         """
         Add a thing served by ZMQ server to the HTTP server. Mostly useful for INPROC transport which behaves like a local object.  
         Iterates through the interaction affordances and adds a route for each property, action and event.
