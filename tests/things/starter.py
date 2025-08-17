@@ -52,7 +52,6 @@ def run_thing_with_zmq_server_forked(
     id: str, 
     log_level: int = logging.WARN,
     protocols: typing.List[str] = ['IPC'], 
-    tcp_socket_address: str = None,
     prerun_callback: typing.Optional[typing.Callable] = None,
     as_process: bool = True,
     done_queue: typing.Optional[multiprocessing.Queue] = None,
