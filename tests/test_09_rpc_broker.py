@@ -416,8 +416,7 @@ class TestRPCServer(TestInprocRPCServer):
                             id=cls.server_id,
                             things=[cls.thing],
                             context=cls.context,
-                            access_points=['INPROC', 'IPC', 'TCP'],
-                            tcp_socket_address='tcp://*:59000',
+                            access_points=['INPROC', 'IPC', 'tcp://*:59000'],
                             logger=cls.logger
                         )
         
@@ -866,8 +865,7 @@ class TestExposedEvents(TestRPCServerMixin):
                             things=[cls.thing],
                             logger=cls.logger,
                             context=cls.context,
-                            access_points=['INPROC', 'IPC', 'TCP'],
-                            tcp_socket_address='tcp://*:59005'
+                            access_points=['INPROC', 'IPC', 'tcp://*:59005'],
                         )
 
     @classmethod

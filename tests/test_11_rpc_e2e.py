@@ -38,8 +38,9 @@ class TestRPCEndToEnd(TestCase):
         cls.thing.rpc_server.stop()
         super().tearDownClass()
 
-    def get_client(self):
-        return ClientFactory.zmq(self.server_id, self.thing_id, "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+    @classmethod
+    def get_client(cls):
+        return ClientFactory.zmq(cls.server_id, cls.thing_id, "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
 
     def test_01_creation_and_handshake(self):
         """Test the creation and handshake of the zmq object proxy client"""
@@ -251,24 +252,27 @@ class TestRPCEndToEnd(TestCase):
 class TestRPCEndToEndAsync(AsyncTestCase):
 
     @classmethod
-    def setUpClass(self):
+    def setUpClass(cls):
+        cls.thing_id = f'test-thing-{uuid4().hex[:8]}'
+        cls.server_id = cls.thing_id
         super().setUpClass()
-        self.setUpThing()
+        cls.setUpThing()
 
     @classmethod
-    def setUpThing(self):
+    def setUpThing(cls):
         """Set up the thing for the zmq object proxy client"""
-        self.thing = TestThing(id="test-thing-async", log_level=logging.ERROR+10)
-        self.thing.run_with_zmq_server(forked=True)
-        self.thing_model = self.thing.get_thing_model(ignore_errors=True).json()
+        cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR+10)
+        cls.thing.run_with_zmq_server(forked=True)
+        cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
 
     @classmethod
     def tearDownClass(cls):
         cls.thing.rpc_server.stop()
         super().tearDownClass()
 
-    def get_client(self):
-        return ClientFactory.zmq("test-thing-async", "test-thing-async", "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
+    @classmethod
+    def get_client(cls):
+        return ClientFactory.zmq(cls.server_id, cls.thing_id, "IPC", log_level=logging.ERROR+10, ignore_TD_errors=True)
 
     async def test_01_creation_and_handshake(self):
         """Test the creation and handshake of the zmq object proxy client"""

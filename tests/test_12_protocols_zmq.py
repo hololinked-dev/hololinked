@@ -4,12 +4,12 @@ import unittest
 from hololinked.client import ClientFactory
 
 try:
-    from .test_11_rpc_e2e import TestRPCEndToEnd
-    from .utils import TestCase, TestRunner, fake, AsyncTestCase
+    from .test_11_rpc_e2e import TestRPCEndToEnd, TestRPCEndToEndAsync
+    from .utils import TestRunner
     from .things import TestThing
 except ImportError:
-    from test_11_rpc_e2e import TestRPCEndToEnd
-    from utils import TestCase, TestRunner, fake, AsyncTestCase
+    from test_11_rpc_e2e import TestRPCEndToEnd, TestRPCEndToEndAsync
+    from utils import TestRunner
     from things import TestThing
 
 
@@ -28,9 +28,26 @@ class TestZMQ_TCP(TestRPCEndToEnd):
         cls.thing.run_with_zmq_server(forked=True, access_points="tcp://*:5557")
         cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
 
-    def get_client(self):
-        return ClientFactory.zmq(self.server_id, self.thing_id, "tcp://localhost:5557", log_level=logging.ERROR+10, ignore_TD_errors=True)
-    
+    @classmethod
+    def get_client(cls):
+        return ClientFactory.zmq(cls.server_id, cls.thing_id, "tcp://localhost:5557", log_level=logging.ERROR+10, ignore_TD_errors=True)
+
+
+
+class TestZMQAsync_TCP(TestRPCEndToEndAsync):
+
+    @classmethod
+    def setUpThing(cls):
+        """Set up the thing for the zmq object proxy client"""
+        cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR+10)
+        cls.thing.run_with_zmq_server(forked=True,  access_points="tcp://*:5558")
+        cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
+
+    @classmethod
+    def get_client(cls):
+        return ClientFactory.zmq(cls.server_id, cls.thing_id, "tcp://localhost:5558", log_level=logging.ERROR+10, ignore_TD_errors=True)
+
+
 
 class TestZMQ_INPROC(TestRPCEndToEnd):
 
@@ -43,13 +60,30 @@ class TestZMQ_INPROC(TestRPCEndToEnd):
 
     def get_client(self):
         return ClientFactory.zmq(self.server_id, self.thing_id, "inproc", log_level=logging.ERROR+10, ignore_TD_errors=True)
+    
 
+
+class TestZMQAsync_INPROC(TestRPCEndToEndAsync):
+
+    @classmethod
+    def setUpThing(cls):
+        """Set up the thing for the zmq object proxy client"""
+        cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR+10)
+        cls.thing.run_with_zmq_server(forked=True,  access_points="inproc")
+        cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
+
+    @classmethod
+    def get_client(cls):
+        return ClientFactory.zmq(cls.server_id, cls.thing_id, "inproc", log_level=logging.ERROR+10, ignore_TD_errors=True)
+    
 
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestZMQ_TCP))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestZMQAsync_TCP))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestZMQ_INPROC))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestZMQAsync_INPROC))
     return suite
         
 if __name__ == '__main__':

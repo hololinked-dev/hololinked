@@ -132,13 +132,17 @@ def run_callable_somehow(method : typing.Union[typing.Callable, typing.Coroutine
     """
     run method if synchronous, or when async, either schedule a coroutine or run it until its complete
     """
-    if not (asyncio.iscoroutinefunction(method) or asyncio.iscoroutine(method)):
-        return method()
-    eventloop = get_current_async_loop()
-    if asyncio.iscoroutinefunction(method):
-        coro = method()
+    if inspect.isawaitable(method):
+        coro = method  # already a coroutine/awaitable object
+    elif callable(method):
+        result = method()  # call it
+        if inspect.isawaitable(result):
+            coro = result
+        else:
+            return result  # truly synchronous
     else:
-        coro = method
+        raise TypeError("method must be a callable or an awaitable")
+    eventloop = get_current_async_loop()
     if eventloop.is_running():    
         # task =  # check later if lambda is necessary
         eventloop.create_task(coro)
