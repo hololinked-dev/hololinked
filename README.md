@@ -6,22 +6,16 @@
 
 For those that understand, this package is a ZMQ/HTTP-RPC.
 
-[![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked)
+<!-- [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest)  --> [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked)
 [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked)
 <br>
 [![email](https://img.shields.io/badge/email%20me-brown)](mailto:vignesh.vaidyanathan@hololinked.dev) [![ways to contact me](https://img.shields.io/badge/ways_to_contact_me-brown)](https://hololinked.dev/contact)
 <br>
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked)
+<!-- [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked) -->
 [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked)
 <br>
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841)
 [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) 
-
-> **Note:**
-> Readers from WoT community and NEPHELE project, please head over to [main-next-release](https://github.com/hololinked-dev/hololinked/tree/main-next-release) branch for the latest codebase. Please also consider using the documentation at [docs.staging.hololinked.dev](https://docs.staging.hololinked.dev/design/descriptors/) for explanations. 
-
-> **⚠️ WARNING:**  
-> Currently there are discussions to donate part of the codebase to the [Web of Things](https://www.w3.org/WoT/) community. This may result in some changes to the package name (to `wotpy`) and the arrangement of features. If you are using this package, please be aware of this. Issues are also currently suspended.
 
 ### To Install
 
