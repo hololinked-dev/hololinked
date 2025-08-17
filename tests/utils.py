@@ -60,6 +60,7 @@ class AsyncTestCase(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def tearDownClass(self):
+        global_config.ZMQ_CONTEXT.term()
         print(f"\n\ntear down {self.__name__}")
 
     async def asyncSetUp(self):
