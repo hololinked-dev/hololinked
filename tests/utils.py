@@ -1,11 +1,11 @@
 import asyncio
+import zmq.asyncio
 import threading
 import typing
 import unittest
 from faker import Faker
 
-from hololinked.utils import get_current_async_loop
-
+from hololinked.config import global_config
 
 
 class TestResult(unittest.TextTestResult):
@@ -37,6 +37,8 @@ class TestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
+        global_config.ZMQ_CONTEXT = zmq.asyncio.Context() 
+        # always replace otherwise one context opens too many sockets
         print(f"----------------------------------------------------------------------")
     
     @classmethod
@@ -52,6 +54,8 @@ class AsyncTestCase(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def setUpClass(self):
+        global_config.ZMQ_CONTEXT = zmq.asyncio.Context() 
+        # always replace otherwise one context opens too many sockets
         print(f"----------------------------------------------------------------------")
 
     @classmethod
