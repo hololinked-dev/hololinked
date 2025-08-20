@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hololinked"
-version = "0.3.0"
+version = "0.3.1"
 authors = [
-    {name = "Vignesh Vaidyanathan", email = "vignesh.vaidyanathan@hololinked.dev"},
+    {name = "Vignesh Vaidyanathan", email = "admin@hololinked.dev"},
 ]
-description = "A ZMQ-based protocol-agnostic object oriented RPC tool-kit for instrument control/data acquisition or controlling generic python objects."
+description = "A ZMQ-based protocol-agnostic object oriented RPC toolkit primarily focussed for instrumentation control, data acquisition or IoT, however can be used for controlling generic python objects."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "BSD-3-Clause"}
@@ -29,7 +29,7 @@ classifiers = [
     "Topic :: System :: Hardware",
     "Development Status :: 4 - Beta"
 ]
-keywords = ["data-acquisition", "zmq-rpc", "SCADA/IoT", "Web of Things"]
+keywords = ["data-acquisition", "zmq-rpc", "SCADA", "IoT", "Web of Things", "remote data logging"]
 dependencies = [
     "argon2-cffi==23.1.0",
     "ifaddr==0.2.0",
@@ -44,7 +44,7 @@ dependencies = [
 
 [project.urls]
 Documentation = "https://hololinked.readthedocs.io/en/latest/index.html"
-Repository = "https://github.com/hololinked-dev/hololinked"  # Update with actual repository URL
+Repository = "https://github.com/hololinked-dev/hololinked"
 
 [tool.setuptools]
 packages = [
@@ -64,17 +64,17 @@ dev = [
     "ConfigParser==7.1.0",
     "fastjsonschema==2.20.0",
     "ipython==8.12.3",
-    "numpy==2.1.2",
-    "pandas==2.2.3",
-    "faker>=37.5.0",
     "serpent==1.41",
+    "numpy>=2.0.0",
+    "pandas==2.2.3",
+    "faker==37.5.0",
     "bcrypt==4.3.0"
 ]
 test = [
     "requests==2.32.3",
-    "numpy>=2.0.0",
-    "faker>=37.5.0",
     "coverage==7.8.0",
+    "numpy>=2.0.0",
+    "faker==37.5.0",
     "bcrypt==4.3.0",
     "fastjsonschema==2.20.0"
 ]   
