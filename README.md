@@ -41,7 +41,7 @@ from hololinked.core.properties import String, Integer, Number, List
 from seabreeze.spectrometers import Spectrometer # a device driver
 ```
 
-#### Definition of one's own hardware controlling class
+#### Definition of one's own Hardware Controlling Class
 
 subclass from `Thing` class to make a "network accessible Thing":
 
@@ -52,7 +52,7 @@ class OceanOpticsSpectrometer(Thing):
     """
 ```
 
-#### Instantiating properties
+#### Instantiating Properties
 
 Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc. 
 or one may define one's own using [pydantic or JSON schema](https://docs.staging.hololinked.dev/howto/articles/properties/#schema-constrained-property). To create properties:
@@ -130,9 +130,9 @@ what the property represents and how to interact with it from somewhere else (in
 
 For example, the `Eclipse ThingWeb` [node-wot](https://github.com/eclipse-thingweb/node-wot) supports this feature to produce a HTTP(s) client in javascript that can issue `readProperty("integration_time")` and `writeProperty("integration_time", 1000)` to read and write this property.
 
-[property full documentation](https://docs.staging.hololinked.dev/howto/articles/properties/), [try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
+[![Property Documentation](https://img.shields.io/badge/Property%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.staging.hololinked.dev/howto/articles/properties/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=playstation)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
-#### Specify methods as actions
+#### Specify Methods as Actions
 
 decorate with `action` decorator on a python method to claim it as a network accessible method:
 
@@ -184,9 +184,9 @@ In WoT Terminology, again, such a method becomes specified as an action affordan
 
 > input and output schema ("input" field above which describes the argument type `serial_number`) are optional and are discussed in docs
 
-[actions full documentation](https://docs.staging.hololinked.dev/howto/articles/actions/), [try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
+[![Actions Documentation](https://img.shields.io/badge/Actions%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.staging.hololinked.dev/howto/articles/actions/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=playstation)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
-#### Defining and pushing events
+#### Defining and Pushing Events
 
 create a named event using `Event` object that can push any arbitrary data:
 
@@ -268,11 +268,11 @@ what the event represents and how to subscribe to it) with subprotocol SSE:
 
 > data schema ("data" field above which describes the event payload) are optional and discussed later
 
-[events full documentation](https://docs.staging.hololinked.dev/howto/articles/events/), [try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
+[![Events Documentation](https://img.shields.io/badge/Events%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.staging.hololinked.dev/howto/articles/events/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=playstation)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through any supported protocol including HTTP server sent events.
 
-#### Start with Protocol Server
+#### Start with a Protocol Server
 
 One can start the Thing object with one or more protocols simultaneously. Currently HTTP & ZMQ is supported. With HTTP server:
 
@@ -302,11 +302,24 @@ if __name__ == '__main__':
     OceanOpticsSpectrometer(
         id='spectrometer',
         serial_number='S14155',
-        log_level=logging.DEBUG
-    ).run_with_zmq_server(
+    ).run(
         access_points=['IPC', 'tcp://*:9999']
     )
     # both interprocess communication & TCP
+```
+
+Multiple:
+
+```python
+
+if __name__ == '__main__':
+    OceanOpticsSpectrometer(
+        id='spectrometer',
+        serial_number='S14155',
+    ).run(
+        access_points=['IPC']
+    )
+    # HTTP & ZMQ Interprocess Communication
 ```
 
 - [examples repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
