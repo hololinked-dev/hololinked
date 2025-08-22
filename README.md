@@ -427,7 +427,7 @@ thing.unobserve_property("integration_time")
 ```
 </details>
 
-[![Python Client Docs](https://img.shields.io/badge/Resources-Get%20Started-orange?logo=book)]()
+[![Python Client Docs](https://img.shields.io/badge/python%20ClientDocs%20-orange?logo=book)](https://docs.staging.hololinked.dev)
 
 #### Javascript Clients
 
