@@ -6,11 +6,12 @@
 
 As a beginner, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, show the data in a dashboard, provide a PyQt GUI or run automated scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 
-If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice as it follows the principles of [W3C Web of Things](https://www.w3.org/WoT/). One can expect a consistent API and flexible bidirectional message flow for interacting with your devices, irrespective of the underlying protocol. 
+If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice as it follows the principles of [W3C Web of Things](https://www.w3.org/WoT/). One can expect a consistent API and flexible bidirectional message flow for interacting with your devices, irrespective of the underlying protocol.
 
 This package is a protocol agnostic RPC framework, currently supporting HTTP & ZMQ, but other protocols like MQTT, websockets are on the way. You can also implement your own protocol bindings. See [use cases table](#use-cases-table).
 
-<!-- [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest)  --> 
+<!-- [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest)  -->
+
 [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev)
 
 ## To Install
@@ -54,7 +55,7 @@ class OceanOpticsSpectrometer(Thing):
 
 ### Instantiating Properties
 
-Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc. 
+Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc.
 or one may define one's own using [pydantic or JSON schema](https://docs.staging.hololinked.dev/howto/articles/properties/#schema-constrained-property). To create properties:
 
 ```python
@@ -62,9 +63,9 @@ or one may define one's own using [pydantic or JSON schema](https://docs.staging
 class OceanOpticsSpectrometer(Thing):
     """class doc"""
 
-    serial_number = String(default=None, allow_None=True, 
+    serial_number = String(default=None, allow_None=True,
                         doc="serial number of the spectrometer to connect/or connected")
-   
+
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True,
                             doc="integration time of measurement in milliseconds")
 
@@ -141,7 +142,7 @@ decorate with `action` decorator on a python method to claim it as a network acc
 class OceanOpticsSpectrometer(Thing):
 
     @action(input_schema={"type": "object", "properties": {"serial_number": {"type": "string"}}})
-    def connect(self, serial_number = None): # by default invoked on HTTP POST 
+    def connect(self, serial_number = None): # by default invoked on HTTP POST
         """connect to spectrometer with given serial number"""
         if serial_number is not None:
             self.serial_number = serial_number
@@ -326,7 +327,7 @@ if __name__ == '__main__':
 
 [![Resources to Get Started](https://img.shields.io/badge/Resources-Get%20Started-orange?logo=book)](#resources)
 
-## Client Side Applications 
+## Client Side Applications
 
 To compose client objects, the JSON description of the properties, actions and events are used, which are summarized into a [Thing Description](https://www.w3.org/TR/wot-thing-description11). The following code would be possible:
 
@@ -338,8 +339,8 @@ Import the `ClientFactory` and create an instance for the desired protocol:
 from hololinked.client import ClientFactory
 
 # for HTTP
-thing = ClientFactory.http(url="http://localhost:8000/spectrometer/resources/wot-td") 
-# For HTTP, one needs to append `/resource/wot-td` to the base URL to construct the full URL as `http(s)://<hostname>:<port>/<thing_id>/resources/wot-td`. At this endpoint, the Thing Description will be autogenerated and loaded to compose a client. 
+thing = ClientFactory.http(url="http://localhost:8000/spectrometer/resources/wot-td")
+# For HTTP, one needs to append `/resource/wot-td` to the base URL to construct the full URL as `http(s)://<hostname>:<port>/<thing_id>/resources/wot-td`. At this endpoint, the Thing Description will be autogenerated and loaded to compose a client.
 
 # zmq IPC
 thing = ClientFactory.zmq(thing_id='spectrometer', access_point='IPC')
@@ -358,12 +359,15 @@ thing.read_property("integration_time")
 # or use dot operator
 thing.integration_time
 ```
+
 within an async function:
+
 ```python
 async def func():
     await thing.async_read_property("integration_time")
     # dot operator not supported
 ```
+
 </details>
 
 <details open> 
@@ -374,7 +378,9 @@ thing.write_property("integration_time", 2000)
 # or use dot operator
 thing.integration_time = 2000
 ```
+
 within an async function:
+
 ```python
 async def func():
     await thing.async_write_property("integration_time", 2000)
@@ -389,12 +395,15 @@ thing.invoke_action("connect", serial_number="S14155")
 # or use dot operator
 thing.connect(serial_number="S14155")
 ```
+
 within an async function:
+
 ```python
 async def func():
     await thing.async_invoke_action("connect", serial_number="S14155")
     # dot operator not supported
 ```
+
 </details>
 
 <details open>
@@ -410,6 +419,7 @@ There is no async subscribe, as events by nature appear at arbitrary times only 
 ```python
 thing.unsubscribe_event("intensity_measurement_event")
 ```
+
 </details>
 
 <details open>
@@ -425,6 +435,7 @@ Only observable properties (property where `observable` was set to `True`) can b
 ```python
 thing.unobserve_property("integration_time")
 ```
+
 </details>
 
 [![Python Client Docs](https://img.shields.io/badge/Python%20Client%20Docs-Read%20More-blue?logo=readthedocs)](https://staging.docs.hololinked.dev)
@@ -450,12 +461,14 @@ servient.start().then((WoT) => {
         })
 )});
 ```
+
 If you're using HTTPS, just make sure the server certificate is valid or trusted by the client.
 
 ```js
 const HttpsClientFactory = require("@node-wot/binding-http").HttpsClientFactory;
-servient.addClientFactory(new HttpsClientFactory({ allowSelfSigned : true }))
+servient.addClientFactory(new HttpsClientFactory({ allowSelfSigned: true }));
 ```
+
 (example [here](https://gitlab.com/hololinked/examples/clients/node-clients/phymotion-controllers-app/-/blob/main/src/App.tsx?ref_type=heads#L77))
 
 To issue operations:
@@ -466,6 +479,7 @@ To issue operations:
 `thing.readProperty("integration_time").then(async(interactionOutput) => {
   console.log("Integration Time:", await interactionOutput.value());
 });`
+
 </details>
 <details open> 
 <summary>Write Property</summary>
@@ -473,6 +487,7 @@ To issue operations:
 `thing.writeProperty("integration_time", 2000).then(() => {
   console.log("Integration Time updated");
 });`
+
 </details>
 <details open>
 <summary>Invoke Action</summary>
@@ -480,6 +495,7 @@ To issue operations:
 `thing.invokeAction("connect", { serial_number: "S14155" }).then(() => {
   console.log("Device connected");
 });`
+
 </details>
 <details open>
 <summary>Subscribe to Event</summary>
@@ -487,17 +503,18 @@ To issue operations:
 `thing.subscribeEvent("intensity_measurement_event", async (interactionOutput) => {
   console.log("Received event:", await interactionOutput.value());
 });`
+
 </details>
 
 <details>
 <summary>Links to React Examples</summary>
-In React, the Thing Description may be fetched inside `useEffect` hook, the client passed via `useContext` hook and the individual operations can be performed in their own callbacks attached to user elements.   
+In React, the Thing Description may be fetched inside `useEffect` hook, the client passed via `useContext` hook and the individual operations can be performed in their own callbacks attached to user elements.
 
-- [fetch TD](https://gitlab.com/hololinked/examples/clients/node-clients/phymotion-controllers-app/-/blob/main/src/App.tsx?ref_type=heads#L96) 
+- [fetch TD](https://gitlab.com/hololinked/examples/clients/node-clients/phymotion-controllers-app/-/blob/main/src/App.tsx?ref_type=heads#L96)
 - [issue operations](https://gitlab.com/hololinked/examples/clients/node-clients/phymotion-controllers-app/-/blob/main/src/components/movements.tsx?ref_type=heads#L54)
 </details>
- 
-## Resources 
+
+## Resources
 
 - [examples repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/hololinked-dev/thing-control-panel) - view & interact with your object's actions, properties and events.
@@ -507,11 +524,12 @@ In React, the Thing Description may be fetched inside `useEffect` hook, the clie
 
 ## Contributing
 
-See [organization info](https://github.com/hololinked-dev) for details regarding contributing to this package. There is:
-- [good first issue](https://github.com/hololinked-dev/hololinked/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
+See [organization info](https://github.com/hololinked-dev) for details regarding contributing to this package. There are:
+
+- [good first issues](https://github.com/hololinked-dev/hololinked/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 - [discord group](https://discord.com/invite/kEz87zqQXh)
-- [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and 
-- [project planning](https://github.com/orgs/hololinked-dev/projects/4)  to discuss activities around this repository. 
+- [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and
+- [project planning](https://github.com/orgs/hololinked-dev/projects/4) to discuss activities around this repository.
 
 ### Development with UV
 
@@ -539,12 +557,14 @@ uv pip install -e ".[dev,test]"
 To run the tests with uv:
 
 In linux:
+
 ```bash
 uv run --active coverage run -m unittest discover -s tests -p 'test_*.py'
 uv run --active coverage report -m
 ```
 
 In windows:
+
 ```bash
 python -m unittest
 ```
@@ -555,11 +575,46 @@ python -m unittest
 - database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties when the object dies and restarts.
 - auto-generate Thing Description for Web of Things applications.
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain comptibility with Javascript (MessagePack may be added later). Default is JSON serializer based on msgspec.
-- asyncio compatible 
+- asyncio compatible
 
 ## Use Case Table
 
-- choose from multiple ZeroMQ transport methods which offers some possibilities like the following without changing the code:
-  - expose only a dashboard or web page on the network without exposing the hardware itself
-  - run direct ZMQ-TCP server without HTTP details
-  - serve multiple objects with the same HTTP server, run HTTP Server & python object in separate processes or the same process
+<table>
+  <tr>
+    <th>Protocol</th>
+    <th>Use Case</th>
+    <th>Operations</th>
+  </tr>
+  <tr>
+    <td>HTTP</td>
+    <td>Web Apps</td>
+    <td rowspan="4">
+        <code>readproperty</code>, 
+        <code>writeproperty</code>, 
+        <code>observeproperty</code>, 
+        <code>unobserveproperty</code>, 
+        <code>invokeaction</code>, 
+        <code>subscribeevent</code>,
+        <code>unsubscribeevent</code>
+        <br>
+        properties and actions can be operated in a oneway and noblock manner as well
+    </td>
+  </tr>
+  <tr>
+    <td>ZMQ TCP</td>
+    <td>Networked Control Systems, subnet protected containerized apps like in Kubernetes</td>
+  </tr>
+  <tr>
+    <td>ZMQ IPC</td>
+    <td>Desktop Applications, Python Dashboards without exposing device API directly on network</td>
+  </tr>
+  <tr>
+    <td>ZMQ INPROC</td>
+    <td>High Speed Desktop Applications (not exposed on network)</td>
+  </tr>
+  <tr>
+    <td>MQTT</td>
+    <td>Upcoming (October 2025)</td>
+    <td><code>subscribeevent</code>, <code>unsubscribeevent</code></td>
+  </tr>
+</table>
