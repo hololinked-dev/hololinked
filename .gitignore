@@ -16,7 +16,7 @@ tests/run-unittest.bat
 # comment tests until good organisation comes about
 
 # vs-code 
-.vscode/
+.vscode/launch.json
 .vs/
 
 # zmq 
