@@ -615,6 +615,11 @@ python -m unittest
   <tr>
     <td>MQTT</td>
     <td>Upcoming (October 2025)</td>
-    <td><code>subscribeevent</code>, <code>unsubscribeevent</code></td>
+    <td>
+        <code>observeproperty</code>, 
+        <code>unobserveproperty</code>, 
+        <code>subscribeevent</code>, 
+        <code>unsubscribeevent</code>
+    </td>
   </tr>
 </table>
