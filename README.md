@@ -387,12 +387,28 @@ async def func():
 
 ```python
 
-thing.subscribeEvent("intensity_measurement_event", lambda value: print(value))
+thing.subscribe_event("intensity_measurement_event", callbacks=lambda value: print(value))
 ```
 
-There is no async unsubscribe, although events can asynchronously listened and callbacks can be asynchronously invoked. Please refer documentation. To unsubscribe:
+There is no async subscribe, as events by nature appear at arbitrary times only when pushed by the server. Yet, events can be asynchronously listened and callbacks can be asynchronously invoked. Please refer documentation. To unsubscribe:
+
+```python
+thing.unsubscribe_event("intensity_measurement_event")
 ```
-thing.unsubscribeEvent("intensity_measurement_event")
+</details>
+
+<details open>
+<summary>Observe Property</summary>
+
+```python
+
+thing.observe_property("integration_time", callbacks=lambda value: print(value))
+```
+
+Only observable properties (property where `observable` was set to `True`) can be observed. To unobserve:
+
+```python
+thing.unobserve_property("integration_time")
 ```
 </details>
 
