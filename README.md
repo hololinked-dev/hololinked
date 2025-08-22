@@ -514,6 +514,10 @@ In React, the Thing Description may be fetched inside `useEffect` hook, the clie
 - [issue operations](https://gitlab.com/hololinked/examples/clients/node-clients/phymotion-controllers-app/-/blob/main/src/components/movements.tsx?ref_type=heads#L54)
 </details>
 
+<br>
+
+[![node-wot docs](https://img.shields.io/badge/nodewot%20docs-Read%20More-blue?logo=JavaScript)](https://thingweb.io/docs/node-wot/API)
+
 ## Resources
 
 - [examples repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
