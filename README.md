@@ -2,27 +2,25 @@
 
 ### Description
 
-`hololinked` is a beginner-friendly pythonic tool suited for instrumentation control and data acquisition over network (a.k.a IoT & SCADA).
+`hololinked` is a beginner-friendly pythonic tool suited for instrumentation control and data acquisition over network (IoT & SCADA).
 
-As a beginner, you have a requirement to control and capture data from your hardware/instrumentation, say in your electronics or science lab, show the data in a dashboard, provide a PyQt GUI or run automated or jupyter scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
+As a beginner, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, show the data in a dashboard, provide a PyQt GUI or run automated scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 
-If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice as it follows the principles of [W3C Web of Things](https://www.w3.org/WoT/). It provides a consistent API and very flexible bidirectional message flow for interacting with your devices, irrespective of the underlying protocol. This package is a protocol agnostic RPC framework, currently supporting HTTP & ZMQ. Other protocols like MQTT, CoAP, websockets are on the way. You can also implement your own protocol bindings. See [use cases table](#use-cases-table).
+If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice as it follows the principles of [W3C Web of Things](https://www.w3.org/WoT/). One can expect a consistent API and flexible bidirectional message flow for interacting with your devices, irrespective of the underlying protocol. 
 
-<!-- [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest)  --> [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked)
-[![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked)
-[![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked)
+This package is a protocol agnostic RPC framework, currently supporting HTTP & ZMQ, but other protocols like MQTT, websockets are on the way. You can also implement your own protocol bindings. See [use cases table](#use-cases-table).
+
+<!-- [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest)  --> 
+[![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) 
 <br>
-[![email](https://img.shields.io/badge/email%20me-brown)](mailto:vignesh.vaidyanathan@hololinked.dev) [![ways to contact me](https://img.shields.io/badge/ways_to_contact_me-brown)](https://hololinked.dev/contact)
-<br>
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841)
-[![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) 
+[![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev)
 
 ### To Install
 
 From pip - `pip install hololinked` <br>
 From conda - `conda install -c conda-forge hololinked`
 
-Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env `hololinked.yml` or `uv.lock` can also help to setup all dependencies.
+Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env `hololinked.yml` or uv environment `uv.lock` can also help to setup all dependencies.
 
 ### Usage/Quickstart
 
@@ -130,11 +128,12 @@ Those familiar with Web of Things (WoT) terminology may note that these properti
 ```
 
 If you are **not familiar** with Web of Things or the term "property affordance", consider the above JSON as a description of
-what the property represents and how to interact with it from somewhere else. Such a JSON is both human-readable, yet consumable by any application that may use the property - say, a client provider to create a client object to interact with the property or a GUI application to autogenerate a suitable input field for this property.
+what the property represents and how to interact with it from somewhere else (in this case, over HTTP). Such a JSON is both human-readable, yet consumable by any application that may use the property - say, a client provider to create a client object to interact with the property or a GUI application to autogenerate a suitable input field for this property.
 
 For example, the `Eclipse ThingWeb` [node-wot](https://github.com/eclipse-thingweb/node-wot) supports this feature to produce a HTTP(s) client in javascript that can issue `readProperty("integration_time")` and `writeProperty("integration_time", 1000)` to read and write this property.
 
 [Property Full Documentation](https://docs.staging.hololinked.dev/howto/articles/properties/)
+[try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 #### Specify methods as actions
 
@@ -160,8 +159,7 @@ class OceanOpticsSpectrometer(Thing):
 
 Methods that are neither decorated with action decorator nor acting as getters-setters of properties remain as plain python methods and are **not** accessible on the network.
 
-In WoT Terminology, again, such a method becomes specified as an action affordance (or a description of what the action represents
-and how to interact with it):
+In WoT Terminology, again, such a method becomes specified as an action affordance (or a description of what the action represents and how to interact with it):
 
 ```JSON
 "connect": {
@@ -190,6 +188,7 @@ and how to interact with it):
 > input and output schema ("input" field above which describes the argument type `serial_number`) are optional and are discussed in docs
 
 [Actions Full Documentation](https://docs.staging.hololinked.dev/howto/articles/actions/)
+[try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 #### Defining and pushing events
 
@@ -239,7 +238,7 @@ class OceanOpticsSpectrometer(Thing):
 Events can stream live data without polling or push data to a client whose generation in time is uncontrollable.
 
 In WoT Terminology, such an event becomes specified as an event affordance (or a description of
-what the event represents and how to subscribe to it) with subprotocol SSE (HTTP-SSE):
+what the event represents and how to subscribe to it) with subprotocol SSE:
 
 ```JSON
 "intensity_measurement_event": {
@@ -274,8 +273,9 @@ what the event represents and how to subscribe to it) with subprotocol SSE (HTTP
 > data schema ("data" field above which describes the event payload) are optional and discussed later
 
 [Full Documentation](https://docs.staging.hololinked.dev/howto/articles/events/)
+[try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
-Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through ZMQ and HTTP SSE.
+Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through any supported protocol including HTTP server sent events.
 
 To start the Thing, a configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object:
 
@@ -300,7 +300,7 @@ if __name__ == '__main__':
     # both interprocess communication & TCP, no HTTP
 ```
 
-##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.
+> The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.
 
 - [examples repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/hololinked-dev/thing-control-panel) - view & interact with your object's actions, properties and events.
