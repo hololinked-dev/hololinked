@@ -1,6 +1,6 @@
 # hololinked - Pythonic Object-Oriented Supervisory Control & Data Acquisition / Internet of Things
 
-### Description
+## Description
 
 `hololinked` is a beginner-friendly pythonic tool suited for instrumentation control and data acquisition over network (IoT & SCADA).
 
@@ -13,14 +13,14 @@ This package is a protocol agnostic RPC framework, currently supporting HTTP & Z
 <!-- [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest)  --> 
 [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev)
 
-### To Install
+## To Install
 
 From pip - `pip install hololinked` <br>
 From conda - `conda install -c conda-forge hololinked`
 
 Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env `hololinked.yml` or uv environment `uv.lock` can also help to setup all dependencies.
 
-### Usage/Quickstart
+## Usage/Quickstart
 
 (As mentioned earlier) `hololinked` is compatible with the [W3C Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software.
 Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
@@ -32,7 +32,7 @@ Each device or thing can be controlled systematically when their design in softw
 
 For example, consider an optical spectrometer, the following code is possible:
 
-#### Import Statements
+### Import Statements
 
 ```python
 
@@ -41,7 +41,7 @@ from hololinked.core.properties import String, Integer, Number, List
 from seabreeze.spectrometers import Spectrometer # a device driver
 ```
 
-#### Definition of one's own Hardware Controlling Class
+### Definition of one's own Hardware Controlling Class
 
 subclass from `Thing` class to make a "network accessible Thing":
 
@@ -52,7 +52,7 @@ class OceanOpticsSpectrometer(Thing):
     """
 ```
 
-#### Instantiating Properties
+### Instantiating Properties
 
 Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc. 
 or one may define one's own using [pydantic or JSON schema](https://docs.staging.hololinked.dev/howto/articles/properties/#schema-constrained-property). To create properties:
@@ -132,7 +132,7 @@ For example, the `Eclipse ThingWeb` [node-wot](https://github.com/eclipse-thingw
 
 [![Property Documentation](https://img.shields.io/badge/Property%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.staging.hololinked.dev/howto/articles/properties/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=python)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
-#### Specify Methods as Actions
+### Specify Methods as Actions
 
 decorate with `action` decorator on a python method to claim it as a network accessible method:
 
@@ -186,7 +186,7 @@ In WoT Terminology, again, such a method becomes specified as an action affordan
 
 [![Actions Documentation](https://img.shields.io/badge/Actions%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.staging.hololinked.dev/howto/articles/actions/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=python)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
-#### Defining and Pushing Events
+### Defining and Pushing Events
 
 create a named event using `Event` object that can push any arbitrary data:
 
@@ -272,7 +272,7 @@ what the event represents and how to subscribe to it) with subprotocol SSE:
 
 Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through any supported protocol including HTTP server sent events.
 
-#### Start with a Protocol Server
+### Start with a Protocol Server
 
 One can start the Thing object with one or more protocols simultaneously. Currently HTTP & ZMQ is supported. With HTTP server:
 
@@ -326,11 +326,11 @@ if __name__ == '__main__':
 
 [![Resources to Get Started](https://img.shields.io/badge/Resources-Get%20Started-orange?logo=book)](#resources)
 
-### Client Side Applications 
+## Client Side Applications 
 
 To compose client objects, the JSON description of the properties, actions and events are used, which are summarized into a [Thing Description](https://www.w3.org/TR/wot-thing-description11). The following code would be possible:
 
-#### Python Clients
+### Python Clients
 
 Import the `ClientFactory` and create an instance for the desired protocol:
 
@@ -429,7 +429,7 @@ thing.unobserve_property("integration_time")
 
 [![Python Client Docs](https://img.shields.io/badge/Python%20Client%20Docs-Read%20More-blue?logo=readthedocs)](https://staging.docs.hololinked.dev)
 
-#### Javascript Clients
+### Javascript Clients
 
 Similary, one could consume the Thing Description in a Node.js script using [node-wot](https://github.com/eclipse-thingweb/node-wot):
 
@@ -490,14 +490,14 @@ To issue operations:
 </details>
 
 <details>
-<summary>Links to Examples</summary>
+<summary>Links to React Examples</summary>
 In React, the Thing Description may be fetched inside `useEffect` hook, the client passed via `useContext` hook and the individual operations can be performed in their own callbacks attached to user elements.   
 
 - [fetch TD](https://gitlab.com/hololinked/examples/clients/node-clients/phymotion-controllers-app/-/blob/main/src/App.tsx?ref_type=heads#L96) 
 - [issue operations](https://gitlab.com/hololinked/examples/clients/node-clients/phymotion-controllers-app/-/blob/main/src/components/movements.tsx?ref_type=heads#L54)
 </details>
  
-### Resources 
+## Resources 
 
 - [examples repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/hololinked-dev/thing-control-panel) - view & interact with your object's actions, properties and events.
@@ -505,20 +505,19 @@ In React, the Thing Description may be fetched inside `useEffect` hook, the clie
 
 > You may use a script deployment/automation tool to remote stop and start servers, in an attempt to remotely control your hardware scripts.
 
-### Contributing
-
-> The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.
+## Contributing
 
 See [organization info](https://github.com/hololinked-dev) for details regarding contributing to this package. There is:
+- [good first issue](https://github.com/hololinked-dev/hololinked/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 - [discord group](https://discord.com/invite/kEz87zqQXh)
 - [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and 
 - [project planning](https://github.com/orgs/hololinked-dev/projects/4)  to discuss activities around this repository. 
 
-#### Development with UV
+### Development with UV
 
 One can setup a development environment with [uv](https://docs.astral.sh/uv/) as follows:
 
-###### Setup Development Environment
+##### Setup Development Environment
 
 1. Install uv if you don't have it already: https://docs.astral.sh/uv/getting-started/installation/
 2. Create and activate a virtual environment:
@@ -535,7 +534,7 @@ uv pip install -e .
 uv pip install -e ".[dev,test]"
 ```
 
-###### Running Tests
+##### Running Tests
 
 To run the tests with uv:
 
@@ -550,16 +549,17 @@ In windows:
 python -m unittest
 ```
 
-### Currently Supported
+## Currently Supported Features
 
 - control method execution and property write with a custom finite state machine.
 - database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties when the object dies and restarts.
 - auto-generate Thing Description for Web of Things applications.
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain comptibility with Javascript (MessagePack may be added later). Default is JSON serializer based on msgspec.
-- asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async
+- asyncio compatible 
+
+## Use Case Table
+
 - choose from multiple ZeroMQ transport methods which offers some possibilities like the following without changing the code:
   - expose only a dashboard or web page on the network without exposing the hardware itself
   - run direct ZMQ-TCP server without HTTP details
   - serve multiple objects with the same HTTP server, run HTTP Server & python object in separate processes or the same process
- 
-Again, please check examples or the code for explanations. Documentation is being actively improved. 
