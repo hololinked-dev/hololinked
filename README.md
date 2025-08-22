@@ -11,9 +11,7 @@ If you are a web developer or an industry professional looking for a web standar
 This package is a protocol agnostic RPC framework, currently supporting HTTP & ZMQ, but other protocols like MQTT, websockets are on the way. You can also implement your own protocol bindings. See [use cases table](#use-cases-table).
 
 <!-- [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest)  --> 
-[![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) 
-<br>
-[![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev)
+[![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev)
 
 ### To Install
 
@@ -132,8 +130,7 @@ what the property represents and how to interact with it from somewhere else (in
 
 For example, the `Eclipse ThingWeb` [node-wot](https://github.com/eclipse-thingweb/node-wot) supports this feature to produce a HTTP(s) client in javascript that can issue `readProperty("integration_time")` and `writeProperty("integration_time", 1000)` to read and write this property.
 
-[Property Full Documentation](https://docs.staging.hololinked.dev/howto/articles/properties/)
-[try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
+[property full documentation](https://docs.staging.hololinked.dev/howto/articles/properties/), [try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 #### Specify methods as actions
 
@@ -187,8 +184,7 @@ In WoT Terminology, again, such a method becomes specified as an action affordan
 
 > input and output schema ("input" field above which describes the argument type `serial_number`) are optional and are discussed in docs
 
-[Actions Full Documentation](https://docs.staging.hololinked.dev/howto/articles/actions/)
-[try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
+[actions full documentation](https://docs.staging.hololinked.dev/howto/articles/actions/), [try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 #### Defining and pushing events
 
@@ -272,41 +268,50 @@ what the event represents and how to subscribe to it) with subprotocol SSE:
 
 > data schema ("data" field above which describes the event payload) are optional and discussed later
 
-[Full Documentation](https://docs.staging.hololinked.dev/howto/articles/events/)
-[try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
+[events full documentation](https://docs.staging.hololinked.dev/howto/articles/events/), [try it out](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through any supported protocol including HTTP server sent events.
 
-To start the Thing, a configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object:
+#### Start with Protocol Server
+
+One can start the Thing object with one or more protocols simultaneously. Currently HTTP & ZMQ is supported. With HTTP server:
 
 ```python
 import ssl, os, logging
-from multiprocessing import Process
-from hololinked.server import HTTPServer
 
 if __name__ == '__main__':
-    ssl_context = ssl.SSLContext(protocol = ssl.PROTOCOL_TLS)
+    ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_SERVER)
     ssl_context.load_cert_chain(f'assets{os.sep}security{os.sep}certificate.pem',
                         keyfile = f'assets{os.sep}security{os.sep}key.pem')
+    ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
 
-    O = OceanOpticsSpectrometer(
+    OceanOpticsSpectrometer(
         id='spectrometer',
         serial_number='S14155',
         log_level=logging.DEBUG
+    ).run_with_http_server(
+        port=9000, ssl_context=ssl_context
     )
-    O.run_with_http_server(ssl_context=ssl_context)
-    # or O.run(zmq_protocols='IPC') - interprocess communication and no HTTP
-    # or O.run(zmq_protocols=['IPC', 'TCP'], tcp_socket_address='tcp://*:9999')
-    # both interprocess communication & TCP, no HTTP
 ```
 
-> The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.
+With ZMQ:
+
+```python
+
+if __name__ == '__main__':
+    OceanOpticsSpectrometer(
+        id='spectrometer',
+        serial_number='S14155',
+        log_level=logging.DEBUG
+    ).run_with_zmq_server(
+        access_points=['IPC', 'tcp://*:9999']
+    )
+    # both interprocess communication & TCP
+```
 
 - [examples repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/hololinked-dev/thing-control-panel) - view & interact with your object's actions, properties and events.
 - [live demo](https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td) - an example of an oscilloscope available for live test
-
-See a list of currently supported possibilities while using this package [below](#currently-supported).
 
 > You may use a script deployment/automation tool to remote stop and start servers, in an attempt to remotely control your hardware scripts.
 
@@ -415,6 +420,8 @@ For React examples using Node-WoT, refer to:
 Again, please check examples or the code for explanations. Documentation is being actively improved. 
 
 ### Contributing
+
+> The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.
 
 See [organization info](https://github.com/hololinked-dev) for details regarding contributing to this package. There is:
 - [discord group](https://discord.com/invite/kEz87zqQXh)
