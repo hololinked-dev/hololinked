@@ -23,48 +23,49 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+
 import tempfile
 import os
-import typing 
+import typing
 import warnings
-import zmq.asyncio 
+import zmq.asyncio
 
-from . import __version__
+
 from .serializers.serializers import PythonBuiltinJSONSerializer
-from .utils import get_current_async_loop
+
 
 class Configuration:
     """
     Allows to auto apply common settings used throughout the package,
     instead of passing these settings as arguments. Import ``global_config`` variable
-    instead of instantitation this class. 
+    instead of instantitation this class.
 
-    Supports loading configuration from a JSON file whose path is specified 
-    under environment variable HOLOLINKED_CONFIG. 
+    Supports loading configuration from a JSON file whose path is specified
+    under environment variable HOLOLINKED_CONFIG.
 
-    Values are mutable in runtime and not type checked. Keys of JSON file 
-    must correspond to supported value name. Supported values are - 
+    Values are mutable in runtime and not type checked. Keys of JSON file
+    must correspond to supported value name. Supported values are -
 
-    TEMP_DIR - system temporary directory to store temporary files like IPC sockets. 
+    TEMP_DIR - system temporary directory to store temporary files like IPC sockets.
     default - tempfile.gettempdir().
-    
-    TCP_SOCKET_SEARCH_START_PORT - starting port number for automatic port searching 
+
+    TCP_SOCKET_SEARCH_START_PORT - starting port number for automatic port searching
     for TCP socket binding, used for event addresses. default 60000.
-    
-    TCP_SOCKET_SEARCH_END_PORT - ending port number for automatic port searching 
+
+    TCP_SOCKET_SEARCH_END_PORT - ending port number for automatic port searching
     for TCP socket binding, used for event addresses. default 65535.
 
-    DB_CONFIG_FILE - file path for database configuration. default None. 
+    DB_CONFIG_FILE - file path for database configuration. default None.
 
     SYSTEM_HOST - system view server qualified IP or name. default None.
-    
-    PWD_HASHER_TIME_COST - system view server password authentication time cost, 
-    default 15. Refer argon2-cffi docs. 
 
-    PWD_HASHER_MEMORY_COST - system view server password authentication memory cost. 
+    PWD_HASHER_TIME_COST - system view server password authentication time cost,
+    default 15. Refer argon2-cffi docs.
+
+    PWD_HASHER_MEMORY_COST - system view server password authentication memory cost.
     Refer argon2-cffi docs.
 
-    USE_UVLOOP - signicantly faster event loop for Linux systems. Reads data from network faster. default False. 
+    USE_UVLOOP - signicantly faster event loop for Linux systems. Reads data from network faster. default False.
 
     Parameters
     ----------
@@ -76,36 +77,43 @@ class Configuration:
     __slots__ = [
         # folders
         "TEMP_DIR",
-        # TCP sockets 
-        "TCP_SOCKET_SEARCH_START_PORT", "TCP_SOCKET_SEARCH_END_PORT",
+        # TCP sockets
+        "TCP_SOCKET_SEARCH_START_PORT",
+        "TCP_SOCKET_SEARCH_END_PORT",
         # HTTP server
-        "COOKIE_SECRET", "ALLOW_CORS",
+        "COOKIE_SECRET",
+        "ALLOW_CORS",
         # credentials
-        "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST",
+        "PWD_HASHER_TIME_COST",
+        "PWD_HASHER_MEMORY_COST",
         # system view
-        "PRIMARY_HOST", "LOCALHOST_PORT", 
+        "PRIMARY_HOST",
+        "LOCALHOST_PORT",
         # database
-        "DB_CONFIG_FILE", 
+        "DB_CONFIG_FILE",
         # Eventloop
-        "USE_UVLOOP", "TRACE_MALLOC",
+        "USE_UVLOOP",
+        "TRACE_MALLOC",
         # Schema
-        'VALIDATE_SCHEMA_ON_CLIENT', 'VALIDATE_SCHEMAS',
+        "VALIDATE_SCHEMA_ON_CLIENT",
+        "VALIDATE_SCHEMAS",
         # ZMQ
         "ZMQ_CONTEXT",
         # make debugging easier
-        "DEBUG",    
+        "DEBUG",
         # serializers
-        "ALLOW_PICKLE", "ALLOW_UNKNOWN_SERIALIZATION"
+        "ALLOW_PICKLE",
+        "ALLOW_UNKNOWN_SERIALIZATION",
     ]
 
-    def __init__(self, use_environment : bool = False):
+    def __init__(self, use_environment: bool = False):
         self.load_variables(use_environment)
         self.reset_actions()
 
-    def load_variables(self, use_environment : bool = False):
+    def load_variables(self, use_environment: bool = False):
         """
-        set default values & use the values from environment file. 
-        Set use_environment to False to not use environment file. 
+        set default values & use the values from environment file.
+        Set use_environment to False to not use environment file.
         """
         self.TEMP_DIR = f"{tempfile.gettempdir()}{os.sep}hololinked"
         self.TCP_SOCKET_SEARCH_START_PORT = 60000
@@ -122,14 +130,16 @@ class Configuration:
         self.ALLOW_CORS = False
 
         if not use_environment:
-            return 
+            return
         # environment variables overwrite config items
         file = os.environ.get("HOLOLINKED_CONFIG", None)
         if not file:
-            warnings.warn("no environment file found although asked to load from one", UserWarning)
+            warnings.warn(
+                "no environment file found although asked to load from one", UserWarning
+            )
             return
         with open(file, "r") as file:
-            config = PythonBuiltinJSONSerializer.load(file) # type: typing.Dict
+            config = PythonBuiltinJSONSerializer.load(file)  # type: typing.Dict
         for item, value in config.items():
             setattr(self, item, value)
 
@@ -150,41 +160,40 @@ class Configuration:
     def asdict(self):
         "returns this config as a regular dictionary"
         return {item: getattr(self, item) for item in self.__slots__}
-    
+
     def zmq_context(self) -> zmq.asyncio.Context:
         """
-        Returns a global ZMQ async context. Use socket_class argument to retrieve 
+        Returns a global ZMQ async context. Use socket_class argument to retrieve
         a synchronous socket if necessary.
-        """        
+        """
         return self.ZMQ_CONTEXT
 
-    def set_default_server_execution_context(self, 
+    def set_default_server_execution_context(
+        self,
         invokation_timeout: typing.Optional[int] = None,
         execution_timeout: typing.Optional[int] = None,
-        oneway: bool = False
+        oneway: bool = False,
     ) -> None:
         """Sets the default server execution context for the application"""
         from .core.zmq.message import default_server_execution_context
+
         default_server_execution_context.invokationTimeout = invokation_timeout or 5
         default_server_execution_context.executionTimeout = execution_timeout or 5
         default_server_execution_context.oneway = oneway
 
-    def set_default_thing_execution_context(self,
+    def set_default_thing_execution_context(
+        self,
         fetch_execution_logs: bool = False,
     ) -> None:
         """Sets the default thing execution context for the application"""
         from .core.zmq.message import default_thing_execution_context
-        default_thing_execution_context.fetchExecutionLogs = fetch_execution_logs
-    
-    def __del__(self):
-        for context in [self.ZMQ_ASYNC_CONTEXT, self.ZMQ_SYNC_CONTEXT]:
-            try:
-                context.destroy()
-            except Exception as ex:
-                warnings.warn(f"Error destroying ZMQ context - {str(ex)}", RuntimeWarning)
 
+        default_thing_execution_context.fetchExecutionLogs = fetch_execution_logs
+
+    def __del__(self):
+        self.ZMQ_CONTEXT.term()
 
 
 global_config = Configuration()
 
-__all__ = ['global_config', 'Configuration']
+__all__ = ["global_config", "Configuration"]
