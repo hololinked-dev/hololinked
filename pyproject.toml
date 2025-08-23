@@ -59,7 +59,7 @@ packages = [
     "hololinked.core", "hololinked.core.zmq"
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "ConfigParser==7.1.0",
     "fastjsonschema==2.20.0",
