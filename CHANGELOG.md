@@ -2,28 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ✓ means ready to try
 
-## [v0.3.0] - 2025 between Apr-Jun
+## [v0.3.1] - 17.08.2025
 
-This release will contain a lot of new features and improvements so that a version 1.0.0 may be published sooner. 
+This release contains a lot of new features and improvements so that a version 1.0.0 may be published sooner:
+
 - better conceptual alignment with WoT in code structure
-- docs recreated in mkdocs-material, more examples and full coverage of features (hosted [here for now](https://docs.hololinked.dev))
-- more tests coverage (over 70%)
-- easier to add more protocols (like MQTT, CoAP, etc)
-- adding custom handlers for each property, action and event to override default behaviour for HTTP protocol 
+- more tests coverage in both breadth and depth
 - schedule async methods & threaded actions more easily
-- supports pydantic models for action schema validation, directly with python typing annotations - no need explicitly specify schema. 
-- bug fix to create pydantic models for properties during validation & pass the model to the setter (instead of JSON)
-- bug fix to remove shared state machine for multiple instances of the same class in the same process
-- bug fix state machine instance creation for multiple instances of the same class in the same process
-Not finalised:
-- cookie auth & its specification in TD (cookie auth branch)
+- support pydantic models for action schema validation directly with python typing annotations - no need explicitly specify schema 
+- easier to add more protocols (like MQTT, CoAP, etc) - protocol bindings are more systematically supported as far as what goes for an WoT compatible RPC
+- scripting API (`ObjectProxy`) also support HTTP - client object abstracts operations irrespective of protocol  
+- `observe_property` op on client side (although we always supported on server side)
+- descriptors for all of properties, actions, events and state machine. previously only property was a descriptor
+- descriptor registries for idiomatic introspection of a Thing's capabilites
+- adding custom handlers for each property, action and event to override default behaviour for HTTP protocol 
+- HTTP basic auth
+- docs recreated in mkdocs-material
 
 ## [v0.2.12] - 2025-05-18
 - virtual environment with `uv` package manager:
