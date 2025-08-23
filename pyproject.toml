@@ -68,7 +68,8 @@ dev = [
     "numpy>=2.0.0",
     "pandas==2.2.3",
     "faker==37.5.0",
-    "bcrypt==4.3.0"
+    "bcrypt==4.3.0",
+    "pip>=25.2"
 ]
 test = [
     "requests==2.32.3",
