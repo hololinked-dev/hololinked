@@ -4,7 +4,7 @@
 
 `hololinked` is a beginner-friendly pythonic tool suited for instrumentation control and data acquisition over network (IoT & SCADA).
 
-As a beginner, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, show the data in a dashboard, provide a PyQt GUI or run automated scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
+As a beginner, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, and you want to show the data in a dashboard, provide a PyQt GUI or run automated scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 
 If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice as it follows the principles of [W3C Web of Things](https://www.w3.org/WoT/). One can expect a consistent API and flexible bidirectional message flow for interacting with your devices, irrespective of the underlying protocol.
 
@@ -19,12 +19,11 @@ This package is a protocol agnostic RPC framework, currently supporting HTTP & Z
 From pip - `pip install hololinked` <br>
 From conda - `conda install -c conda-forge hololinked`
 
-Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env `hololinked.yml` or uv environment `uv.lock` can also help to setup all dependencies.
+Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env `hololinked.yml` or [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies.
 
 ## Usage/Quickstart
 
-(As mentioned earlier) `hololinked` is compatible with the [W3C Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software.
-Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
+(As mentioned earlier) `hololinked` is compatible with the [W3C Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
 
 - the hardware is represented by a class
 - properties are validated get-set attributes of the class which may be used to model settings, hold captured/computed data or generic network accessible quantities
@@ -581,12 +580,12 @@ python -m unittest
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain comptibility with Javascript (MessagePack may be added later). Default is JSON serializer based on msgspec.
 - asyncio compatible
 
-## Use Case Table
+## Use Cases <a name="use-cases-table"></a>
 
 <table>
   <tr>
     <th>Protocol</th>
-    <th>Use Case</th>
+    <th>Plausible Use Cases</th>
     <th>Operations</th>
   </tr>
   <tr>
@@ -614,7 +613,7 @@ python -m unittest
   </tr>
   <tr>
     <td>ZMQ INPROC</td>
-    <td>High Speed Desktop Applications (not exposed on network)</td>
+    <td>High Speed Desktop Applications (again, not exposed on network), currently you will need some CPP magic or disable GIL to leverage it fully</td>
   </tr>
   <tr>
     <td>MQTT</td>
