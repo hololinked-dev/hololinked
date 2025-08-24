@@ -39,7 +39,7 @@ dependencies = [
     "SQLAlchemy_Utils==0.41.1",
     "pydantic>=2.8.0,<3.0.0",
     "tornado==6.3.3",
-    "jsonschema==4.22.0"
+    "jsonschema==4.22.0",
 ]
 
 [project.urls]
@@ -69,7 +69,8 @@ dev = [
     "pandas==2.2.3",
     "faker==37.5.0",
     "bcrypt==4.3.0",
-    "pip>=25.2"
+    "pip>=25.2",
+    "ruff>=0.12.10"
 ]
 test = [
     "requests==2.32.3",

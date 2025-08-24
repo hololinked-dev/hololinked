@@ -38,9 +38,9 @@ class TestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        print("----------------------------------------------------------------------")
         global_config.ZMQ_CONTEXT = zmq.asyncio.Context()
         # always replace otherwise one context opens too many sockets
-        print("----------------------------------------------------------------------")
 
     @classmethod
     def tearDownClass(cls):
@@ -61,7 +61,6 @@ class AsyncTestCase(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        global_config.ZMQ_CONTEXT.term()
         print(f"\n\ntear down {cls.__name__}")
 
     async def asyncSetUp(self):
