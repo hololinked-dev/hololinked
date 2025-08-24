@@ -62,7 +62,7 @@ data_structures = [
     {"array": [1, 2, 3]},
 ]  # to use for testing
 
-global_config.DEBUG = True
+# global_config.DEBUG = True
 
 
 class InteractionAffordanceMixin(TestBrokerMixin):
