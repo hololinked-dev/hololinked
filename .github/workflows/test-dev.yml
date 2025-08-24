@@ -17,6 +17,10 @@ jobs:
           # Define specific Python versions for each OS
           - os: windows-latest
             python-version: 3.11
+          - os: windows-latest
+            python-version: 3.12
+          - os: windows-latest
+            python-version: 3.13
           # - os: macos-latest
           #   python-version: 3.11
           # - os: ubuntu-latest
@@ -76,5 +80,6 @@ jobs:
 
       - name: Upload coverage report to codecov
         uses: codecov/codecov-action@v4.0.1
+        if: runner.os != 'Windows' && matrix.python-version == 3.13
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
