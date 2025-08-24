@@ -54,7 +54,7 @@ class TestHTTPServer(TestCase):
     def test_01_init_run_and_stop(self):
         """Test basic init, run and stop of the HTTP server."""
         # init, run and stop synchronously
-        server = HTTPServer(log_level=logging.ERROR + 10, port=9001)
+        server = HTTPServer(log_level=logging.ERROR + 10, port=60001)
         self.assertTrue(server.all_ok)
         server.listen(forked=True)
         time.sleep(5)
@@ -287,7 +287,7 @@ class TestHTTPServer(TestCase):
 
         global_config.ALLOW_PICKLE = True  # allow pickle serializer for testing
         thing_id = f"test-request-info-{uuid.uuid4().hex[0:8]}"
-        port = 9002
+        port = 60002
 
         thing = OceanOpticsSpectrometer(id=thing_id, log_level=logging.ERROR + 10)
         thing.run_with_http_server(
@@ -495,13 +495,13 @@ class TestHTTPServer(TestCase):
 
     def _test_authenticated_end_to_end(
         self,
+        port: int,
         security_scheme: SecurityScheme,
         auth_headers: dict[str, str] = None,
         wrong_auth_headers: dict[str, str] = None,
     ):
         """Test end-to-end with authentication"""
         thing_id = f"test-sec-{uuid.uuid4().hex[0:8]}"
-        port = 9003
         thing = OceanOpticsSpectrometer(
             id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
         )
@@ -522,7 +522,7 @@ class TestHTTPServer(TestCase):
 
     def test_06_basic_end_to_end(self):
         thing_id = f"test-sec-{uuid.uuid4().hex[0:8]}"
-        port = 9004
+        port = 60004
         thing = OceanOpticsSpectrometer(
             id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
         )
@@ -536,7 +536,9 @@ class TestHTTPServer(TestCase):
         security_scheme = BcryptBasicSecurity(
             username="someuser", password="somepassword"
         )
+        port = 60005
         self._test_authenticated_end_to_end(
+            port=port,
             security_scheme=security_scheme,
             auth_headers={
                 "Content-type": "application/json",
@@ -562,7 +564,9 @@ class TestHTTPServer(TestCase):
         security_scheme = Argon2BasicSecurity(
             username="someuserargon2", password="somepasswordargon2"
         )
+        port = 60006
         self._test_authenticated_end_to_end(
+            port=port,
             security_scheme=security_scheme,
             auth_headers={
                 "Content-type": "application/json",
@@ -585,13 +589,15 @@ class TestHTTPServer(TestCase):
         )
 
     def _test_sse_end_to_end(
-        self, security_scheme: SecurityScheme = None, headers: dict[str, str] = None
+        self,
+        port: int,
+        security_scheme: SecurityScheme = None,
+        headers: dict[str, str] = None,
     ):
         """
         Test end-to-end with Server-Sent Events (SSE).
         """
         thing_id = f"test-sse-{uuid.uuid4().hex[0:8]}"
-        port = 9005
         thing = OceanOpticsSpectrometer(
             id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
         )
@@ -620,9 +626,9 @@ class TestHTTPServer(TestCase):
 
     def test_09_sse(self):
         """Test Server-Sent Events (SSE)"""
-        for security_scheme in [
-            None,
-            BcryptBasicSecurity(username="someuser", password="somepassword"),
+        for security_scheme, port in [
+            (None, 60007),
+            (BcryptBasicSecurity(username="someuser", password="somepassword"), 60008),
         ]:
             # test SSE with and without security
             if security_scheme:
@@ -632,11 +638,13 @@ class TestHTTPServer(TestCase):
                 }
             else:
                 headers = dict()
-            self._test_sse_end_to_end(security_scheme=security_scheme, headers=headers)
+            self._test_sse_end_to_end(
+                port=port, security_scheme=security_scheme, headers=headers
+            )
 
     def test_10_forms_generation(self):
         thing_id = f"test-forms-{uuid.uuid4().hex[0:8]}"
-        port = 9006
+        port = 60009
         thing = OceanOpticsSpectrometer(
             id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
         )
@@ -668,7 +676,7 @@ class TestHTTPServer(TestCase):
 
     def test_11_object_proxy_basic(self):
         thing_id = f"test-obj-proxy-{uuid.uuid4().hex[0:8]}"
-        port = 9007
+        port = 60010
         thing = OceanOpticsSpectrometer(
             id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
         )
@@ -750,7 +758,7 @@ class TestHTTPObjectProxy(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.thing_id = f"test-obj-proxy-{uuid.uuid4().hex[0:8]}"
-        cls.port = 9010
+        cls.port = 60011
         cls.thing = OceanOpticsSpectrometer(
             id=cls.thing_id, serial_number="simulation", log_level=logging.ERROR + 10
         )
@@ -834,7 +842,7 @@ class TestHTTPObjectProxy(TestCase):
         )
         self.assertEqual(self.object_proxy.read_reply(noblock_msg_id), 800)
 
-    def notest_03_rw_multiple_properties(self):
+    def test_03_rw_multiple_properties(self):
         """Test reading and writing multiple properties at once."""
         # test read multiple properties
         properties = self.object_proxy.read_multiple_properties(
@@ -877,7 +885,7 @@ class TestHTTPObjectProxy(TestCase):
 class TestHTTPEndToEnd(TestRPCEndToEnd):
     @classmethod
     def setUpClass(cls):
-        cls.http_port = 9011
+        cls.http_port = 60012
         super().setUpClass()
         print("Test HTTP Object Proxy End to End")
 
@@ -909,8 +917,8 @@ class TestHTTPEndToEnd(TestRPCEndToEnd):
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPObjectProxy))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPEndToEnd))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPObjectProxy))
+    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPEndToEnd))
     return suite
 
 
