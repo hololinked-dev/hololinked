@@ -1026,7 +1026,7 @@ class TestExposedEvents(TestRPCServerMixin):
                 time.sleep(0.1)
             self.assertTrue(len(results) >= attempts)
             self.assertEqual(results, [expected_data] * len(results))
-            event_client.unsubscribe(cb)
+            event_client.unsubscribe()
 
         for name, data in zip(
             self.event_names,
@@ -1083,7 +1083,7 @@ class TestExposedEvents(TestRPCServerMixin):
             # since we are pushing events in multiple protocols, sometimes the event from the previous test is
             # still lingering on the socket. So the captured event must be at least the number of attempts.
             self.assertEqual(results, [expected_data] * len(results))
-            event_client.unsubscribe(cb)
+            event_client.unsubscribe()
 
         for name, data in zip(
             self.event_names,
