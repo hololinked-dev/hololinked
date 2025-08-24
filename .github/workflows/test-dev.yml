@@ -10,25 +10,24 @@ on:
   #     - main
 
 jobs:
-
   test:
     strategy:
       matrix:
         include:
           # Define specific Python versions for each OS
-          - os: ubuntu-latest
+          - os: windows-latest
             python-version: 3.11
-          # - os: windows-latest
-          #   python-version: 3.11
           # - os: macos-latest
           #   python-version: 3.11
-          - os: ubuntu-latest
-            python-version: 3.12
-          - os: ubuntu-latest
-            python-version: 3.13
+          # - os: ubuntu-latest
+          #   python-version: 3.11
+          # - os: ubuntu-latest
+          #   python-version: 3.12
+          # - os: ubuntu-latest
+          #   python-version: 3.13
 
     runs-on: ${{ matrix.os }}
- 
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,29 +37,44 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install uv
+      - name: Install uv (Linux/macOS)
+        if: runner.os != 'Windows'
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      - name: Install dependencies
+      - name: Install uv (Windows)
+        if: runner.os == 'Windows'
         run: |
-          uv venv .venv 
-          source .venv/bin/activate 
-          uv sync --all-extras --no-install-project
-          uv pip install coverage
+          python -m pip install uv
 
-      - name: Run unit tests and generate coverage report
+      - name: Install dependencies (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
-          source .venv/bin/activate 
+          uv venv .venv
+          source .venv/bin/activate
+          uv sync --no-install-project --group test --group dev
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          uv venv .venv
+          .venv\Scripts\activate
+          uv sync --no-install-project --group test --group dev
+
+      - name: Run unit tests and generate coverage report (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          source .venv/bin/activate
           uv run coverage run -m unittest discover -s tests -p 'test_*.py'
+          uv run coverage report -m
+
+      - name: Run unit tests and generate coverage report (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .venv\Scripts\activate
+          uv run coverage run -m unittest discover -s tests -p "test_*.py"
           uv run coverage report -m
 
       - name: Upload coverage report to codecov
         uses: codecov/codecov-action@v4.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-
-    
-    
-
-              
- 
