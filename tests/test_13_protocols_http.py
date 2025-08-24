@@ -917,9 +917,15 @@ class TestHTTPEndToEnd(TestRPCEndToEnd):
 
     @classmethod
     def get_client(cls):
-        return ClientFactory.http(
-            url=f"http://127.0.0.1:{cls.http_port}/{cls.thing_id}/resources/wot-td"
-        )
+        try:
+            if cls.client is not None:
+                return cls._client
+            raise AttributeError()
+        except AttributeError:
+            cls.client = ClientFactory.http(
+                url=f"http://127.0.0.1:{cls.http_port}/{cls.thing_id}/resources/wot-td"
+            )
+            return cls.client
 
     def test_04_RW_multiple_properties(self):
         pass
