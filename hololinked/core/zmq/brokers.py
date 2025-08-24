@@ -206,7 +206,6 @@ class BaseZMQ:
                 )
                 + f" Given transport {transport}."
             )
-
         return socket, socket_address
 
 
@@ -633,7 +632,6 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                 while True:
                     try:
                         raw_message = await socket.recv_multipart(zmq.NOBLOCK)
-                        # print("got raw message", raw_message)
                     except zmq.Again:
                         break
                     else:

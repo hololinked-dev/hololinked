@@ -47,7 +47,6 @@ except ImportError:
         TestThing,
     )
 
-
 data_structures = [
     {"key": "value"},
     [1, 2, 3],
@@ -590,6 +589,7 @@ class TestExposedActions(InteractionAffordanceMixin):
             log_level=logging.ERROR + 10,
             done_queue=cls.done_queue,
             prerun_callback=replace_methods_with_actions,
+            as_process=False,
         )
 
     @classmethod
@@ -611,7 +611,7 @@ class TestExposedActions(InteractionAffordanceMixin):
         replace_methods_with_actions(TestThing)
         thing = TestThing(id=self.server_id, log_level=logging.ERROR)
         # has to match server only because run_thing_with_zmq_server_forked equates server_id and thing_id
-        self.client.handshake()
+        self.sync_client.handshake()
 
         # thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
         assert isinstance(thing.action_echo, BoundAction)  # type definition
@@ -819,6 +819,7 @@ class TestExposedProperties(InteractionAffordanceMixin):
             id=cls.server_id,
             log_level=logging.ERROR + 10,
             done_queue=cls.done_queue,
+            as_process=False,
         )
 
     @classmethod
@@ -1185,12 +1186,12 @@ class TestThingRunRPCServer(TestBrokerMixin):
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInprocRPCServer))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestInprocRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestRPCServer))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedActions))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedProperties))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestExposedEvents))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingRunRPCServer))
     return suite
 
 
