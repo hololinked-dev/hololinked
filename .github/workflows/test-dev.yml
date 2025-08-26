@@ -114,6 +114,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
           fail_ci_if_error: true
+          slug: hololinked-dev/hololinked
 
       - name: Skip note (no Ubuntu 3.13 artifact found)
         if: steps.dl.outcome != 'success'
