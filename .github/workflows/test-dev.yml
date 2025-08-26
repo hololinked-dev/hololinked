@@ -97,6 +97,9 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download Ubuntu 3.13 coverage artifact
         id: dl
         uses: actions/download-artifact@v4
@@ -111,7 +114,6 @@ jobs:
         env:
           CI: true
         with:
-          working-directory: ${{ github.workspace }}
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
           fail_ci_if_error: true
