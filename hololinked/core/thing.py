@@ -4,6 +4,7 @@ import threading
 import ssl
 import time
 import typing
+import warnings
 
 from ..constants import JSON, ZMQ_TRANSPORTS
 from ..utils import *  # noqa: F403
@@ -352,7 +353,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     @forkable  # noqa: F405
     def run(
-        self, servers: typing.Sequence[BaseProtocolServer], forked: bool = False
+        self,
+        access_points: dict[str, dict] = None,
+        servers: typing.Sequence[BaseProtocolServer] = None,
+        forked: bool = False,
     ) -> None:
         """
         Expose the object with the given servers. This method is blocking until `exit()` is called.
@@ -366,8 +370,29 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from ..server.zmq import ZMQServer
         from .zmq.rpc_server import RPCServer, prepare_rpc_server
 
+        if not (access_points is None and servers is None):
+            raise ValueError(
+                "At least one of access_points or servers must be provided."
+            )
+        if access_points is not None and servers is not None:
+            raise ValueError("Only one of access_points or servers can be provided.")
+
+        if access_points is not None:
+            servers = []
+            for protocol, params in access_points.items():
+                if protocol.upper() == "HTTP":
+                    http_server = HTTPServer([], **params)
+                    servers.append(http_server)
+                elif protocol.upper() == "ZMQ":
+                    prepare_rpc_server(self, access_points=ZMQ_TRANSPORTS.INPROC)
+                    servers.append(self.rpc_server)
+                else:
+                    warnings.warn(
+                        f"Unsupported protocol: {protocol}", category=UserWarning
+                    )
+
         if not any(isinstance(server, (RPCServer, ZMQServer)) for server in servers):
-            prepare_rpc_server(transports=ZMQ_TRANSPORTS.INPROC)
+            prepare_rpc_server(self, access_points=ZMQ_TRANSPORTS.INPROC)
         for server in servers:
             if isinstance(server, HTTPServer):
                 server.add_thing(self)
