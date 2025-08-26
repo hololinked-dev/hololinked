@@ -4,13 +4,13 @@
 
 `hololinked` is a beginner-friendly pythonic tool suited for instrumentation control and data acquisition over network (IoT & SCADA).
 
-As a beginner, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, and you want to show the data in a dashboard, provide a PyQt GUI or run automated scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
+As a novice, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, and you want to show the data in a dashboard, provide a PyQt GUI, run automated scripts or use jupyter notebooks, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 
-If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice as it follows the principles of [W3C Web of Things](https://www.w3.org/WoT/). One can expect a consistent API and flexible bidirectional message flow for interacting with your devices, irrespective of the underlying protocol.
+If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice. By conforming to [W3C Web of Things](https://www.w3.org/WoT/), one can expect a consistent API and flexible bidirectional message flow to interact with your devices, irrespective of the underlying protocol. Currently HTTP & ZMQ are supported. See [Use Cases Table](#use-cases-table)
 
-This package is a protocol agnostic RPC framework, currently supporting HTTP & ZMQ, but other protocols like MQTT, websockets are on the way. You can also implement your own protocol bindings. See [use cases table](#use-cases-table).
+This implementation is based on RPC.
 
-[![Documentation Status](https://img.shields.io/github/actions/workflow/status/hololinked-dev/docs-v2/ci.yaml?label=Build%20And%20Publish%20Docs)](https://github.com/hololinked-dev/docs-v2) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev)
+[![Documentation Status](https://img.shields.io/github/actions/workflow/status/hololinked-dev/docs/ci.yaml?label=Build%20And%20Publish%20Docs)](https://github.com/hololinked-dev/docs) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev)
 
 ## To Install
 
@@ -33,7 +33,6 @@ For example, consider an optical spectrometer, the following code is possible:
 ### Import Statements
 
 ```python
-
 from hololinked.core import Thing, Property, action, Event
 from hololinked.core.properties import String, Integer, Number, List
 from seabreeze.spectrometers import Spectrometer # a device driver
@@ -52,11 +51,9 @@ class OceanOpticsSpectrometer(Thing):
 
 ### Instantiating Properties
 
-Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc.
-or one may define one's own using [pydantic or JSON schema](https://docs.staging.hololinked.dev/howto/articles/properties/#schema-constrained-property). To create properties:
+Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc. or one may define one's own using [pydantic or JSON schema](https://docs.hololinked.dev/howto/articles/properties/#schema-constrained-property). To create properties:
 
 ```python
-
 class OceanOpticsSpectrometer(Thing):
     """class doc"""
 
@@ -64,17 +61,16 @@ class OceanOpticsSpectrometer(Thing):
                         doc="serial number of the spectrometer to connect/or connected")
 
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True,
-                            doc="integration time of measurement in milliseconds")
+                        doc="integration time of measurement in milliseconds")
 
     intensity = List(default=None, allow_None=True, doc="captured intensity", readonly=True,
-                    fget=lambda self: self._intensity)
+                        fget=lambda self: self._intensity)
 
     def __init__(self, id, serial_number, **kwargs):
         super().__init__(id=id, serial_number=serial_number, **kwargs)
-
 ```
 
-In non-expert terms, properties look like class attributes however their data containers are instantiated at object instance level by default. This is possible due to [python descriptor protocol](). For example, the `integration_time` property defined above as `Number`, whenever set/written, will be validated as a float or int, cropped to bounds and assigned as an attribute to each **instance** of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name as the property value can be accessed again in any python logic using the dot operator, say, `print(self.integration_time)`.
+In non-expert terms, properties look like class attributes however their data containers are instantiated at object instance level by default. This is possible due to [python descriptor protocol](https://realpython.com/python-descriptors/). For example, the `integration_time` property defined above as `Number`, whenever set/written, will be validated as a float or int, cropped to bounds and assigned as an attribute to each **instance** of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name as the property value can be accessed again in any python logic using the dot operator, say, `print(self.integration_time)`.
 
 One may overload the get-set (or read-write) of properties to customize their behavior:
 
@@ -84,21 +80,24 @@ class OceanOpticsSpectrometer(Thing):
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True,
                             doc="integration time of measurement in milliseconds")
 
-    @integration_time.setter # by default called on http PUT method
+    @integration_time.setter
     def set_integration_time(self, value : float):
-        self.device.integration_time_micros(int(value*1000))
-        self._integration_time = int(value)
+        self.device.write_integration_time_micros(int(value*1000))
+        # seabreeze does not provide a write_integration_time_micros method,
+        # this is only an example
 
-    @integration_time.getter # by default called on http GET method
+    @integration_time.getter
     def get_integration_time(self) -> float:
         try:
-            return self._integration_time
+            return self.device.read_integration_time_micros() / 1000
+            # seabreeze does not provide a read_integration_time_micros method,
+            # this is only an example
         except AttributeError:
             return self.properties["integration_time"].default
 
 ```
 
-In this case, instead of generating a data container with an internal name, the setter method is called when `integration_time` property is set/written. One might add the hardware device driver logic here (say, supplied by the manufacturer) or a protocol that talks directly to the device to apply the property onto the device. In the above example, there is not a way provided by the device driver library to read the value from the device, so we store it in a variable after applying it and supply the variable back to the getter method. Normally, one would also want the getter to read from the device directly.
+In this case, instead of generating a data container with an internal name, the setter method is called when `integration_time` property is set/written. One might add the hardware device driver logic here (say, supplied by the manufacturer) or a protocol that applies the property directly onto the device. One would also want the getter to read from the device directly as well.
 
 Those familiar with Web of Things (WoT) terminology may note that these properties generate the property affordance. An example for `integration_time` is as follows:
 
@@ -128,7 +127,7 @@ what the property represents and how to interact with it from somewhere else (in
 
 For example, the `Eclipse ThingWeb` [node-wot](https://github.com/eclipse-thingweb/node-wot) supports this feature to produce a HTTP(s) client in javascript that can issue `readProperty("integration_time")` and `writeProperty("integration_time", 1000)` to read and write this property.
 
-[![Property Documentation](https://img.shields.io/badge/Property%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.staging.hololinked.dev/howto/articles/properties/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=python)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
+[![Property Documentation](https://img.shields.io/badge/Property%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/howto/articles/properties/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=python)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 ### Specify Methods as Actions
 
@@ -139,14 +138,14 @@ decorate with `action` decorator on a python method to claim it as a network acc
 class OceanOpticsSpectrometer(Thing):
 
     @action(input_schema={"type": "object", "properties": {"serial_number": {"type": "string"}}})
-    def connect(self, serial_number = None): # by default invoked on HTTP POST
+    def connect(self, serial_number = None):
         """connect to spectrometer with given serial number"""
         if serial_number is not None:
             self.serial_number = serial_number
         self.device = Spectrometer.from_serial_number(self.serial_number)
         self._wavelengths = self.device.wavelengths().tolist()
 
-    @action() # by default invoked on HTTP POST
+    @action()
     def disconnect(self):
         """disconnect from the spectrometer"""
         self.device.close()
@@ -182,21 +181,20 @@ In WoT Terminology, again, such a method becomes specified as an action affordan
 
 > input and output schema ("input" field above which describes the argument type `serial_number`) are optional and are discussed in docs
 
-[![Actions Documentation](https://img.shields.io/badge/Actions%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.staging.hololinked.dev/howto/articles/actions/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=python)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
+[![Actions Documentation](https://img.shields.io/badge/Actions%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/howto/articles/actions/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=python)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 ### Defining and Pushing Events
 
-create a named event using `Event` object that can push any arbitrary data:
+create a named event using `Event` object that can push any arbitrary serializable data:
 
 ```python
 class OceanOpticsSpectrometer(Thing):
 
-    # only GET HTTP method possible for events
     intensity_measurement_event = Event(name='intensity-measurement-event',
             doc="""event generated on measurement of intensity,
             max 30 per second even if measurement is faster.""",
             schema=intensity_event_schema)
-            # schema is optional and will be discussed later,
+            # schema is optional and will be discussed in documentation,
             # assume the intensity_event_schema variable is valid
 
     def capture(self): # not an action, but a plain python method
@@ -264,11 +262,11 @@ what the event represents and how to subscribe to it) with subprotocol SSE:
 }
 ```
 
-> data schema ("data" field above which describes the event payload) are optional and discussed later
-
-[![Events Documentation](https://img.shields.io/badge/Events%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.staging.hololinked.dev/howto/articles/events/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=python)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
+> data schema ("data" field above which describes the event payload) are optional and discussed in documentation
 
 Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through any supported protocol including HTTP server sent events.
+
+[![Events Documentation](https://img.shields.io/badge/Events%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/howto/articles/events/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=python)](https://control-panel.hololinked.dev/#https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 ### Start with a Protocol Server
 
@@ -326,7 +324,7 @@ if __name__ == '__main__':
 
 ## Client Side Applications
 
-To compose client objects, the JSON description of the properties, actions and events are used, which are summarized into a [Thing Description](https://www.w3.org/TR/wot-thing-description11). The following code would be possible:
+To compose client objects, the JSON description of the properties, actions and events are used, which are summarized into a [Thing Description](https://www.w3.org/TR/wot-thing-description11). These descriptions are autogenerated, so at least in the beginner stages, you dont need to know how they work. The following code would be possible:
 
 ### Python Clients
 
@@ -343,7 +341,7 @@ thing = ClientFactory.http(url="http://localhost:8000/spectrometer/resources/wot
 thing = ClientFactory.zmq(thing_id='spectrometer', access_point='IPC')
 # zmq TCP
 thing = ClientFactory.zmq(thing_id='spectrometer', access_point='tcp://localhost:9999')
-# For ZMQ Thing Description loading is automatically mediated
+# For ZMQ, Thing Description loading is automatically mediated simply by specifying how to access the Thing
 ```
 
 To issue operations:
@@ -435,6 +433,11 @@ thing.unobserve_property("integration_time")
 
 </details>
 
+Operations which rely on request-reply pattern (properties and actions) also support one-way and no-block calls:
+
+- `oneway` - issue the operation and dont collect the reply
+- `noblock` - issue the operation, obtain a message ID and collect the reply when you want
+
 [![Python Client Docs](https://img.shields.io/badge/Python%20Client%20Docs-Read%20More-blue?logo=readthedocs)](https://staging.docs.hololinked.dev)
 
 ### Javascript Clients
@@ -503,9 +506,18 @@ To issue operations:
 
 </details>
 
+<details open>
+<summary>Observe Property</summary>
+
+`thing.observeProperty("integration_time", async (interactionOutput) => {
+    console.log("Observed integration_time:", await interactionOutput.value());
+});`
+
+</details>
+
 <details>
 <summary>Links to React Examples</summary>
-In React, the Thing Description may be fetched inside `useEffect` hook, the client passed via `useContext` hook and the individual operations can be performed in their own callbacks attached to user elements.
+In React, the Thing Description may be fetched inside `useEffect` hook, the client passed via a `useContext` hook (or a global state manager). The individual operations can be performed in their own callbacks attached to DOM elements:
 
 - [fetch TD](https://gitlab.com/hololinked/examples/clients/node-clients/phymotion-controllers-app/-/blob/main/src/App.tsx?ref_type=heads#L96)
 - [issue operations](https://gitlab.com/hololinked/examples/clients/node-clients/phymotion-controllers-app/-/blob/main/src/components/movements.tsx?ref_type=heads#L54)
@@ -572,11 +584,13 @@ python -m unittest
 
 ## Currently Supported Features
 
+Some other features that are currently supported:
+
 - control method execution and property write with a custom finite state machine.
 - database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties when the object dies and restarts.
 - auto-generate Thing Description for Web of Things applications.
-- use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain comptibility with Javascript (MessagePack may be added later). Default is JSON serializer based on msgspec.
-- asyncio compatible
+- use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement
+- asyncio event loops on server side
 
 ## Use Cases <a name="use-cases-table"></a>
 
@@ -596,7 +610,11 @@ python -m unittest
         <code>unobserveproperty</code>, 
         <code>invokeaction</code>, 
         <code>subscribeevent</code>,
-        <code>unsubscribeevent</code>
+        <code>unsubscribeevent</code>,
+        <code>readmultipleproperties</code>,
+        <code>writemultipleproperties</code>,
+        <code>readallproperties</code>,
+        <code>writeallproperties</code>
         <br>
         properties and actions can be operated in a oneway and noblock manner as well
     </td>
