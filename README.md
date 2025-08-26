@@ -4,11 +4,11 @@
 
 `hololinked` is a beginner-friendly pythonic tool suited for instrumentation control and data acquisition over network (IoT & SCADA).
 
-As a beginner, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, and you want to show the data in a dashboard, provide a PyQt GUI, run automated scripts or use jupyter notebooks, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
+As a novice, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, and you want to show the data in a dashboard, provide a PyQt GUI, run automated scripts or use jupyter notebooks, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 
-If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice as it follows the principles of [W3C Web of Things](https://www.w3.org/WoT/). One can expect a consistent API and flexible bidirectional message flow for interacting with your devices, irrespective of the underlying protocol.
+If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice. By conforming to [W3C Web of Things](https://www.w3.org/WoT/), one can expect a consistent API and flexible bidirectional message flow to interact with your devices, irrespective of the underlying protocol. Currently HTTP & ZMQ are supported. See [Use Cases Table](#use-cases-table)
 
-This package is a protocol agnostic RPC framework, currently supporting HTTP & ZMQ, but other protocols like MQTT, websockets are on the way. You can also implement your own protocol bindings. See [use cases table](#use-cases-table).
+This implementation is based on RPC.
 
 [![Documentation Status](https://img.shields.io/github/actions/workflow/status/hololinked-dev/docs/ci.yaml?label=Build%20And%20Publish%20Docs)](https://github.com/hololinked-dev/docs) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev)
 
@@ -80,13 +80,13 @@ class OceanOpticsSpectrometer(Thing):
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True,
                             doc="integration time of measurement in milliseconds")
 
-    @integration_time.setter # by default called on http PUT method
+    @integration_time.setter
     def set_integration_time(self, value : float):
         self.device.write_integration_time_micros(int(value*1000))
         # seabreeze does not provide a write_integration_time_micros method,
         # this is only an example
 
-    @integration_time.getter # by default called on http GET method
+    @integration_time.getter
     def get_integration_time(self) -> float:
         try:
             return self.device.read_integration_time_micros() / 1000
@@ -138,14 +138,14 @@ decorate with `action` decorator on a python method to claim it as a network acc
 class OceanOpticsSpectrometer(Thing):
 
     @action(input_schema={"type": "object", "properties": {"serial_number": {"type": "string"}}})
-    def connect(self, serial_number = None): # by default invoked on HTTP POST
+    def connect(self, serial_number = None):
         """connect to spectrometer with given serial number"""
         if serial_number is not None:
             self.serial_number = serial_number
         self.device = Spectrometer.from_serial_number(self.serial_number)
         self._wavelengths = self.device.wavelengths().tolist()
 
-    @action() # by default invoked on HTTP POST
+    @action()
     def disconnect(self):
         """disconnect from the spectrometer"""
         self.device.close()
@@ -190,7 +190,6 @@ create a named event using `Event` object that can push any arbitrary serializab
 ```python
 class OceanOpticsSpectrometer(Thing):
 
-    # only GET HTTP method possible for events
     intensity_measurement_event = Event(name='intensity-measurement-event',
             doc="""event generated on measurement of intensity,
             max 30 per second even if measurement is faster.""",
