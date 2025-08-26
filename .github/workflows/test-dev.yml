@@ -107,10 +107,13 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: steps.dl.outcome == 'success'
-        uses: codecov/codecov-action@v4.0.1
+        uses: codecov/codecov-action@v4
+        env:
+          CI: true
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          fail_ci_if_error: true
 
       - name: Skip note (no Ubuntu 3.13 artifact found)
         if: steps.dl.outcome != 'success'
