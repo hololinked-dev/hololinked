@@ -75,7 +75,7 @@ jobs:
         run: |
           source .venv/bin/activate
           uv run coverage run -m unittest discover -s tests -p 'test_*.py'
-          uv run coverage report -m
+          uv run coverage xml -o coverage.xml
 
       - name: Run unit tests (Windows)
         if: runner.os == 'Windows'
@@ -87,8 +87,8 @@ jobs:
         uses: actions/upload-artifact@v4
         if: runner.os != 'Windows' && matrix.python-version == 3.13
         with:
-          name: coverage-report-${{ matrix.os }}-py${{ matrix.python-version }}
-          path: .coverage
+          name: coverage-report-ubuntu-latest-py3.13
+          path: coverage.xml
           if-no-files-found: warn
 
   publish:
@@ -110,7 +110,7 @@ jobs:
         uses: codecov/codecov-action@v4.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: .coverage
+          files: coverage.xml
 
       - name: Skip note (no Ubuntu 3.13 artifact found)
         if: steps.dl.outcome != 'success'
