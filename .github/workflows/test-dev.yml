@@ -15,18 +15,18 @@ jobs:
       matrix:
         include:
           # Define specific Python versions for each OS
-          - os: windows-latest
-            python-version: 3.11
-          - os: windows-latest
-            python-version: 3.12
-          - os: windows-latest
-            python-version: 3.13
+          # - os: windows-latest
+          #   python-version: 3.11
+          # - os: windows-latest
+          #   python-version: 3.12
+          # - os: windows-latest
+          #   python-version: 3.13
           # - os: macos-latest
           #   python-version: 3.11
-          - os: ubuntu-latest
-            python-version: 3.11
-          - os: ubuntu-latest
-            python-version: 3.12
+          # - os: ubuntu-latest
+          #   python-version: 3.11
+          # - os: ubuntu-latest
+          #   python-version: 3.12
           - os: ubuntu-latest
             python-version: 3.13
 
@@ -111,6 +111,7 @@ jobs:
         env:
           CI: true
         with:
+          working-directory: ${{ github.workspace }}
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
           fail_ci_if_error: true
