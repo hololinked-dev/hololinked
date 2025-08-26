@@ -5,5 +5,5 @@ coverage:
         enabled: false
 
 fixes:
-  - "^/home/runner/work/hololinked/::"
+  - "/home/runner/work/hololinked/::"
   # sufficient for linux as only one test generates the report
