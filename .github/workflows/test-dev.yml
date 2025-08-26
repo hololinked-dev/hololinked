@@ -64,22 +64,54 @@ jobs:
           .venv\Scripts\activate
           uv sync --no-install-project --group test --group dev
 
-      - name: Run unit tests and generate coverage report (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Run unit tests (Linux/macOS)
+        if: runner.os != 'Windows' && matrix.python-version != 3.13
+        run: |
+          source .venv/bin/activate
+          uv run coverage run -m unittest discover -s tests -p 'test_*.py'
+
+      - name: Run unit tests and generate coverage report (Linux/macOS python 3.13)
+        if: runner.os != 'Windows' && matrix.python-version == 3.13
         run: |
           source .venv/bin/activate
           uv run coverage run -m unittest discover -s tests -p 'test_*.py'
           uv run coverage report -m
 
-      - name: Run unit tests and generate coverage report (Windows)
+      - name: Run unit tests (Windows)
         if: runner.os == 'Windows'
         run: |
           .venv\Scripts\activate
           uv run coverage run -m unittest discover -s tests -p "test_*.py"
-          uv run coverage report -m
 
-      - name: Upload coverage report to codecov
-        uses: codecov/codecov-action@v4.0.1
+      - name: Upload coverage report as artifact
+        uses: actions/upload-artifact@v4
         if: runner.os != 'Windows' && matrix.python-version == 3.13
         with:
+          name: coverage-report-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: .coverage
+          if-no-files-found: warn
+
+  publish:
+    name: Publish coverage (Ubuntu Python 3.13)
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Download Ubuntu 3.13 coverage artifact
+        id: dl
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report-ubuntu-latest-py3.13
+          path: .
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        if: steps.dl.outcome == 'success'
+        uses: codecov/codecov-action@v4.0.1
+        with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: .coverage
+
+      - name: Skip note (no Ubuntu 3.13 artifact found)
+        if: steps.dl.outcome != 'success'
+        run: echo "No Ubuntu 3.13 coverage artifact present; skipping Codecov upload."
