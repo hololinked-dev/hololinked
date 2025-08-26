@@ -3,3 +3,7 @@ coverage:
     patch:
       default:
         enabled: false
+
+fixes:
+  - "/home/runner/work/hololinked/hololinked/::"
+  # sufficient for linux as only one test generates the report

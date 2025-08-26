@@ -14,7 +14,6 @@ jobs:
     strategy:
       matrix:
         include:
-          # Define specific Python versions for each OS
           - os: windows-latest
             python-version: 3.11
           - os: windows-latest
@@ -97,6 +96,9 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download Ubuntu 3.13 coverage artifact
         id: dl
         uses: actions/download-artifact@v4
@@ -114,6 +116,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
           fail_ci_if_error: true
+          slug: hololinked-dev/hololinked
 
       - name: Skip note (no Ubuntu 3.13 artifact found)
         if: steps.dl.outcome != 'success'
