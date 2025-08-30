@@ -2,16 +2,14 @@ import logging
 import inspect
 import threading
 import ssl
-import time
 import typing
 import warnings
 
-from ..constants import JSON, ZMQ_TRANSPORTS
+from ..constants import ZMQ_TRANSPORTS
 from ..utils import *  # noqa: F403
 from ..exceptions import *  # noqa: F403
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
 from ..server.server import BaseProtocolServer
-from .dataklasses import build_our_temp_TD
 from .properties import String, ClassSelector
 from .property import Property
 from .actions import BoundAction, action
@@ -230,19 +228,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         ).generate()
 
     thing_model = property(get_thing_model, doc=get_thing_model.__doc__)
-
-    @action()
-    def get_our_thing_model(self, ignore_errors: bool = False) -> JSON:
-        """
-        Certain customizations to the Thing Model to facilitate features that are not part of the standard yet.
-
-        Parameters
-        ----------
-        ignore_errors: bool, optional, Default False
-            if True, offending interaction affordances will be removed from the JSON.
-            This is useful to build partial but always working ThingModel.
-        """
-        return build_our_temp_TD(self, ignore_errors=ignore_errors)
 
     @forkable  # noqa: F405
     def run_with_zmq_server(

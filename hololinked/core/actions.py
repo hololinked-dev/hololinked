@@ -327,26 +327,19 @@ def action(
                         type(input_schema)
                     )
                 )
-        if issubklass(input_schema, (BaseModel, RootModel)):
-            execution_info_validator.argument_schema = input_schema.model_json_schema()
-        elif isinstance(input_schema, dict):
-            execution_info_validator.argument_schema = input_schema
+        execution_info_validator.argument_schema = input_schema
 
         if output_schema:
             # output is not validated by us, so we just check the schema and dont create a validator
             if isinstance(output_schema, dict):
                 jsonschema.Draft7Validator.check_schema(output_schema)
                 execution_info_validator.return_value_schema = output_schema
-            elif isinstance(output_schema, (BaseModel, RootModel)):
-                execution_info_validator.return_value_schema = (
-                    output_schema.model_json_schema()
-                )
+            elif issubklass(output_schema, (BaseModel, RootModel)):
+                execution_info_validator.return_value_schema = output_schema
             else:
                 try:
                     output_schema_model = get_return_type_from_signature(obj)
-                    execution_info_validator.return_value_schema = (
-                        output_schema_model.model_json_schema()
-                    )
+                    execution_info_validator.return_value_schema = output_schema_model
                 except Exception as ex:
                     warnings.warn(
                         f"Could not infer output schema for {obj.__name__} due to {ex}. "
