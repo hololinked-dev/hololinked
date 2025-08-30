@@ -329,6 +329,16 @@ def action(
                 )
         execution_info_validator.argument_schema = input_schema
 
+        if not output_schema:
+            try:
+                output_schema = get_return_type_from_signature(obj)
+            except Exception as ex:
+                warnings.warn(
+                    f"Could not infer output schema for {obj.__name__} due to {str(ex)}. "
+                    + "Considering filing a bug report if you think this should have worked correctly",
+                    category=RuntimeWarning,
+                )
+
         if output_schema:
             # output is not validated by us, so we just check the schema and dont create a validator
             if isinstance(output_schema, dict):
@@ -337,15 +347,11 @@ def action(
             elif issubklass(output_schema, (BaseModel, RootModel)):
                 execution_info_validator.return_value_schema = output_schema
             else:
-                try:
-                    output_schema_model = get_return_type_from_signature(obj)
-                    execution_info_validator.return_value_schema = output_schema_model
-                except Exception as ex:
-                    warnings.warn(
-                        f"Could not infer output schema for {obj.__name__} due to {ex}. "
-                        + "Considering filing a bug report if you think this should have worked correctly",
-                        category=RuntimeError,
+                raise TypeError(
+                    "output schema must be a JSON schema or a Pydantic model, got {}".format(
+                        type(output_schema)
                     )
+                )
 
         final_obj = Action(original)  # type: Action
         final_obj.execution_info = execution_info_validator

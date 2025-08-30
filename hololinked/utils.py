@@ -470,6 +470,28 @@ def get_input_model_from_signature(
     return model
 
 
+def get_return_type_from_signature(func: typing.Callable) -> RootModel | None:
+    """Determine the return type of a function."""
+    sig = inspect.signature(func)
+    if sig.return_annotation == inspect.Signature.empty:
+        return None  # type: ignore[return-value]
+    else:
+        # We use `get_type_hints` rather than just `sig.return_annotation`
+        # because it resolves forward references, etc.
+        type_hints = typing.get_type_hints(func, include_extras=True)
+        from .core.property import wrap_plain_types_in_rootmodel
+
+        if (
+            "return" not in type_hints
+            or type_hints["return"] is typing.Any
+            or type_hints["return"] is None
+            or type_hints["return"] is type(None)
+        ):
+            return None
+
+        return wrap_plain_types_in_rootmodel(type_hints["return"])
+
+
 def pydantic_validate_args_kwargs(
     model: typing.Type[BaseModel],
     args: typing.Tuple = tuple(),
@@ -591,20 +613,6 @@ def json_schema_merge_args_to_kwargs(
     if extra_kwargs:
         data.update(extra_kwargs)
     return data
-
-
-def get_return_type_from_signature(func: typing.Callable) -> RootModel:
-    """Determine the return type of a function."""
-    sig = inspect.signature(func)
-    if sig.return_annotation == inspect.Signature.empty:
-        return typing.Any  # type: ignore[return-value]
-    else:
-        # We use `get_type_hints` rather than just `sig.return_annotation`
-        # because it resolves forward references, etc.
-        type_hints = typing.get_type_hints(func, include_extras=True)
-        from server.property import wrap_plain_types_in_rootmodel
-
-        return wrap_plain_types_in_rootmodel(type_hints["return"])
 
 
 def get_all_sub_things_recusively(thing) -> typing.List:
