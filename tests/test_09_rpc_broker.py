@@ -994,7 +994,7 @@ class TestExposedEvents(TestRPCServerMixin):
 
         def test_events(event_name: str, expected_data: typing.Any) -> None:
             event_client = getattr(self, event_name)  # type: ZMQEvent
-            event_client._default_scheduling_mode = "sync"
+
             self.assertEqual(
                 get_zmq_unique_identifier_from_event_affordance(event_client._resource),
                 getattr(self.thing, event_client._resource.name)._unique_identifier,  # type: EventDispatcher
@@ -1048,7 +1048,6 @@ class TestExposedEvents(TestRPCServerMixin):
 
         async def test_events(event_name: str, expected_data: typing.Any) -> None:
             event_client = getattr(self, event_name)  # type: ZMQEvent
-            event_client._default_scheduling_mode = "async"
             self.assertEqual(
                 get_zmq_unique_identifier_from_event_affordance(event_client._resource),
                 getattr(self.thing, event_client._resource.name)._unique_identifier,  # type: EventDispatcher
@@ -1067,7 +1066,7 @@ class TestExposedEvents(TestRPCServerMixin):
 
             if event_client._callbacks:
                 event_client._callbacks.clear()
-            event_client.subscribe(cb)
+            event_client.subscribe(cb, asynch=True)
             time.sleep(
                 5
             )  # calm down for event publisher to connect fully as there is no handshake for events
