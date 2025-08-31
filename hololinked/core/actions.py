@@ -228,11 +228,6 @@ def action(
         state machine state under which the action can be executed. When not provided, the action can be executed
         under any state.
     **kwargs:
-        - `safe`: bool,
-            indicate in thing description if action is safe to execute, default `False`
-        - `idempotent`: bool,
-            indicate in thing description if action is idempotent (for example, allows HTTP clients to cache return value),
-            default `False`
         - `synchronous`: bool,
             indicate in thing description if action is synchronous (not long running or async) - completes in a deterministic
             (& usually) short period of time, default `True`
@@ -240,6 +235,11 @@ def action(
             indicate that a method should be run in a separate thread, default `False`. Alternative to synchronous for non-async methods.
         - `create_task`: bool,
             indicate that a method function should be run in a new task, default `True`. Alternative to synchronous for async methods.
+        - `safe`: bool,
+            indicate in thing description if action is safe to execute, default `False`
+        - `idempotent`: bool,
+            indicate in thing description if action is idempotent (for example, allows HTTP clients to cache return value),
+            default `False`
 
     Returns
     -------
