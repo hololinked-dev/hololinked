@@ -552,6 +552,8 @@ class ObjectProxy:
             one or more callbacks that will be executed when this event is received
         thread_callbacks: bool
             thread the callbacks otherwise the callbacks will be executed serially
+        deserialize: bool
+            whether to deserialize the event data before passing it to the callbacks
 
         Raises
         ------
