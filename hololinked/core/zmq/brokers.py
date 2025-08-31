@@ -2348,6 +2348,7 @@ class BaseEventConsumer(BaseZMQClient):
         )
         self.interruptor.bind(f"inproc://{self.id}-{short_uuid}/interruption")
         self.interrupting_peer.connect(f"inproc://{self.id}-{short_uuid}/interruption")
+        self._stop = False
 
     def subscribe(self) -> None:
         self.socket.setsockopt(zmq.SUBSCRIBE, self.event_unique_identifier)
@@ -2358,6 +2359,9 @@ class BaseEventConsumer(BaseZMQClient):
         #     self.poller.unregister(self.interruptor)
         self.poller.register(self.socket, zmq.POLLIN)
         self.poller.register(self.interruptor, zmq.POLLIN)
+
+    def stop_polling(self) -> None:
+        self._stop = True
 
     def craft_interrupt_message(self) -> EventMessage:
         return EventMessage.craft_from_arguments(
@@ -2371,7 +2375,7 @@ class BaseEventConsumer(BaseZMQClient):
             BaseZMQ.exit(self)
             self.poller.unregister(self.socket)
             self.poller.unregister(self.interruptor)
-        except Exception as E:
+        except Exception as ex:
             # self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message: {}".format(
             #     self.socket_address, str(E)))
             # above line prints too many warnings
@@ -2385,8 +2389,8 @@ class BaseEventConsumer(BaseZMQClient):
                     self.socket_address
                 )
             )
-        except:
-            self.logger.warning("could not terminate sockets")
+        except Exception as ex:
+            self.logger.warning(f"could not terminate sockets: {str(ex)}")
 
 
 class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
@@ -2406,7 +2410,7 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
             instance name of the Thing publishing the event
     """
 
-    def receive(self, timeout: typing.Optional[float] = 1000) -> EventMessage:
+    def receive(self, timeout: typing.Optional[float] = 1000) -> EventMessage | None:
         """
         receive event with given timeout
 
@@ -2452,7 +2456,8 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
     def interrupt(self):
         """
         interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method,
-        generally should be used for exiting this object
+        generally should be used for exiting this object if there is no poll period / infinite polling.
+        Otherwise please use stop_polling().
         """
         self.interrupting_peer.send_multipart(self.craft_interrupt_message().byte_array)
 
@@ -2478,7 +2483,7 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         self,
         timeout: typing.Optional[float] = 1000,
         raise_interrupt_as_exception: bool = False,
-    ) -> EventMessage:
+    ) -> EventMessage | None:
         """
         receive event with given timeout
 
@@ -2523,7 +2528,8 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
     async def interrupt(self):
         """
         interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method,
-        generally should be used for exiting this object
+        generally should be used for exiting this object, if there is no poll period / infinite polling.
+        Otherwise please use stop_polling().
         """
         await self.interrupting_peer.send_multipart(
             self.craft_interrupt_message().byte_array

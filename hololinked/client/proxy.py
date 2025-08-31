@@ -501,7 +501,8 @@ class ObjectProxy:
         self,
         name: str,
         callbacks: typing.Union[typing.List[typing.Callable], typing.Callable],
-        thread_callbacks: bool = False,
+        asynch: bool = False,
+        concurrent: bool = False,
         deserialize: bool = True,
     ) -> None:
         event = getattr(self, f"{name}_change_event", None)  # type: ConsumedThingEvent
@@ -510,7 +511,8 @@ class ObjectProxy:
         self.subscribe_event(
             name=f"{name}_change_event",
             callbacks=callbacks,
-            thread_callbacks=thread_callbacks,
+            asynch=asynch,
+            concurrent=concurrent,
             deserialize=deserialize,
         )
 
@@ -536,7 +538,8 @@ class ObjectProxy:
         self,
         name: str,
         callbacks: typing.Union[typing.List[typing.Callable], typing.Callable],
-        thread_callbacks: bool = False,
+        asynch: bool = False,
+        concurrent: bool = False,
         deserialize: bool = True,
     ) -> None:
         """
@@ -567,7 +570,12 @@ class ObjectProxy:
         if event._subscribed:
             event.add_callbacks(callbacks)
         else:
-            event.subscribe(callbacks, thread_callbacks, deserialize)
+            event.subscribe(
+                callbacks,
+                asynch=asynch,
+                concurrent=concurrent,
+                deserialize=deserialize,
+            )
 
     def unsubscribe_event(self, name: str):
         """
