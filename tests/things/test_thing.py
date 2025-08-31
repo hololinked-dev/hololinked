@@ -1,6 +1,6 @@
 import asyncio, threading, time, logging, unittest, os
 import typing
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from hololinked.core import Thing, action, Property, Event
 from hololinked.core.properties import (
@@ -530,7 +530,7 @@ class TestThing(Thing):
         https://www.picotech.com/download/manuals/picoscope-6000-series-a-api-programmers-guide.pdf
         """
         print(
-            f"set_channel called with channel={channel}, enabled={enabled}, "
+            f"set_channel_pydantic called with channel={channel}, enabled={enabled}, "
             + f"v_range={v_range}, offset={offset}, coupling={coupling}, bw_limiter={bw_limiter}"
         )
 
@@ -545,6 +545,55 @@ class TestThing(Thing):
         Sensor should be defined as a class and added to the AllowedSensors dict.
         """
         print(f"set_sensor_model called with value={value}")
+
+    @action()
+    def set_sensor_model_pydantic(
+        self, value: typing.Literal["QE25LP-S-MB", "QE12LP-S-MB-QED-D0"]
+    ):
+        """
+        Set the attached sensor to the meter under control.
+        Sensor should be defined as a class and added to the AllowedSensors dict.
+        """
+        print(f"set_sensor_model_pydantic called with value={value}")
+
+    @action()
+    def start_acquisition(self, max_count: typing.Annotated[int, Field(gt=0)]):
+        """
+        Start acquisition of energy measurements.
+
+        Parameters
+        ----------
+        max_count: int
+            maximum number of measurements to acquire before stopping automatically.
+        """
+        print(f"start_acquisition called with max_count={max_count}")
+
+    data_point_event_schema = {
+        "type": "object",
+        "properties": {"timestamp": {"type": "string"}, "energy": {"type": "number"}},
+        "required": ["timestamp", "energy"],
+    }
+
+    data_point_event = Event(
+        doc="Event raised when a new data point is available",
+        label="Data Point Event",
+        schema=data_point_event_schema,
+    )
+
+    # ----- Serial Utility
+    @action()
+    def execute_instruction(
+        self, command: str, return_data_size: typing.Annotated[int, Field(ge=0)] = 0
+    ) -> str:
+        """
+        executes instruction given by the ASCII string parameter 'command'.
+        If return data size is greater than 0, it reads the response and returns the response.
+        Return Data Size - in bytes - 1 ASCII character = 1 Byte.
+        """
+        print(
+            f"execute_instruction called with command={command}, return_data_size={return_data_size}"
+        )
+        return b""
 
 
 def replace_methods_with_actions(thing_cls: typing.Type[TestThing]) -> None:
