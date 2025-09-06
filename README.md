@@ -17,7 +17,7 @@ This implementation is based on RPC, built ground-up in python keeping both the 
 From pip - `pip install hololinked` <br>
 From conda - `conda install -c conda-forge hololinked`
 
-Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env `hololinked.yml` or [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies.
+Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env `hololinked.yml` or [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
 
 ## Usage/Quickstart
 
