@@ -63,18 +63,20 @@ class HTTPServer(Parameterized):
         allow_None=True,
         doc="id(s) of the things to be served by the HTTP server.",
     )  # type: typing.List[str]
+
     port = Integer(
         default=8080,
         bounds=(1, 65535),
         doc="the port at which the server should be run",
     )  # type: int
+
     address = IPAddress(default="0.0.0.0", doc="IP address")  # type: str
     # protocol_version = Selector(objects=[1, 1.1, 2], default=2,
     #                 doc="for HTTP 2, SSL is mandatory. HTTP2 is recommended. \
     #                 When no SSL configurations are provided, defaults to 1.1" ) # type: float
-    logger = ClassSelector(
-        class_=logging.Logger, default=None, allow_None=True, doc="logging.Logger"
-    )  # type: logging.Logger
+
+    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, doc="logging.Logger")  # type: logging.Logger
+
     log_level = Selector(
         objects=[
             logging.DEBUG,
@@ -88,36 +90,42 @@ class HTTPServer(Parameterized):
         doc="""alternative to logger, this creates an internal logger with the specified log level 
                     along with a IO stream handler.""",
     )  # type: int
+
     serializer = ClassSelector(
         class_=JSONSerializer,
         default=None,
         allow_None=True,
         doc="""json serializer used by the server""",
     )  # type: JSONSerializer
+
     ssl_context = ClassSelector(
         class_=ssl.SSLContext,
         default=None,
         allow_None=True,
         doc="SSL context to provide encrypted communication",
     )  # type: typing.Optional[ssl.SSLContext]
+
     certfile = String(
         default=None,
         allow_None=True,
         doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
                         create a SSL context""",
     )  # type: str
+
     keyfile = String(
         default=None,
         allow_None=True,
         doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
                         create a SSL context""",
     )  # type: str
+
     allowed_clients = TypedList(
         item_type=str,
         doc="""Serves request and sets CORS only from these clients, other clients are rejected with 403. 
                                 Unlike pure CORS, the server resource is not even executed if the client is not 
                                 an allowed client. if None any client is served.""",
     )
+
     host = String(
         default=None,
         allow_None=True,
@@ -127,24 +135,28 @@ class HTTPServer(Parameterized):
     #                         doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
     #                         therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
     #                         you may leave this field" ) # type: str
+
     property_handler = ClassSelector(
         default=PropertyHandler,
         class_=(PropertyHandler, RPCHandler),
         isinstance=False,
         doc="custom web request handler of your choice for property read-write & action execution",
     )  # type: typing.Union[RPCHandler, PropertyHandler]
+
     action_handler = ClassSelector(
         default=ActionHandler,
         class_=(ActionHandler, RPCHandler),
         isinstance=False,
         doc="custom web request handler of your choice for property read-write & action execution",
     )  # type: typing.Union[RPCHandler, ActionHandler]
+
     event_handler = ClassSelector(
         default=EventHandler,
         class_=(EventHandler, RPCHandler),
         isinstance=False,
         doc="custom event handler of your choice for handling events",
     )  # type: typing.Union[RPCHandler, EventHandler]
+
     schema_validator = ClassSelector(
         class_=BaseSchemaValidator,
         default=JSONSchemaValidator,
@@ -152,12 +164,14 @@ class HTTPServer(Parameterized):
         isinstance=False,
         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""",
     )  # type: BaseSchemaValidator
+
     security_schemes = TypedList(
         default=None,
         allow_None=True,
         item_type=Security,
         doc="List of security schemes to be used by the server",
     )  # type: typing.Optional[typing.List[Security]]
+
     config = TypedDict(
         default=None,
         allow_None=True,
@@ -167,10 +181,7 @@ class HTTPServer(Parameterized):
 
     def __init__(
         self,
-        things: typing.List[str]
-        | typing.List[Thing]
-        | typing.List[ThingMeta]
-        | None = None,
+        things: typing.List[str] | typing.List[Thing] | typing.List[ThingMeta] | None = None,
         *,
         port: int = 8080,
         address: str = "0.0.0.0",
@@ -184,9 +195,7 @@ class HTTPServer(Parameterized):
         certfile: str = None,
         keyfile: str = None,
         # protocol_version : int = 1, network_interface : str = 'Ethernet',
-        allowed_clients: typing.Optional[
-            typing.Union[str, typing.Iterable[str]]
-        ] = None,
+        allowed_clients: typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,
         config: typing.Optional[dict[str, typing.Any]] = None,
         **kwargs,
     ) -> None:
@@ -250,9 +259,7 @@ class HTTPServer(Parameterized):
             )
 
         self.tornado_instance = None
-        self.app = Application(
-            handlers=[(r"/stop", StopHandler, dict(owner_inst=self))]
-        )
+        self.app = Application(handlers=[(r"/stop", StopHandler, dict(owner_inst=self))])
         self.router = ApplicationRouter(self.app, self)
 
         self.zmq_client_pool = MessageMappedZMQClientPool(
@@ -278,14 +285,10 @@ class HTTPServer(Parameterized):
         # One time creation attributes/activities must be in init
         ioloop.IOLoop.clear_current()  # cleat the event in case any pending tasks exist, also restarting with same
         # event loop is buggy, so we remove it.
-        event_loop = (
-            get_current_async_loop()
-        )  # sets async loop for a non-possessing thread as well
+        event_loop = get_current_async_loop()  # sets async loop for a non-possessing thread as well
         # event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda: asyncio.create_task(self.subscribe_to_host()))
-        event_loop.call_soon(
-            lambda: asyncio.create_task(self.zmq_client_pool.poll_responses())
-        )
+        event_loop.call_soon(lambda: asyncio.create_task(self.zmq_client_pool.poll_responses()))
         # self.zmq_client_pool.handshake(), NOTE - handshake better done upfront as we already poll_responses here
         # which will prevent handshake function to succeed (although handshake will be done)
 
@@ -297,9 +300,7 @@ class HTTPServer(Parameterized):
         #     raise NotImplementedError("Current HTTP2 is not implemented.")
         #     self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
         # else:
-        self.tornado_instance = TornadoHTTP1Server(
-            self.app, ssl_options=self.ssl_context
-        )  # type: TornadoHTTP1Server
+        self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)  # type: TornadoHTTP1Server
         return True
 
     @forkable
@@ -370,25 +371,17 @@ class HTTPServer(Parameterized):
             elif isinstance(thing, (dict, str)):
                 if isinstance(thing, str):
                     # if protocol not given, try INPROC first
-                    self.router.add_zmq_thing_instance(
-                        thing, thing, access_point="INPROC"
-                    )
+                    self.router.add_zmq_thing_instance(thing, thing, access_point="INPROC")
                     if not self.zmq_client_pool.get_client_id_from_thing_id(thing):
-                        self.router.add_zmq_thing_instance(
-                            thing, thing, access_point="IPC"
-                        )
+                        self.router.add_zmq_thing_instance(thing, thing, access_point="IPC")
                     self.router._resolve_rules_per_thing_id(thing)
                 else:
                     for address, thing_id in thing.items():
-                        self.router.add_zmq_thing_instance(
-                            server_id=thing_id, thing_id=thing_id, access_point=address
-                        )
+                        self.router.add_zmq_thing_instance(server_id=thing_id, thing_id=thing_id, access_point=address)
             elif issubklass(thing, ThingMeta):
                 raise TypeError(f"thing should be of type Thing, not ThingMeta")
             else:
-                raise TypeError(
-                    f"thing should be of type Thing, unknown type given - {type(thing)}"
-                )
+                raise TypeError(f"thing should be of type Thing, unknown type given - {type(thing)}")
 
     def add_thing(self, server_id: str, thing: Thing | str, access_point: str) -> None:
         """
@@ -405,13 +398,9 @@ class HTTPServer(Parameterized):
             access_point=access_point,
         )
 
-    def register_id_for_thing(
-        self, thing_cls: typing.Type[ThingMeta], thing_id: str
-    ) -> None:
+    def register_id_for_thing(self, thing_cls: typing.Type[ThingMeta], thing_id: str) -> None:
         """register an expected thing id for a thing class"""
-        assert isinstance(thing_id, str), (
-            f"thing_id should be a string, given {type(thing_id)}"
-        )
+        assert isinstance(thing_id, str), f"thing_id should be a string, given {type(thing_id)}"
         if not self._registered_things.get(thing_cls, None):
             self._registered_things[thing_cls] = []
         if isinstance(thing_id, list):
@@ -430,8 +419,7 @@ class HTTPServer(Parameterized):
         self,
         URL_path: str,
         property: Property | PropertyAffordance,
-        http_methods: typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
-        | None = ("GET", "PUT", None),
+        http_methods: typing.Tuple[str, typing.Optional[str], typing.Optional[str]] | None = ("GET", "PUT", None),
         handler: BaseHandler | PropertyHandler = PropertyHandler,
         **kwargs,
     ) -> None:
@@ -453,13 +441,9 @@ class HTTPServer(Parameterized):
             additional keyword arguments to be passed to the handler's __init__
         """
         if not isinstance(property, (Property, PropertyAffordance)):
-            raise TypeError(
-                f"property should be of type Property, given type {type(property)}"
-            )
+            raise TypeError(f"property should be of type Property, given type {type(property)}")
         if not issubklass(handler, BaseHandler):
-            raise TypeError(
-                f"handler should be subclass of BaseHandler, given type {type(handler)}"
-            )
+            raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(property, Property):
             property = property.to_affordance()
         read_http_method = write_http_method = delete_http_method = None
@@ -479,9 +463,7 @@ class HTTPServer(Parameterized):
         kwargs["resource"] = property
         kwargs["owner_inst"] = self
         kwargs["metadata"] = dict(http_methods=http_methods)
-        self.router.add_rule(
-            affordance=property, URL_path=URL_path, handler=handler, kwargs=kwargs
-        )
+        self.router.add_rule(affordance=property, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_action(
         self,
@@ -508,13 +490,9 @@ class HTTPServer(Parameterized):
             additional keyword arguments to be passed to the handler's __init__
         """
         if not isinstance(action, (Action, ActionAffordance)):
-            raise TypeError(
-                f"Given action should be of type Action or ActionAffordance, given type {type(action)}"
-            )
+            raise TypeError(f"Given action should be of type Action or ActionAffordance, given type {type(action)}")
         if not issubklass(handler, BaseHandler):
-            raise TypeError(
-                f"handler should be subclass of BaseHandler, given type {type(handler)}"
-            )
+            raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         http_methods = _comply_http_method(http_method)
         if len(http_methods) != 1:
             raise ValueError("http_method should be a single HTTP method")
@@ -523,9 +501,7 @@ class HTTPServer(Parameterized):
         kwargs["resource"] = action
         kwargs["owner_inst"] = self
         kwargs["metadata"] = dict(http_methods=http_methods)
-        self.router.add_rule(
-            affordance=action, URL_path=URL_path, handler=handler, kwargs=kwargs
-        )
+        self.router.add_rule(affordance=action, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_event(
         self,
@@ -551,20 +527,14 @@ class HTTPServer(Parameterized):
         if not isinstance(event, (Event, EventAffordance)) and (
             not isinstance(event, PropertyAffordance) or not event.observable
         ):
-            raise TypeError(
-                f"event should be of type Event or EventAffordance, given type {type(event)}"
-            )
+            raise TypeError(f"event should be of type Event or EventAffordance, given type {type(event)}")
         if not issubklass(handler, BaseHandler):
-            raise TypeError(
-                f"handler should be subclass of BaseHandler, given type {type(handler)}"
-            )
+            raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(event, Event):
             event = event.to_affordance()
         kwargs["resource"] = event
         kwargs["owner_inst"] = self
-        self.router.add_rule(
-            affordance=event, URL_path=URL_path, handler=handler, kwargs=kwargs
-        )
+        self.router.add_rule(affordance=event, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     async def subscribe_to_host(self):
         if self.host is None:
@@ -713,13 +683,7 @@ class ApplicationRouter:
 
     def __contains__(
         self,
-        item: str
-        | Property
-        | Action
-        | Event
-        | PropertyAffordance
-        | ActionAffordance
-        | EventAffordance,
+        item: str | Property | Action | Event | PropertyAffordance | ActionAffordance | EventAffordance,
     ) -> bool:
         """
         Check if the item is in the application router.
@@ -783,9 +747,7 @@ class ApplicationRouter:
                 path = f"/{action.thing_id}/{pep8_to_dashed_name(name)}"
             else:
                 path = f"/{pep8_to_dashed_name(name)}"
-            self.server.add_action(
-                URL_path=path, action=action, handler=self.server.action_handler
-            )
+            self.server.add_action(URL_path=path, action=action, handler=self.server.action_handler)
         for event in events:
             if event in self:
                 continue
@@ -793,16 +755,10 @@ class ApplicationRouter:
                 path = f"/{event.thing_id}/{pep8_to_dashed_name(event.name)}"
             else:
                 path = f"/{pep8_to_dashed_name(event.name)}"
-            self.server.add_event(
-                URL_path=path, event=event, handler=self.server.event_handler
-            )
+            self.server.add_event(URL_path=path, event=event, handler=self.server.event_handler)
         self.server.add_action(
-            URL_path=f"/{thing_id}/resources/wot-td"
-            if thing_id
-            else "/resources/wot-td",
-            action=next(
-                (action for action in actions if action.name == "get_thing_model"), None
-            ),
+            URL_path=f"/{thing_id}/resources/wot-td" if thing_id else "/resources/wot-td",
+            action=next((action for action in actions if action.name == "get_thing_model"), None),
             http_method=("GET",),
             handler=ThingDescriptionHandler,
         )
@@ -835,17 +791,13 @@ class ApplicationRouter:
             thing_id=thing.id if isinstance(thing.id, str) else None,
         )
 
-    def add_zmq_thing_instance(
-        self, server_id: str, thing_id: str, access_point: str
-    ) -> None:
+    def add_zmq_thing_instance(self, server_id: str, thing_id: str, access_point: str) -> None:
         """
         Add a thing served by ZMQ server to the HTTP server. Mostly useful for INPROC transport which behaves like a local object.
         Iterates through the interaction affordances and adds a route for each property, action and event.
         """
         run_callable_somehow(
-            self.async_add_zmq_thing_instance(
-                thing_id=thing_id, server_id=server_id, access_point=access_point
-            )
+            self.async_add_zmq_thing_instance(thing_id=thing_id, server_id=server_id, access_point=access_point)
         )
 
     async def async_add_zmq_thing_instance(
@@ -874,12 +826,8 @@ class ApplicationRouter:
             # fetch TD
             assert isinstance(Thing.get_thing_model, Action)  # type definition
             FetchTMAffordance = Thing.get_thing_model.to_affordance()
-            FetchTMAffordance.override_defaults(
-                thing_id=thing_id, name="get_thing_description"
-            )
-            fetch_td = ZMQAction(
-                resource=FetchTMAffordance, sync_client=None, async_client=client
-            )
+            FetchTMAffordance.override_defaults(thing_id=thing_id, name="get_thing_description")
+            fetch_td = ZMQAction(resource=FetchTMAffordance, sync_client=None, async_client=client)
             if isinstance(access_point, str) and len(access_point) in [3, 6]:
                 access_point = access_point.upper()
             elif access_point.lower().startswith("tcp://"):
@@ -887,10 +835,7 @@ class ApplicationRouter:
             TD = await fetch_td.async_call(ignore_errors=True, protocol=access_point)  # type: typing.Dict[str, typing.Any]
             # Add to server
             self.add_interaction_affordances(
-                [
-                    PropertyAffordance.from_TD(name, TD)
-                    for name in TD["properties"].keys()
-                ],
+                [PropertyAffordance.from_TD(name, TD) for name in TD["properties"].keys()],
                 [ActionAffordance.from_TD(name, TD) for name in TD["actions"].keys()],
                 [EventAffordance.from_TD(name, TD) for name in TD["events"].keys()],
                 thing_id=thing_id,
@@ -907,41 +852,40 @@ class ApplicationRouter:
                 f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}. error: {str(ex)}"
             )
 
-    def get_href_for_affordance(self, affordance) -> str:
+    def get_href_for_affordance(self, affordance, use_localhost: bool = False) -> str:
         if affordance not in self:
-            raise ValueError(
-                f"affordance {affordance} not found in the application router"
-            )
+            raise ValueError(f"affordance {affordance} not found in the application router")
         for rule in self.app.wildcard_router.rules:
             if rule.target_kwargs.get("resource", None) == affordance:
-                protocol = "https" if self.server.ssl_context else "http"
-                port = f":{self.server.port}" if self.server.port != 80 else ""
                 path = str(rule.matcher.regex.pattern).rstrip("$")
-                return f"{protocol}://{socket.gethostname()}{port}{path}"
+                return f"{self.get_basepath(use_localhost)}{path}"
 
-    @property
-    def basepath(self):
+    def get_basepath(self, use_localhost: bool = False) -> str:
         protocol = "https" if self.server.ssl_context else "http"
         port = f":{self.server.port}" if self.server.port != 80 else ""
+        if use_localhost:
+            if self.server.address == "0.0.0.0" or self.server.address == "127.0.0.1":
+                return f"{protocol}://127.0.0.1{port}"
+            elif self.server.address == "::":
+                return f"{protocol}://[::1]{port}"
+            return f"{protocol}://localhost{port}"
         return f"{protocol}://{socket.gethostname()}{port}"
+
+    basepath = property(fget=get_basepath, doc="basepath of the server")
 
     def get_target_kwargs_for_affordance(self, affordance) -> dict:
         """
         Get the target kwargs for the affordance in the application router.
         """
         if affordance not in self:
-            raise ValueError(
-                f"affordance {affordance} not found in the application router"
-            )
+            raise ValueError(f"affordance {affordance} not found in the application router")
         for rule in self.app.wildcard_router.rules:
             if rule.target_kwargs.get("resource", None) == affordance:
                 return rule.target_kwargs
         for rule in self._pending_rules:
             if rule[2].get("resource", None) == affordance:
                 return rule[2]
-        raise ValueError(
-            f"affordance {affordance} not found in the application router rules"
-        )
+        raise ValueError(f"affordance {affordance} not found in the application router rules")
 
     def print_rules(self) -> None:
         """
