@@ -3,11 +3,13 @@ Classes that contain the client logic for the HTTP protocol.
 """
 
 import asyncio
+import socket
 import threading
-import tornado.httpclient
-from typing import Any, Callable
+import httpx
+from typing import Any, Callable, Optional
+from dataclasses import dataclass
 from copy import deepcopy
-from tornado.simple_httpclient import HTTPTimeoutError, HTTPStreamClosedError
+
 
 from ...utils import get_current_async_loop
 from ...constants import Operations
@@ -62,52 +64,46 @@ class HTTPConsumedAffordanceMixin:
 
     def __init__(
         self,
-        connect_timeout: int = 60,
-        request_timeout: int = 60,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        **kwargs,
+        sync_client: httpx.Client = None,
+        async_client: httpx.AsyncClient = None,
     ) -> None:
         super().__init__()
-        self._connect_timeout = connect_timeout
-        self._request_timeout = request_timeout
         self._invokation_timeout = invokation_timeout
         self._execution_timeout = execution_timeout
-        self._sync_http_client = tornado.httpclient.HTTPClient()
-        self._async_http_client = tornado.httpclient.AsyncHTTPClient()
+        self._sync_http_client = sync_client
+        self._async_http_client = async_client
 
     def get_body_from_response(
         self,
-        response: tornado.httpclient.HTTPResponse,
+        response: httpx.Response,
         form: Form,
         raise_exception: bool = True,
     ) -> Any:
-        if response.code >= 200 and response.code < 300:
-            body = response.body
-            if not body:
-                return
-            serializer = Serializers.content_types.get(
-                form.contentType or "application/json"
-            )
-            if serializer is None:
-                raise ValueError(f"Unsupported content type: {form.contentType}")
-            body = serializer.loads(body)
-            if isinstance(body, dict) and "exception" in body and raise_exception:
-                raise_local_exception(body)
-            return body
-        raise Exception(f"status code {response.code}")
+        try:
+            if response.status_code >= 200 and response.status_code < 300:
+                body = response.content
+                if not body:
+                    return
+                serializer = Serializers.content_types.get(form.contentType or "application/json")
+                if serializer is None:
+                    raise ValueError(f"Unsupported content type: {form.contentType}")
+                body = serializer.loads(body)
+                if isinstance(body, dict) and "exception" in body and raise_exception:
+                    raise_local_exception(body)
+                return body
+            response.raise_for_status()
+        finally:
+            response.close()
 
-    def create_http_request(
-        self, form: Form, default_method: str, body: bytes | None = None
-    ) -> tornado.httpclient.HTTPRequest:
+    def create_http_request(self, form: Form, default_method: str, body: bytes | None = None) -> httpx.Request:
         """Creates an HTTP request for the given form and body."""
-        return tornado.httpclient.HTTPRequest(
-            form.href,
+        return httpx.Request(
             method=form.htv_methodName or default_method,
-            body=body,
-            headers=self._merge_auth_headers({"Content-Type": "application/json"}),
-            connect_timeout=self._connect_timeout,
-            request_timeout=self._request_timeout,
+            url=form.href,
+            content=body,
+            headers=self._merge_auth_headers({"Content-Type": form.contentType or "application/json"}),
         )
 
     def read_reply(self, form: Form, message_id: str, timeout=None):
@@ -115,10 +111,7 @@ class HTTPConsumedAffordanceMixin:
         form.href = f"{form.href}?messageID={message_id}&timeout={timeout or self._invokation_timeout}"
         form.htv_methodName = "GET"
         http_request = self.create_http_request(form, "GET", None)
-        try:
-            response = self._sync_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
+        response = self._sync_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
 
@@ -126,8 +119,8 @@ class HTTPAction(AuthHeaderMixin, ConsumedThingAction, HTTPConsumedAffordanceMix
     def __init__(
         self,
         resource: ActionAffordance,
-        connect_timeout: int = 60,
-        request_timeout: int = 60,
+        sync_client: httpx.Client = None,
+        async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
         **kwargs,
@@ -135,95 +128,66 @@ class HTTPAction(AuthHeaderMixin, ConsumedThingAction, HTTPConsumedAffordanceMix
         ConsumedThingAction.__init__(self=self, resource=resource, **kwargs)
         HTTPConsumedAffordanceMixin.__init__(
             self=self,
-            connect_timeout=connect_timeout,
-            request_timeout=request_timeout,
+            sync_client=sync_client,
+            async_client=async_client,
             invokation_timeout=invokation_timeout,
             execution_timeout=execution_timeout,
-            **kwargs,
         )
 
     async def async_call(self, *args, **kwargs):
         form = self._resource.retrieve_form(Operations.invokeaction, None)
         if form is None:
-            raise ValueError(
-                f"No form found for invokeAction operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
         if args:
             kwargs.update({"__args__": args})
-        serializer = Serializers.content_types.get(
-            form.contentType or "application/json"
-        )
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(kwargs)
         http_request = self.create_http_request(form, "POST", body)
-        try:
-            response = await self._async_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
+        response = await self._async_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
     def __call__(self, *args, **kwargs):
         form = self._resource.retrieve_form(Operations.invokeaction, None)
         if form is None:
-            raise ValueError(
-                f"No form found for invokeAction operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
         if args:
             kwargs.update({"__args__": args})
-        serializer = Serializers.content_types.get(
-            form.contentType or "application/json"
-        )
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(kwargs)
         http_request = self.create_http_request(form, "POST", body)
-        try:
-            response = self._sync_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
+        response = self._sync_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
     def oneway(self, *args, **kwargs):
         """Invoke the action without waiting for a response."""
         form = deepcopy(self._resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
-            raise ValueError(
-                f"No form found for invokeAction operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
         if args:
             kwargs.update({"__args__": args})
-        serializer = Serializers.content_types.get(
-            form.contentType or "application/json"
-        )
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(kwargs)
         form.href = f"{form.href}?oneway=true"
         http_request = self.create_http_request(form, "POST", body)
-        try:
-            response = self._sync_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
-        # we still do it like this only to ensure our logic is consistent, oneway actions do not expect a body
-        return self.get_body_from_response(response, form)
+        response = self._sync_http_client.send(http_request)
+        # just to ensure the request was successful, no body expected.
+        self.get_body_from_response(response, form)
+        return None
 
     def noblock(self, *args, **kwargs) -> str:
         """Invoke the action in non-blocking mode."""
         form = deepcopy(self._resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
-            raise ValueError(
-                f"No form found for invokeAction operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
         if args:
             kwargs.update({"__args__": args})
-        serializer = Serializers.content_types.get(
-            form.contentType or "application/json"
-        )
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(kwargs)
         form.href = f"{form.href}?noblock=true"
         http_request = self.create_http_request(form, "POST", body)
-        try:
-            response = self._sync_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
-        assert response.headers.get("X-Message-ID", None) is not None, (
-            "The server did not return a message ID for the non-blocking action."
-        )
+        response = self._sync_http_client.send(http_request)
+        if response.headers.get("X-Message-ID", None) is None:
+            raise ValueError("The server did not return a message ID for the non-blocking action.")
         message_id = response.headers["X-Message-ID"]
         self._owner_inst._noblock_messages[message_id] = self
         return message_id
@@ -231,9 +195,7 @@ class HTTPAction(AuthHeaderMixin, ConsumedThingAction, HTTPConsumedAffordanceMix
     def read_reply(self, message_id, timeout=None):
         form = deepcopy(self._resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
-            raise ValueError(
-                f"No form found for invokeAction operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
         return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
 
 
@@ -241,8 +203,8 @@ class HTTPProperty(AuthHeaderMixin, ConsumedThingProperty, HTTPConsumedAffordanc
     def __init__(
         self,
         resource: ActionAffordance,
-        connect_timeout: int = 60,
-        request_timeout: int = 60,
+        sync_client: httpx.Client = None,
+        async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
         **kwargs,
@@ -250,34 +212,25 @@ class HTTPProperty(AuthHeaderMixin, ConsumedThingProperty, HTTPConsumedAffordanc
         ConsumedThingProperty.__init__(self=self, resource=resource, **kwargs)
         HTTPConsumedAffordanceMixin.__init__(
             self=self,
-            connect_timeout=connect_timeout,
-            request_timeout=request_timeout,
+            sync_client=sync_client,
+            async_client=async_client,
             invokation_timeout=invokation_timeout,
             execution_timeout=execution_timeout,
-            **kwargs,
         )
         self._read_reply_op_map = dict()
 
-    async def set(self, value: Any) -> None:
+    async def async_set(self, value: Any) -> None:
         if self._resource.readOnly:
             raise NotImplementedError("This property is not writable")
         form = self._resource.retrieve_form(Operations.writeproperty, None)
         if form is None:
-            raise ValueError(
-                f"No form found for writeproperty operation for {self._resource.name}"
-            )
-        serializer = Serializers.content_types.get(
-            form.contentType or "application/json"
-        )
+            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
         http_request = self.create_http_request(form, "PUT", body)
-        try:
-            response = await self._async_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
-        self.get_body_from_response(
-            response, form
-        )  # Just to ensure the request was successful, no body expected.
+        response = await self._async_http_client.send(http_request)
+        # Just to ensure the request was successful, no body expected.
+        self.get_body_from_response(response, form)
         return None
 
     def set(self, value: Any) -> None:
@@ -286,45 +239,29 @@ class HTTPProperty(AuthHeaderMixin, ConsumedThingProperty, HTTPConsumedAffordanc
             raise NotImplementedError("This property is not writable")
         form = self._resource.retrieve_form(Operations.writeproperty, None)
         if form is None:
-            raise ValueError(
-                f"No form found for writeproperty operation for {self._resource.name}"
-            )
-        serializer = Serializers.content_types.get(
-            form.contentType or "application/json"
-        )
+            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
         http_request = self.create_http_request(form, "PUT", body)
-        try:
-            response = self._sync_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
+        response = self._sync_http_client.send(http_request)
         self.get_body_from_response(response, form)
+        # Just to ensure the request was successful, no body expected.
         return None
 
-    async def get(self):
+    async def async_get(self):
         form = self._resource.retrieve_form(Operations.readproperty, None)
         if form is None:
-            raise ValueError(
-                f"No form found for readproperty operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
         http_request = self.create_http_request(form, "GET", b"")
-        try:
-            response = await self._async_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
+        response = await self._async_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
     def get(self):
         form = self._resource.retrieve_form(Operations.readproperty, None)
         if form is None:
-            raise ValueError(
-                f"No form found for readproperty operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
         http_request = self.create_http_request(form, "GET", None)
-        try:
-            response = self._sync_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
+        response = self._sync_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
     def oneway_set(self, value: Any) -> None:
@@ -332,37 +269,25 @@ class HTTPProperty(AuthHeaderMixin, ConsumedThingProperty, HTTPConsumedAffordanc
             raise NotImplementedError("This property is not writable")
         form = deepcopy(self._resource.retrieve_form(Operations.writeproperty, None))
         if form is None:
-            raise ValueError(
-                f"No form found for writeproperty operation for {self._resource.name}"
-            )
-        serializer = Serializers.content_types.get(
-            form.contentType or "application/json"
-        )
+            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
         form.href = f"{form.href}?oneway=true"
         http_request = self.create_http_request(form, "PUT", body)
-        try:
-            response = self._sync_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
-        # we still do it like this only to ensure our logic is consistent, oneway actions do not expect a body
-        return self.get_body_from_response(response, form, raise_exception=False)
+        response = self._sync_http_client.send(http_request)
+        # Just to ensure the request was successful, no body expected.
+        self.get_body_from_response(response, form, raise_exception=False)
+        return None
 
     def noblock_get(self) -> str:
         form = deepcopy(self._resource.retrieve_form(Operations.readproperty, None))
         if form is None:
-            raise ValueError(
-                f"No form found for readproperty operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
         form.href = f"{form.href}?noblock=true"
         http_request = self.create_http_request(form, "GET", None)
-        try:
-            response = self._sync_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
-        assert response.headers.get("X-Message-ID", None) is not None, (
-            "The server did not return a message ID for the non-blocking property read."
-        )
+        response = self._sync_http_client.send(http_request)
+        if response.headers.get("X-Message-ID", None) is None:
+            raise ValueError("The server did not return a message ID for the non-blocking property read.")
         message_id = response.headers["X-Message-ID"]
         self._read_reply_op_map[message_id] = "readproperty"
         self._owner_inst._noblock_messages[message_id] = self
@@ -371,50 +296,37 @@ class HTTPProperty(AuthHeaderMixin, ConsumedThingProperty, HTTPConsumedAffordanc
     def noblock_set(self, value):
         form = deepcopy(self._resource.retrieve_form(Operations.writeproperty, None))
         if form is None:
-            raise ValueError(
-                f"No form found for writeproperty operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
         if self._resource.readOnly:
             raise NotImplementedError("This property is not writable")
-        serializer = Serializers.content_types.get(
-            form.contentType or "application/json"
-        )
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
         form.href = f"{form.href}?noblock=true"
         http_request = self.create_http_request(form, "PUT", body)
-        try:
-            response = self._sync_http_client.fetch(http_request)
-        except HTTPTimeoutError as ex:
-            raise TimeoutError(str(ex)) from None
-        assert response.code == 204, "noblock did not return 204"
-        assert response.headers.get("X-Message-ID", None) is not None, (
-            f"The server did not return a message ID for the non-blocking property write. response headers: {response.headers}, code {response.code}"
-        )
+        response = self._sync_http_client.send(http_request)
+        if response.headers.get("X-Message-ID", None) is None:
+            raise ValueError(
+                "The server did not return a message ID for the non-blocking property write. "
+                + f" response headers: {response.headers}, code {response.status_code}"
+            )
         message_id = response.headers["X-Message-ID"]
         self._owner_inst._noblock_messages[message_id] = self
         self._read_reply_op_map[message_id] = "writeproperty"
         return message_id
 
     def read_reply(self, message_id, timeout=None):
-        form = deepcopy(
-            self._resource.retrieve_form(
-                op=self._read_reply_op_map.get(message_id, "readproperty")
-            )
-        )
+        form = deepcopy(self._resource.retrieve_form(op=self._read_reply_op_map.get(message_id, "readproperty")))
         if form is None:
-            raise ValueError(
-                f"No form found for readproperty operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
         return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
 
 
-class HTTPEvent(AuthHeaderMixin, ConsumedThingEvent, HTTPConsumedAffordanceMixin):
+class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
     def __init__(
         self,
         resource: EventAffordance | PropertyAffordance,
-        default_scheduling_mode: str = "sync",
-        connect_timeout: int = 60,
-        request_timeout: int = 60,
+        sync_client: httpx.Client = None,
+        async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
         **kwargs,
@@ -422,138 +334,147 @@ class HTTPEvent(AuthHeaderMixin, ConsumedThingEvent, HTTPConsumedAffordanceMixin
         ConsumedThingEvent.__init__(self, resource=resource, **kwargs)
         HTTPConsumedAffordanceMixin.__init__(
             self,
-            connect_timeout=connect_timeout,
-            request_timeout=request_timeout,
+            sync_client=sync_client,
+            async_client=async_client,
             invokation_timeout=invokation_timeout,
             execution_timeout=execution_timeout,
-            **kwargs,
         )
-        self._default_scheduling_mode = default_scheduling_mode
         self._thread = None
 
     def subscribe(
         self,
         callbacks: list[Callable] | Callable,
-        thread_callbacks: bool = False,
+        asynch: bool = False,
+        concurrent: bool = False,
         deserialize: bool = True,
     ) -> None:
-        if not self._default_scheduling_mode in ["sync", "async"]:
-            raise ValueError(
-                f"Invalid scheduling mode: {self._default_scheduling_mode}. Must be 'sync' or 'async'."
-            )
-        op = (
-            Operations.observeproperty
-            if isinstance(self._resource, PropertyAffordance)
-            else Operations.subscribeevent
-        )
+        op = Operations.observeproperty if isinstance(self._resource, PropertyAffordance) else Operations.subscribeevent
         form = self._resource.retrieve_form(op, None)
         if form is None:
-            raise ValueError(
-                f"No form found for {op} operation for {self._resource.name}"
-            )
+            raise ValueError(f"No form found for {op} operation for {self._resource.name}")
         self.add_callbacks(callbacks)
         self._subscribed = True
-        self._deserialize = deserialize
-        self._thread_callbacks = thread_callbacks
-        if self._default_scheduling_mode == "sync":
-            self._thread = threading.Thread(target=self.listen)
-            self._thread.start()
+        if asynch:
+            get_current_async_loop().call_soon(lambda: asyncio.create_task(self.async_listen(form, concurrent)))
         else:
-            get_current_async_loop().call_soon(
-                lambda: asyncio.create_task(self.async_listen())
-            )
+            self._thread = threading.Thread(target=self.listen, args=(form, concurrent))
+            self._thread.start()
 
-    def listen(self):
-        op = (
-            Operations.observeproperty
-            if isinstance(self._resource, PropertyAffordance)
-            else Operations.subscribeevent
-        )
-        form = self._resource.retrieve_form(op, None)
-        if form is None:
-            raise ValueError(
-                f"No form found for {op} operation for {self._resource.name}"
-            )
+    def listen(self, form: Form, concurrent: bool = False):
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
 
-        serializer = Serializers.content_types.get(
-            form.contentType or "application/json"
-        )
-        buffer = ""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        with self._sync_http_client.stream(
+            method="GET", url=form.href, headers={"Accept": "text/event-stream"}
+        ) as resp:
+            resp.raise_for_status()
 
-        def on_chunk(chunk: bytes):
-            """process incoming SSE chunks"""
-            nonlocal self, serializer, buffer
+            event_data = SSE()
+            for line in resp.iter_lines():
+                if not self._subscribed:
+                    break
 
-            if not self._subscribed:
-                self._logger.debug(
-                    "Unsubscribed from the event stream, stopping processing."
-                )
-                self._sync_http_client.close()
-                return
-
-            buffer += chunk.decode("utf-8")
-            # split events on the SSE separator: two newlines
-            while "\n\n" in buffer:
-                raw_event, buffer = buffer.split("\n\n", 1)
-                event = {}
-                for line in raw_event.splitlines():
-                    # skip comments
-                    if not line or line.startswith(":"):
+                if line == "":
+                    if not event_data.data:
+                        self._logger.warning(f"Received an invalid SSE event: {line}")
                         continue
-                    if ":" in line:
-                        field, value = line.split(":", 1)
-                        event.setdefault(field, "")
-                        # strip leading space after colon
-                        event[field] += value.lstrip()
-                if "data" in event:
-                    # if the event has a data field, it is an event, and its also a string, so we need to cast it to bytes
-                    value = serializer.loads(event["data"].encode("utf-8"))
+
+                    event_data.data = serializer.loads(event_data.data.encode("utf-8"))
                     for cb in self._callbacks:
-                        if not self._thread_callbacks:
-                            cb(value)
+                        if not concurrent:
+                            cb(event_data)
                         else:
-                            threading.Thread(target=cb, args=(value,)).start()
-                else:
-                    self._logger.warning(f"Received an invalid SSE event: {raw_event}")
+                            threading.Thread(target=cb, args=(event_data,)).start()
+                    event_data = SSE()
+                    continue
 
-        request = tornado.httpclient.HTTPRequest(
-            form.href,
-            method="GET",
-            headers=self._merge_auth_headers({"Accept": "text/event-stream"}),
-            request_timeout=self._request_timeout,
-            connect_timeout=self._connect_timeout,
-            streaming_callback=on_chunk,
-        )
-        try:
-            while self._subscribed:
-                try:
-                    response = self._sync_http_client.fetch(request, raise_error=False)
-                    if response.code < 200 or response.code >= 300:
-                        raise Exception(
-                            f"Failed to subscribe to SSE stream: {response.code}"
-                        )
-                except HTTPTimeoutError as ex:
-                    pass
-        except HTTPStreamClosedError as ex:
-            self._logger.debug(f"HTTP stream closed: {str(ex)}")
-        finally:
-            tasks = [task for task in asyncio.all_tasks(loop) if not task.done()]
-            for task in tasks:
-                task.cancel()
-            loop.close()
-            self._sync_http_client.close()  # can close twice sometimes, seems to be OK
+                self.decode_chunk(line, event_data)
 
-    def unsubscribe(self, join_thread: bool = True):
+    async def async_listen(self, form: Form, concurrent: bool = False):
+        serializer = Serializers.content_types.get(form.contentType or "application/json")
+
+        async with self._async_http_client.stream(
+            method="GET", url=form.href, headers={"Accept": "text/event-stream"}
+        ) as resp:
+            resp.raise_for_status()
+            event_data = SSE()
+            async for line in resp.aiter_lines():
+                if not self._subscribed:
+                    break
+                if line == "":
+                    if not event_data.data:
+                        self._logger.warning(f"Received an invalid SSE event: {line}")
+                        continue
+
+                    event_data.data = serializer.loads(event_data.data.encode("utf-8"))
+                    for cb in self._callbacks:
+                        if not concurrent:
+                            if asyncio.iscoroutinefunction(cb):
+                                await cb(event_data)
+                            else:
+                                cb(event_data)
+                        else:
+                            if asyncio.iscoroutinefunction(cb):
+                                asyncio.create_task(cb(event_data))
+                            else:
+                                asyncio.get_running_loop().run_in_executor(None, cb, event_data)
+
+                    event_data = SSE()
+                    continue
+                self.decode_chunk(line, event_data)
+
+    def unsubscribe(self):
         """
         Unsubscribe from the event.
         Its inherently a little slower due to the nature of HTTP, please wait until the request timeout is reached.
         """
         self._subscribed = False
-        if self._thread and join_thread:
-            self._thread.join()
-            self._thread = None
+
+    def decode_chunk(self, line: str, event_data: "SSE") -> None:
+        if line is None or line.startswith(":"):  # comment/heartbeat
+            return
+
+        field, _, value = line.partition(":")
+        if value.startswith(" "):
+            value = value[1:]  # spec: single leading space is stripped
+
+        if field == "event":
+            event_data.event = value or "message"
+        elif field == "data":
+            event_data.data += value
+        elif field == "id":
+            event_data.id = value or None
+        elif field == "retry":
+            try:
+                event_data.retry = int(value)
+            except ValueError:
+                self._logger.warning(f"Invalid retry value: {value}")
+
+
+@dataclass
+class SSE:
+    __slots__ = ("event", "data", "id", "retry")
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.event: str = "message"
+        self.data: Optional[str] = ""
+        self.id: Optional[str] = None
+        self.retry: Optional[int] = None
+
+    def flush(self) -> Optional[dict]:
+        if not self.data and self.id is None:
+            return None
+        payload = {
+            "event": self.event,
+            "data": "\n".join(self.data),
+            "id": self.id,
+            "retry": self.retry,
+        }
+        # reset to default for next event
+        self.clear()
+        return payload
 
 
 __all__ = [HTTPProperty.__name__, HTTPAction.__name__, HTTPEvent.__name__]
