@@ -62,9 +62,7 @@ class ZMQConsumedAffordanceMixin:
         self._thing_execution_context = dict(fetch_execution_logs=False)
         self._last_zmq_response = None  # type: typing.Optional[ResponseMessage]
 
-    def get_last_return_value(
-        self, response: ResponseMessage, raise_exception: bool = False
-    ) -> typing.Any:
+    def get_last_return_value(self, response: ResponseMessage, raise_exception: bool = False) -> typing.Any:
         """
         cached return value of the last call to the method
         """
@@ -89,14 +87,10 @@ class ZMQConsumedAffordanceMixin:
 
     def read_reply(self, message_id: str, timeout: int = None) -> typing.Any:
         if self._owner_inst._noblock_messages.get(message_id) != self:
-            raise RuntimeError(
-                f"Message ID {message_id} does not belong to this property."
-            )
+            raise RuntimeError(f"Message ID {message_id} does not belong to this property.")
         response = self._sync_zmq_client.recv_response(message_id=message_id)
         if not response:
-            raise ReplyNotArrivedError(
-                f"could not fetch reply within timeout for message id '{message_id}'"
-            )
+            raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
         self._last_zmq_response = response
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
 
@@ -125,15 +119,11 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             asynchronous ZMQ client for async calls
         """
         ConsumedThingAction.__init__(self, resource=resource, owner_inst=owner_inst)
-        ZMQConsumedAffordanceMixin.__init__(
-            self, sync_client=sync_client, async_client=async_client, **kwargs
-        )
+        ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
         self._resource = resource
 
     last_return_value = property(
-        fget=lambda self: ZMQConsumedAffordanceMixin.get_last_return_value(
-            self, self._last_zmq_response, True
-        ),
+        fget=lambda self: ZMQConsumedAffordanceMixin.get_last_return_value(self, self._last_zmq_response, True),
         doc="cached return value of the last call to the method",
     )
 
@@ -148,9 +138,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             thing_id=self._resource.thing_id,
             objekt=self._resource.name,
             operation=Operations.invokeaction,
-            payload=SerializableData(
-                value=kwargs, content_type=form.contentType or "application/json"
-            ),
+            payload=SerializableData(value=kwargs, content_type=form.contentType or "application/json"),
             server_execution_context=dict(
                 invokation_timeout=self._invokation_timeout,
                 execution_timeout=self._execution_timeout,
@@ -162,9 +150,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
 
     async def async_call(self, *args, **kwargs) -> typing.Any:
         if not self._async_zmq_client:
-            raise RuntimeError(
-                "async calls not possible as async_mixin was not set True at __init__()"
-            )
+            raise RuntimeError("async calls not possible as async_mixin was not set True at __init__()")
         if len(args) > 0:
             kwargs["__args__"] = args
         elif self._schema_validator:
@@ -175,9 +161,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             operation=Operations.invokeaction,
             payload=SerializableData(
                 value=kwargs,
-                content_type=self._resource.retrieve_form(
-                    Operations.invokeaction, Form()
-                ).contentType
+                content_type=self._resource.retrieve_form(Operations.invokeaction, Form()).contentType
                 or "application/json",
             ),
             server_execution_context=dict(
@@ -200,9 +184,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             operation=Operations.invokeaction,
             payload=SerializableData(
                 value=kwargs,
-                content_type=self._resource.retrieve_form(
-                    Operations.invokeaction, Form()
-                ).contentType
+                content_type=self._resource.retrieve_form(Operations.invokeaction, Form()).contentType
                 or "application/json",
             ),
             server_execution_context=dict(
@@ -224,9 +206,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             operation=Operations.invokeaction,
             payload=SerializableData(
                 value=kwargs,
-                content_type=self._resource.retrieve_form(
-                    Operations.invokeaction, Form()
-                ).contentType
+                content_type=self._resource.retrieve_form(Operations.invokeaction, Form()).contentType
                 or "application/json",
             ),
             server_execution_context=dict(
@@ -262,15 +242,11 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
             asynchronous ZMQ client for async calls
         """
         ConsumedThingProperty.__init__(self, resource=resource, owner_inst=owner_inst)
-        ZMQConsumedAffordanceMixin.__init__(
-            self, sync_client=sync_client, async_client=async_client, **kwargs
-        )
+        ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
         self._resource = resource
 
     last_read_value = property(
-        fget=lambda self: ZMQConsumedAffordanceMixin.get_last_return_value(
-            self, self._last_zmq_response, True
-        ),
+        fget=lambda self: ZMQConsumedAffordanceMixin.get_last_return_value(self, self._last_zmq_response, True),
         doc="cached return value of the last call to the method",
     )
 
@@ -281,9 +257,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
             operation=Operations.writeproperty,
             payload=SerializableData(
                 value=value,
-                content_type=self._resource.retrieve_form(
-                    Operations.writeproperty, Form()
-                ).contentType
+                content_type=self._resource.retrieve_form(Operations.writeproperty, Form()).contentType
                 or "application/json",
             ),
             server_execution_context=dict(
@@ -311,18 +285,14 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
 
     async def async_set(self, value: typing.Any) -> None:
         if not self._async_zmq_client:
-            raise RuntimeError(
-                "async calls not possible as async_mixin was not set at __init__()"
-            )
+            raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
         response = await self._async_zmq_client.async_execute(
             thing_id=self._resource.thing_id,
             objekt=self._resource.name,
             operation=Operations.writeproperty,
             payload=SerializableData(
                 value=value,
-                content_type=self._resource.retrieve_form(
-                    Operations.writeproperty, Form()
-                ).contentType
+                content_type=self._resource.retrieve_form(Operations.writeproperty, Form()).contentType
                 or "application/json",
             ),
             server_execution_context=dict(
@@ -334,9 +304,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
 
     async def async_get(self) -> typing.Any:
         if not self._async_zmq_client:
-            raise RuntimeError(
-                "async calls not possible as async_mixin was not set at __init__()"
-            )
+            raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
         response = await self._async_zmq_client.async_execute(
             thing_id=self._resource.thing_id,
             objekt=self._resource.name,
@@ -357,9 +325,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
             operation=Operations.writeproperty,
             payload=SerializableData(
                 value=value,
-                content_type=self._resource.retrieve_form(
-                    Operations.writeproperty, Form()
-                ).contentType
+                content_type=self._resource.retrieve_form(Operations.writeproperty, Form()).contentType
                 or "application/json",
             ),
             server_execution_context=dict(
@@ -390,9 +356,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
             operation=Operations.writeproperty,
             payload=SerializableData(
                 value=value,
-                content_type=self._resource.retrieve_form(
-                    Operations.writeproperty, Form()
-                ).contentType
+                content_type=self._resource.retrieve_form(Operations.writeproperty, Form()).contentType
                 or "application/json",
             ),
             server_execution_context=dict(
@@ -449,14 +413,10 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         self._subscribed = True
         if asynch:
             self._async_zmq_client.subscribe()
-            get_current_async_loop().call_soon(
-                lambda: asyncio.create_task(self.async_listen(concurrent, deserialize))
-            )
+            get_current_async_loop().call_soon(lambda: asyncio.create_task(self.async_listen(concurrent, deserialize)))
         else:
             self._sync_zmq_client.subscribe()
-            self._thread = threading.Thread(
-                target=self.listen, args=(concurrent, deserialize)
-            )
+            self._thread = threading.Thread(target=self.listen, args=(concurrent, deserialize))
             self._thread.start()
 
     def listen(self, concurrent: bool, deserialize: bool):
@@ -500,9 +460,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                         asyncio.create_task(
                             cb(value)
                             if asyncio.iscoroutinefunction(cb)
-                            else get_current_async_loop().run_in_executor(
-                                None, cb, value
-                            )
+                            else get_current_async_loop().run_in_executor(None, cb, value)
                         )
                     elif asyncio.iscoroutinefunction(cb):
                         await cb(value)

@@ -340,6 +340,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             execution_timeout=execution_timeout,
         )
         self._thread = None
+        self._subscribed = dict()  # replace to dict
 
     def subscribe(
         self,
@@ -350,18 +351,21 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
     ) -> None:
         op = Operations.observeproperty if isinstance(self._resource, PropertyAffordance) else Operations.subscribeevent
         form = self._resource.retrieve_form(op, None)
+        callbacks = [callbacks] if callable(callbacks) else callbacks
         if form is None:
             raise ValueError(f"No form found for {op} operation for {self._resource.name}")
-        self.add_callbacks(callbacks)
-        self._subscribed = True
         if asynch:
-            get_current_async_loop().call_soon(lambda: asyncio.create_task(self.async_listen(form, concurrent)))
+            get_current_async_loop().call_soon(
+                lambda: asyncio.create_task(self.async_listen(form, callbacks, concurrent, deserialize))
+            )
         else:
-            self._thread = threading.Thread(target=self.listen, args=(form, concurrent))
-            self._thread.start()
+            _thread = threading.Thread(target=self.listen, args=(form, callbacks, concurrent, deserialize))
+            _thread.start()
 
-    def listen(self, form: Form, concurrent: bool = False):
+    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = False, deserialize: bool = True):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
+        callback_id = threading.get_ident()
+        self._subscribed[callback_id] = True
 
         with self._sync_http_client.stream(
             method="GET", url=form.href, headers={"Accept": "text/event-stream"}
@@ -370,27 +374,28 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
             event_data = SSE()
             for line in resp.iter_lines():
-                if not self._subscribed:
+                if not self._subscribed.get(callback_id, False):
+                    # when value is popped, consider unsubscribed
                     break
 
                 if line == "":
                     if not event_data.data:
                         self._logger.warning(f"Received an invalid SSE event: {line}")
                         continue
-
-                    event_data.data = serializer.loads(event_data.data.encode("utf-8"))
-                    for cb in self._callbacks:
-                        if not concurrent:
-                            cb(event_data)
-                        else:
-                            threading.Thread(target=cb, args=(event_data,)).start()
+                    if deserialize:
+                        event_data.data = serializer.loads(event_data.data.encode("utf-8"))
+                    self.schedule_callbacks(callbacks, event_data, concurrent)
                     event_data = SSE()
                     continue
 
                 self.decode_chunk(line, event_data)
 
-    async def async_listen(self, form: Form, concurrent: bool = False):
+    async def async_listen(
+        self, form: Form, callbacks: list[Callable], concurrent: bool = False, deserialize: bool = True
+    ):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
+        callback_id = asyncio.current_task().get_name()
+        self._subscribed[callback_id] = True
 
         async with self._async_http_client.stream(
             method="GET", url=form.href, headers={"Accept": "text/event-stream"}
@@ -398,26 +403,17 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             resp.raise_for_status()
             event_data = SSE()
             async for line in resp.aiter_lines():
-                if not self._subscribed:
+                if not self._subscribed.get(callback_id, False):
+                    # when value is popped, consider unsubscribed
                     break
+
                 if line == "":
                     if not event_data.data:
                         self._logger.warning(f"Received an invalid SSE event: {line}")
                         continue
-
-                    event_data.data = serializer.loads(event_data.data.encode("utf-8"))
-                    for cb in self._callbacks:
-                        if not concurrent:
-                            if asyncio.iscoroutinefunction(cb):
-                                await cb(event_data)
-                            else:
-                                cb(event_data)
-                        else:
-                            if asyncio.iscoroutinefunction(cb):
-                                asyncio.create_task(cb(event_data))
-                            else:
-                                asyncio.get_running_loop().run_in_executor(None, cb, event_data)
-
+                    if deserialize:
+                        event_data.data = serializer.loads(event_data.data.encode("utf-8"))
+                    await self.async_schedule_callbacks(callbacks, event_data, concurrent)
                     event_data = SSE()
                     continue
                 self.decode_chunk(line, event_data)
@@ -425,9 +421,8 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
     def unsubscribe(self):
         """
         Unsubscribe from the event.
-        Its inherently a little slower due to the nature of HTTP, please wait until the request timeout is reached.
         """
-        self._subscribed = False
+        self._subscribed.clear()
 
     def decode_chunk(self, line: str, event_data: "SSE") -> None:
         if line is None or line.startswith(":"):  # comment/heartbeat
