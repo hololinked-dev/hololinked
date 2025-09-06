@@ -1,4 +1,4 @@
-
-
 class ReplyNotArrivedError(Exception):
-    pass 
+    """Exception raised when a reply is not received in time."""
+
+    pass
