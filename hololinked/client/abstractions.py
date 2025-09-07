@@ -27,10 +27,12 @@ import threading
 import typing
 import builtins
 import logging
+from types import FunctionType, MethodType
 
 from ..td import PropertyAffordance, ActionAffordance, EventAffordance
 from ..td.forms import Form
 from ..utils import get_current_async_loop
+from ..constants import Operations
 
 
 class ConsumedThingAction:
@@ -300,14 +302,48 @@ class ConsumedThingEvent:
             dataclass object representing the event
         """
         self._resource = resource
-        self._logger = kwargs.get("logger", None)  # type: logging.Logger
+        self._subscribed = dict()
+        self._sync_callbacks = []
+        self._async_callbacks = []
+        self.logger = kwargs.get("logger", None)  # type: logging.Logger
+
+    def add_callbacks(
+        self, callbacks: typing.Union[typing.List[typing.Callable], typing.Callable], asynch: bool = False
+    ) -> None:
+        """
+        add callbacks to the event
+
+        Parameters
+        ----------
+        *callbacks: typing.List[typing.Callable] | typing.Callable
+            callback or list of callbacks to add
+        """
+        if asynch:
+            if not self._async_callbacks:
+                self._async_callbacks = []
+            if isinstance(callbacks, (FunctionType, MethodType)):
+                self._async_callbacks.append(callbacks)
+            elif isinstance(callbacks, (list, tuple)):
+                self._async_callbacks.extend(callbacks)
+            else:
+                raise TypeError("callbacks must be a callable or a list of callables")
+        else:
+            if not self._sync_callbacks:
+                self._sync_callbacks = []
+            if isinstance(callbacks, (FunctionType, MethodType)):
+                self._sync_callbacks.append(callbacks)
+            elif isinstance(callbacks, (list, tuple)):
+                self._sync_callbacks.extend(callbacks)
+            else:
+                raise TypeError("callbacks must be a callable or a list of callables")
 
     def subscribe(
         self,
-        callbacks: typing.Union[typing.List[typing.Callable], typing.Callable],
+        callbacks: list[typing.Callable] | typing.Callable,
         asynch: bool = False,
         concurrent: bool = False,
         deserialize: bool = True,
+        create_new_connection: bool = False,
     ) -> None:
         """
         subscribe to the event
@@ -321,7 +357,23 @@ class ConsumedThingEvent:
         deserialize: bool
             whether to deserialize the event payload
         """
-        raise NotImplementedError("implement subscribe per protocol")
+        op = Operations.observeproperty if isinstance(self._resource, PropertyAffordance) else Operations.subscribeevent
+        form = self._resource.retrieve_form(op, None)
+        if not create_new_connection:
+            self.add_callbacks(callbacks, asynch)
+            if asynch:
+                callbacks = self._async_callbacks
+            else:
+                callbacks = self._sync_callbacks
+        if form is None:
+            raise ValueError(f"No form found for {op} operation for {self._resource.name}")
+        if asynch:
+            get_current_async_loop().call_soon(
+                lambda: asyncio.create_task(self.async_listen(form, callbacks, concurrent, deserialize))
+            )
+        else:
+            _thread = threading.Thread(target=self.listen, args=(form, callbacks, concurrent, deserialize))
+            _thread.start()
 
     def unsubscribe(self):
         """
@@ -332,7 +384,9 @@ class ConsumedThingEvent:
         join_thread: bool
             whether to join the event thread after unsubscribing
         """
-        raise NotImplementedError("implement unsubscribe per protocol")
+        self._subscribed.clear()
+        self._sync_callbacks.clear()
+        self._async_callbacks.clear()
 
     def listen(self, form: Form, callbacks: list[typing.Callable], concurrent: bool = True, deserialize: bool = True):
         """
@@ -360,10 +414,13 @@ class ConsumedThingEvent:
             whether to run each callback in a separate thread
         """
         for cb in callbacks:
-            if not concurrent:
-                cb(event_data)
-            else:
-                threading.Thread(target=cb, args=(event_data,)).start()
+            try:
+                if not concurrent:
+                    cb(event_data)
+                else:
+                    threading.Thread(target=cb, args=(event_data,)).start()
+            except Exception as ex:
+                self.logger.error(f"Error occurred in callback {cb}: {ex}")
 
     async def async_schedule_callbacks(self, callbacks, event_data: typing.Any, concurrent: bool = False) -> None:
         """
@@ -378,16 +435,18 @@ class ConsumedThingEvent:
         """
         loop = get_current_async_loop()
         for cb in callbacks:
-            if not concurrent:
-                if asyncio.iscoroutinefunction(cb):
+            try:
+                if concurrent:
+                    if asyncio.iscoroutinefunction(cb):
+                        loop.create_task(cb(event_data))
+                    else:
+                        loop.run_in_executor(None, cb, event_data)
+                elif asyncio.iscoroutinefunction(cb):
                     await cb(event_data)
                 else:
                     cb(event_data)
-            else:
-                if asyncio.iscoroutinefunction(cb):
-                    loop.create_task(cb(event_data))
-                else:
-                    loop.run_in_executor(None, cb, event_data)
+            except Exception as ex:
+                self.logger.error(f"Error occurred in callback {cb}: {ex}")
 
 
 def raise_local_exception(error_message: typing.Dict[str, typing.Any]) -> None:

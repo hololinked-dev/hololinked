@@ -339,28 +339,6 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             invokation_timeout=invokation_timeout,
             execution_timeout=execution_timeout,
         )
-        self._thread = None
-        self._subscribed = dict()  # replace to dict
-
-    def subscribe(
-        self,
-        callbacks: list[Callable] | Callable,
-        asynch: bool = False,
-        concurrent: bool = False,
-        deserialize: bool = True,
-    ) -> None:
-        op = Operations.observeproperty if isinstance(self._resource, PropertyAffordance) else Operations.subscribeevent
-        form = self._resource.retrieve_form(op, None)
-        callbacks = [callbacks] if callable(callbacks) else callbacks
-        if form is None:
-            raise ValueError(f"No form found for {op} operation for {self._resource.name}")
-        if asynch:
-            get_current_async_loop().call_soon(
-                lambda: asyncio.create_task(self.async_listen(form, callbacks, concurrent, deserialize))
-            )
-        else:
-            _thread = threading.Thread(target=self.listen, args=(form, callbacks, concurrent, deserialize))
-            _thread.start()
 
     def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = False, deserialize: bool = True):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
@@ -380,7 +358,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
                 if line == "":
                     if not event_data.data:
-                        self._logger.warning(f"Received an invalid SSE event: {line}")
+                        self.logger.warning(f"Received an invalid SSE event: {line}")
                         continue
                     if deserialize:
                         event_data.data = serializer.loads(event_data.data.encode("utf-8"))
@@ -409,7 +387,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
                 if line == "":
                     if not event_data.data:
-                        self._logger.warning(f"Received an invalid SSE event: {line}")
+                        self.logger.warning(f"Received an invalid SSE event: {line}")
                         continue
                     if deserialize:
                         event_data.data = serializer.loads(event_data.data.encode("utf-8"))
@@ -417,12 +395,6 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                     event_data = SSE()
                     continue
                 self.decode_chunk(line, event_data)
-
-    def unsubscribe(self):
-        """
-        Unsubscribe from the event.
-        """
-        self._subscribed.clear()
 
     def decode_chunk(self, line: str, event_data: "SSE") -> None:
         if line is None or line.startswith(":"):  # comment/heartbeat
@@ -442,7 +414,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             try:
                 event_data.retry = int(value)
             except ValueError:
-                self._logger.warning(f"Invalid retry value: {value}")
+                self.logger.warning(f"Invalid retry value: {value}")
 
 
 @dataclass

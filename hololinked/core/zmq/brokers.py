@@ -54,15 +54,9 @@ class BaseZMQ:
                 kwargs.get("log_level", logging.INFO),
             )
         self.logger = logger
-        self.context = (
-            self.context if hasattr(self, "context") and self.context else None
-        )  # type: zmq.Context | zmq.asyncio.Context
+        self.context = self.context if hasattr(self, "context") and self.context else None  # type: zmq.Context | zmq.asyncio.Context
         self.socket = self.socket if hasattr(self, "socket") and self.socket else None  # type: zmq.Socket | None
-        self.socket_address = (
-            self.socket_address
-            if hasattr(self, "socket_address") and self.socket_address
-            else None
-        )  # type: str | None
+        self.socket_address = self.socket_address if hasattr(self, "socket_address") and self.socket_address else None  # type: str | None
 
     def exit(self) -> None:
         """
@@ -70,9 +64,7 @@ class BaseZMQ:
         automatically. Each subclass server/client should implement their version of exiting if necessary.
         """
         if not hasattr(self, "logger") or not self.logger:
-            self.logger = get_default_logger(
-                "{}|{}".format(self.__class__.__name__, self.id), logging.INFO
-            )
+            self.logger = get_default_logger("{}|{}".format(self.__class__.__name__, self.id), logging.INFO)
 
     def __del__(self) -> None:
         self.exit()
@@ -121,24 +113,16 @@ class BaseZMQ:
         RuntimeError
             if transport is TCP and a socket connect from client side is requested but a socket address is not supplied
         """
-        assert node_type.lower() in ["server", "client"], (
-            f"Invalid node_type: {node_type}"
-        )
+        assert node_type.lower() in ["server", "client"], f"Invalid node_type: {node_type}"
         bind = node_type.lower() == "server"
-        if (
-            len(access_point) == 3
-            or len(access_point) == 6
-            or isinstance(access_point, Enum)
-        ):
+        if len(access_point) == 3 or len(access_point) == 6 or isinstance(access_point, Enum):
             transport = access_point
             socket_address = None
         else:
             transport = access_point.split("://")[0].upper()
             socket_address = access_point
 
-        socket = context.socket(
-            socket_type, socket_class=kwargs.get("socket_class", None)
-        )
+        socket = context.socket(socket_type, socket_class=kwargs.get("socket_class", None))
         socket.setsockopt_string(zmq.IDENTITY, socket_id)
 
         if transport == ZMQ_TRANSPORTS.IPC or transport.lower() == "ipc":
@@ -147,16 +131,12 @@ class BaseZMQ:
                     split_id = server_id.split("/")
                 elif not socket_address.endswith(".ipc"):
                     split_id = socket_address.split("/")
-                socket_dir = (
-                    os.sep + os.sep.join(split_id[:-1]) if len(split_id) > 1 else ""
-                )
+                socket_dir = os.sep + os.sep.join(split_id[:-1]) if len(split_id) > 1 else ""
                 directory = global_config.TEMP_DIR + socket_dir
                 if not os.path.exists(directory):
                     os.makedirs(directory)
                 # re-compute for IPC because it looks for a file in a directory
-                socket_address = "ipc://{}{}{}.ipc".format(
-                    directory, os.sep, split_id[-1]
-                )
+                socket_address = "ipc://{}{}{}.ipc".format(directory, os.sep, split_id[-1])
             if bind:
                 socket.bind(socket_address)
             else:
@@ -186,9 +166,7 @@ class BaseZMQ:
             elif socket_address:
                 socket.connect(socket_address)
             else:
-                raise RuntimeError(
-                    f"Socket address not supplied for TCP connection to identity - {socket_id}"
-                )
+                raise RuntimeError(f"Socket address not supplied for TCP connection to identity - {socket_id}")
         elif transport == ZMQ_TRANSPORTS.INPROC or transport.lower() == "inproc":
             # inproc_id = id.replace('/', '_').replace('-', '_')
             if socket_address is None:
@@ -201,9 +179,7 @@ class BaseZMQ:
                 socket.connect(socket_address)
         else:
             raise NotImplementedError(
-                "transports other than IPC, TCP & INPROC are not implemented now for {}.".format(
-                    cls.__name__
-                )
+                "transports other than IPC, TCP & INPROC are not implemented now for {}.".format(cls.__name__)
                 + f" Given transport {transport}."
             )
         return socket, socket_address
@@ -232,9 +208,7 @@ class BaseAsyncZMQ(BaseZMQ):
         """
         if context and not isinstance(context, zmq.asyncio.Context):
             raise TypeError(
-                "async ZMQ message broker accepts only async ZMQ context. supplied type {}".format(
-                    type(context)
-                )
+                "async ZMQ message broker accepts only async ZMQ context. supplied type {}".format(type(context))
             )
         self.context = context or global_config.zmq_context()
         self.socket, self.socket_address = BaseZMQ.get_socket(
@@ -325,9 +299,7 @@ class BaseZMQServer(BaseZMQ):
             f"handshake cannot be handled - implement _handshake in {self.__class__} to handshake."
         )
 
-    def handle_invalid_message(
-        self, request_message: RequestMessage, exception: Exception
-    ) -> None:
+    def handle_invalid_message(self, request_message: RequestMessage, exception: Exception) -> None:
         """
         Pass an invalid message to the client when an exception occurred while parsing the message from the client
         (``parse_client_message()``)
@@ -345,17 +317,13 @@ class BaseZMQServer(BaseZMQ):
         """
         run_callable_somehow(self._handle_invalid_message(request_message, exception))
 
-    def _handle_invalid_message(
-        self, message: RequestMessage, exception: Exception
-    ) -> None:
+    def _handle_invalid_message(self, message: RequestMessage, exception: Exception) -> None:
         raise NotImplementedError(
             "invalid message cannot be handled"
             + f" - implement _handle_invalid_message in {self.__class__} to handle invalid messages."
         )
 
-    def handle_timeout(
-        self, request_message: RequestMessage, timeout_type: str
-    ) -> None:
+    def handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> None:
         """
         Pass timeout message to the client when the operation could not be executed within specified timeouts
 
@@ -369,21 +337,15 @@ class BaseZMQServer(BaseZMQ):
         -------
         None
         """
-        run_callable_somehow(
-            self._handle_timeout(request_message, timeout_type=timeout_type)
-        )
+        run_callable_somehow(self._handle_timeout(request_message, timeout_type=timeout_type))
 
-    def _handle_timeout(
-        self, request_message: RequestMessage, timeout_type: str
-    ) -> None:
+    def _handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> None:
         raise NotImplementedError(
             "timeouts cannot be handled ",
             f"- implement _handle_timeout in {self.__class__} to handle timeout.",
         )
 
-    def handle_error_message(
-        self, request_message: RequestMessage, exception: Exception
-    ) -> None:
+    def handle_error_message(self, request_message: RequestMessage, exception: Exception) -> None:
         """
         Pass an exception message to the client when an exception occurred while executing the operation
 
@@ -400,9 +362,7 @@ class BaseZMQServer(BaseZMQ):
         """
         run_callable_somehow(self._handle_error_message(request_message, exception))
 
-    def _handle_error_message(
-        self, request_message: RequestMessage, exception: Exception
-    ) -> None:
+    def _handle_error_message(self, request_message: RequestMessage, exception: Exception) -> None:
         raise NotImplementedError(
             "exceptions cannot be handled ",
             f"- implement _handle_error_message in {self.__class__} to handle exceptions.",
@@ -430,9 +390,7 @@ class BaseZMQServer(BaseZMQ):
             return True
         elif request_message.type == EXIT:
             # self.send response with message type EXIT
-            raise BreakLoop(
-                f"exit message received from {request_message.sender_id} with msg-ID {request_message.id}"
-            )
+            raise BreakLoop(f"exit message received from {request_message.sender_id} with msg-ID {request_message.id}")
         return False
 
 
@@ -532,10 +490,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
             try:
                 raw_message = await self.socket.recv_multipart(zmq.NOBLOCK)
                 request_message = RequestMessage(raw_message)
-                if (
-                    not self.handled_default_message_types(request_message)
-                    and raw_message
-                ):
+                if not self.handled_default_message_types(request_message) and raw_message:
                     self.logger.debug(
                         f"received message from client '{request_message.sender_id}' with msg-ID '{request_message.id}'"
                     )
@@ -573,9 +528,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                 preserialized_payload=preserialized_payload,
             ).byte_array
         )
-        self.logger.debug(
-            f"sent response to client '{request_message.sender_id}' with msg-ID '{request_message.id}'"
-        )
+        self.logger.debug(f"sent response to client '{request_message.sender_id}' with msg-ID '{request_message.id}'")
 
     async def async_send_response_with_message_type(
         self,
@@ -608,9 +561,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                 preserialized_payload=preserialized_payload,
             ).byte_array
         )
-        self.logger.debug(
-            f"sent response to client '{request_message.sender_id}' with msg-ID '{request_message.id}'"
-        )
+        self.logger.debug(f"sent response to client '{request_message.sender_id}' with msg-ID '{request_message.id}'")
 
     async def poll_requests(self) -> typing.List[RequestMessage]:
         """
@@ -625,9 +576,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         self.stop_poll = False
         messages = []
         while not self.stop_poll:
-            sockets = await self.poller.poll(
-                self._poll_timeout
-            )  # type hints dont work in this line
+            sockets = await self.poller.poll(self._poll_timeout)  # type hints dont work in this line
             for socket, _ in sockets:
                 while True:
                     try:
@@ -636,10 +585,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                         break
                     else:
                         request_message = RequestMessage(raw_message)
-                        if (
-                            not self.handled_default_message_types(request_message)
-                            and raw_message
-                        ):
+                        if not self.handled_default_message_types(request_message) and raw_message:
                             self.logger.debug(
                                 f"received message from client '{request_message.sender_id}' with msg-ID '{request_message.id}'"
                             )
@@ -670,9 +616,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         )
         self.logger.info(f"sent handshake to client '{request_message.sender_id}'")
 
-    async def _handle_timeout(
-        self, request_message: RequestMessage, timeout_type: str
-    ) -> None:
+    async def _handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> None:
         """
         Inner method that handles timeout. Scheduled by ``handle_timeout()``, signature same as ``handle_timeout``.
         """
@@ -687,9 +631,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         )
         self.logger.info(f"sent timeout to client '{request_message.sender_id}'")
 
-    async def _handle_invalid_message(
-        self, request_message: RequestMessage, exception: Exception
-    ) -> None:
+    async def _handle_invalid_message(self, request_message: RequestMessage, exception: Exception) -> None:
         """
         Inner method that handles invalid messages. Scheduled by ``handle_invalid_message()``,
         signature same as ``handle_invalid_message()``.
@@ -707,13 +649,10 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
             ).byte_array
         )
         self.logger.info(
-            f"sent invalid message to client '{request_message.sender_id}'."
-            + f" exception - {str(exception)}"
+            f"sent invalid message to client '{request_message.sender_id}'." + f" exception - {str(exception)}"
         )
 
-    async def _handle_error_message(
-        self, request_message: RequestMessage, exception: Exception
-    ) -> None:
+    async def _handle_error_message(self, request_message: RequestMessage, exception: Exception) -> None:
         response_message = ResponseMessage.craft_with_message_type(
             request_message=request_message,
             message_type=ERROR,
@@ -721,8 +660,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         )
         await self.socket.send_multipart(response_message.byte_array)
         self.logger.info(
-            f"sent exception message to client '{response_message.receiver_id}'."
-            + f" exception - {str(exception)}"
+            f"sent exception message to client '{response_message.receiver_id}'." + f" exception - {str(exception)}"
         )
 
     def exit(self) -> None:
@@ -733,9 +671,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
             BaseZMQ.exit(self)
             self.poller.unregister(self.socket)
             self.socket.close(0)
-            self.logger.info(
-                f"terminated socket of server '{self.id}' of type {self.__class__}"
-            )
+            self.logger.info(f"terminated socket of server '{self.id}' of type {self.__class__}")
         except Exception as ex:
             self.logger.warning(f"error while closing socket {self.id} - {str(ex)}")
 
@@ -780,8 +716,7 @@ class ZMQServerPool(BaseZMQServer):
     def register_server(self, server: AsyncZMQServer) -> None:
         if not isinstance(server, (AsyncZMQServer)):
             raise TypeError(
-                "registration possible for servers only subclass of AsyncZMQServer."
-                + f" Given type {type(server)}"
+                "registration possible for servers only subclass of AsyncZMQServer." + f" Given type {type(server)}"
             )
         self.pool[server.id] = server
         self.poller.register(server.socket, zmq.POLLIN)
@@ -899,9 +834,7 @@ class ZMQServerPool(BaseZMQServer):
             try:
                 self.poller.unregister(server.socket)
             except Exception as ex:
-                self.logger.warning(
-                    f"could not unregister poller {server.id} - {str(ex)}"
-                )
+                self.logger.warning(f"could not unregister poller {server.id} - {str(ex)}")
             server.exit()
 
 
@@ -975,11 +908,7 @@ class BaseZMQClient(BaseZMQ):
             if self._monitor_socket is not None:
                 self._monitor_socket.close(0)
             self.socket.close(0)
-            self.logger.info(
-                "terminated socket of server '{}' of type '{}'".format(
-                    self.id, self.__class__
-                )
-            )
+            self.logger.info("terminated socket of server '{}' of type '{}'".format(self.id, self.__class__))
         except Exception as ex:
             self.logger.warning(
                 "could not properly terminate socket or attempted to terminate an already terminated "
@@ -1001,16 +930,9 @@ class BaseZMQClient(BaseZMQ):
         -------
         None
         """
-        if (
-            len(response_message.byte_array) == 2
-        ):  # socket monitor message, not our message
+        if len(response_message.byte_array) == 2:  # socket monitor message, not our message
             try:
-                if (
-                    ZMQ_EVENT_MAP[
-                        parse_monitor_message(response_message.byte_array)["event"]
-                    ]
-                    == SERVER_DISCONNECTED
-                ):
+                if ZMQ_EVENT_MAP[parse_monitor_message(response_message.byte_array)["event"]] == SERVER_DISCONNECTED:
                     raise ConnectionAbortedError(f"server disconnected for {self.id}")
                 return True  # True should simply continue polling
             except RuntimeError as ex:
@@ -1018,9 +940,7 @@ class BaseZMQClient(BaseZMQ):
                     f"message received from monitor socket cannot be deserialized for {self.id}, assuming its irrelevant and skipping, {response_message.byte_array}"
                 )
                 return True
-        elif (
-            len(response_message.byte_array) != ResponseMessage.length
-        ):  # either an error or not our message
+        elif len(response_message.byte_array) != ResponseMessage.length:  # either an error or not our message
             self.logger.warning(
                 f"received unknown message from server '{self.server_id}' for client '{self.id}' "
                 + f" - message length: {len(response_message.byte_array)}, message: {response_message.byte_array}"
@@ -1147,9 +1067,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             if message_id in self._response_cache:
                 return self._response_cache.pop(message_id)
             try:
-                if not self._poller_lock.acquire(
-                    timeout=self.poll_timeout / 1000 if self.poll_timeout else -1
-                ):
+                if not self._poller_lock.acquire(timeout=self.poll_timeout / 1000 if self.poll_timeout else -1):
                     continue
                 sockets = self.poller.poll(self.poll_timeout)
                 response_message = None  # type: ResponseMessage
@@ -1164,17 +1082,9 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                             continue
                         if message_id != response_message.id:
                             self._response_cache[response_message.id] = response_message
-                            self.logger.debug(
-                                "cached response with msg-id {}".format(
-                                    response_message.id
-                                )
-                            )
+                            self.logger.debug("cached response with msg-id {}".format(response_message.id))
                         else:
-                            self.logger.debug(
-                                "received response with msg-id {}".format(
-                                    response_message.id
-                                )
-                            )
+                            self.logger.debug("received response with msg-id {}".format(response_message.id))
                             return response_message
             finally:
                 try:
@@ -1240,13 +1150,9 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         start_time = time.time_ns()
         while not self._stop:
             if timeout is not None and (time.time_ns() - start_time) / 1e6 > timeout:
-                raise ConnectionError(
-                    f"Unable to contact server '{self.server_id}' from client '{self.id}'"
-                )
+                raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
             self.socket.send_multipart(
-                RequestMessage.craft_with_message_type(
-                    self.id, self.server_id, HANDSHAKE
-                ).byte_array
+                RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE).byte_array
             )
             self.logger.info(f"sent Handshake to server '{self.server_id}'")
             if self.poller.poll(500):
@@ -1257,9 +1163,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                     pass
                 else:
                     if response_message.type == HANDSHAKE:
-                        self.logger.info(
-                            f"client '{self.id}' handshook with server '{self.server_id}'"
-                        )
+                        self.logger.info(f"client '{self.id}' handshook with server '{self.server_id}'")
                         break
                     elif self.handled_default_message_types(response_message):
                         continue
@@ -1348,13 +1252,9 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         start_time = time.time_ns()
         while not self._stop:
             if timeout is not None and (time.time_ns() - start_time) / 1e6 > timeout:
-                raise ConnectionError(
-                    f"Unable to contact server '{self.server_id}' from client '{self.id}'"
-                )
+                raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
             await self.socket.send_multipart(
-                RequestMessage.craft_with_message_type(
-                    self.id, self.server_id, HANDSHAKE
-                ).byte_array
+                RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE).byte_array
             )
             self.logger.info(f"sent Handshake to server '{self.server_id}'")
             if await self.poller.poll(500):
@@ -1365,9 +1265,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                     pass
                 else:
                     if response_message.type == HANDSHAKE:  # type: ignore
-                        self.logger.info(
-                            f"client '{self.id}' handshook with server '{self.server_id}'"
-                        )
+                        self.logger.info(f"client '{self.id}' handshook with server '{self.server_id}'")
                         break
                     elif self.handled_default_message_types(response_message):
                         continue
@@ -1387,13 +1285,9 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         """
         wait for handshake to complete
         """
-        await asyncio.wait_for(
-            self._handshake_event.wait(), int(timeout / 1000) if timeout else None
-        )
+        await asyncio.wait_for(self._handshake_event.wait(), int(timeout / 1000) if timeout else None)
         if not self._handshake_event.is_set():
-            raise TimeoutError(
-                f"Handshake with server '{self.server_id}' timed out after {timeout} ms"
-            )
+            raise TimeoutError(f"Handshake with server '{self.server_id}' timed out after {timeout} ms")
 
     async def async_send_request(
         self,
@@ -1403,9 +1297,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
         server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: typing.Dict[
-            str, typing.Any
-        ] = default_thing_execution_context,
+        thing_execution_context: typing.Dict[str, typing.Any] = default_thing_execution_context,
     ) -> str:
         """
         send message to server.
@@ -1455,14 +1347,10 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             thing_execution_context=thing_execution_context,
         )
         await self.socket.send_multipart(request_message.byte_array)
-        self.logger.debug(
-            f"sent operation '{operation}' to server '{self.id}' with msg-id '{request_message.id}'"
-        )
+        self.logger.debug(f"sent operation '{operation}' to server '{self.id}' with msg-id '{request_message.id}'")
         return request_message.id
 
-    async def async_recv_response(
-        self, message_id: str
-    ) -> typing.List[ResponseMessage]:
+    async def async_recv_response(self, message_id: str) -> typing.List[ResponseMessage]:
         """
         Receives response from server. Messages are identified by message id, so call this method immediately after
         calling ``send_request()`` to avoid receiving messages out of order. Or, use other methods like
@@ -1505,15 +1393,9 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                             continue
                         if message_id != response_message.id:
                             self._response_cache[response_message.id] = response_message
-                            self.logger.debug(
-                                "cached response with msg-id {}".format(
-                                    response_message.id
-                                )
-                            )
+                            self.logger.debug("cached response with msg-id {}".format(response_message.id))
                         else:
-                            self.logger.debug(
-                                f"received response with msg-id {response_message.id}"
-                            )
+                            self.logger.debug(f"received response with msg-id {response_message.id}")
                             return response_message
             finally:
                 try:
@@ -1634,9 +1516,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self.stop_poll = False
         self._thing_to_client_map = dict()  # type: typing.Dict[str, AsyncZMQClient]
 
-    def create_new(
-        self, id: str, server_id: str, access_point: str = ZMQ_TRANSPORTS.IPC
-    ) -> None:
+    def create_new(self, id: str, server_id: str, access_point: str = ZMQ_TRANSPORTS.IPC) -> None:
         """
         Create new server with specified transport. other arguments are taken from pool specifications.
 
@@ -1660,9 +1540,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             self.poller.register(client._monitor_socket, zmq.POLLIN)
             self.pool[id] = client
         else:
-            raise ValueError(
-                f"client for instance name '{server_id}' already present in pool"
-            )
+            raise ValueError(f"client for instance name '{server_id}' already present in pool")
 
     def register(self, client: AsyncZMQClient, thing_id: str | None = None) -> None:
         """
@@ -1675,8 +1553,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         """
         if not isinstance(client, AsyncZMQClient):
             raise TypeError(
-                "registration possible for clients only subclass of AsyncZMQClient."
-                + f" Given type {type(client)}"
+                "registration possible for clients only subclass of AsyncZMQClient." + f" Given type {type(client)}"
             )
         if client.id in self.pool:
             if self.pool[client.id] == client:
@@ -1691,9 +1568,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         if thing_id:
             self._thing_to_client_map[thing_id] = client.id
 
-    def get_client_id_from_thing_id(
-        self, thing_id: str
-    ) -> typing.Dict[str, AsyncZMQClient]:
+    def get_client_id_from_thing_id(self, thing_id: str) -> typing.Dict[str, AsyncZMQClient]:
         """
         map of thing_id to client
         """
@@ -1740,15 +1615,11 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         Do not duplicate this method call as there are no checks how many pollers exist and messages will become malformed
         if multiple pollers are active.
         """
-        self.logger.info(
-            "client polling started for sockets for {}".format(list(self.pool.keys()))
-        )
+        self.logger.info("client polling started for sockets for {}".format(list(self.pool.keys())))
         self.stop_poll = False
         event_loop = asyncio.get_event_loop()
         while not self.stop_poll:
-            sockets = await self.poller.poll(
-                self.poll_timeout
-            )  # type hints dont work in this line
+            sockets = await self.poller.poll(self.poll_timeout)  # type hints dont work in this line
             for socket, _ in sockets:
                 while True:
                     try:
@@ -1760,9 +1631,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                     except ConnectionAbortedError:
                         for client in self.pool.values():
                             if client.socket.get_monitor_socket() == socket:
-                                self.poller.unregister(
-                                    client.socket
-                                )  # leave the monitor in the pool
+                                self.poller.unregister(client.socket)  # leave the monitor in the pool
                                 client.handshake(timeout=None)
                                 self.logger.error(
                                     f"{client.id} disconnected."
@@ -1778,9 +1647,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         )
                         if message_id in self.cancelled_messages:
                             self.cancelled_messages.remove(message_id)
-                            self.logger.debug(
-                                f"msg-ID '{message_id}' was previously cancelled. dropping..."
-                            )
+                            self.logger.debug(f"msg-ID '{message_id}' was previously cancelled. dropping...")
                             continue
                         self.message_map[message_id] = response_message
                         event = self.events_map.get(message_id, None)
@@ -1816,11 +1683,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                     self.logger.debug(f"message_id {message_id} cancelled")
                     return
                 if i >= max_number_of_retries - 1:
-                    self.logger.error(
-                        "unknown message id {} without corresponding event object".format(
-                            message_id
-                        )
-                    )
+                    self.logger.error("unknown message id {} without corresponding event object".format(message_id))
                     return
             else:
                 self.message_map[message_id] = data
@@ -1930,12 +1793,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                 self.assert_client_ready(self.pool[client_id])
             except TimeoutError:
                 self.cancelled_messages.append(message_id)
-                self.logger.debug(
-                    f"message_id {message_id} added to list of cancelled messages"
-                )
-                raise TimeoutError(
-                    f"Execution not completed within {timeout} seconds"
-                ) from None
+                self.logger.debug(f"message_id {message_id} added to list of cancelled messages")
+                raise TimeoutError(f"Execution not completed within {timeout} seconds") from None
         self.events_map.pop(message_id)
         self.event_pool.completed(event)
         response = self.message_map.pop(message_id)
@@ -2066,9 +1925,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         """
         ping all servers connected to the client pool, calls ping() on Thing
         """
-        return (
-            await self.async_execute_in_all()
-        )  # operation='invokeAction', objekt=CommonRPC.PING)
+        return await self.async_execute_in_all()  # operation='invokeAction', objekt=CommonRPC.PING)
 
     def __contains__(self, name: str) -> bool:
         return name in self.pool
@@ -2086,17 +1943,11 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                 self.poller.unregister(client.socket)
                 self.poller.unregister(client.socket.get_monitor_socket())
                 client.exit()
-            self.logger.info(
-                "all client socket unregistered from pool for '{}'".format(
-                    self.__class__
-                )
-            )
+            self.logger.info("all client socket unregistered from pool for '{}'".format(self.__class__))
         except Exception as ex:
             self.logger.warning(
                 "could not properly terminate context or attempted to terminate an already \
-                                terminated context. Exception message: {}".format(
-                    str(ex)
-                )
+                                terminated context. Exception message: {}".format(str(ex))
             )
 
     """
@@ -2177,9 +2028,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         """
         from ...core.events import EventDispatcher
 
-        assert isinstance(event, EventDispatcher), (
-            "event must be an instance of EventDispatcher"
-        )
+        assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
         if event._unique_identifier in self.events and event not in self.events:
             raise AttributeError(
                 f"event {event._unique_identifier} already found in list of events, please use another name."
@@ -2236,11 +2085,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                     if not isinstance(data, bytes)
                     else SerializableNone
                 )
-                preserialized_payload = (
-                    PreserializedData(data)
-                    if isinstance(data, bytes)
-                    else PreserializedEmptyByte
-                )
+                preserialized_payload = PreserializedData(data) if isinstance(data, bytes) else PreserializedEmptyByte
                 event_message = EventMessage.craft_from_arguments(
                     event._unique_identifier,
                     self.id,
@@ -2248,11 +2093,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                     preserialized_payload=preserialized_payload,
                 )
                 self.socket.send_multipart(event_message.byte_array)
-                self.logger.debug(
-                    "published event with unique identifier {}".format(
-                        event._unique_identifier
-                    )
-                )
+                self.logger.debug("published event with unique identifier {}".format(event._unique_identifier))
                 # print("published event with unique identifier {}".format(event._unique_identifier))
             else:
                 raise AttributeError(
@@ -2270,11 +2111,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         try:
             BaseZMQ.exit(self)
             self.socket.close(0)
-            self.logger.info(
-                "terminated event publishing socket with address '{}'".format(
-                    self.socket_address
-                )
-            )
+            self.logger.info("terminated event publishing socket with address '{}'".format(self.socket_address))
         except Exception as E:
             self.logger.warning(
                 "could not properly terminate context or attempted to terminate an already terminated context at address '{}'. Exception message: {}".format(
@@ -2321,9 +2158,7 @@ class BaseEventConsumer(BaseZMQClient):
             socket_class = zmq.asyncio.Socket
             self._poller_lock = asyncio.Lock()
         else:
-            raise TypeError(
-                "BaseEventConsumer must be subclassed by either BaseSyncZMQ or BaseAsyncZMQ"
-            )
+            raise TypeError("BaseEventConsumer must be subclassed by either BaseSyncZMQ or BaseAsyncZMQ")
         super().__init__(id=id, server_id=kwargs.get("server_id", None), **kwargs)
         self.create_socket(
             server_id=id,
@@ -2337,15 +2172,9 @@ class BaseEventConsumer(BaseZMQClient):
         self.event_unique_identifier = bytes(event_unique_identifier, encoding="utf-8")
         short_uuid = uuid4().hex[:8]
         self.interruptor = self.context.socket(zmq.PAIR, socket_class=socket_class)
-        self.interruptor.setsockopt_string(
-            zmq.IDENTITY, f"interrupting-server-{short_uuid}"
-        )
-        self.interrupting_peer = self.context.socket(
-            zmq.PAIR, socket_class=socket_class
-        )
-        self.interrupting_peer.setsockopt_string(
-            zmq.IDENTITY, f"interrupting-client-{short_uuid}"
-        )
+        self.interruptor.setsockopt_string(zmq.IDENTITY, f"interrupting-server-{short_uuid}")
+        self.interrupting_peer = self.context.socket(zmq.PAIR, socket_class=socket_class)
+        self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f"interrupting-client-{short_uuid}")
         self.interruptor.bind(f"inproc://{self.id}-{short_uuid}/interruption")
         self.interrupting_peer.connect(f"inproc://{self.id}-{short_uuid}/interruption")
         self._stop = False
@@ -2384,11 +2213,7 @@ class BaseEventConsumer(BaseZMQClient):
             self.socket.close(0)
             self.interruptor.close(0)
             self.interrupting_peer.close(0)
-            self.logger.info(
-                "terminated event consuming socket with address '{}'".format(
-                    self.socket_address
-                )
-            )
+            self.logger.info("terminated event consuming socket with address '{}'".format(self.socket_address))
         except Exception as ex:
             self.logger.warning(f"could not terminate sockets: {str(ex)}")
 
@@ -2410,7 +2235,9 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
             instance name of the Thing publishing the event
     """
 
-    def receive(self, timeout: typing.Optional[float] = 1000) -> EventMessage | None:
+    def receive(
+        self, timeout: typing.Optional[float] = 1000, raise_interrupt_as_exception: bool = False
+    ) -> EventMessage | None:
         """
         receive event with given timeout
 
@@ -2424,26 +2251,27 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         self._stop = False
         while not self._stop:
             try:
-                if not self._poller_lock.acquire(
-                    timeout=timeout / 1000 if timeout else -1
-                ):
+                if not self._poller_lock.acquire(timeout=timeout / 1000 if timeout else -1):
                     continue
-                sockets = self.poller.poll(
-                    timeout
-                )  # typing.List[typing.Tuple[zmq.Socket, int]]
+                sockets = self.poller.poll(timeout)  # typing.List[typing.Tuple[zmq.Socket, int]]
                 if len(sockets) > 1:
                     # if there is an interrupt message as well as an event,
                     # give preference to interrupt message.
                     if sockets[0][0] == self.interrupting_peer:
-                        sockets = [
-                            sockets[0]
-                        ]  # we still need the socket, poll event  tuple
+                        sockets = [sockets[0]]  # we still need the socket, poll event  tuple
                     elif sockets[1][0] == self.interrupting_peer:
                         sockets = [sockets[1]]
                 for socket, _ in sockets:
                     try:
                         raw_message = socket.recv_multipart(zmq.NOBLOCK)
-                        return EventMessage(raw_message)
+                        message = EventMessage(raw_message)
+                        if socket == self.interrupting_peer:
+                            if message.payload.deserialize() == "INTERRUPT":
+                                self.stop_polling()
+                                if raise_interrupt_as_exception:
+                                    raise BreakLoop("event consumer interrupted")
+                                return
+                        return message
                     except zmq.Again:
                         pass
                     # if not self.handled_default_message_types(event_message):
@@ -2516,7 +2344,14 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
                 for socket, _ in sockets:
                     try:
                         raw_message = await socket.recv_multipart(zmq.NOBLOCK)
-                        return EventMessage(raw_message)
+                        message = EventMessage(raw_message)
+                        if socket == self.interrupting_peer:
+                            if message.payload.deserialize() == "INTERRUPT":
+                                self.stop_polling()
+                                if raise_interrupt_as_exception:
+                                    raise BreakLoop("event consumer interrupted")
+                                return
+                        return message
                     except zmq.Again:
                         pass
             finally:
@@ -2531,9 +2366,7 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         generally should be used for exiting this object, if there is no poll period / infinite polling.
         Otherwise please use stop_polling().
         """
-        await self.interrupting_peer.send_multipart(
-            self.craft_interrupt_message().byte_array
-        )
+        await self.interrupting_peer.send_multipart(self.craft_interrupt_message().byte_array)
 
 
 from ...core.events import EventDispatcher  # noqa: F401
