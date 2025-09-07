@@ -4,7 +4,7 @@ import typing
 import threading
 import warnings
 import traceback
-
+import uuid
 
 from ...utils import get_current_async_loop
 from ...constants import Operations
@@ -16,6 +16,7 @@ from ...client.abstractions import (
     ConsumedThingEvent,
     ConsumedThingProperty,
     raise_local_exception,
+    SSE,
 )
 from ...core.zmq.message import ResponseMessage
 from ...core.zmq.message import EMPTY_BYTE, REPLY, TIMEOUT, ERROR, INVALID_MESSAGE
@@ -27,6 +28,7 @@ from ...core.zmq.brokers import (
 )
 from ...core import Thing, Action
 from ..exceptions import ReplyNotArrivedError
+from ...exceptions import BreakLoop
 
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
@@ -376,20 +378,13 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         "__name__",
         "__qualname__",
         "__doc__",
-        "_sync_zmq_client",
-        "_async_zmq_client",
-        "_event_consumer",
-        "_callbacks",
+        "logger",
         "_subscribed",
-        "_thread",
-        "_logger",
     ]
 
     def __init__(
         self,
         resource: EventAffordance,
-        sync_zmq_client: EventConsumer,
-        async_zmq_client: AsyncEventConsumer | None = None,
         logger: logging.Logger = None,
         **kwargs,
     ) -> None:
@@ -398,45 +393,32 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
             logger=logger,
             **kwargs,
         )
-        self._sync_zmq_client = sync_zmq_client
-        self._async_zmq_client = async_zmq_client
-        self._thread = None
 
-    def subscribe(
-        self,
-        callbacks: typing.Union[typing.List[typing.Callable], typing.Callable],
-        asynch: bool = False,
-        concurrent: bool = False,
-        deserialize: bool = True,
-    ) -> None:
-        self.add_callbacks(callbacks)
-        self._subscribed = True
-        if asynch:
-            self._async_zmq_client.subscribe()
-            get_current_async_loop().call_soon(lambda: asyncio.create_task(self.async_listen(concurrent, deserialize)))
-        else:
-            self._sync_zmq_client.subscribe()
-            self._thread = threading.Thread(target=self.listen, args=(concurrent, deserialize))
-            self._thread.start()
-
-    def listen(self, concurrent: bool, deserialize: bool):
-        while self._subscribed:
+    def listen(self, form: Form, callbacks: list[typing.Callable], concurrent: bool, deserialize: bool):
+        sync_event_client = EventConsumer(
+            id=f"{self._resource.thing_id}|{self._resource.name}|sync|{uuid.uuid4().hex[:8]}",
+            event_unique_identifier=f"{self._resource.thing_id}/{self._resource.name}",
+            access_point=form.href,
+            logger=self.logger,
+        )
+        sync_event_client.subscribe()
+        task_id = threading.get_ident()
+        self._subscribed[task_id] = True
+        while True:
             try:
-                event_message = self._sync_zmq_client.receive()
+                if not self._subscribed.get(task_id, False):
+                    break
+                event_message = sync_event_client.receive(raise_interrupt_as_exception=True)
                 if not event_message:
                     continue
                 self._last_zmq_response = event_message
-                value = self.get_last_return_value(event_message, raise_exception=True)
-                if value == "INTERRUPT":
-                    break
-                for cb in self._callbacks:
-                    if not concurrent:
-                        cb(value)
-                    else:
-                        threading.Thread(target=cb, args=(value,)).start()
+                event_data = SSE()
+                event_data.id = event_message.id
+                event_data.data = self.get_last_return_value(event_message, raise_exception=True)
+                self.schedule_callbacks(callbacks, event_data, concurrent)
+            except BreakLoop:
+                break
             except Exception as ex:
-                import traceback
-
                 # traceback.print_exc()
                 # TODO: some minor bug here within the zmq receive loop when the loop is interrupted
                 # uncomment the above line to see the traceback
@@ -445,29 +427,31 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                     category=RuntimeWarning,
                 )
 
-    async def async_listen(self, concurrent: bool, deserialize: bool):
-        while self._subscribed:
+    async def async_listen(self, form: Form, callbacks: list[typing.Callable], concurrent: bool, deserialize: bool):
+        async_event_client = AsyncEventConsumer(
+            id=f"{self._resource.thing_id}|{self._resource.name}|async|{uuid.uuid4().hex[:8]}",
+            event_unique_identifier=f"{self._resource.thing_id}/{self._resource.name}",
+            access_point=form.href,
+            logger=self.logger,
+        )
+        async_event_client.subscribe()
+        task_id = asyncio.current_task().get_name()
+        self._subscribed[task_id] = True
+        while True:
             try:
-                event_message = await self._async_zmq_client.receive()
+                if not self._subscribed.get(task_id, False):
+                    break
+                event_message = await async_event_client.receive(raise_interrupt_as_exception=True)
                 if not event_message:
                     continue
                 self._last_zmq_response = event_message
-                value = self.get_last_return_value(event_message, raise_exception=True)
-                if value == "INTERRUPT":
-                    break
-                for cb in self._callbacks:
-                    if concurrent:
-                        asyncio.create_task(
-                            cb(value)
-                            if asyncio.iscoroutinefunction(cb)
-                            else get_current_async_loop().run_in_executor(None, cb, value)
-                        )
-                    elif asyncio.iscoroutinefunction(cb):
-                        await cb(value)
-                    else:
-                        cb(value)
+                event_data = SSE()
+                event_data.id = event_message.id
+                event_data.data = self.get_last_return_value(event_message, raise_exception=True)
+                await self.async_schedule_callbacks(callbacks, event_data, concurrent)
+            except BreakLoop:
+                break
             except Exception as ex:
-                #
                 # traceback.print_exc()
                 # if "There is no current event loop in thread" and not self._subscribed:
                 #     # TODO: some minor bug here within the umq receive loop when the loop is interrupted
@@ -478,12 +462,6 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                     f"Uncaught exception from {self._resource.name} event - {str(ex)}\n{traceback.print_exc()}",
                     category=RuntimeWarning,
                 )
-
-    def unsubscribe(self) -> None:
-        self._subscribed = False
-        self._callbacks = []
-        self._sync_zmq_client.stop_polling()
-        self._async_zmq_client.stop_polling()
 
 
 class WriteMultipleProperties(ZMQAction):

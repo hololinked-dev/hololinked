@@ -13,12 +13,7 @@ from copy import deepcopy
 
 from ...utils import get_current_async_loop
 from ...constants import Operations
-from ..abstractions import (
-    ConsumedThingAction,
-    ConsumedThingEvent,
-    ConsumedThingProperty,
-    raise_local_exception,
-)
+from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception, SSE
 from ...td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
@@ -420,33 +415,6 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                 event_data.retry = int(value)
             except ValueError:
                 self.logger.warning(f"Invalid retry value: {value}")
-
-
-@dataclass
-class SSE:
-    __slots__ = ("event", "data", "id", "retry")
-
-    def __init__(self):
-        self.clear()
-
-    def clear(self):
-        self.event: str = "message"
-        self.data: Optional[str] = ""
-        self.id: Optional[str] = None
-        self.retry: Optional[int] = None
-
-    def flush(self) -> Optional[dict]:
-        if not self.data and self.id is None:
-            return None
-        payload = {
-            "event": self.event,
-            "data": "\n".join(self.data),
-            "id": self.id,
-            "retry": self.retry,
-        }
-        # reset to default for next event
-        self.clear()
-        return payload
 
 
 __all__ = [HTTPProperty.__name__, HTTPAction.__name__, HTTPEvent.__name__]

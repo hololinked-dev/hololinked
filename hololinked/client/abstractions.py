@@ -28,6 +28,7 @@ import typing
 import builtins
 import logging
 from types import FunctionType, MethodType
+from dataclasses import dataclass
 
 from ..td import PropertyAffordance, ActionAffordance, EventAffordance
 from ..td.forms import Form
@@ -484,3 +485,30 @@ def raise_local_exception(error_message: typing.Dict[str, typing.Any]) -> None:
             f"{error_message[0].upper()}{error_message[1:]} timeout occured. Server did not respond within specified timeout"
         ) from None
     raise RuntimeError("unknown error occurred on server side") from None
+
+
+@dataclass
+class SSE:
+    __slots__ = ("event", "data", "id", "retry")
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.event: str = "message"
+        self.data: typing.Optional[str] = ""
+        self.id: typing.Optional[str] = None
+        self.retry: typing.Optional[int] = None
+
+    def flush(self) -> typing.Optional[dict]:
+        if not self.data and self.id is None:
+            return None
+        payload = {
+            "event": self.event,
+            "data": "\n".join(self.data),
+            "id": self.id,
+            "retry": self.retry,
+        }
+        # reset to default for next event
+        self.clear()
+        return payload

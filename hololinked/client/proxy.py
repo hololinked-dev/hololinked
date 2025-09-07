@@ -95,10 +95,7 @@ class ObjectProxy:
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
         if (
             __name in ObjectProxy._own_attrs
-            or (
-                __name not in self.__dict__
-                and isinstance(__value, ClientFactory.__allowed_attribute_types__)
-            )
+            or (__name not in self.__dict__ and isinstance(__value, ClientFactory.__allowed_attribute_types__))
             or self._allow_foreign_attributes
         ):
             # allowed attribute types are ConsumedThingProperty and ConsumedThingAction defined after this class
@@ -108,9 +105,7 @@ class ObjectProxy:
             if isinstance(obj, ConsumedThingProperty):
                 obj.set(value=__value)
                 return
-            raise AttributeError(
-                f"Cannot set attribute {__name} again to ObjectProxy for {self.id}."
-            )
+            raise AttributeError(f"Cannot set attribute {__name} again to ObjectProxy for {self.id}.")
         raise AttributeError(
             f"Cannot set foreign attribute {__name} to ObjectProxy for {self.id}. Given attribute not found in server object."
         )
@@ -125,9 +120,7 @@ class ObjectProxy:
         pass
 
     def __bool__(self) -> bool:
-        raise NotImplementedError(
-            "Cannot convert ObjectProxy to bool. Use is_connected() instead."
-        )
+        raise NotImplementedError("Cannot convert ObjectProxy to bool. Use is_connected() instead.")
         # try:
         #     self.zmq_client.handshake(num_of_tries=10)
         #     return True
@@ -145,10 +138,7 @@ class ObjectProxy:
 
     def __ne__(self, other) -> bool:
         if other and isinstance(other, ObjectProxy):
-            return (
-                other.id != self.id
-                or other.zmq_client.protocol != self.zmq_client.protocol
-            )
+            return other.id != self.id or other.zmq_client.protocol != self.zmq_client.protocol
         return True
 
     def __hash__(self) -> int:
@@ -159,9 +149,7 @@ class ObjectProxy:
 
     def set_invokation_timeout(self, value: typing.Union[float, int]) -> None:
         if not isinstance(value, (float, int, type(None))):
-            raise TypeError(
-                f"Timeout can only be float or int greater than 0, or None. Given type {type(value)}."
-            )
+            raise TypeError(f"Timeout can only be float or int greater than 0, or None. Given type {type(value)}.")
         elif value is not None and value < 0:
             raise ValueError("Timeout must be at least 0 or None, not negative.")
         self._invokation_timeout = value
@@ -178,9 +166,7 @@ class ObjectProxy:
 
     def set_execution_timeout(self, value: typing.Union[float, int]) -> None:
         if not isinstance(value, (float, int, type(None))):
-            raise TypeError(
-                f"Timeout can only be float or int greater than 0, or None. Given type {type(value)}."
-            )
+            raise TypeError(f"Timeout can only be float or int greater than 0, or None. Given type {type(value)}.")
         elif value is not None and value < 0:
             raise ValueError("Timeout must be at least 0 or None, not negative.")
         self._execution_timeout = value
@@ -230,9 +216,7 @@ class ObjectProxy:
         """
         method = getattr(self, name, None)  # type: ConsumedThingAction
         if not isinstance(method, ConsumedThingAction):
-            raise AttributeError(
-                f"No remote method named {name} in Thing {self.td['id']}"
-            )
+            raise AttributeError(f"No remote method named {name} in Thing {self.td['id']}")
         oneway = kwargs.pop("oneway", False)
         noblock = kwargs.pop("noblock", False)
         if noblock:
@@ -301,9 +285,7 @@ class ObjectProxy:
         else:
             return prop.get()
 
-    def write_property(
-        self, name: str, value: typing.Any, oneway: bool = False, noblock: bool = False
-    ) -> None:
+    def write_property(self, name: str, value: typing.Any, oneway: bool = False, noblock: bool = False) -> None:
         """
         set property specified by name on server with specified value.
 
@@ -381,9 +363,7 @@ class ObjectProxy:
             raise AttributeError(f"No property named {name}")
         await prop.async_set(value)
 
-    def read_multiple_properties(
-        self, names: typing.List[str], noblock: bool = False
-    ) -> typing.Any:
+    def read_multiple_properties(self, names: typing.List[str], noblock: bool = False) -> typing.Any:
         """
         get properties specified by list of names.
 
@@ -401,9 +381,7 @@ class ObjectProxy:
         """
         method = getattr(self, "_get_properties", None)  # type: ConsumedThingAction
         if not method:
-            raise RuntimeError(
-                "Client did not load server resources correctly. Report issue at github."
-            )
+            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if noblock:
             return method.noblock(names=names)
         else:
@@ -439,9 +417,7 @@ class ObjectProxy:
             raise ValueError("no properties given to set_properties")
         method = getattr(self, "_set_properties", None)  # type: ConsumedThingAction
         if not method:
-            raise RuntimeError(
-                "Client did not load server resources correctly. Report issue at github."
-            )
+            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if oneway:
             method.oneway(**properties)
         elif noblock:
@@ -465,14 +441,10 @@ class ObjectProxy:
         """
         method = getattr(self, "_get_properties", None)  # type: ConsumedThingAction
         if not method:
-            raise RuntimeError(
-                "Client did not load server resources correctly. Report issue at github."
-            )
+            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         return await method.async_call(names=names)
 
-    async def async_write_multiple_properties(
-        self, **properties: dict[str, typing.Any]
-    ) -> None:
+    async def async_write_multiple_properties(self, **properties: dict[str, typing.Any]) -> None:
         """
         async(io) set properties whose name is specified by keys of a dictionary
 
@@ -492,9 +464,7 @@ class ObjectProxy:
             raise ValueError("no properties given to set_properties")
         method = getattr(self, "_set_properties", None)  # type: ConsumedThingAction
         if not method:
-            raise RuntimeError(
-                "Client did not load server resources correctly. Report issue at github."
-            )
+            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         await method.async_call(**properties)
 
     def observe_property(
@@ -541,6 +511,7 @@ class ObjectProxy:
         asynch: bool = False,
         concurrent: bool = False,
         deserialize: bool = True,
+        # create_new_connection: bool = False,
     ) -> None:
         """
         Subscribe to event specified by name. Events are listened in separate threads and supplied callbacks are
@@ -566,16 +537,23 @@ class ObjectProxy:
         event = getattr(self, name, None)  # type: ConsumedThingEvent
         if not isinstance(event, ConsumedThingEvent):
             raise AttributeError(f"No event named {name}")
-        event._deserialize = deserialize
-        if event._subscribed:
-            event.add_callbacks(callbacks)
-        else:
-            event.subscribe(
-                callbacks,
-                asynch=asynch,
-                concurrent=concurrent,
-                deserialize=deserialize,
-            )
+        # TODO: fix the logic below to reuse connections when possible
+        # if not create_new_connection:
+        #     for task_id, subscribed in event._subscribed.items():
+        #         if isinstance(task_id, int) and not asynch and subscribed:
+        #             event.add_callbacks(callbacks, asynch=asynch)
+        #             return
+        #         elif isinstance(task_id, str) and asynch and subscribed:
+        #             event.add_callbacks(callbacks, asynch=asynch)
+        #             return
+        #         # or create a new connection
+        event.subscribe(
+            callbacks,
+            asynch=asynch,
+            concurrent=concurrent,
+            deserialize=deserialize,
+            # create_new_connection=create_new_connection,
+        )
 
     def unsubscribe_event(self, name: str):
         """
@@ -596,9 +574,7 @@ class ObjectProxy:
             raise AttributeError(f"No event named {name}")
         event.unsubscribe()
 
-    def read_reply(
-        self, message_id: str, timeout: typing.Optional[float] = 5000
-    ) -> typing.Any:
+    def read_reply(self, message_id: str, timeout: typing.Optional[float] = 5000) -> typing.Any:
         """
         read reply of no block calls of an action or a property read/write.
         """
@@ -612,33 +588,21 @@ class ObjectProxy:
         """
         list of properties in the server object
         """
-        return [
-            prop
-            for prop in self.__dict__.values()
-            if isinstance(prop, ConsumedThingProperty)
-        ]
+        return [prop for prop in self.__dict__.values() if isinstance(prop, ConsumedThingProperty)]
 
     @property
     def actions(self) -> typing.List[ConsumedThingAction]:
         """
         list of actions in the server object
         """
-        return [
-            action
-            for action in self.__dict__.values()
-            if isinstance(action, ConsumedThingAction)
-        ]
+        return [action for action in self.__dict__.values() if isinstance(action, ConsumedThingAction)]
 
     @property
     def events(self) -> typing.List[ConsumedThingEvent]:
         """
         list of events in the server object
         """
-        return [
-            event
-            for event in self.__dict__.values()
-            if isinstance(event, ConsumedThingEvent)
-        ]
+        return [event for event in self.__dict__.values() if isinstance(event, ConsumedThingEvent)]
 
     @property
     def thing_id(self) -> str:
