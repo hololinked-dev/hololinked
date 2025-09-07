@@ -120,29 +120,14 @@ class ClientFactory:
                 owner_inst=object_proxy,
                 invokation_timeout=invokation_timeout,
                 execution_timeout=execution_timeout,
+                logger=logger,
             )
             self.add_property(object_proxy, consumed_property)
             if hasattr(affordance, "observable") and affordance.observable:
-                form = affordance.retrieve_form("observeproperty", None)
-                if not form:
-                    raise ValueError(f"No socket address found for observable property {affordance.name}")
-                sync_event_client = EventConsumer(
-                    id=f"{TD['id']}|{affordance.name}|sync",
-                    event_unique_identifier=f"{TD['id']}/{affordance.name}",
-                    access_point=form.href,
-                    logger=logger,
-                )
-                async_event_client = AsyncEventConsumer(
-                    id=f"{TD['id']}|{affordance.name}|async",
-                    event_unique_identifier=f"{TD['id']}/{affordance.name}",
-                    access_point=form.href,
-                    logger=logger,
-                )
                 consumed_observable = ZMQEvent(
                     resource=affordance,
-                    sync_zmq_client=sync_event_client,
-                    async_zmq_client=async_event_client,
                     owner_inst=object_proxy,
+                    logger=logger,
                 )
                 self.add_event(object_proxy, consumed_observable)
         # add actions
@@ -155,31 +140,16 @@ class ClientFactory:
                 owner_inst=object_proxy,
                 invokation_timeout=invokation_timeout,
                 execution_timeout=execution_timeout,
+                logger=logger,
             )
             self.add_action(object_proxy, consumed_action)
         # add events
         for event in TD.get("events", []):
             affordance = EventAffordance.from_TD(event, TD)
-            form = affordance.retrieve_form("subscribeevent", None)
-            if not form:
-                raise ValueError(f"No socket address found for event {affordance.name}")
-            sync_event_client = EventConsumer(
-                id=f"{TD['id']}|{affordance.name}|sync",
-                event_unique_identifier=f"{TD['id']}/{affordance.name}",
-                access_point=form.href,
-                logger=logger,
-            )
-            async_event_client = AsyncEventConsumer(
-                id=f"{TD['id']}|{affordance.name}|async",
-                event_unique_identifier=f"{TD['id']}/{affordance.name}",
-                access_point=form.href,
-                logger=logger,
-            )
             consumed_event = ZMQEvent(
                 resource=affordance,
                 owner_inst=object_proxy,
-                sync_zmq_client=sync_event_client,
-                async_zmq_client=async_event_client,
+                logger=logger,
             )
             self.add_event(object_proxy, consumed_event)
         # add top level form handlers (for ZMQ even if said form exists or not)
@@ -196,6 +166,7 @@ class ClientFactory:
                     owner_inst=object_proxy,
                     invokation_timeout=invokation_timeout,
                     execution_timeout=execution_timeout,
+                    logger=logger,
                 ),
             )
         return object_proxy
@@ -259,7 +230,7 @@ class ClientFactory:
         response.raise_for_status()
 
         TD = Serializers.json.loads(response.content)
-        id = f"client|{TD['id']}|HTTP|{uuid.uuid4()}"
+        id = f"client|{TD['id']}|HTTP|{uuid.uuid4().hex[:8]}"
         log_level = kwargs.get("log_level", logging.INFO)
         logger = get_default_logger(id, log_level=log_level)
         object_proxy = ObjectProxy(id, td=TD, logger=logger, **kwargs)
