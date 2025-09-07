@@ -349,24 +349,26 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             method="GET", url=form.href, headers={"Accept": "text/event-stream"}
         ) as resp:
             resp.raise_for_status()
-
             event_data = SSE()
             for line in resp.iter_lines():
-                if not self._subscribed.get(callback_id, False):
-                    # when value is popped, consider unsubscribed
-                    break
+                try:
+                    if not self._subscribed.get(callback_id, False):
+                        # when value is popped, consider unsubscribed
+                        break
 
-                if line == "":
-                    if not event_data.data:
-                        self.logger.warning(f"Received an invalid SSE event: {line}")
+                    if line == "":
+                        if not event_data.data:
+                            self.logger.warning(f"Received an invalid SSE event: {line}")
+                            continue
+                        if deserialize:
+                            event_data.data = serializer.loads(event_data.data.encode("utf-8"))
+                        self.schedule_callbacks(callbacks, event_data, concurrent)
+                        event_data = SSE()
                         continue
-                    if deserialize:
-                        event_data.data = serializer.loads(event_data.data.encode("utf-8"))
-                    self.schedule_callbacks(callbacks, event_data, concurrent)
-                    event_data = SSE()
-                    continue
 
-                self.decode_chunk(line, event_data)
+                    self.decode_chunk(line, event_data)
+                except Exception as ex:
+                    self.logger.error(f"Error processing SSE event: {ex}")
 
     async def async_listen(
         self, form: Form, callbacks: list[Callable], concurrent: bool = False, deserialize: bool = True
@@ -381,20 +383,23 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             resp.raise_for_status()
             event_data = SSE()
             async for line in resp.aiter_lines():
-                if not self._subscribed.get(callback_id, False):
-                    # when value is popped, consider unsubscribed
-                    break
+                try:
+                    if not self._subscribed.get(callback_id, False):
+                        # when value is popped, consider unsubscribed
+                        break
 
-                if line == "":
-                    if not event_data.data:
-                        self.logger.warning(f"Received an invalid SSE event: {line}")
+                    if line == "":
+                        if not event_data.data:
+                            self.logger.warning(f"Received an invalid SSE event: {line}")
+                            continue
+                        if deserialize:
+                            event_data.data = serializer.loads(event_data.data.encode("utf-8"))
+                        await self.async_schedule_callbacks(callbacks, event_data, concurrent)
+                        event_data = SSE()
                         continue
-                    if deserialize:
-                        event_data.data = serializer.loads(event_data.data.encode("utf-8"))
-                    await self.async_schedule_callbacks(callbacks, event_data, concurrent)
-                    event_data = SSE()
-                    continue
-                self.decode_chunk(line, event_data)
+                    self.decode_chunk(line, event_data)
+                except Exception as ex:
+                    self.logger.error(f"Error processing SSE event: {ex}")
 
     def decode_chunk(self, line: str, event_data: "SSE") -> None:
         if line is None or line.startswith(":"):  # comment/heartbeat

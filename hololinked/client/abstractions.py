@@ -303,39 +303,9 @@ class ConsumedThingEvent:
         """
         self._resource = resource
         self._subscribed = dict()
-        self._sync_callbacks = []
-        self._async_callbacks = []
+        # self._sync_callbacks = []
+        # self._async_callbacks = []
         self.logger = kwargs.get("logger", None)  # type: logging.Logger
-
-    def add_callbacks(
-        self, callbacks: typing.Union[typing.List[typing.Callable], typing.Callable], asynch: bool = False
-    ) -> None:
-        """
-        add callbacks to the event
-
-        Parameters
-        ----------
-        *callbacks: typing.List[typing.Callable] | typing.Callable
-            callback or list of callbacks to add
-        """
-        if asynch:
-            if not self._async_callbacks:
-                self._async_callbacks = []
-            if isinstance(callbacks, (FunctionType, MethodType)):
-                self._async_callbacks.append(callbacks)
-            elif isinstance(callbacks, (list, tuple)):
-                self._async_callbacks.extend(callbacks)
-            else:
-                raise TypeError("callbacks must be a callable or a list of callables")
-        else:
-            if not self._sync_callbacks:
-                self._sync_callbacks = []
-            if isinstance(callbacks, (FunctionType, MethodType)):
-                self._sync_callbacks.append(callbacks)
-            elif isinstance(callbacks, (list, tuple)):
-                self._sync_callbacks.extend(callbacks)
-            else:
-                raise TypeError("callbacks must be a callable or a list of callables")
 
     def subscribe(
         self,
@@ -343,7 +313,7 @@ class ConsumedThingEvent:
         asynch: bool = False,
         concurrent: bool = False,
         deserialize: bool = True,
-        create_new_connection: bool = False,
+        # create_new_connection: bool = False,
     ) -> None:
         """
         subscribe to the event
@@ -359,12 +329,13 @@ class ConsumedThingEvent:
         """
         op = Operations.observeproperty if isinstance(self._resource, PropertyAffordance) else Operations.subscribeevent
         form = self._resource.retrieve_form(op, None)
-        if not create_new_connection:
-            self.add_callbacks(callbacks, asynch)
-            if asynch:
-                callbacks = self._async_callbacks
-            else:
-                callbacks = self._sync_callbacks
+        callbacks = callbacks if isinstance(callbacks, (list, tuple)) else [callbacks]
+        # if not create_new_connection:
+        #     self.add_callbacks(callbacks, asynch)
+        #     if asynch:
+        #         callbacks = self._async_callbacks
+        #     else:
+        #         callbacks = self._sync_callbacks
         if form is None:
             raise ValueError(f"No form found for {op} operation for {self._resource.name}")
         if asynch:
@@ -385,8 +356,8 @@ class ConsumedThingEvent:
             whether to join the event thread after unsubscribing
         """
         self._subscribed.clear()
-        self._sync_callbacks.clear()
-        self._async_callbacks.clear()
+        # self._sync_callbacks.clear()
+        # self._async_callbacks.clear()
 
     def listen(self, form: Form, callbacks: list[typing.Callable], concurrent: bool = True, deserialize: bool = True):
         """
@@ -447,6 +418,39 @@ class ConsumedThingEvent:
                     cb(event_data)
             except Exception as ex:
                 self.logger.error(f"Error occurred in callback {cb}: {ex}")
+
+    def add_callbacks(
+        self, callbacks: typing.Union[typing.List[typing.Callable], typing.Callable], asynch: bool = False
+    ) -> None:
+        """
+        add callbacks to the event
+
+        Parameters
+        ----------
+        *callbacks: typing.List[typing.Callable] | typing.Callable
+            callback or list of callbacks to add
+        """
+        raise NotImplementedError(
+            "logic error - cannot add callbacks to reuse event subscription. Unsubscribe and resubscribe with new callbacks"
+        )
+        if asynch:
+            if not self._async_callbacks:
+                self._async_callbacks = []
+            if isinstance(callbacks, (FunctionType, MethodType)):
+                self._async_callbacks.append(callbacks)
+            elif isinstance(callbacks, (list, tuple)):
+                self._async_callbacks.extend(callbacks)
+            else:
+                raise TypeError("callbacks must be a callable or a list of callables")
+        else:
+            if not self._sync_callbacks:
+                self._sync_callbacks = []
+            if isinstance(callbacks, (FunctionType, MethodType)):
+                self._sync_callbacks.append(callbacks)
+            elif isinstance(callbacks, (list, tuple)):
+                self._sync_callbacks.extend(callbacks)
+            else:
+                raise TypeError("callbacks must be a callable or a list of callables")
 
 
 def raise_local_exception(error_message: typing.Dict[str, typing.Any]) -> None:
