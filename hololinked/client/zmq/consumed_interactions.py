@@ -403,10 +403,10 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         )
         sync_event_client.subscribe()
         task_id = threading.get_ident()
-        self._subscribed[task_id] = True
+        self._subscribed[task_id] = (True, sync_event_client)
         while True:
             try:
-                if not self._subscribed.get(task_id, False):
+                if not self._subscribed.get(task_id, (False, None))[0]:
                     break
                 event_message = sync_event_client.receive(raise_interrupt_as_exception=True)
                 if not event_message:
@@ -436,10 +436,10 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         )
         async_event_client.subscribe()
         task_id = asyncio.current_task().get_name()
-        self._subscribed[task_id] = True
+        self._subscribed[task_id] = (True, async_event_client)
         while True:
             try:
-                if not self._subscribed.get(task_id, False):
+                if not self._subscribed.get(task_id, (False, None))[0]:
                     break
                 event_message = await async_event_client.receive(raise_interrupt_as_exception=True)
                 if not event_message:
@@ -462,6 +462,12 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                     f"Uncaught exception from {self._resource.name} event - {str(ex)}\n{traceback.print_exc()}",
                     category=RuntimeWarning,
                 )
+
+    def unsubscribe(self) -> None:
+        for task_id, (subscribed, client) in self._subscribed.items():
+            if client:
+                client.stop_polling()
+        return super().unsubscribe()
 
 
 class WriteMultipleProperties(ZMQAction):
