@@ -9,6 +9,7 @@ import random
 import time
 from types import SimpleNamespace
 
+from hololinked.client.abstractions import SSE
 from hololinked.core.actions import BoundAction
 from hololinked.core.property import Property
 from hololinked.core.thing import Thing
@@ -22,6 +23,7 @@ from hololinked.core.zmq.brokers import (
 from hololinked.core.zmq.message import EXIT, RequestMessage
 from hololinked.core.zmq.rpc_server import RPCServer
 from hololinked.server.zmq import ZMQServer
+from hololinked.td.forms import Form
 from hololinked.td.utils import get_zmq_unique_identifier_from_event_affordance
 from hololinked.utils import get_all_sub_things_recusively, get_current_async_loop
 from hololinked.config import global_config
@@ -141,9 +143,7 @@ class InteractionAffordanceMixin(TestBrokerMixin):
             schema_validator=None,
         )
         cls.total_number_of_events = ZMQProperty(
-            resource=PropertyAffordance.from_TD(
-                "total_number_of_events", test_thing_TD
-            ),
+            resource=PropertyAffordance.from_TD("total_number_of_events", test_thing_TD),
             sync_client=cls.sync_client,
             async_client=cls.async_client,
             owner_inst=owner_inst,
@@ -172,16 +172,13 @@ class TestRPCServerMixin(InteractionAffordanceMixin):
 
     @classmethod
     def setUpServer(cls):
-        cls.server = RPCServer(
-            id=cls.server_id, things=[cls.thing], context=cls.context, logger=cls.logger
-        )
+        cls.server = RPCServer(id=cls.server_id, things=[cls.thing], logger=cls.logger)
 
     @classmethod
     def setUpClient(cls):
         cls.async_client = AsyncZMQClient(
             id=cls.client_id,
             server_id=cls.server_id,
-            context=cls.context,
             access_point="INPROC",
             logger=cls.logger,
             handshake=False,
@@ -189,7 +186,6 @@ class TestRPCServerMixin(InteractionAffordanceMixin):
         cls.sync_client = SyncZMQClient(
             id=cls.client_id + "-sync",
             server_id=cls.server_id,
-            context=cls.context,
             access_point="INPROC",
             logger=cls.logger,
             handshake=False,
@@ -205,7 +201,6 @@ class TestRPCServerMixin(InteractionAffordanceMixin):
 
     @classmethod
     def setUpClass(cls):
-        cls.context = global_config.zmq_context()
         super().setUpClass()
         print(f"test ZMQ RPC Server {cls.__name__}")
 
@@ -218,12 +213,8 @@ class TestRPCServerMixin(InteractionAffordanceMixin):
 class TestInprocRPCServer(TestRPCServerMixin):
     def test_1_creation_defaults(self):
         """test server configuration defaults"""
-        self.assertTrue(
-            self.server.req_rep_server.socket_address.startswith("inproc://")
-        )
-        self.assertTrue(
-            self.server.event_publisher.socket_address.startswith("inproc://")
-        )
+        self.assertTrue(self.server.req_rep_server.socket_address.startswith("inproc://"))
+        self.assertTrue(self.server.event_publisher.socket_address.startswith("inproc://"))
 
         self.assertTrue(self.thing.rpc_server, self.server)
         self.assertTrue(self.thing.event_publisher, self.server.event_publisher)
@@ -266,9 +257,7 @@ class TestInprocRPCServer(TestRPCServerMixin):
             last_call_type = None
             # Randomize calls to self.action_echo
             for index, data in enumerate(data_structures):
-                call_type = random.choice(
-                    ["async_call", "plain_call", "oneway", "noblock"]
-                )
+                call_type = random.choice(["async_call", "plain_call", "oneway", "noblock"])
                 if call_type == "async_call":
                     result = await self.action_echo.async_call(data)
                     self.assertEqual(result, data)
@@ -284,13 +273,9 @@ class TestInprocRPCServer(TestRPCServerMixin):
 
                 # print("last_call_type", last_call_type, "call_type", call_type, "data", data)
                 if last_call_type == "noblock":
-                    response = self.action_echo._sync_zmq_client.recv_response(
-                        msg_ids[index - 1]
-                    )
+                    response = self.action_echo._sync_zmq_client.recv_response(msg_ids[index - 1])
                     self.action_echo._last_zmq_response = response
-                    self.assertEqual(
-                        self.action_echo.last_return_value, data_structures[index - 1]
-                    )
+                    self.assertEqual(self.action_echo.last_return_value, data_structures[index - 1])
 
                 last_call_type = call_type
 
@@ -314,9 +299,7 @@ class TestInprocRPCServer(TestRPCServerMixin):
                 await self.base_property.async_set(0)
                 self.assertEqual(await self.base_property.async_get(), 0)
 
-            get_current_async_loop().run_until_complete(
-                test_async_property_abstractions()
-            )
+            get_current_async_loop().run_until_complete(test_async_property_abstractions())
 
         test_basic_operations()
         self.sync_client.handshake()
@@ -330,9 +313,7 @@ class TestInprocRPCServer(TestRPCServerMixin):
             last_call_type = None
             # Randomize calls to self.action_echo
             for index, data in enumerate(data_structures):
-                call_type = random.choice(
-                    ["async_set", "set", "oneway_set", "noblock_get"]
-                )
+                call_type = random.choice(["async_set", "set", "oneway_set", "noblock_get"])
                 if call_type == "async_set":
                     self.assertIsNone(await self.base_property.async_set(data))
                     self.assertEqual(await self.base_property.async_get(), data)
@@ -350,13 +331,9 @@ class TestInprocRPCServer(TestRPCServerMixin):
 
                 #  print("last_call_type", last_call_type, "call_type", call_type, "data", data)
                 if last_call_type == "noblock":
-                    response = self.base_property._sync_zmq_client.recv_response(
-                        msg_ids[index - 1]
-                    )
+                    response = self.base_property._sync_zmq_client.recv_response(msg_ids[index - 1])
                     self.base_property._last_zmq_response = response
-                    self.assertEqual(
-                        self.base_property.last_read_value, data_structures[index - 1]
-                    )
+                    self.assertEqual(self.base_property.last_read_value, data_structures[index - 1])
 
                 last_call_type = call_type
 
@@ -368,19 +345,13 @@ class TestInprocRPCServer(TestRPCServerMixin):
         old_thing_execution_context = self.action_echo._thing_execution_context
         # Only fetch_execution_logs currently supported
         self.action_echo._thing_execution_context = dict(fetch_execution_logs=True)
-        get_current_async_loop().run_until_complete(
-            self.action_echo.async_call("value")
-        )
+        get_current_async_loop().run_until_complete(self.action_echo.async_call("value"))
         self.assertIsInstance(self.action_echo.last_return_value, dict)
         self.assertTrue("execution_logs" in self.action_echo.last_return_value.keys())
         self.assertTrue("return_value" in self.action_echo.last_return_value.keys())
         self.assertTrue(len(self.action_echo.last_return_value) == 2)
-        self.assertFalse(
-            self.action_echo.last_return_value == "value"
-        )  # because its a dict now
-        self.assertIsInstance(
-            self.action_echo.last_return_value["execution_logs"], list
-        )
+        self.assertFalse(self.action_echo.last_return_value == "value")  # because its a dict now
+        self.assertIsInstance(self.action_echo.last_return_value["execution_logs"], list)
         self.assertTrue(self.action_echo.last_return_value["return_value"] == "value")
         self.action_echo._thing_execution_context = old_thing_execution_context
 
@@ -401,9 +372,7 @@ class TestInprocRPCServer(TestRPCServerMixin):
         async def test_invokation_timeout():
             try:
                 old_timeout = self.action_sleep._invokation_timeout
-                self.action_sleep._invokation_timeout = (
-                    0.1  # reduce the value to test timeout
-                )
+                self.action_sleep._invokation_timeout = 0.1  # reduce the value to test timeout
                 await self.action_sleep.async_call()
             except Exception as ex:
                 self.assertIsInstance(ex, TimeoutError)
@@ -445,7 +414,6 @@ class TestRPCServer(TestInprocRPCServer):
         cls.server = ZMQServer(
             id=cls.server_id,
             things=[cls.thing],
-            context=cls.context,
             access_points=["INPROC", "IPC", "tcp://*:59000"],
             logger=cls.logger,
         )
@@ -509,9 +477,7 @@ class TestRPCServer(TestInprocRPCServer):
             (self.sync_tcp_client, self.async_tcp_client),
             (self.sync_ipc_client, self.async_ipc_client),
         ]:
-            self.action_echo._sync_zmq_client, self.action_echo._async_zmq_client = (
-                clients
-            )
+            self.action_echo._sync_zmq_client, self.action_echo._async_zmq_client = clients
             super().test_3_action_abstractions()
         self.action_echo._sync_zmq_client = old_sync_client
         self.action_echo._async_zmq_client = old_async_client
@@ -538,9 +504,7 @@ class TestRPCServer(TestInprocRPCServer):
             (self.sync_tcp_client, self.async_tcp_client),
             (self.sync_ipc_client, self.async_ipc_client),
         ]:
-            self.action_echo._sync_zmq_client, self.action_echo._async_zmq_client = (
-                clients
-            )
+            self.action_echo._sync_zmq_client, self.action_echo._async_zmq_client = clients
             super().test_5_thing_execution_context()
         self.action_echo._sync_zmq_client = old_sync_client
         self.action_echo._async_zmq_client = old_async_client
@@ -552,9 +516,7 @@ class TestRPCServer(TestInprocRPCServer):
             (self.sync_tcp_client, self.async_tcp_client),
             (self.sync_ipc_client, self.async_ipc_client),
         ]:
-            self.action_sleep._sync_zmq_client, self.action_sleep._async_zmq_client = (
-                clients
-            )
+            self.action_sleep._sync_zmq_client, self.action_sleep._async_zmq_client = clients
             super().test_6_server_execution_context()
         self.action_sleep._sync_zmq_client = old_sync_client
         self.action_sleep._async_zmq_client = old_async_client
@@ -615,14 +577,10 @@ class TestExposedActions(InteractionAffordanceMixin):
 
         # thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
         assert isinstance(thing.action_echo, BoundAction)  # type definition
-        action_echo = ZMQAction(
-            resource=thing.action_echo.to_affordance(), sync_client=self.client
-        )
+        action_echo = ZMQAction(resource=thing.action_echo.to_affordance(), sync_client=self.client)
         self.assertEqual(action_echo(1), 1)
 
-        assert isinstance(
-            thing.action_echo_with_classmethod, BoundAction
-        )  # type definition
+        assert isinstance(thing.action_echo_with_classmethod, BoundAction)  # type definition
         action_echo_with_classmethod = ZMQAction(
             resource=thing.action_echo_with_classmethod.to_affordance(),
             sync_client=self.client,
@@ -630,14 +588,10 @@ class TestExposedActions(InteractionAffordanceMixin):
         self.assertEqual(action_echo_with_classmethod(2), 2)
 
         assert isinstance(thing.action_echo_async, BoundAction)  # type definition
-        action_echo_async = ZMQAction(
-            resource=thing.action_echo_async.to_affordance(), sync_client=self.client
-        )
+        action_echo_async = ZMQAction(resource=thing.action_echo_async.to_affordance(), sync_client=self.client)
         self.assertEqual(action_echo_async("string"), "string")
 
-        assert isinstance(
-            thing.action_echo_async_with_classmethod, BoundAction
-        )  # type definition
+        assert isinstance(thing.action_echo_async_with_classmethod, BoundAction)  # type definition
         action_echo_async_with_classmethod = ZMQAction(
             resource=thing.action_echo_async_with_classmethod.to_affordance(),
             sync_client=self.client,
@@ -645,17 +599,13 @@ class TestExposedActions(InteractionAffordanceMixin):
         self.assertEqual(action_echo_async_with_classmethod([1, 2]), [1, 2])
 
         assert isinstance(thing.parameterized_action, BoundAction)  # type definition
-        parameterized_action = ZMQAction(
-            resource=thing.parameterized_action.to_affordance(), sync_client=self.client
-        )
+        parameterized_action = ZMQAction(resource=thing.parameterized_action.to_affordance(), sync_client=self.client)
         self.assertEqual(
             parameterized_action(arg1=1, arg2="hello", arg3=5),
             [self.server_id, 1, "hello", 5],
         )
 
-        assert isinstance(
-            thing.parameterized_action_async, BoundAction
-        )  # type definition
+        assert isinstance(thing.parameterized_action_async, BoundAction)  # type definition
         parameterized_action_async = ZMQAction(
             resource=thing.parameterized_action_async.to_affordance(),
             sync_client=self.client,
@@ -665,18 +615,14 @@ class TestExposedActions(InteractionAffordanceMixin):
             [self.server_id, 2.5, "hello", "foo"],
         )
 
-        assert isinstance(
-            thing.parameterized_action_without_call, BoundAction
-        )  # type definition
+        assert isinstance(thing.parameterized_action_without_call, BoundAction)  # type definition
         parameterized_action_without_call = ZMQAction(
             resource=thing.parameterized_action_without_call.to_affordance(),
             sync_client=self.client,
         )
         with self.assertRaises(NotImplementedError) as ex:
             parameterized_action_without_call(arg1=2, arg2="hello", arg3=5)
-        self.assertTrue(
-            str(ex.exception).startswith("Subclasses must implement __call__")
-        )
+        self.assertTrue(str(ex.exception).startswith("Subclasses must implement __call__"))
 
     def test_2_schema_validation(self):
         """Test if schema validation is working correctly"""
@@ -688,39 +634,27 @@ class TestExposedActions(InteractionAffordanceMixin):
         self.sync_client.handshake()
 
         # JSON schema validation
-        assert isinstance(
-            thing.json_schema_validated_action, BoundAction
-        )  # type definition
+        assert isinstance(thing.json_schema_validated_action, BoundAction)  # type definition
         action_affordance = thing.json_schema_validated_action.to_affordance()
-        json_schema_validated_action = ZMQAction(
-            resource=action_affordance, sync_client=self.client
-        )
+        json_schema_validated_action = ZMQAction(resource=action_affordance, sync_client=self.client)
         # data with invalid schema
         with self.assertRaises(Exception) as ex1:
-            json_schema_validated_action(
-                val1="1", val2="hello", val3={"field": "value"}, val4=[]
-            )
+            json_schema_validated_action(val1="1", val2="hello", val3={"field": "value"}, val4=[])
         self.assertTrue(str(ex1.exception).startswith("'1' is not of type 'integer'"))
         with self.assertRaises(Exception) as ex2:
-            json_schema_validated_action(
-                "1", val2="hello", val3={"field": "value"}, val4=[]
-            )
+            json_schema_validated_action("1", val2="hello", val3={"field": "value"}, val4=[])
         self.assertTrue(str(ex2.exception).startswith("'1' is not of type 'integer'"))
         with self.assertRaises(Exception) as ex3:
             json_schema_validated_action(1, 2, val3={"field": "value"}, val4=[])
         self.assertTrue(str(ex3.exception).startswith("2 is not of type 'string'"))
         with self.assertRaises(Exception) as ex4:
             json_schema_validated_action(1, "hello", val3="field", val4=[])
-        self.assertTrue(
-            str(ex4.exception).startswith("'field' is not of type 'object'")
-        )
+        self.assertTrue(str(ex4.exception).startswith("'field' is not of type 'object'"))
         with self.assertRaises(Exception) as ex5:
             json_schema_validated_action(1, "hello", val3={"field": "value"}, val4="[]")
         self.assertTrue(str(ex5.exception).startswith("'[]' is not of type 'array'"))
         # data with valid schema
-        return_value = json_schema_validated_action(
-            val1=1, val2="hello", val3={"field": "value"}, val4=[]
-        )
+        return_value = json_schema_validated_action(val1=1, val2="hello", val3={"field": "value"}, val4=[])
         self.assertEqual(return_value, {"val1": 1, "val3": {"field": "value"}})
         jsonschema.Draft7Validator(action_affordance.output).validate(return_value)
 
@@ -729,18 +663,12 @@ class TestExposedActions(InteractionAffordanceMixin):
         self.sync_client.handshake()
 
         # Pydantic schema validation
-        assert isinstance(
-            thing.pydantic_validated_action, BoundAction
-        )  # type definition
+        assert isinstance(thing.pydantic_validated_action, BoundAction)  # type definition
         action_affordance = thing.pydantic_validated_action.to_affordance()
-        pydantic_validated_action = ZMQAction(
-            resource=action_affordance, sync_client=self.client
-        )
+        pydantic_validated_action = ZMQAction(resource=action_affordance, sync_client=self.client)
         # data with invalid schema
         with self.assertRaises(Exception) as ex1:
-            pydantic_validated_action(
-                val1="1", val2="hello", val3={"field": "value"}, val4=[]
-            )
+            pydantic_validated_action(val1="1", val2="hello", val3={"field": "value"}, val4=[])
         self.assertTrue(
             "validation error for pydantic_validated_action_input" in str(ex1.exception)
             and "val1" in str(ex1.exception)
@@ -749,9 +677,7 @@ class TestExposedActions(InteractionAffordanceMixin):
             and "val4" not in str(ex1.exception)
         )  # {obj.name}_input is the pydantic model name
         with self.assertRaises(Exception) as ex2:
-            pydantic_validated_action(
-                "1", val2="hello", val3={"field": "value"}, val4=[]
-            )
+            pydantic_validated_action("1", val2="hello", val3={"field": "value"}, val4=[])
         self.assertTrue(
             "validation error for pydantic_validated_action_input" in str(ex2.exception)
             and "val1" in str(ex2.exception)
@@ -787,9 +713,7 @@ class TestExposedActions(InteractionAffordanceMixin):
             and "val4" in str(ex5.exception)
         )
         # data with valid schema
-        return_value = pydantic_validated_action(
-            val1=1, val2="hello", val3={"field": "value"}, val4=[]
-        )
+        return_value = pydantic_validated_action(val1=1, val2="hello", val3={"field": "value"}, val4=[])
         self.assertEqual(return_value, {"val2": "hello", "val4": []})
 
     def test_3_exit(self):
@@ -839,9 +763,7 @@ class TestExposedProperties(InteractionAffordanceMixin):
 
         descriptor = thing.properties["number_prop"]
         assert isinstance(descriptor, Property)  # type definition
-        number_prop = ZMQProperty(
-            resource=descriptor.to_affordance(thing), sync_client=self.client
-        )
+        number_prop = ZMQProperty(resource=descriptor.to_affordance(thing), sync_client=self.client)
         self.assertEqual(number_prop.get(), descriptor.default)
         number_prop.set(100)
         self.assertEqual(number_prop.get(), 100)
@@ -864,16 +786,12 @@ class TestExposedProperties(InteractionAffordanceMixin):
             await number_prop.async_set(0)
             self.assertEqual(await number_prop.async_get(), 0)
 
-        get_current_async_loop().run_until_complete(
-            test_6_async_property_abstractions(self)
-        )
+        get_current_async_loop().run_until_complete(test_6_async_property_abstractions(self))
 
     def test_02_json_schema_property(self):
         """Test json schema based property"""
         test_thing_TD = copy.deepcopy(test_thing_original_TD)
-        test_thing_TD["id"] = (
-            self.server_id
-        )  # thing id should be server id. TODO refactor this
+        test_thing_TD["id"] = self.server_id  # thing id should be server id. TODO refactor this
         json_schema_prop = ZMQProperty(
             resource=PropertyAffordance.from_TD("json_schema_prop", test_thing_TD),
             sync_client=self.client,
@@ -890,9 +808,7 @@ class TestExposedProperties(InteractionAffordanceMixin):
     def test_03_pydantic_model_property(self):
         """Test pydantic model based property"""
         test_thing_TD = copy.deepcopy(test_thing_original_TD)
-        test_thing_TD["id"] = (
-            self.server_id
-        )  # thing id should be server id. TODO refactor this
+        test_thing_TD["id"] = self.server_id  # thing id should be server id. TODO refactor this
         pydantic_prop = ZMQProperty(
             resource=PropertyAffordance.from_TD("pydantic_prop", test_thing_TD),
             sync_client=self.client,
@@ -936,7 +852,6 @@ class TestExposedEvents(TestRPCServerMixin):
             id=cls.server_id,
             things=[cls.thing],
             logger=cls.logger,
-            context=cls.context,
             access_points=["INPROC", "IPC", "tcp://*:59005"],
         )
 
@@ -951,37 +866,19 @@ class TestExposedEvents(TestRPCServerMixin):
         ]
         for event_name in cls.event_names:
             event_affordance = EventAffordance.from_TD(event_name, test_thing_TD)
-            sync_event_client = EventConsumer(
-                id=f"{event_affordance.thing_id}|{event_affordance.name}|sync",
-                event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(
-                    event_affordance
-                ),
-                access_point=cls.server.event_publisher.socket_address,
-                logger=cls.logger,
-                context=cls.context,
-            )
-            async_event_client = AsyncEventConsumer(
-                id=f"{event_affordance.thing_id}|{event_affordance.name}|async",
-                event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(
-                    event_affordance
-                ),
-                access_point=cls.server.event_publisher.socket_address,
-                logger=cls.logger,
-                context=cls.context,
-            )
-            event = ZMQEvent(
-                resource=event_affordance,
-                sync_zmq_client=sync_event_client,
-                async_zmq_client=async_event_client,
-            )
+            form = Form()
+            form.href = cls.server.event_publisher.socket_address
+            form.contentType = "application/json"
+            form.op = "subscribeevent"
+            form.subprotocol = "sse"
+            event_affordance.forms = [form]
+            event = ZMQEvent(resource=event_affordance)
             setattr(cls, event_name, event)
 
     def test_1_creation_defaults(self):
         """test server configuration defaults"""
         all_things = get_all_sub_things_recusively(self.thing)
-        self.assertTrue(
-            len(all_things) > 1
-        )  # run the test only if there are sub things
+        self.assertTrue(len(all_things) > 1)  # run the test only if there are sub things
         for thing in all_things:
             assert isinstance(thing, Thing)
             for name, event in thing.events.values.items():
@@ -999,33 +896,23 @@ class TestExposedEvents(TestRPCServerMixin):
                 get_zmq_unique_identifier_from_event_affordance(event_client._resource),
                 getattr(self.thing, event_client._resource.name)._unique_identifier,  # type: EventDispatcher
             )
-            # self.assertEqual(
-            #     event_client._sync_zmq_client.socket_address,
-            #     self.server.event_publisher.socket_address
-            # )
             attempts = 100
             results = []
 
-            def cb(value):
+            def cb(value: SSE):
                 nonlocal results
                 results.append(value)
 
-            if event_client._callbacks:
-                event_client._callbacks.clear()
             event_client.subscribe(cb)
-            time.sleep(
-                5
-            )  # calm down for event publisher to connect fully as there is no handshake for events
-            self.action_push_events(
-                event_name=event_name, total_number_of_events=attempts
-            )
+            time.sleep(5)  # calm down for event publisher to connect fully as there is no handshake for events
+            self.action_push_events(event_name=event_name, total_number_of_events=attempts)
 
             for i in range(attempts):
                 if len(results) == attempts:
                     break
                 time.sleep(0.1)
-            self.assertTrue(len(results) >= attempts)
-            self.assertEqual(results, [expected_data] * len(results))
+            self.assertAlmostEqual(len(results), attempts, delta=3)
+            self.assertEqual([res.data for res in results], [expected_data] * len(results))
             event_client.unsubscribe()
 
         for name, data in zip(
@@ -1052,36 +939,26 @@ class TestExposedEvents(TestRPCServerMixin):
                 get_zmq_unique_identifier_from_event_affordance(event_client._resource),
                 getattr(self.thing, event_client._resource.name)._unique_identifier,  # type: EventDispatcher
             )
-            # self.assertEqual(
-            #     event_client._async_zmq_client.socket_address,
-            #     self.server.event_publisher.socket_address
-            # )
             attempts = 100
             results = []
 
-            def cb(value):
+            def cb(value: SSE):
                 nonlocal results
                 # print("event callback", value)
                 results.append(value)
 
-            if event_client._callbacks:
-                event_client._callbacks.clear()
             event_client.subscribe(cb, asynch=True)
-            time.sleep(
-                5
-            )  # calm down for event publisher to connect fully as there is no handshake for events
-            self.action_push_events(
-                event_name=event_name, total_number_of_events=attempts
-            )
+            time.sleep(5)  # calm down for event publisher to connect fully as there is no handshake for events
+            self.action_push_events(event_name=event_name, total_number_of_events=attempts)
 
             for i in range(attempts):
                 if len(results) == attempts:
                     break
                 await asyncio.sleep(0.1)
-            self.assertTrue(len(results) >= attempts)
+            self.assertAlmostEqual(len(results), attempts, delta=3)
             # since we are pushing events in multiple protocols, sometimes the event from the previous test is
             # still lingering on the socket. So the captured event must be at least the number of attempts.
-            self.assertEqual(results, [expected_data] * len(results))
+            self.assertEqual([res.data for res in results], [expected_data] * len(results))
             event_client.unsubscribe()
 
         for name, data in zip(
@@ -1108,30 +985,18 @@ class TestExposedEvents(TestRPCServerMixin):
         ]:
             self.assertIsInstance(publisher, EventPublisher)
             self.assertTrue(
-                publisher.socket_address.startswith("tcp://")
-                or publisher.socket_address.startswith("ipc://")
+                publisher.socket_address.startswith("tcp://") or publisher.socket_address.startswith("ipc://")
             )
             for event_name in self.event_names:
                 event_affordance = EventAffordance.from_TD(event_name, test_thing_TD)
                 event = getattr(self, event_name)  # type: ZMQEvent
-                sync_event_client = EventConsumer(
-                    id=f"{event_affordance.thing_id}|{event_affordance.name}|sync",
-                    event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(
-                        event_affordance
-                    ),
-                    access_point=publisher.socket_address.replace("*", "localhost"),
-                    logger=self.logger,
-                )
-                async_event_client = AsyncEventConsumer(
-                    id=f"{event_affordance.thing_id}|{event_affordance.name}|async",
-                    event_unique_identifier=get_zmq_unique_identifier_from_event_affordance(
-                        event_affordance
-                    ),
-                    access_point=publisher.socket_address.replace("*", "localhost"),
-                    logger=self.logger,
-                )
-                event._sync_zmq_client = sync_event_client
-                event._async_zmq_client = async_event_client
+                form = Form()
+                form.href = publisher.socket_address.replace("*", "localhost")
+                form.contentType = "application/json"
+                form.op = "subscribeevent"
+                form.subprotocol = "sse"
+                event_affordance.forms = [form]
+                event._resource.forms = event_affordance.forms
             self.test_2_sync_client_event_stream()
             self.test_3_async_client_event_stream()
 
@@ -1144,9 +1009,7 @@ class TestThingRunRPCServer(TestBrokerMixin):
 
     @classmethod
     def setUpThing(self):
-        self.thing = TestThing(
-            id=self.thing_id, logger=self.logger, remote_accessible_logger=True
-        )
+        self.thing = TestThing(id=self.thing_id, logger=self.logger, remote_accessible_logger=True)
 
     @classmethod
     def startServer(self):
@@ -1175,9 +1038,7 @@ class TestThingRunRPCServer(TestBrokerMixin):
     def test_2_handshake(self):
         self.sync_client.handshake()
         self.async_client.handshake()
-        get_current_async_loop().run_until_complete(
-            self.async_client.handshake_complete()
-        )
+        get_current_async_loop().run_until_complete(self.async_client.handshake_complete())
 
     def test_3_stop(self):
         self.thing.rpc_server.stop()

@@ -418,7 +418,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
         for callback_id, (subscribed, resp) in list(self._subscribed.items()):
             if resp is not None:
                 try:
-                    resp.close()
+                    resp.close()  # not working
                 except Exception as ex:
                     self.logger.error(f"Error closing SSE response: {ex}")
         return super().unsubscribe()
