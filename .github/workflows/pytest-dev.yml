@@ -90,10 +90,10 @@ jobs:
           if-no-files-found: warn
 
   publish:
-    name: Publish coverage (Ubuntu Python 3.13)
+    name: Publish coverage (disabled for pytest per issue #107)
     needs: test
     runs-on: ubuntu-latest
-    if: ${{ always() }}
+    if: ${{ false }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -106,17 +106,11 @@ jobs:
           path: .
         continue-on-error: true
 
-      - name: Upload coverage to Codecov
-        if: steps.dl.outcome == 'success'
+      - name: Upload coverage to Codecov (disabled)
+        if: false
         uses: codecov/codecov-action@v4
-        env:
-          CI: true
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
-          fail_ci_if_error: true
-          slug: hololinked-dev/hololinked
 
-      - name: Skip note (no Ubuntu 3.13 artifact found)
-        if: steps.dl.outcome != 'success'
-        run: echo "No Ubuntu 3.13 coverage artifact present; skipping Codecov upload."
+      - name: Skip note (coverage upload disabled for pytest)
+        run: echo "Skipping Codecov upload in pytest workflow per issue #107."
