@@ -786,15 +786,14 @@ class ThingDescriptionHandler(BaseHandler):
         self.add_security_definitions(TD)
         return TD
 
-    @classmethod
-    def add_security_definitions(cls, server, TD: dict[str, JSONSerializable]) -> None:
+    def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
         from ..security import BcryptBasicSecurity, Argon2BasicSecurity
         from ...td.security_definitions import SecurityScheme
 
         TD["securityDefinitions"] = {}
         sec_names: list[str] = []
 
-        schemes = getattr(server, "security_schemes", None)
+        schemes = getattr(self.server, "security_schemes", None)
         if schemes:
             for i, scheme in enumerate(schemes):
                 if isinstance(scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
