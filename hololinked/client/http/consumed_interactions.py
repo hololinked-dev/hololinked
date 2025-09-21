@@ -3,9 +3,10 @@ Classes that contain the client logic for the HTTP protocol.
 """
 
 import asyncio
+import contextlib
 import threading
 import httpx
-from typing import Any, Callable
+from typing import Any, AsyncIterator, Callable
 from copy import deepcopy
 
 from ...constants import Operations
@@ -340,7 +341,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             event_data = SSE()
             for line in resp.iter_lines():
                 try:
-                    if not self._subscribed.get(callback_id, False):
+                    if not self._subscribed.get(callback_id, (False, None))[0]:
                         # when value is popped, consider unsubscribed
                         break
 
@@ -357,6 +358,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                     self.decode_chunk(line, event_data)
                 except Exception as ex:
                     self.logger.error(f"Error processing SSE event: {ex}")
+        resp.close()
 
     async def async_listen(
         self, form: Form, callbacks: list[Callable], concurrent: bool = False, deserialize: bool = True
@@ -368,11 +370,12 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             method="GET", url=form.href, headers={"Accept": "text/event-stream"}
         ) as resp:
             resp.raise_for_status()
-            self._subscribed[callback_id] = (True, resp)
+            interrupting_event = asyncio.Event()
+            self._subscribed[callback_id] = (True, interrupting_event)
             event_data = SSE()
-            async for line in resp.aiter_lines():
+            async for line in self.interruptible_aiter_lines(resp, interrupting_event):
                 try:
-                    if not self._subscribed.get(callback_id, False):
+                    if not self._subscribed.get(callback_id, (False, None))[0]:
                         # when value is popped, consider unsubscribed
                         break
 
@@ -388,6 +391,36 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                     self.decode_chunk(line, event_data)
                 except Exception as ex:
                     self.logger.error(f"Error processing SSE event: {ex}")
+
+    async def interruptible_aiter_lines(self, resp: httpx.Response, stop: asyncio.Event) -> AsyncIterator[str]:
+        """
+        Yield lines from an httpx streaming response, but stop immediately when `stop` is set.
+        Works by racing the next __anext__() call against stop.wait().
+        """
+        it = resp.aiter_lines()
+        try:
+            while True:
+                next_line = asyncio.create_task(it.__anext__())
+                stopper = asyncio.create_task(stop.wait())
+                done, pending = await asyncio.wait({next_line, stopper}, return_when=asyncio.FIRST_COMPLETED)
+
+                if stopper in done:
+                    next_line.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await next_line
+                    break
+
+                stopper.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await stopper
+                yield next_line.result()
+        except StopAsyncIteration:
+            # remote closed the stream
+            return
+        finally:
+            # make sure the underlying connection is closed
+            with contextlib.suppress(Exception):
+                await resp.aclose()
 
     def decode_chunk(self, line: str, event_data: "SSE") -> None:
         if line is None or line.startswith(":"):  # comment/heartbeat
@@ -411,12 +444,9 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
     def unsubscribe(self):
         """Unsubscribe from the event."""
-        for callback_id, (subscribed, resp) in list(self._subscribed.items()):
-            if resp is not None:
-                try:
-                    resp.close()  # not working
-                except Exception as ex:
-                    self.logger.error(f"Error closing SSE response: {ex}")
+        for callback_id, (subscribed, interruptor) in list(self._subscribed.items()):
+            if interruptor is not None:
+                interruptor.set()  # signal the event to stop
         return super().unsubscribe()
 
 
