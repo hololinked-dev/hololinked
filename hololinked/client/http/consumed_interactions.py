@@ -5,8 +5,9 @@ Classes that contain the client logic for the HTTP protocol.
 import asyncio
 import contextlib
 import threading
+import httpcore
 import httpx
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator, Callable, Iterator
 from copy import deepcopy
 
 from ...constants import Operations
@@ -18,37 +19,6 @@ from ...td.interaction_affordance import (
 )
 from ...td.forms import Form
 from ...serializers import Serializers
-
-
-class AuthHeaderMixin:
-    def _merge_auth_headers(self, base=None):
-        headers = dict(base or {})
-
-        # Avoid truthiness on ObjectProxy
-        owner = getattr(self, "_owner_inst", None)
-        if owner is None:
-            owner = getattr(self, "owner", None)
-
-        auth = getattr(owner, "_auth_header", None) if owner is not None else None
-
-        # Normalize present header names (case-insensitive)
-        present = {k.lower() for k in headers}
-
-        if auth:
-            if isinstance(auth, dict):
-                # Merge key-by-key if caller stored a header dict
-                for k, v in auth.items():
-                    if k.lower() not in present:
-                        headers[k] = v
-            elif isinstance(auth, str):
-                # Caller stored just the value: "Basic abcd=="
-                if "authorization" not in present:
-                    headers["Authorization"] = auth
-            else:
-                # Ignore unexpected types instead of crashing
-                pass
-
-        return headers
 
 
 class HTTPConsumedAffordanceMixin:
@@ -86,6 +56,35 @@ class HTTPConsumedAffordanceMixin:
             return body
         response.raise_for_status()
 
+    def _merge_auth_headers(self, base: dict | None = None):
+        headers = dict(base or {})
+
+        # Avoid truthiness on ObjectProxy
+        owner = getattr(self, "_owner_inst", None)
+        if owner is None:
+            owner = getattr(self, "owner", None)
+
+        auth = getattr(owner, "_auth_header", None) if owner is not None else None
+
+        # Normalize present header names (case-insensitive)
+        present = {k.lower() for k in headers}
+
+        if auth:
+            if isinstance(auth, dict):
+                # Merge key-by-key if caller stored a header dict
+                for k, v in auth.items():
+                    if k.lower() not in present:
+                        headers[k] = v
+            elif isinstance(auth, str):
+                # Caller stored just the value: "Basic abcd=="
+                if "authorization" not in present:
+                    headers["Authorization"] = auth
+            else:
+                # Ignore unexpected types instead of crashing
+                pass
+
+        return headers
+
     def create_http_request(self, form: Form, default_method: str, body: bytes | None = None) -> httpx.Request:
         """Creates an HTTP request for the given form and body."""
         return httpx.Request(
@@ -104,7 +103,7 @@ class HTTPConsumedAffordanceMixin:
         return self.get_body_from_response(response, form)
 
 
-class HTTPAction(AuthHeaderMixin, ConsumedThingAction, HTTPConsumedAffordanceMixin):
+class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
     def __init__(
         self,
         resource: ActionAffordance,
@@ -188,7 +187,7 @@ class HTTPAction(AuthHeaderMixin, ConsumedThingAction, HTTPConsumedAffordanceMix
         return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
 
 
-class HTTPProperty(AuthHeaderMixin, ConsumedThingProperty, HTTPConsumedAffordanceMixin):
+class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
     def __init__(
         self,
         resource: ActionAffordance,
@@ -333,32 +332,35 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         callback_id = threading.get_ident()
 
-        with self._sync_http_client.stream(
-            method="GET", url=form.href, headers={"Accept": "text/event-stream"}
-        ) as resp:
-            resp.raise_for_status()
-            self._subscribed[callback_id] = (True, resp)
-            event_data = SSE()
-            for line in resp.iter_lines():
-                try:
-                    if not self._subscribed.get(callback_id, (False, None))[0]:
-                        # when value is popped, consider unsubscribed
-                        break
+        try:
+            with self._sync_http_client.stream(
+                method="GET", url=form.href, headers=self._merge_auth_headers({"Accept": "text/event-stream"})
+            ) as resp:
+                resp.raise_for_status()
+                interrupting_event = threading.Event()
+                self._subscribed[callback_id] = (True, interrupting_event, resp)
+                event_data = SSE()
+                for line in self.iter_lines_interruptible(resp, interrupting_event):
+                    try:
+                        if not self._subscribed.get(callback_id, (False, None))[0] or interrupting_event.is_set():
+                            # when value is popped, consider unsubscribed
+                            break
 
-                    if line == "":
-                        if not event_data.data:
-                            self.logger.warning(f"Received an invalid SSE event: {line}")
+                        if line == "":
+                            if not event_data.data:
+                                self.logger.warning(f"Received an invalid SSE event: {line}")
+                                continue
+                            if deserialize:
+                                event_data.data = serializer.loads(event_data.data.encode("utf-8"))
+                            self.schedule_callbacks(callbacks, event_data, concurrent)
+                            event_data = SSE()
                             continue
-                        if deserialize:
-                            event_data.data = serializer.loads(event_data.data.encode("utf-8"))
-                        self.schedule_callbacks(callbacks, event_data, concurrent)
-                        event_data = SSE()
-                        continue
 
-                    self.decode_chunk(line, event_data)
-                except Exception as ex:
-                    self.logger.error(f"Error processing SSE event: {ex}")
-        resp.close()
+                        self.decode_chunk(line, event_data)
+                    except Exception as ex:
+                        self.logger.error(f"Error processing SSE event: {ex}")
+        except (httpx.ReadError, httpcore.ReadError):
+            pass
 
     async def async_listen(
         self, form: Form, callbacks: list[Callable], concurrent: bool = False, deserialize: bool = True
@@ -366,40 +368,44 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         callback_id = asyncio.current_task().get_name()
 
-        async with self._async_http_client.stream(
-            method="GET", url=form.href, headers={"Accept": "text/event-stream"}
-        ) as resp:
-            resp.raise_for_status()
-            interrupting_event = asyncio.Event()
-            self._subscribed[callback_id] = (True, interrupting_event)
-            event_data = SSE()
-            async for line in self.interruptible_aiter_lines(resp, interrupting_event):
-                try:
-                    if not self._subscribed.get(callback_id, (False, None))[0]:
-                        # when value is popped, consider unsubscribed
-                        break
+        try:
+            async with self._async_http_client.stream(
+                method="GET", url=form.href, headers=self._merge_auth_headers({"Accept": "text/event-stream"})
+            ) as resp:
+                resp.raise_for_status()
+                interrupting_event = asyncio.Event()
+                self._subscribed[callback_id] = (True, interrupting_event, resp)
+                event_data = SSE()
+                async for line in self.aiter_lines_interruptible(resp, interrupting_event, resp):
+                    try:
+                        if not self._subscribed.get(callback_id, (False, None))[0] or interrupting_event.is_set():
+                            # when value is popped, consider unsubscribed
+                            break
 
-                    if line == "":
-                        if not event_data.data:
-                            self.logger.warning(f"Received an invalid SSE event: {line}")
+                        if line == "":
+                            if not event_data.data:
+                                self.logger.warning(f"Received an invalid SSE event: {line}")
+                                continue
+                            if deserialize:
+                                event_data.data = serializer.loads(event_data.data.encode("utf-8"))
+                            await self.async_schedule_callbacks(callbacks, event_data, concurrent)
+                            event_data = SSE()
                             continue
-                        if deserialize:
-                            event_data.data = serializer.loads(event_data.data.encode("utf-8"))
-                        await self.async_schedule_callbacks(callbacks, event_data, concurrent)
-                        event_data = SSE()
-                        continue
-                    self.decode_chunk(line, event_data)
-                except Exception as ex:
-                    self.logger.error(f"Error processing SSE event: {ex}")
 
-    async def interruptible_aiter_lines(self, resp: httpx.Response, stop: asyncio.Event) -> AsyncIterator[str]:
+                        self.decode_chunk(line, event_data)
+                    except Exception as ex:
+                        self.logger.error(f"Error processing SSE event: {ex}")
+        except (httpx.ReadError, httpcore.ReadError):
+            pass
+
+    async def aiter_lines_interruptible(self, resp: httpx.Response, stop: asyncio.Event) -> AsyncIterator[str]:
         """
         Yield lines from an httpx streaming response, but stop immediately when `stop` is set.
         Works by racing the next __anext__() call against stop.wait().
         """
         it = resp.aiter_lines()
-        try:
-            while True:
+        while not stop.is_set():
+            try:
                 next_line = asyncio.create_task(it.__anext__())
                 stopper = asyncio.create_task(stop.wait())
                 done, pending = await asyncio.wait({next_line, stopper}, return_when=asyncio.FIRST_COMPLETED)
@@ -414,13 +420,25 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                 with contextlib.suppress(asyncio.CancelledError):
                     await stopper
                 yield next_line.result()
-        except StopAsyncIteration:
-            # remote closed the stream
-            return
-        finally:
-            # make sure the underlying connection is closed
-            with contextlib.suppress(Exception):
-                await resp.aclose()
+
+            except (httpx.ReadTimeout, httpcore.ReadTimeout):
+                continue
+
+            except StopAsyncIteration:
+                # remote closed the stream
+                return
+
+    def iter_lines_interruptible(self, resp: httpx.Response, stop: threading.Event) -> Iterator[str]:
+        it = resp.iter_lines()
+        # Using a dedicated stream scope inside the thread
+        while not stop.is_set():
+            try:
+                next_line = next(it)
+            except (httpx.ReadTimeout, httpcore.ReadTimeout):
+                continue
+            except StopIteration:
+                break
+            yield next_line
 
     def decode_chunk(self, line: str, event_data: "SSE") -> None:
         if line is None or line.startswith(":"):  # comment/heartbeat
@@ -444,9 +462,8 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
     def unsubscribe(self):
         """Unsubscribe from the event."""
-        for callback_id, (subscribed, interruptor) in list(self._subscribed.items()):
-            if interruptor is not None:
-                interruptor.set()  # signal the event to stop
+        for callback_id, (subscribed, obj, resp) in list(self._subscribed.items()):
+            obj.set()
         return super().unsubscribe()
 
 

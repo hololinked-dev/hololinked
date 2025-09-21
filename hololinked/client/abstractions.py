@@ -344,7 +344,7 @@ class ConsumedThingEvent:
                 lambda: asyncio.create_task(self.async_listen(form, callbacks, concurrent, deserialize))
             )
         else:
-            _thread = threading.Thread(target=self.listen, args=(form, callbacks, concurrent, deserialize))
+            _thread = threading.Thread(target=self.listen, args=(form, callbacks, concurrent, deserialize), daemon=True)
             _thread.start()
 
     def unsubscribe(self):

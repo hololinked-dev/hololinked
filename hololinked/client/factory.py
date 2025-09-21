@@ -200,7 +200,7 @@ class ClientFactory:
         )
         sse_timeout = httpx.Timeout(
             connect=connect_timeout,
-            read=None,
+            read=3,
             write=request_timeout,
             pool=2,
         )

@@ -626,7 +626,10 @@ class TestHTTPServer(TestCase):
             password="clipass",
         )
         self.assertEqual(object_proxy.read_property("max_intensity"), 16384)
-        self.stop_server(port=port, thing_ids=[thing_id])
+        headers = {}
+        token = base64.b64encode("cliuser:clipass".encode("utf-8")).decode("ascii")
+        headers["Authorization"] = f"Basic {token}"
+        self.stop_server(port=port, thing_ids=[thing_id], headers=headers)
 
     @classmethod
     def stop_server(cls, port, thing_ids: list[str] = [], **request_kwargs):
