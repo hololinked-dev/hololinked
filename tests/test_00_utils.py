@@ -183,9 +183,7 @@ class TestUtils(TestCase):
         def func_with_no_annotations(a, b):
             return a + b
 
-        model = get_input_model_from_signature(
-            func_with_no_annotations, model_for_empty_annotations=True
-        )
+        model = get_input_model_from_signature(func_with_no_annotations, model_for_empty_annotations=True)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields["a"].annotation, typing.Any)
         self.assertEqual(model.model_fields["b"].annotation, typing.Any)
@@ -271,9 +269,7 @@ class TestUtils(TestCase):
         with self.assertRaises(ValidationError):
             pydantic_validate_args_kwargs(model, kwargs={"a": 1})
         # 4. too many keyword arguments
-        pydantic_validate_args_kwargs(
-            model, kwargs={"a": 1, "b": 2, "c": 3, "d": 4}
-        )  # OK, not an error
+        pydantic_validate_args_kwargs(model, kwargs={"a": 1, "b": 2, "c": 3, "d": 4})  # OK, not an error
         # 5. correct positional arguments
         pydantic_validate_args_kwargs(model, args=(1, 2))
         # 6. incorrect argument types with positional arguments
@@ -359,9 +355,7 @@ class TestUtils(TestCase):
             pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={"b": 3})
         self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
         with self.assertRaises(ValueError) as ex:
-            pydantic_validate_args_kwargs(
-                model, args=(1, 2), kwargs={"a": list(), "c": 3}
-            )
+            pydantic_validate_args_kwargs(model, args=(1, 2), kwargs={"a": list(), "c": 3})
         self.assertTrue(str(ex.exception).startswith("Multiple values for argument"))
         # 11. incorrect usage with both positional and keyword arguments
         # any extra keyword argument is allowed so long it is of type int
@@ -380,9 +374,7 @@ class TestUtils(TestCase):
         def func_with_args(*args):
             return sum(args)
 
-        model = get_input_model_from_signature(
-            func_with_args, model_for_empty_annotations=True
-        )
+        model = get_input_model_from_signature(func_with_args, model_for_empty_annotations=True)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields["args"].annotation, typing.Tuple)
         self.assertEqual(len(model.model_fields), 1)
@@ -473,20 +465,14 @@ class TestUtils(TestCase):
         model = get_input_model_from_signature(func_with_args_and_kwargs)
         self.assertTrue(model is None)
         # check model for empty annotations
-        model = get_input_model_from_signature(
-            func_with_args_and_kwargs, model_for_empty_annotations=True
-        )
+        model = get_input_model_from_signature(func_with_args_and_kwargs, model_for_empty_annotations=True)
         self.assertTrue(issubklass(model, BaseModel))
         self.assertEqual(model.model_fields["args"].annotation, typing.Tuple)
-        self.assertEqual(
-            model.model_fields["kwargs"].annotation, typing.Dict[str, typing.Any]
-        )
+        self.assertEqual(model.model_fields["kwargs"].annotation, typing.Dict[str, typing.Any])
         self.assertEqual(len(model.model_fields), 2)
         self.assertEqual(model.model_config["extra"], "forbid")
 
-        def func_with_annotated_args_and_kwargs(
-            *args: typing.List[int], **kwargs: typing.Dict[str, int]
-        ):
+        def func_with_annotated_args_and_kwargs(*args: typing.List[int], **kwargs: typing.Dict[str, int]):
             return sum(args) + sum(kwargs.values())
 
         model = get_input_model_from_signature(func_with_annotated_args_and_kwargs)

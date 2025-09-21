@@ -34,15 +34,9 @@ class TestSerializer(TestCase):
         self.assertEqual(serializers.pickle, Serializers.pickle)
         self.assertEqual(serializers.msgpack, Serializers.msgpack)
         self.assertEqual(serializers.content_types, Serializers.content_types)
-        self.assertEqual(
-            serializers.object_content_type_map, Serializers.object_content_type_map
-        )
-        self.assertEqual(
-            serializers.object_serializer_map, Serializers.object_serializer_map
-        )
-        self.assertEqual(
-            serializers.protocol_serializer_map, Serializers.protocol_serializer_map
-        )
+        self.assertEqual(serializers.object_content_type_map, Serializers.object_content_type_map)
+        self.assertEqual(serializers.object_serializer_map, Serializers.object_serializer_map)
+        self.assertEqual(serializers.protocol_serializer_map, Serializers.protocol_serializer_map)
         # check existing serializers are all instances of BaseSerializer
         for name, serializer in Serializers.content_types.items():
             self.assertIsInstance(serializer, BaseSerializer)
@@ -52,9 +46,7 @@ class TestSerializer(TestCase):
         self.assertEqual(serializers.default, Serializers().json)
         self.assertEqual(serializers.default, Serializers().default)
         # check default content type, given that we know its JSON at least for the current test
-        self.assertEqual(
-            serializers.default_content_type, Serializers.json.content_type
-        )
+        self.assertEqual(serializers.default_content_type, Serializers.json.content_type)
         # change default to pickle and check if it is set correctly
         # serializers.default = serializers.pickle
         # self.assertEqual(serializers.default, Serializers.pickle)
@@ -102,15 +94,9 @@ class TestSerializer(TestCase):
 
     def test_3_registration_for_objects(self):
         """i.e. test if a new serializer can be registered for a specific property, action or event"""
-        Serializers.register_content_type_for_object(
-            TestThing.base_property, "application/x-pickle"
-        )
-        Serializers.register_content_type_for_object(
-            TestThing.action_echo, "application/msgpack"
-        )
-        Serializers.register_content_type_for_object(
-            TestThing.test_event, "application/yaml"
-        )
+        Serializers.register_content_type_for_object(TestThing.base_property, "application/x-pickle")
+        Serializers.register_content_type_for_object(TestThing.action_echo, "application/msgpack")
+        Serializers.register_content_type_for_object(TestThing.test_event, "application/yaml")
 
         self.assertEqual(
             Serializers.for_object(None, "TestThing", "action_echo"),
@@ -120,9 +106,7 @@ class TestSerializer(TestCase):
             Serializers.for_object(None, "TestThing", "base_property"),
             Serializers.pickle,
         )
-        self.assertEqual(
-            Serializers.for_object(None, "TestThing", "test_event"), Serializers.yaml
-        )
+        self.assertEqual(Serializers.for_object(None, "TestThing", "test_event"), Serializers.yaml)
         self.assertEqual(
             Serializers.for_object(None, "TestThing", "test_unknown_property"),
             Serializers.default,
@@ -141,9 +125,7 @@ class TestSerializer(TestCase):
         """test the dictionary where all serializers are stored"""
         # depends on test 3
         self.assertIn("test_thing", Serializers.object_content_type_map)
-        self.assertIn(
-            "base_property", Serializers.object_content_type_map["test_thing"]
-        )
+        self.assertIn("base_property", Serializers.object_content_type_map["test_thing"])
         self.assertEqual(
             Serializers.object_content_type_map["test_thing"]["base_property"],
             "application/yaml",
@@ -188,9 +170,7 @@ class TestSerializer(TestCase):
         # reset default and check if default is reset
         Serializers.default = old_default
         self.assertEqual(Serializers.default, old_default)
-        self.assertEqual(
-            Serializers.default, Serializers.json
-        )  # because we know its JSON
+        self.assertEqual(Serializers.default, Serializers.json)  # because we know its JSON
 
     @classmethod
     def tearDownClass(cls):

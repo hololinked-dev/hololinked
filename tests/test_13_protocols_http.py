@@ -611,9 +611,7 @@ class TestHTTPServer(TestCase):
         security_scheme = BcryptBasicSecurity(username="cliuser", password="clipass")
         port = 60013
         thing_id = f"test-basic-proxy-{uuid.uuid4().hex[0:8]}"
-        thing = OceanOpticsSpectrometer(
-            id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
-        )
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(
             forked=True,
             port=port,
