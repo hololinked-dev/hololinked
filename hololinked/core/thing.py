@@ -56,9 +56,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         allow_None=True,
         readonly=True,
         observable=True,
-        fget=lambda self: self.state_machine.current_state
-        if self.state_machine
-        else None,
+        fget=lambda self: self.state_machine.current_state if self.state_machine else None,
         doc="""current state machine's state if state machine present, `None` indicates absence of state machine.
                 State machine returned state is always a string even if specified as an Enum in the state machine.""",
     )  # type: typing.Optional[str]
@@ -136,9 +134,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             ),
         )
         prepare_object_FSM(self)
-        prepare_object_storage(
-            self, **kwargs
-        )  # use_default_db, db_config_file, use_json_file, json_filename
+        prepare_object_storage(self, **kwargs)  # use_default_db, db_config_file, use_json_file, json_filename
 
         self._qualified_id = self.id  # filler for now - TODO
         # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
@@ -160,15 +156,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # database operations
         self.properties.load_from_DB()
         # object is ready
-        self.logger.info(
-            f"initialialised Thing class {self.__class__.__name__} with id {self.id}"
-        )
+        self.logger.info(f"initialialised Thing class {self.__class__.__name__} with id {self.id}")
 
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
-        if (
-            __name == "_internal_fixed_attributes"
-            or __name in self._internal_fixed_attributes
-        ):
+        if __name == "_internal_fixed_attributes" or __name in self._internal_fixed_attributes:
             # order of 'or' operation for above 'if' matters
             if not hasattr(self, __name) or getattr(self, __name, None) is None:
                 # allow setting of fixed attributes once
@@ -223,19 +214,14 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         #     In other words, schema validation will always pass.
         from ..td.tm import ThingModel
 
-        return ThingModel(
-            instance=self, ignore_errors=ignore_errors, skip_names=skip_names
-        ).generate()
+        return ThingModel(instance=self, ignore_errors=ignore_errors, skip_names=skip_names).generate()
 
     thing_model = property(get_thing_model, doc=get_thing_model.__doc__)
 
     @forkable  # noqa: F405
     def run_with_zmq_server(
         self,
-        access_points: list[ZMQ_TRANSPORTS]
-        | ZMQ_TRANSPORTS
-        | str
-        | list[str] = ZMQ_TRANSPORTS.IPC,
+        access_points: list[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS | str | list[str] = ZMQ_TRANSPORTS.IPC,
         forked: bool = False,  # used by decorator
         # expose_eventloop : bool = False,
         **kwargs: typing.Dict[str, typing.Any],
@@ -339,9 +325,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     @forkable  # noqa: F405
     def run(
         self,
-        access_points: dict[str, dict] = None,
-        servers: typing.Sequence[BaseProtocolServer] = None,
-        forked: bool = False,
+        **kwargs: typing.Dict[str, typing.Any],
     ) -> None:
         """
         Expose the object with the given servers. This method is blocking until `exit()` is called.
@@ -355,33 +339,55 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from ..server.zmq import ZMQServer
         from .zmq.rpc_server import RPCServer, prepare_rpc_server
 
-        if not (access_points is None and servers is None):
-            raise ValueError(
-                "At least one of access_points or servers must be provided."
-            )
+        access_points = kwargs.get("access_points", None)  # type: dict[str, dict | int | str | list[str]]
+        servers = kwargs.get("servers", [])  # type: typing.Optional[typing.List[BaseProtocolServer]]
+
+        if access_points is None and servers is None:
+            raise ValueError("At least one of access_points or servers must be provided.")
         if access_points is not None and servers is not None:
             raise ValueError("Only one of access_points or servers can be provided.")
 
         if access_points is not None:
-            servers = []
-            for protocol, params in access_points.items():
+            for protocol, params in access_points:
                 if protocol.upper() == "HTTP":
+                    if isinstance(params, int):
+                        params = dict(port=params)
                     http_server = HTTPServer([], **params)
                     servers.append(http_server)
                 elif protocol.upper() == "ZMQ":
-                    prepare_rpc_server(self, access_points=ZMQ_TRANSPORTS.INPROC)
+                    if isinstance(params, int):
+                        params = dict(access_points=[f"tcp://*:{params}"])
+                    elif isinstance(params, str):
+                        params = dict(access_points=[params])
+                    elif isinstance(params, list):
+                        params = dict(access_points=params)
+                    if not any(
+                        isinstance(ap, str) and ap.upper().startswith("INPROC")
+                        for ap in params.get("access_points", [])
+                    ):
+                        params["access_points"].append("INPROC")
+                    prepare_rpc_server(self, **params)
                     servers.append(self.rpc_server)
                 else:
-                    warnings.warn(
-                        f"Unsupported protocol: {protocol}", category=UserWarning
-                    )
+                    warnings.warn(f"Unsupported protocol: {protocol}", category=UserWarning)
 
         if not any(isinstance(server, (RPCServer, ZMQServer)) for server in servers):
             prepare_rpc_server(self, access_points=ZMQ_TRANSPORTS.INPROC)
         for server in servers:
+            # this cannot be merged with the loop below because self.rpc_server needs to be set first
+            if isinstance(server, (RPCServer, ZMQServer)):
+                self.rpc_server = server
+
+        for server in servers:
             if isinstance(server, HTTPServer):
-                server.add_thing(self)
-                threading.Thread(target=server.listen).start()
+
+                def start_http_server(server: HTTPServer) -> None:
+                    server.router.add_zmq_thing_instance(
+                        server_id=self.rpc_server.id, thing_id=self.id, access_point="INPROC"
+                    )
+                    server.listen()
+
+                threading.Thread(target=start_http_server, args=(server,)).start()
         self.rpc_server.run()
 
     @action()

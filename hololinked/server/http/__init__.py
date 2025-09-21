@@ -359,6 +359,7 @@ class HTTPServer(Parameterized):
         *things: Thing | ThingMeta | dict | str
             the thing instance(s) or thing classe(s) to be served, or a map of address/ZMQ protocol to thing id,
             for example - {'tcp://my-pc:5555': 'my-thing-id', 'IPC' : 'my-thing-id-2'}
+            The server ID needs to match the thing ID, otherwise this method would be unable to find the thing.
         """
         for thing in things:
             if isinstance(thing, Thing):
@@ -366,7 +367,7 @@ class HTTPServer(Parameterized):
             elif isinstance(thing, ThingMeta):
                 raise ValueError(
                     f"class {thing} is not a thing instance, no need to add it to the server."
-                    + f" Just supply a thing instance to the server. skipping..."
+                    + " Just supply a thing instance to the server. skipping..."
                 )
             elif isinstance(thing, (dict, str)):
                 if isinstance(thing, str):
@@ -379,7 +380,7 @@ class HTTPServer(Parameterized):
                     for address, thing_id in thing.items():
                         self.router.add_zmq_thing_instance(server_id=thing_id, thing_id=thing_id, access_point=address)
             elif issubklass(thing, ThingMeta):
-                raise TypeError(f"thing should be of type Thing, not ThingMeta")
+                raise TypeError("thing should be of type Thing, not ThingMeta")
             else:
                 raise TypeError(f"thing should be of type Thing, unknown type given - {type(thing)}")
 

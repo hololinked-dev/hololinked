@@ -45,7 +45,7 @@ class BaseZMQ:
     which is common to all server and client implementations.
     """
 
-    def __init__(self, id: str, logger: logging.Logger | None, **kwargs) -> None:
+    def __init__(self, id: str, logger: logging.Logger | None = None, **kwargs) -> None:
         super().__init__()
         self.id = id  # type: str
         if not logger:
