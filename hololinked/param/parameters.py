@@ -142,17 +142,13 @@ class String(Parameter):
             else:
                 raise_ValueError(f"None not allowed for string type", obj)
         if not isinstance(value, str):
-            raise_TypeError(
-                "given value is not string type, but {}.".format(type(value)), obj
-            )
+            raise_TypeError("given value is not string type, but {}.".format(type(value)), obj)
         if regex is not None:
             match = re.match(regex, value)
             if match is None or match.group(0) != value:
                 # match should be original string, not some substring
                 raise_ValueError(
-                    "given string value {} does not match regex {}.".format(
-                        value, regex
-                    ),
+                    "given string value {} does not match regex {}.".format(value, regex),
                     obj,
                 )
 
@@ -216,17 +212,13 @@ class Bytes(String):
             else:
                 raise_ValueError(f"None not allowed for string type", obj)
         if not isinstance(value, bytes):
-            raise_TypeError(
-                "given value is not bytes type, but {}.".format(type(value)), obj
-            )
+            raise_TypeError("given value is not bytes type, but {}.".format(type(value)), obj)
         if regex is not None:
             match = re.match(regex, value)
             if match is None or match.group(0) != value:
                 # match should be original string, not some substring
                 raise_ValueError(
-                    "given bytes value {} does not match regex {}.".format(
-                        value, regex
-                    ),
+                    "given bytes value {} does not match regex {}.".format(value, regex),
                     obj,
                 )
 
@@ -294,9 +286,7 @@ class IPAddress(Parameter):
             return
         if not isinstance(value, str):
             raise_TypeError(
-                "given value for IP address not a string, but type {}".format(
-                    type(value)
-                ),
+                "given value for IP address not a string, but type {}".format(type(value)),
                 obj,
             )
         if allow_localhost and value == "localhost":
@@ -305,9 +295,7 @@ class IPAddress(Parameter):
             (allow_ipv4 and (obj.isipv4(value) or obj.isipv4cidr(value)))
             or (allow_ipv6 and (obj.isipv6(value) or obj.isipv6cidr(value)))
         ):
-            raise_ValueError(
-                "Given value {} is not a valid IP address.".format(value), obj
-            )
+            raise_ValueError("Given value {} is not a valid IP address.".format(value), obj)
 
     @classmethod
     def isinstance(
@@ -341,11 +329,7 @@ class IPAddress(Parameter):
             bool : True if conformant
         """
         groups = value.split(".")
-        if (
-            len(groups) != 4
-            or any(not x.isdigit() for x in groups)
-            or any(len(x) > 3 for x in groups)
-        ):
+        if len(groups) != 4 or any(not x.isdigit() for x in groups) or any(len(x) > 3 for x in groups):
             return False
         return all(0 <= int(part) < 256 for part in groups)
 
@@ -430,24 +414,13 @@ class IPAddress(Parameter):
         if count_blank == 0 and part_count == max_groups:
             # no :: -> must have size of max_groups
             return True
-        elif (
-            count_blank == 1
-            and ipv6_groups[-1]
-            and ipv6_groups[0]
-            and part_count < max_groups
-        ):
+        elif count_blank == 1 and ipv6_groups[-1] and ipv6_groups[0] and part_count < max_groups:
             # one :: inside the address or prefix or suffix : -> filter least two cases
             return True
         elif (
             count_blank == 2
             and part_count < max_groups
-            and (
-                (
-                    (ipv6_groups[0] and not ipv6_groups[-1])
-                    or (not ipv6_groups[0] and ipv6_groups[-1])
-                )
-                or ipv4_groups
-            )
+            and (((ipv6_groups[0] and not ipv6_groups[-1]) or (not ipv6_groups[0] and ipv6_groups[-1])) or ipv4_groups)
         ):
             # leading or trailing :: or : at end and begin -> filter last case
             # Check if it has ipv4 groups because they get removed from the ipv6_groups
@@ -573,9 +546,7 @@ class Number(Parameter):
         bounded_value = self._crop_to_bounds(value)
         super().__set__(obj, bounded_value)
 
-    def _crop_to_bounds(
-        self, value: typing.Union[int, float]
-    ) -> typing.Union[int, float]:
+    def _crop_to_bounds(self, value: typing.Union[int, float]) -> typing.Union[int, float]:
         """
         Return the given value cropped to be within the hard bounds
         for this parameter.
@@ -647,17 +618,13 @@ class Number(Parameter):
                 if incmax is True:
                     if not value <= vmax:
                         raise_ValueError(
-                            "given value must be at most {}, not {}.".format(
-                                vmax, value
-                            ),
+                            "given value must be at most {}, not {}.".format(vmax, value),
                             obj,
                         )
                 else:
                     if not value < vmax:
                         raise_ValueError(
-                            "Parameter must be less than {}, not {}.".format(
-                                vmax, value
-                            ),
+                            "Parameter must be less than {}, not {}.".format(vmax, value),
                             obj,
                         )
 
@@ -665,17 +632,13 @@ class Number(Parameter):
                 if incmin is True:
                     if not value >= vmin:
                         raise_ValueError(
-                            "Parameter must be at least {}, not {}.".format(
-                                vmin, value
-                            ),
+                            "Parameter must be at least {}, not {}.".format(vmin, value),
                             obj,
                         )
                 else:
                     if not value > vmin:
                         raise_ValueError(
-                            "Parameter must be greater than {}, not {}.".format(
-                                vmin, value
-                            ),
+                            "Parameter must be greater than {}, not {}.".format(vmin, value),
                             obj,
                         )
             return value
@@ -685,16 +648,12 @@ class Number(Parameter):
             if self.dtype:
                 if not isinstance(value, self.dtype):
                     raise_ValueError(
-                        "Step can only be None or {}, not type {}.".format(
-                            self.dtype, type(value)
-                        ),
+                        "Step can only be None or {}, not type {}.".format(self.dtype, type(value)),
                         self,
                     )
             elif not self.isnumber(self.step):
                 raise_ValueError(
-                    "Step can only be None or numeric value, not type {}.".format(
-                        type(value)
-                    ),
+                    "Step can only be None or numeric value, not type {}.".format(type(value)),
                     self,
                 )
 
@@ -778,9 +737,7 @@ class Integer(Number):
     def _validate_step(self, step: int):
         if step is not None and not isinstance(step, int):
             raise_ValueError(
-                "Step can only be None or an integer value, not type {}".format(
-                    type(step)
-                ),
+                "Step can only be None or an integer value, not type {}".format(type(step)),
                 self,
             )
 
@@ -823,9 +780,7 @@ class Boolean(Parameter):
         if self.allow_None and value is None:
             return
         elif not isinstance(value, bool):
-            raise_ValueError(
-                "given value not boolean type, but type {}".format(type(value)), self
-            )
+            raise_ValueError("given value not boolean type, but type {}".format(type(value)), self)
         return value
 
 
@@ -878,12 +833,8 @@ class Iterable(Parameter):
         self.item_type = item_type
         self.dtype = (list, tuple)
 
-    def validate_and_adapt(
-        self, value: typing.Any
-    ) -> typing.Union[typing.List, typing.Tuple]:
-        self._assert(
-            value, self.bounds, self.length, self.dtype, self.item_type, self.allow_None
-        )
+    def validate_and_adapt(self, value: typing.Any) -> typing.Union[typing.List, typing.Tuple]:
+        self._assert(value, self.bounds, self.length, self.dtype, self.item_type, self.allow_None)
         return value
 
     @classmethod
@@ -900,9 +851,7 @@ class Iterable(Parameter):
             return
         if not isinstance(value, dtype):
             raise_ValueError(
-                "given value not of iterable type {}, but {}.".format(
-                    dtype, type(value)
-                ),
+                "given value not of iterable type {}, but {}.".format(dtype, type(value)),
                 obj,
             )
         if bounds is not None:
@@ -915,9 +864,7 @@ class Iterable(Parameter):
                 )
         elif length is not None and len(value) != length:
             raise_ValueError(
-                "given iterable is not of correct length ({} instead of {})".format(
-                    len(value), length
-                ),
+                "given iterable is not of correct length ({} instead of {})".format(len(value), length),
                 obj,
             )
         if item_type is not None:
@@ -997,9 +944,7 @@ class Tuple(Iterable):
             value = tuple(value)
         if self.accept_item and not isinstance(value, (list, tuple, type(None))):
             value = (value,)
-        self._assert(
-            value, self.bounds, self.length, self.dtype, self.item_type, self.allow_None
-        )
+        self._assert(value, self.bounds, self.length, self.dtype, self.item_type, self.allow_None)
         return value
 
     @classmethod
@@ -1073,9 +1018,7 @@ class List(Iterable):
     def validate_and_adapt(self, value: typing.Any) -> typing.Tuple:
         if self.accept_tuple and isinstance(value, tuple):
             value = list(value)
-        self._assert(
-            value, self.bounds, self.length, self.dtype, self.item_type, self.allow_None
-        )
+        self._assert(value, self.bounds, self.length, self.dtype, self.item_type, self.allow_None)
         return value
 
 
@@ -1092,9 +1035,7 @@ class Callable(Parameter):
     def validate_and_adapt(self, value: typing.Any) -> typing.Callable:
         if (self.allow_None and value is None) or callable(value):
             return value
-        raise_ValueError(
-            "given value not a callable object, but type {}.".format(type(value)), self
-        )
+        raise_ValueError("given value not a callable object, but type {}.".format(type(value)), self)
 
 
 class Composite(Parameter):
@@ -1262,11 +1203,7 @@ class Selector(SelectorBase):
             self.objects = objects
             autodefault = objects[0]
         else:
-            raise TypeError(
-                "objects should be a list, tuple, mapping or None. Given type : {}".format(
-                    type(objects)
-                )
-            )
+            raise TypeError("objects should be a list, tuple, mapping or None. Given type : {}".format(type(objects)))
         default = autodefault if (not empty_default and default is None) else default
 
     def validate_and_adapt(self, value: typing.Any) -> typing.Any:
@@ -1465,9 +1402,7 @@ class TupleSelector(Selector):
                 for obj in value:
                     if obj not in self.objects:
                         raise_ValueError(
-                            "object {} not specified as a valid member of list of objects.".format(
-                                obj
-                            ),
+                            "object {} not specified as a valid member of list of objects.".format(obj),
                             self,
                         )
         return value
@@ -1516,13 +1451,7 @@ class resolve_path(ParameterizedFunction):
     def __call__(self, path: str, **params) -> str:
         p = ParamOverrides(self, params)
         path = os.path.normpath(path)
-        ftype = (
-            "File"
-            if p.path_to_file is True
-            else "Folder"
-            if p.path_to_file is False
-            else "Path"
-        )
+        ftype = "File" if p.path_to_file is True else "Folder" if p.path_to_file is False else "Path"
 
         if not p.search_paths:
             p.search_paths = [os.getcwd()]
@@ -1722,13 +1651,8 @@ def abbreviate_paths(pathspec, named_paths):
     Helps keep menu items short yet unambiguous.
     """
 
-    prefix = os.path.commonprefix(
-        [os.path.dirname(name) + os.path.sep for name in named_paths.keys()]
-        + [pathspec]
-    )
-    return OrderedDict(
-        [(name[len(prefix) :], path) for name, path in named_paths.items()]
-    )
+    prefix = os.path.commonprefix([os.path.dirname(name) + os.path.sep for name in named_paths.keys()] + [pathspec])
+    return OrderedDict([(name[len(prefix) :], path) for name, path in named_paths.items()])
 
 
 class FileSelector(Selector):
@@ -1885,9 +1809,7 @@ class Date(Number):
 
     def _validate_step(self, val):
         if self.step is not None and not isinstance(self.step, dt_types):
-            raise ValueError(
-                f"Step can only be None, a datetime or datetime type, not type {type(val)}"
-            )
+            raise ValueError(f"Step can only be None, a datetime or datetime type, not type {type(val)}")
 
     @classmethod
     def serialize(cls, value):
@@ -2165,17 +2087,13 @@ class CSS3Color(Parameter):
             return
         if not isinstance(value, str):
             raise ValueError(
-                "Color parameter %r expects a string value, "
-                "not an object of type %s." % (self.name, type(value))
+                "Color parameter %r expects a string value, not an object of type %s." % (self.name, type(value))
             )
         if self.allow_named and value in self._named_colors:
             return
         is_hex = re.match("^#?(([0-9a-fA-F]{2}){3}|([0-9a-fA-F]){3})$", value)
         if not is_hex:
-            raise ValueError(
-                "Color '%s' only takes RGB hex codes "
-                "or named colors, received '%s'." % (self.name, value)
-            )
+            raise ValueError("Color '%s' only takes RGB hex codes or named colors, received '%s'." % (self.name, value))
 
 
 class Range(Tuple):
@@ -2244,8 +2162,7 @@ class Range(Tuple):
             too_high = (vmax is not None) and (v > vmax if incmax else v >= vmax)
             if too_low or too_high:
                 raise ValueError(
-                    "Range parameter %r's %s bound must be in range %s."
-                    % (self.name, bound, self.rangestr())
+                    "Range parameter %r's %s bound must be in range %s." % (self.name, bound, self.rangestr())
                 )
 
     @property
@@ -2273,22 +2190,19 @@ class DateRange(Range):
 
         if not isinstance(val, tuple):
             raise ValueError(
-                "DateRange parameter %r only takes a tuple value, "
-                "not %s." % (self.name, type(val).__name__)
+                "DateRange parameter %r only takes a tuple value, not %s." % (self.name, type(val).__name__)
             )
         for n in val:
             if isinstance(n, dt_types):
                 continue
             raise ValueError(
-                "DateRange parameter %r only takes date/datetime "
-                "values, not type %s." % (self.name, type(n).__name__)
+                "DateRange parameter %r only takes date/datetime values, not type %s." % (self.name, type(n).__name__)
             )
 
         start, end = val
         if not end >= start:
             raise ValueError(
-                "DateRange parameter %r's end datetime %s "
-                "is before start datetime %s." % (self.name, val[1], val[0])
+                "DateRange parameter %r's end datetime %s is before start datetime %s." % (self.name, val[1], val[0])
             )
 
     @classmethod
@@ -2335,16 +2249,12 @@ class CalendarDateRange(Range):
 
         for n in val:
             if not isinstance(n, dt.date):
-                raise ValueError(
-                    "CalendarDateRange parameter %r only "
-                    "takes date types, not %s." % (self.name, val)
-                )
+                raise ValueError("CalendarDateRange parameter %r only takes date types, not %s." % (self.name, val))
 
         start, end = val
         if not end >= start:
             raise ValueError(
-                "CalendarDateRange parameter %r's end date "
-                "%s is before start date %s." % (self.name, val[1], val[0])
+                "CalendarDateRange parameter %r's end date %s is before start date %s." % (self.name, val[1], val[0])
             )
 
     @classmethod
@@ -2397,41 +2307,29 @@ class BaseConstrainedList(collections.abc.MutableSequence):
 
     def _validate_for_extension(self, value: typing.List) -> None:
         if self.constant:
-            raise ValueError(
-                f"List {get_iterable_printfriendly_repr(self._inner)} is a constant, cannot be modified."
-            )
+            raise ValueError(f"List {get_iterable_printfriendly_repr(self._inner)} is a constant, cannot be modified.")
         self._validate_value(value)
         self._validate_bounds_for_extension(value)
         self._validate_items(value)
 
     def _validate_for_insertion(self, value: typing.Any) -> None:
         if self.constant:
-            raise ValueError(
-                f"List {get_iterable_printfriendly_repr(self._inner)} is a constant, cannot be modified."
-            )
+            raise ValueError(f"List {get_iterable_printfriendly_repr(self._inner)} is a constant, cannot be modified.")
         self._validate_bounds_for_extension()
         self._validate_item(value)
 
     def _validate_value(self, value: typing.Any) -> None:
         if not isinstance(value, list):
-            raise TypeError(
-                f"Given value for a constrained list is not a list, but type {type(value)}"
-            )
+            raise TypeError(f"Given value for a constrained list is not a list, but type {type(value)}")
 
     def _validate_items(self, value: typing.Any) -> None:
-        raise NotImplementedError(
-            "Please implement _validate_item in the child of BaseConstrainedList."
-        )
+        raise NotImplementedError("Please implement _validate_item in the child of BaseConstrainedList.")
 
     def _validate_item(self, value: typing.Any):
-        raise NotImplementedError(
-            "Please implement _validate_single_item in the child of BaseConstrainedList."
-        )
+        raise NotImplementedError("Please implement _validate_single_item in the child of BaseConstrainedList.")
 
     def _validate_bounds_for_set(self, value: typing.Any) -> None:
-        if not (
-            value.__len__() >= self.bounds[0] and value.__len__() <= self.bounds[1]
-        ):
+        if not (value.__len__() >= self.bounds[0] and value.__len__() <= self.bounds[1]):
             raise ValueError(
                 wrap_error_text(
                     f"""given list {get_iterable_printfriendly_repr(value)} has length out of bounds {self.bounds}. 
@@ -2468,9 +2366,7 @@ class BaseConstrainedList(collections.abc.MutableSequence):
 
     def __setitem__(self, index: int, value: typing.Any) -> None:
         if self.constant:
-            raise ValueError(
-                f"List {get_iterable_printfriendly_repr(self._inner)} is a constant, cannot be modified."
-            )
+            raise ValueError(f"List {get_iterable_printfriendly_repr(self._inner)} is a constant, cannot be modified.")
         self._validate_item(value)
         self._inner[index] = value
 
@@ -2520,9 +2416,7 @@ class BaseConstrainedList(collections.abc.MutableSequence):
             return self._inner.__add__(__x)
 
     def __iadd__(self, values: typing.List[typing.Any]) -> typing.List:
-        raise NotImplementedError(
-            "Please implement __iadd__ in the child of BaseConstrainedList."
-        )
+        raise NotImplementedError("Please implement __iadd__ in the child of BaseConstrainedList.")
 
     def insert(self, __index: int, __object: typing.Any) -> None:
         self._validate_for_insertion(__object)
@@ -2558,9 +2452,7 @@ class BaseConstrainedList(collections.abc.MutableSequence):
         self._inner.sort(key=key, reverse=reverse)
 
     def copy(self, return_as_typed_list: bool = False):
-        raise NotImplementedError(
-            "Please implement copy() in the child of BaseConstrainedList."
-        )
+        raise NotImplementedError("Please implement copy() in the child of BaseConstrainedList.")
 
 
 class TypeConstrainedList(BaseConstrainedList):
@@ -2609,9 +2501,7 @@ class TypeConstrainedList(BaseConstrainedList):
             skip_validate=True,
         )
 
-    def copy(
-        self, return_as_typed_list: bool = False
-    ) -> typing.Union["TypeConstrainedList", typing.List[typing.Any]]:
+    def copy(self, return_as_typed_list: bool = False) -> typing.Union["TypeConstrainedList", typing.List[typing.Any]]:
         if return_as_typed_list:
             return TypeConstrainedList(
                 default=self._inner.copy(),
@@ -2678,11 +2568,7 @@ class TypedList(ClassSelector):
     def validate_and_adapt(self, value: typing.Any):
         if self.allow_None and value is None:
             return
-        if (
-            value is not None
-            and self.accept_nonlist_object
-            and not isinstance(value, list)
-        ):
+        if value is not None and self.accept_nonlist_object and not isinstance(value, list):
             value = [value]
         return TypeConstrainedList(
             default=value,
@@ -2751,12 +2637,8 @@ class TypeConstrainedDict(collections.abc.MutableMapping):
                 Given dictionary length outside bounds. Given length {value.__len__()}, expected length : {self.bounds}""")
             )
 
-    def _validate_bounds_for_extension(
-        self, value: typing.Dict = {"dummy": "dummy"}
-    ) -> None:
-        if not (
-            self.bounds[0] <= self._inner.__len__() + value.__len__() <= self.bounds[1]
-        ):
+    def _validate_bounds_for_extension(self, value: typing.Dict = {"dummy": "dummy"}) -> None:
+        if not (self.bounds[0] <= self._inner.__len__() + value.__len__() <= self.bounds[1]):
             raise ValueError(
                 wrap_error_text(f"""
                 Extending dictionary crosses bounds. Existing length {self._inner.__len__()}, 
@@ -2786,14 +2668,10 @@ class TypeConstrainedDict(collections.abc.MutableMapping):
     def _validate_key_value_pair(self, __key: typing.Any, __value: typing.Any) -> None:
         if self.key_type is not None:
             if not isinstance(__key, self.key_type):
-                raise TypeError(
-                    "given key {} is not of {}.".format(__key, self.key_type)
-                )
+                raise TypeError("given key {} is not of {}.".format(__key, self.key_type))
         if self.item_type is not None:
             if not isinstance(__value, self.item_type):
-                raise TypeError(
-                    "given item {} is not of {}.".format(__value, self.item_type)
-                )
+                raise TypeError("given item {} is not of {}.".format(__value, self.item_type))
 
     def __iter__(self) -> typing.Iterator:
         return self._inner.__iter__()
@@ -2859,9 +2737,7 @@ class TypeConstrainedDict(collections.abc.MutableMapping):
     def clear(self) -> None:
         self._inner.clear()
 
-    def copy(
-        self, return_as_typed: bool = False
-    ) -> typing.Union["TypeConstrainedDict", typing.Dict]:
+    def copy(self, return_as_typed: bool = False) -> typing.Union["TypeConstrainedDict", typing.Dict]:
         if return_as_typed:
             return TypeConstrainedDict(
                 default=self._inner.copy(),
@@ -2917,18 +2793,14 @@ class TypedKeyMappingsConstrainedDict(TypeConstrainedDict):
             if self.allow_unspecified_keys:
                 pass
             else:
-                raise KeyError(
-                    f"Keys except {self.key_list} not allowed for typed dictionary. Given key : {__key}."
-                )
+                raise KeyError(f"Keys except {self.key_list} not allowed for typed dictionary. Given key : {__key}.")
         elif not isinstance(__value, self.type_mapping[__key]):
             raise TypeError(
                 wrap_error_text(f""" 
                 Value for key {__key} not of expected type : {self.type_mapping[__key]}. Given type : {type(__value)}.""")
             )
 
-    def copy(
-        self, return_as_typed: bool = False
-    ) -> typing.Union["TypedKeyMappingsConstrainedDict", typing.Dict]:
+    def copy(self, return_as_typed: bool = False) -> typing.Union["TypedKeyMappingsConstrainedDict", typing.Dict]:
         if return_as_typed:
             return TypedKeyMappingsConstrainedDict(
                 default=self._inner.copy(),
@@ -3002,13 +2874,9 @@ class TypedDict(ClassSelector):
                 constant=self.constant,
                 skip_validate=False,
             )
-            return super().__set__(
-                obj, container
-            )  # re-set it to trigger param related activities
+            return super().__set__(obj, container)  # re-set it to trigger param related activities
         else:
-            return super().__set__(
-                obj, value
-            )  # re-set it to trigger param related activities
+            return super().__set__(obj, value)  # re-set it to trigger param related activities
 
     @classmethod
     def serialize(cls, value: TypeConstrainedDict) -> typing.Any:
@@ -3080,9 +2948,7 @@ class TypedKeyMappingsDict(ClassSelector):
             )
             return super().__set__(obj, container)
         else:
-            return super().__set__(
-                obj, value
-            )  # re-set it to trigger param related activities
+            return super().__set__(obj, value)  # re-set it to trigger param related activities
 
     @classmethod
     def serialize(cls, value: TypeConstrainedDict) -> typing.Any:
@@ -3159,9 +3025,7 @@ def concrete_descendents(parentclass):
 
     Only non-abstract classes will be included.
     """
-    return dict(
-        (c.__name__, c) for c in descendents(parentclass) if not _is_abstract(c)
-    )
+    return dict((c.__name__, c) for c in descendents(parentclass) if not _is_abstract(c))
 
 
 __all__ = [

@@ -15,15 +15,13 @@ See https://github.com/holoviz/autover for more information.
 # Version.__new__ is added here to provide the previous Version class
 # (OldDeprecatedVersion) if Version is called in the old way.
 
-
-__author__ = 'Jean-Luc Stevens'
+__author__ = "Jean-Luc Stevens"
 
 import os, subprocess, json
 
+
 def run_cmd(args, cwd=None):
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            cwd=cwd)
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
     output, error = (str(s.decode()).strip() for s in proc.communicate())
 
     # Detects errors as _either_ a non-zero return code _or_ messages
@@ -32,7 +30,6 @@ def run_cmd(args, cwd=None):
     if proc.returncode != 0 or len(error) > 0:
         raise Exception(proc.returncode, error)
     return output
-
 
 
 class Version(object):
@@ -79,19 +76,28 @@ class Version(object):
     alternate valid prefix such as '.rev', '_rev', '_r' or '.r' may be
     supplied."""
 
-    def __new__(cls,**kw):
+    def __new__(cls, **kw):
         # If called in the old way, provide the previous class. Means
         # PEP440/tag based workflow warning below will never appear.
-        if ('release' in kw and kw['release'] is not None) or \
-           ('dev' in kw and kw['dev'] is not None) or \
-           ('commit_count' in kw):
+        if (
+            ("release" in kw and kw["release"] is not None)
+            or ("dev" in kw and kw["dev"] is not None)
+            or ("commit_count" in kw)
+        ):
             return OldDeprecatedVersion(**kw)
         else:
             return super(Version, cls).__new__(cls)
 
-
-    def __init__(self, release=None, fpath=None, commit=None, reponame=None,
-                 commit_count_prefix='.post', archive_commit=None, **kwargs):
+    def __init__(
+        self,
+        release=None,
+        fpath=None,
+        commit=None,
+        reponame=None,
+        commit_count_prefix=".post",
+        archive_commit=None,
+        **kwargs,
+    ):
         """
         :release:      Release tuple (corresponding to the current VCS tag)
         :commit        Short SHA. Set to '$Format:%h$' for git archive support.
@@ -101,8 +107,10 @@ class Version(object):
         self.fpath = fpath
         self._expected_commit = commit
 
-        if release is not None or 'commit_count' in kwargs:
-            print('WARNING: param.Version now supports PEP440 and a new tag based workflow. See param/version.py for more details')
+        if release is not None or "commit_count" in kwargs:
+            print(
+                "WARNING: param.Version now supports PEP440 and a new tag based workflow. See param/version.py for more details"
+            )
 
         self.expected_release = release
 
@@ -112,7 +120,7 @@ class Version(object):
         self._dirty = False
         self._prerelease = None
 
-        self.archive_commit= archive_commit
+        self.archive_commit = archive_commit
 
         self.reponame = reponame
         self.commit_count_prefix = commit_count_prefix
@@ -145,7 +153,6 @@ class Version(object):
         "True if there are uncommited changes, False otherwise"
         return self.fetch()._dirty
 
-
     def fetch(self):
         """
         Returns a tuple of the major version together with the
@@ -159,8 +166,8 @@ class Version(object):
             self._commit = self._expected_commit
             return self
 
-         # Only git right now but easily extended to SVN, Mercurial, etc.
-        for cmd in ['git', 'git.cmd', 'git.exe']:
+        # Only git right now but easily extended to SVN, Mercurial, etc.
+        for cmd in ["git", "git.cmd", "git.exe"]:
             try:
                 self.git_fetch(cmd)
                 break
@@ -168,8 +175,7 @@ class Version(object):
                 pass
         return self
 
-
-    def git_fetch(self, cmd='git', as_string=False):
+    def git_fetch(self, cmd="git", as_string=False):
         commit_argument = self._commit
         output = None
         try:
@@ -177,24 +183,28 @@ class Version(object):
                 # Verify this is the correct repository (since fpath could
                 # be an unrelated git repository, and autover could just have
                 # been copied/installed into it).
-                remotes = run_cmd([cmd, 'remote', '-v'],
-                                  cwd=os.path.dirname(self.fpath))
-                repo_matches = ['/' + self.reponame + '.git' ,
-                                # A remote 'server:reponame.git' can also be referred
-                                # to (i.e. cloned) as `server:reponame`.
-                                '/' + self.reponame + ' ']
+                remotes = run_cmd([cmd, "remote", "-v"], cwd=os.path.dirname(self.fpath))
+                repo_matches = [
+                    "/" + self.reponame + ".git",
+                    # A remote 'server:reponame.git' can also be referred
+                    # to (i.e. cloned) as `server:reponame`.
+                    "/" + self.reponame + " ",
+                ]
                 if not any(m in remotes for m in repo_matches):
                     try:
                         output = self._output_from_file()
                         if output is not None:
                             self._update_from_vcs(output)
-                    except: pass
+                    except:
+                        pass
             if output is None:
                 # glob pattern (not regexp) matching vX.Y.Z* tags
-                output = run_cmd([cmd, 'describe', '--long', '--match',
-                                  "v[0-9]*.[0-9]*.[0-9]*", '--dirty'],
-                                 cwd=os.path.dirname(self.fpath))
-            if as_string: return output
+                output = run_cmd(
+                    [cmd, "describe", "--long", "--match", "v[0-9]*.[0-9]*.[0-9]*", "--dirty"],
+                    cwd=os.path.dirname(self.fpath),
+                )
+            if as_string:
+                return output
         except Exception as e1:
             try:
                 output = self._output_from_file()
@@ -202,7 +212,8 @@ class Version(object):
                     self._update_from_vcs(output)
                 if self._known_stale():
                     self._commit_count = None
-                if as_string: return output
+                if as_string:
+                    return output
 
                 # If an explicit commit was supplied (e.g from git
                 # archive), it should take precedence over the file.
@@ -211,13 +222,12 @@ class Version(object):
                 return
 
             except IOError:
-                if e1.args[1] == 'fatal: No names found, cannot describe anything.':
+                if e1.args[1] == "fatal: No names found, cannot describe anything.":
                     raise Exception("Cannot find any git version tags of format v*.*")
                 # If there is any other error, return (release value still useful)
                 return self
 
         self._update_from_vcs(output)
-
 
     def _known_stale(self):
         """
@@ -229,13 +239,16 @@ class Version(object):
         else:
             commit = self.commit
 
-        known_stale = (self.archive_commit is not None
-                       and not self.archive_commit.startswith('$Format')
-                       and self.archive_commit != commit)
-        if known_stale: self._commit_count = None
+        known_stale = (
+            self.archive_commit is not None
+            and not self.archive_commit.startswith("$Format")
+            and self.archive_commit != commit
+        )
+        if known_stale:
+            self._commit_count = None
         return known_stale
 
-    def _output_from_file(self, entry='git_describe'):
+    def _output_from_file(self, entry="git_describe"):
         """
         Read the version from a .version file that may exist alongside __init__.py.
 
@@ -244,30 +257,28 @@ class Version(object):
         git describe --long --match v*.*
         """
         try:
-            vfile = os.path.join(os.path.dirname(self.fpath), '.version')
-            with open(vfile, 'r') as f:
+            vfile = os.path.join(os.path.dirname(self.fpath), ".version")
+            with open(vfile, "r") as f:
                 return json.loads(f.read()).get(entry, None)
-        except: # File may be missing if using pip + git archive
+        except:  # File may be missing if using pip + git archive
             return None
-
 
     def _update_from_vcs(self, output):
         "Update state based on the VCS state e.g the output of git describe"
-        split = output[1:].split('-')
-        dot_split = split[0].split('.')
-        for prefix in ['a','b','rc']:
+        split = output[1:].split("-")
+        dot_split = split[0].split(".")
+        for prefix in ["a", "b", "rc"]:
             if prefix in dot_split[-1]:
                 prefix_split = dot_split[-1].split(prefix)
                 self._prerelease = prefix + prefix_split[-1]
                 dot_split[-1] = prefix_split[0]
 
-
         self._release = tuple(int(el) for el in dot_split)
         self._commit_count = int(split[1])
 
-        self._commit = str(split[2][1:]) # Strip out 'g' prefix ('g'=>'git')
+        self._commit = str(split[2][1:])  # Strip out 'g' prefix ('g'=>'git')
 
-        self._dirty = (split[-1]=='dirty')
+        self._dirty = split[-1] == "dirty"
         return self
 
     def __str__(self):
@@ -284,38 +295,36 @@ class Version(object):
         """
         known_stale = self._known_stale()
         if self.release is None and not known_stale:
-            extracted_directory_tag = self._output_from_file(entry='extracted_directory_tag')
-            return 'None' if extracted_directory_tag is None else extracted_directory_tag
+            extracted_directory_tag = self._output_from_file(entry="extracted_directory_tag")
+            return "None" if extracted_directory_tag is None else extracted_directory_tag
         elif self.release is None and known_stale:
-            extracted_directory_tag = self._output_from_file(entry='extracted_directory_tag')
+            extracted_directory_tag = self._output_from_file(entry="extracted_directory_tag")
             if extracted_directory_tag is not None:
                 return extracted_directory_tag
-            return '0.0.0+g{SHA}-gitarchive'.format(SHA=self.archive_commit)
+            return "0.0.0+g{SHA}-gitarchive".format(SHA=self.archive_commit)
 
-        release = '.'.join(str(el) for el in self.release)
-        prerelease = '' if self.prerelease is None else self.prerelease
+        release = ".".join(str(el) for el in self.release)
+        prerelease = "" if self.prerelease is None else self.prerelease
 
         if self.commit_count == 0 and not self.dirty:
             return release + prerelease
 
         commit = self.commit
-        dirty = '-dirty' if self.dirty else ''
-        archive_commit = ''
+        dirty = "-dirty" if self.dirty else ""
+        archive_commit = ""
         if known_stale:
-            archive_commit = '-gitarchive'
+            archive_commit = "-gitarchive"
             commit = self.archive_commit
 
-        if archive_commit != '':
-            postcount = self.commit_count_prefix + '0'
+        if archive_commit != "":
+            postcount = self.commit_count_prefix + "0"
         elif self.commit_count not in [0, None]:
             postcount = self.commit_count_prefix + str(self.commit_count)
         else:
-            postcount = ''
+            postcount = ""
 
-        components = [release, prerelease, postcount,
-                      '' if commit is None else '+g' + commit, dirty,
-                      archive_commit]
-        return ''.join(components)
+        components = [release, prerelease, postcount, "" if commit is None else "+g" + commit, dirty, archive_commit]
+        return "".join(components)
 
     def __repr__(self):
         return str(self)
@@ -324,7 +333,7 @@ class Version(object):
         """
         Abbreviated string representation of just the release number.
         """
-        return '.'.join(str(el) for el in self.release)
+        return ".".join(str(el) for el in self.release)
 
     def verify(self, string_version=None):
         """
@@ -343,18 +352,14 @@ class Version(object):
         if self.expected_release is not None and self.release != self.expected_release:
             raise Exception("Declared release does not match current release tag.")
 
-        if self.commit_count !=0:
+        if self.commit_count != 0:
             raise Exception("Please update the VCS version tag before release.")
 
-        if (self._expected_commit is not None
-            and not self._expected_commit.startswith( "$Format")):
+        if self._expected_commit is not None and not self._expected_commit.startswith("$Format"):
             raise Exception("Declared release does not match the VCS version tag")
 
-
-
     @classmethod
-    def get_setup_version(cls, setup_path, reponame, describe=False,
-                          dirty='report', pkgname=None, archive_commit=None):
+    def get_setup_version(cls, setup_path, reponame, describe=False, dirty="report", pkgname=None, archive_commit=None):
         """
         Helper for use in setup.py to get the version from the .version file (if available)
         or more up-to-date information from git describe (if available).
@@ -375,7 +380,7 @@ class Version(object):
         dirty repository state.
         """
         pkgname = reponame if pkgname is None else pkgname
-        policies = ['raise','report', 'strip']
+        policies = ["raise", "report", "strip"]
         if dirty not in policies:
             raise AssertionError("get_setup_version dirty policy must be in %r" % policies)
 
@@ -386,70 +391,60 @@ class Version(object):
         else:
             vstring = str(version)
 
-        if version.dirty and dirty == 'raise':
-            raise AssertionError('Repository is in a dirty state.')
-        elif version.dirty and dirty=='strip':
-            return vstring.replace('-dirty', '')
+        if version.dirty and dirty == "raise":
+            raise AssertionError("Repository is in a dirty state.")
+        elif version.dirty and dirty == "strip":
+            return vstring.replace("-dirty", "")
         else:
             return vstring
 
-
     @classmethod
     def extract_directory_tag(cls, setup_path, reponame):
-        setup_dir = os.path.split(setup_path)[-1] # Directory containing setup.py
-        prefix = reponame + '-' # Prefix to match
+        setup_dir = os.path.split(setup_path)[-1]  # Directory containing setup.py
+        prefix = reponame + "-"  # Prefix to match
         if setup_dir.startswith(prefix):
-            tag = setup_dir[len(prefix):]
+            tag = setup_dir[len(prefix) :]
             # Assuming the tag is a version if it isn't empty, 'master' and has a dot in it
-            if tag not in ['', 'master'] and ('.' in tag):
+            if tag not in ["", "master"] and ("." in tag):
                 return tag
         return None
 
-
     @classmethod
-    def setup_version(cls, setup_path, reponame, archive_commit=None,
-                      pkgname=None, dirty='report'):
+    def setup_version(cls, setup_path, reponame, archive_commit=None, pkgname=None, dirty="report"):
         info = {}
         git_describe = None
         pkgname = reponame if pkgname is None else pkgname
         try:
             # Will only work if in a git repo and git is available
-            git_describe  = Version.get_setup_version(setup_path,
-                                                      reponame,
-                                                      describe=True,
-                                                      dirty=dirty,
-                                                      pkgname=pkgname,
-                                                      archive_commit=archive_commit)
+            git_describe = Version.get_setup_version(
+                setup_path, reponame, describe=True, dirty=dirty, pkgname=pkgname, archive_commit=archive_commit
+            )
 
             if git_describe is not None:
-                info['git_describe'] = git_describe
-        except: pass
+                info["git_describe"] = git_describe
+        except:
+            pass
 
         if git_describe is None:
             extracted_directory_tag = Version.extract_directory_tag(setup_path, reponame)
             if extracted_directory_tag is not None:
-                info['extracted_directory_tag'] = extracted_directory_tag
+                info["extracted_directory_tag"] = extracted_directory_tag
             try:
-                with open(os.path.join(setup_path, pkgname, '.version'), 'w') as f:
-                    f.write(json.dumps({'extracted_directory_tag':extracted_directory_tag}))
+                with open(os.path.join(setup_path, pkgname, ".version"), "w") as f:
+                    f.write(json.dumps({"extracted_directory_tag": extracted_directory_tag}))
             except:
-                print('Error in setup_version: could not write .version file.')
+                print("Error in setup_version: could not write .version file.")
 
-
-        info['version_string'] =  Version.get_setup_version(setup_path,
-                                                            reponame,
-                                                            describe=False,
-                                                            dirty=dirty,
-                                                            pkgname=pkgname,
-                                                            archive_commit=archive_commit)
+        info["version_string"] = Version.get_setup_version(
+            setup_path, reponame, describe=False, dirty=dirty, pkgname=pkgname, archive_commit=archive_commit
+        )
         try:
-            with open(os.path.join(setup_path, pkgname, '.version'), 'w') as f:
+            with open(os.path.join(setup_path, pkgname, ".version"), "w") as f:
                 f.write(json.dumps(info))
         except:
-            print('Error in setup_version: could not write .version file.')
+            print("Error in setup_version: could not write .version file.")
 
-        return info['version_string']
-
+        return info["version_string"]
 
 
 def get_setup_version(location, reponame, pkgname=None, archive_commit=None):
@@ -469,10 +464,13 @@ def get_setup_version(location, reponame, pkgname=None, archive_commit=None):
 
     """
     import warnings
+
     pkgname = reponame if pkgname is None else pkgname
     if archive_commit is None:
         warnings.warn("No archive commit available; git archives will not contain version information")
-    return Version.setup_version(os.path.dirname(os.path.abspath(location)),reponame,pkgname=pkgname,archive_commit=archive_commit)
+    return Version.setup_version(
+        os.path.dirname(os.path.abspath(location)), reponame, pkgname=pkgname, archive_commit=archive_commit
+    )
 
 
 def get_setupcfg_version():
@@ -514,24 +512,29 @@ def get_setupcfg_version():
     try:
         import configparser
     except ImportError:
-        import ConfigParser as configparser # python2 (also prevents dict-like access)
+        import ConfigParser as configparser  # python2 (also prevents dict-like access)
     import re
+
     cfg = "setup.cfg"
-    autover_section = 'tool:autover'
+    autover_section = "tool:autover"
     config = configparser.ConfigParser()
     config.read(cfg)
-    pkgname = config.get('metadata','name')
-    reponame = config.get(autover_section,'reponame',vars={'reponame':pkgname}) if autover_section in config.sections() else pkgname
+    pkgname = config.get("metadata", "name")
+    reponame = (
+        config.get(autover_section, "reponame", vars={"reponame": pkgname})
+        if autover_section in config.sections()
+        else pkgname
+    )
 
     ###
     # hack archive_commit into section heading; see docstring
     archive_commit = None
-    archive_commit_key = autover_section+'.configparser_workaround.archive_commit'
+    archive_commit_key = autover_section + ".configparser_workaround.archive_commit"
     for section in config.sections():
         if section.startswith(archive_commit_key):
-            archive_commit = re.match(r".*=\s*(\S*)\s*",section).group(1)
+            archive_commit = re.match(r".*=\s*(\S*)\s*", section).group(1)
     ###
-    return get_setup_version(cfg,reponame=reponame,pkgname=pkgname,archive_commit=archive_commit)
+    return get_setup_version(cfg, reponame=reponame, pkgname=pkgname, archive_commit=archive_commit)
 
 
 # from param/version.py aa087db29976d9b7e0f59c29789dfd721c85afd0
@@ -572,8 +575,7 @@ class OldDeprecatedVersion(object):
       __init__.py export-subst
     """
 
-    def __init__(self, release=None, fpath=None, commit=None,
-                 reponame=None, dev=None, commit_count=0):
+    def __init__(self, release=None, fpath=None, commit=None, reponame=None, dev=None, commit_count=0):
         """
         :release:      Release tuple (corresponding to the current VCS tag)
         :commit        Short SHA. Set to '$Format:%h$' for git archive support.
@@ -613,7 +615,6 @@ class OldDeprecatedVersion(object):
         "True if there are uncommited changes, False otherwise"
         return self.fetch()._dirty
 
-
     def fetch(self):
         """
         Returns a tuple of the major version together with the
@@ -627,8 +628,8 @@ class OldDeprecatedVersion(object):
             self._commit = self._expected_commit
             return self
 
-         # Only git right now but easily extended to SVN, Mercurial, etc.
-        for cmd in ['git', 'git.cmd', 'git.exe']:
+        # Only git right now but easily extended to SVN, Mercurial, etc.
+        for cmd in ["git", "git.cmd", "git.exe"]:
             try:
                 self.git_fetch(cmd)
                 break
@@ -636,26 +637,25 @@ class OldDeprecatedVersion(object):
                 pass
         return self
 
-
-    def git_fetch(self, cmd='git'):
+    def git_fetch(self, cmd="git"):
         try:
             if self.reponame is not None:
                 # Verify this is the correct repository (since fpath could
                 # be an unrelated git repository, and param could just have
                 # been copied/installed into it).
-                output = run_cmd([cmd, 'remote', '-v'],
-                                 cwd=os.path.dirname(self.fpath))
-                repo_matches = ['/' + self.reponame + '.git' ,
-                                # A remote 'server:reponame.git' can also be referred
-                                # to (i.e. cloned) as `server:reponame`.
-                                '/' + self.reponame + ' ']
+                output = run_cmd([cmd, "remote", "-v"], cwd=os.path.dirname(self.fpath))
+                repo_matches = [
+                    "/" + self.reponame + ".git",
+                    # A remote 'server:reponame.git' can also be referred
+                    # to (i.e. cloned) as `server:reponame`.
+                    "/" + self.reponame + " ",
+                ]
                 if not any(m in output for m in repo_matches):
                     return self
 
-            output = run_cmd([cmd, 'describe', '--long', '--match', 'v*.*', '--dirty'],
-                             cwd=os.path.dirname(self.fpath))
+            output = run_cmd([cmd, "describe", "--long", "--match", "v*.*", "--dirty"], cwd=os.path.dirname(self.fpath))
         except Exception as e:
-            if e.args[1] == 'fatal: No names found, cannot describe anything.':
+            if e.args[1] == "fatal: No names found, cannot describe anything.":
                 raise Exception("Cannot find any git version tags of format v*.*")
             # If there is any other error, return (release value still useful)
             return self
@@ -664,21 +664,20 @@ class OldDeprecatedVersion(object):
 
     def _update_from_vcs(self, output):
         "Update state based on the VCS state e.g the output of git describe"
-        split = output[1:].split('-')
-        if 'dev' in split[0]:
-            dev_split = split[0].split('dev')
+        split = output[1:].split("-")
+        if "dev" in split[0]:
+            dev_split = split[0].split("dev")
             self.dev = int(dev_split[1])
             split[0] = dev_split[0]
             # Remove the pep440 dot if present
-            if split[0].endswith('.'):
+            if split[0].endswith("."):
                 split[0] = dev_split[0][:-1]
 
-        self._release = tuple(int(el) for el in split[0].split('.'))
+        self._release = tuple(int(el) for el in split[0].split("."))
         self._commit_count = int(split[1])
-        self._commit = str(split[2][1:]) # Strip out 'g' prefix ('g'=>'git')
-        self._dirty = (split[-1]=='dirty')
+        self._commit = str(split[2][1:])  # Strip out 'g' prefix ('g'=>'git')
+        self._dirty = split[-1] == "dirty"
         return self
-
 
     def __str__(self):
         """
@@ -692,30 +691,28 @@ class OldDeprecatedVersion(object):
 
         (with "v" prefix removed).
         """
-        if self.release is None: return 'None'
-        release = '.'.join(str(el) for el in self.release)
-        release = '%s.dev%d' % (release, self.dev) if self.dev is not None else release
+        if self.release is None:
+            return "None"
+        release = ".".join(str(el) for el in self.release)
+        release = "%s.dev%d" % (release, self.dev) if self.dev is not None else release
 
-        if (self._expected_commit is not None) and  ("$Format" not in self._expected_commit):
+        if (self._expected_commit is not None) and ("$Format" not in self._expected_commit):
             pass  # Concrete commit supplied - print full version string
-        elif (self.commit_count == 0 and not self.dirty):
+        elif self.commit_count == 0 and not self.dirty:
             return release
 
-        dirty_status = '-dirty' if self.dirty else ''
-        return '%s-%s-g%s%s' % (release, self.commit_count if self.commit_count else 'x',
-                                self.commit, dirty_status)
+        dirty_status = "-dirty" if self.dirty else ""
+        return "%s-%s-g%s%s" % (release, self.commit_count if self.commit_count else "x", self.commit, dirty_status)
 
     def __repr__(self):
         return str(self)
 
-    def abbrev(self,dev_suffix=""):
+    def abbrev(self, dev_suffix=""):
         """
         Abbreviated string representation, optionally declaring whether it is
         a development version.
         """
-        return '.'.join(str(el) for el in self.release) + \
-            (dev_suffix if self.commit_count > 0 or self.dirty else "")
-
+        return ".".join(str(el) for el in self.release) + (dev_suffix if self.commit_count > 0 or self.dirty else "")
 
     def __eq__(self, other):
         """
@@ -725,9 +722,9 @@ class OldDeprecatedVersion(object):
         other version, since it could potentially have any arbitrary
         changes even for the same release and commit count.
         """
-        if self.dirty or other.dirty: return False
-        return ((self.release, self.commit_count, self.dev)
-                == (other.release, other.commit_count, other.dev))
+        if self.dirty or other.dirty:
+            return False
+        return (self.release, self.commit_count, self.dev) == (other.release, other.commit_count, other.dev)
 
     def __gt__(self, other):
         if self.release == other.release:
@@ -741,11 +738,10 @@ class OldDeprecatedVersion(object):
             return (self.release, self.commit_count) > (other.release, other.commit_count)
 
     def __lt__(self, other):
-        if self==other:
+        if self == other:
             return False
         else:
             return not (self > other)
-
 
     def verify(self, string_version=None):
         """
@@ -764,7 +760,7 @@ class OldDeprecatedVersion(object):
         if self.release != self.expected_release:
             raise Exception("Declared release does not match current release tag.")
 
-        if self.commit_count !=0:
+        if self.commit_count != 0:
             raise Exception("Please update the VCS version tag before release.")
 
         if self._expected_commit not in [None, "$Format:%h$"]:
