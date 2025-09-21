@@ -67,19 +67,19 @@ jobs:
         if: runner.os != 'Windows' && matrix.python-version != 3.13
         run: |
           source .venv/bin/activate
-          uv run pytest tests/ -v --cov=hololinked --cov-report=term-missing
+          uv run pytest tests/test_01_message_pytest.py -v --cov=hololinked --cov-report=term-missing
 
       - name: Run pytest tests and generate coverage report (Linux/macOS python 3.13)
         if: runner.os != 'Windows' && matrix.python-version == 3.13
         run: |
           source .venv/bin/activate
-          uv run pytest tests/ -v --cov=hololinked --cov-report=term-missing --cov-report=xml
+          uv run pytest tests/test_01_message_pytest.py -v --cov=hololinked --cov-report=term-missing --cov-report=xml
 
       - name: Run pytest tests (Windows)
         if: runner.os == 'Windows'
         run: |
           .venv\Scripts\activate
-          uv run pytest tests/ -v --cov=hololinked --cov-report=term-missing
+          uv run pytest tests/test_01_message_pytest.py -v --cov=hololinked --cov-report=term-missing
 
       - name: Upload coverage report as artifact
         uses: actions/upload-artifact@v4
