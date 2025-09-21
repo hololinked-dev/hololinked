@@ -81,7 +81,10 @@ test = [
     "numpy>=2.0.0",
     "faker==37.5.0",
     "bcrypt==4.3.0",
-    "fastjsonschema==2.20.0"
+    "fastjsonschema==2.20.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-order>=1.0.0"
 ]   
 linux = [
     "uvloop==0.20.0"
