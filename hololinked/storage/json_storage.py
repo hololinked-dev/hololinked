@@ -21,6 +21,7 @@ class ThingJSONStorage:
     serializer : JSONSerializer, optional
         Serializer used for encoding and decoding JSON data. Defaults to an instance of ``JSONSerializer``.
     """
+
     def __init__(self, filename: str, instance: Parameterized, serializer: Optional[Any] = None):
         self.filename = filename
         self.thing_instance = instance
@@ -41,7 +42,7 @@ class ThingJSONStorage:
         if not os.path.exists(self.filename) or os.path.getsize(self.filename) == 0:
             return {}
         try:
-            with open(self.filename, 'rb') as f:
+            with open(self.filename, "rb") as f:
                 raw_bytes = f.read()
                 if not raw_bytes:
                     return {}
@@ -54,7 +55,7 @@ class ThingJSONStorage:
         Encode and write data to the JSON file.
         """
         raw_bytes = self._serializer.dumps(self._data)
-        with open(self.filename, 'wb') as f:
+        with open(self.filename, "wb") as f:
             f.write(raw_bytes)
 
     def get_property(self, property: Union[str, Property]) -> Any:
@@ -133,8 +134,9 @@ class ThingJSONStorage:
         with self._lock:
             return dict(self._data)
 
-    def create_missing_properties(self, properties: Dict[str, Property],
-                                  get_missing_property_names: bool = False) -> Optional[List[str]]:
+    def create_missing_properties(
+        self, properties: Dict[str, Property], get_missing_property_names: bool = False
+    ) -> Optional[List[str]]:
         """
         create any and all missing properties of ``Thing`` instance
 

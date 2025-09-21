@@ -48,7 +48,7 @@ class TestZMQAsync_TCP(TestRPCEndToEndAsync):
     def setUpThing(cls):
         """Set up the thing for the zmq object proxy client"""
         cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR + 10)
-        cls.thing.run_with_zmq_server(forked=True, access_points="tcp://*:5558")
+        cls.thing.run_with_zmq_server(forked=True, access_points="tcp://*:6000")
         cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
 
     @classmethod
@@ -61,7 +61,7 @@ class TestZMQAsync_TCP(TestRPCEndToEndAsync):
             cls._client = ClientFactory.zmq(
                 cls.server_id,
                 cls.thing_id,
-                "tcp://localhost:5558",
+                "tcp://localhost:6000",
                 log_level=logging.ERROR + 10,
                 ignore_TD_errors=True,
             )

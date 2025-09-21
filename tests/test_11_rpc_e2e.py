@@ -3,6 +3,7 @@ import time
 import unittest
 import logging
 from uuid import uuid4
+from hololinked.client.abstractions import SSE
 from hololinked.client.factory import ClientFactory
 from hololinked.client.proxy import ObjectProxy
 
@@ -61,9 +62,7 @@ class TestRPCEndToEnd(TestCase):
         self.assertIsInstance(thing, ObjectProxy)
         self.assertTrue(
             len(thing.properties) + len(thing.actions) + len(thing.events)
-            >= len(self.thing_model["properties"])
-            + len(self.thing_model["actions"])
-            + len(self.thing_model["events"])
+            >= len(self.thing_model["properties"]) + len(self.thing_model["actions"]) + len(self.thing_model["events"])
         )
 
     def test_02_invoke_action(self):
@@ -71,9 +70,7 @@ class TestRPCEndToEnd(TestCase):
         thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)
         # Test invoke_action method with reply
-        self.assertEqual(
-            thing.invoke_action("action_echo", fake.text(max_nb_chars=100)), fake.last
-        )
+        self.assertEqual(thing.invoke_action("action_echo", fake.text(max_nb_chars=100)), fake.last)
         self.assertEqual(thing.invoke_action("action_echo", fake.sentence()), fake.last)
         self.assertEqual(thing.invoke_action("action_echo", fake.json()), fake.last)
         # Test invoke_action with dot notation
@@ -82,28 +79,20 @@ class TestRPCEndToEnd(TestCase):
         self.assertEqual(thing.action_echo(fake.address()), fake.last)
         # Test invoke_action with no reply
         self.assertEqual(
-            thing.invoke_action(
-                "set_non_remote_number_prop", fake.random_number(), oneway=True
-            ),
+            thing.invoke_action("set_non_remote_number_prop", fake.random_number(), oneway=True),
             None,
         )
         self.assertEqual(thing.get_non_remote_number_prop(), fake.last)
         # Test invoke_action in non blocking mode
         noblock_payload = fake.pylist(20, value_types=[int, float, str, bool])
-        noblock_msg_id = thing.invoke_action(
-            "action_echo", noblock_payload, noblock=True
-        )
+        noblock_msg_id = thing.invoke_action("action_echo", noblock_payload, noblock=True)
         self.assertIsInstance(noblock_msg_id, str)
         self.assertEqual(
-            thing.invoke_action(
-                "action_echo", fake.pylist(20, value_types=[int, float, str, bool])
-            ),
+            thing.invoke_action("action_echo", fake.pylist(20, value_types=[int, float, str, bool])),
             fake.last,
         )
         self.assertEqual(
-            thing.invoke_action(
-                "action_echo", fake.pylist(10, value_types=[int, float, str, bool])
-            ),
+            thing.invoke_action("action_echo", fake.pylist(10, value_types=[int, float, str, bool])),
             fake.last,
         )
         self.assertEqual(thing.read_reply(noblock_msg_id), noblock_payload)
@@ -115,25 +104,19 @@ class TestRPCEndToEnd(TestCase):
         # Test read_property method
         self.assertIsInstance(thing.read_property("number_prop"), (int, float))
         self.assertIsInstance(thing.read_property("string_prop"), str)
-        self.assertIn(
-            thing.read_property("selector_prop"), TestThing.selector_prop.objects
-        )
+        self.assertIn(thing.read_property("selector_prop"), TestThing.selector_prop.objects)
         # Test write_property method
         thing.write_property("number_prop", fake.random_number())
         self.assertEqual(thing.read_property("number_prop"), fake.last)
         thing.write_property(
             "selector_prop",
-            TestThing.selector_prop.objects[
-                fake.random_int(0, len(TestThing.selector_prop.objects) - 1)
-            ],
+            TestThing.selector_prop.objects[fake.random_int(0, len(TestThing.selector_prop.objects) - 1)],
         )
         self.assertEqual(
             thing.read_property("selector_prop"),
             TestThing.selector_prop.objects[fake.last],
         )
-        thing.write_property(
-            "observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool])
-        )
+        thing.write_property("observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool]))
         self.assertEqual(thing.read_property("observable_list_prop"), fake.last)
         # Test read property through dot notation attribute access
         self.assertIsInstance(thing.number_prop, (int, float))
@@ -145,21 +128,15 @@ class TestRPCEndToEnd(TestCase):
         thing.selector_prop = TestThing.selector_prop.objects[
             fake.random_int(0, len(TestThing.selector_prop.objects) - 1)
         ]
-        self.assertEqual(
-            thing.selector_prop, TestThing.selector_prop.objects[fake.last]
-        )
-        thing.observable_list_prop = fake.pylist(
-            25, value_types=[int, float, str, bool]
-        )
+        self.assertEqual(thing.selector_prop, TestThing.selector_prop.objects[fake.last])
+        thing.observable_list_prop = fake.pylist(25, value_types=[int, float, str, bool])
         self.assertEqual(thing.observable_list_prop, fake.last)
         # Test one way write property
         thing.write_property("number_prop", fake.random_number(), oneway=True)
         self.assertEqual(thing.read_property("number_prop"), fake.last)
         thing.write_property(
             "selector_prop",
-            TestThing.selector_prop.objects[
-                fake.random_int(0, len(TestThing.selector_prop.objects) - 1)
-            ],
+            TestThing.selector_prop.objects[fake.random_int(0, len(TestThing.selector_prop.objects) - 1)],
             oneway=True,
         )
         self.assertEqual(
@@ -175,19 +152,13 @@ class TestRPCEndToEnd(TestCase):
         # Test noblock read property
         noblock_msg_id = thing.read_property("number_prop", noblock=True)
         self.assertIsInstance(noblock_msg_id, str)
-        self.assertIn(
-            thing.read_property("selector_prop"), TestThing.selector_prop.objects
-        )
+        self.assertIn(thing.read_property("selector_prop"), TestThing.selector_prop.objects)
         self.assertIsInstance(thing.read_property("string_prop"), str)
         self.assertEqual(thing.read_reply(noblock_msg_id), thing.number_prop)
         # Test noblock write property
-        noblock_msg_id = thing.write_property(
-            "number_prop", fake.random_number(), noblock=True
-        )
+        noblock_msg_id = thing.write_property("number_prop", fake.random_number(), noblock=True)
         self.assertIsInstance(noblock_msg_id, str)
-        self.assertEqual(
-            thing.read_property("number_prop"), fake.last
-        )  # noblock worked
+        self.assertEqual(thing.read_property("number_prop"), fake.last)  # noblock worked
         self.assertEqual(thing.read_reply(noblock_msg_id), None)
         # Test exception propagation to client
         thing.string_prop = "world"
@@ -214,9 +185,7 @@ class TestRPCEndToEnd(TestCase):
         thing.int_prop = 5
         thing.selector_prop = "b"
         thing.number_prop = -15  # simply override
-        props = thing.read_multiple_properties(
-            names=["selector_prop", "int_prop", "number_prop", "string_prop"]
-        )
+        props = thing.read_multiple_properties(names=["selector_prop", "int_prop", "number_prop", "string_prop"])
         self.assertEqual(props["selector_prop"], "b")
         self.assertEqual(props["int_prop"], 5)
         self.assertEqual(props["number_prop"], -15)
@@ -229,7 +198,7 @@ class TestRPCEndToEnd(TestCase):
 
         results = []
 
-        def cb(value):
+        def cb(value: SSE):
             results.append(value)
 
         thing.subscribe_event("test_event", cb)
@@ -258,9 +227,9 @@ class TestRPCEndToEnd(TestCase):
         result = []
         attempt = 0
 
-        def cb(value):
+        def cb(value: SSE):
             nonlocal attempt, result
-            self.assertEqual(value, propective_values[attempt])
+            self.assertEqual(value.data, propective_values[attempt])
             result.append(value)
             attempt += 1
 
@@ -278,16 +247,16 @@ class TestRPCEndToEnd(TestCase):
         thing.unobserve_property("observable_list_prop")
 
         for res in result:
-            self.assertIn(res, propective_values)
+            self.assertIn(res.data, propective_values)
 
         # # req 2 - observable events come due to reading a property
         propective_values = [1, 2, 3, 4, 5]
         result = []
         attempt = 0
 
-        def cb(value):
+        def cb(value: SSE):
             nonlocal attempt, result
-            self.assertEqual(value, propective_values[attempt])
+            self.assertEqual(value.data, propective_values[attempt])
             result.append(value)
             attempt += 1
 
@@ -305,7 +274,7 @@ class TestRPCEndToEnd(TestCase):
 
         thing.unobserve_property("observable_readonly_prop")
         for res in result:
-            self.assertIn(res, propective_values)
+            self.assertIn(res.data, propective_values)
 
 
 class TestRPCEndToEndAsync(AsyncTestCase):
@@ -351,9 +320,7 @@ class TestRPCEndToEndAsync(AsyncTestCase):
         self.assertIsInstance(thing, ObjectProxy)
         self.assertTrue(
             len(thing.properties) + len(thing.actions) + len(thing.events)
-            >= len(self.thing_model["properties"])
-            + len(self.thing_model["actions"])
-            + len(self.thing_model["events"])
+            >= len(self.thing_model["properties"]) + len(self.thing_model["actions"]) + len(self.thing_model["events"])
         )
 
     async def test_02_invoke_action(self):
@@ -363,21 +330,15 @@ class TestRPCEndToEndAsync(AsyncTestCase):
             await thing.async_invoke_action("action_echo", fake.text(max_nb_chars=100)),
             fake.last,
         )
-        self.assertEqual(
-            await thing.async_invoke_action("action_echo", fake.sentence()), fake.last
-        )
-        self.assertEqual(
-            await thing.async_invoke_action("action_echo", fake.json()), fake.last
-        )
+        self.assertEqual(await thing.async_invoke_action("action_echo", fake.sentence()), fake.last)
+        self.assertEqual(await thing.async_invoke_action("action_echo", fake.json()), fake.last)
 
     async def test_03_rwd_properties(self):
         """Test the read, write and delete of properties on the zmq object proxy client"""
         thing = self.get_client()
         self.assertIsInstance(thing, ObjectProxy)
         # Test read_property method
-        self.assertIsInstance(
-            await thing.async_read_property("number_prop"), (int, float)
-        )
+        self.assertIsInstance(await thing.async_read_property("number_prop"), (int, float))
         self.assertIsInstance(await thing.async_read_property("string_prop"), str)
         self.assertIn(
             await thing.async_read_property("selector_prop"),
@@ -388,20 +349,14 @@ class TestRPCEndToEndAsync(AsyncTestCase):
         self.assertEqual(await thing.async_read_property("number_prop"), fake.last)
         await thing.async_write_property(
             "selector_prop",
-            TestThing.selector_prop.objects[
-                fake.random_int(0, len(TestThing.selector_prop.objects) - 1)
-            ],
+            TestThing.selector_prop.objects[fake.random_int(0, len(TestThing.selector_prop.objects) - 1)],
         )
         self.assertEqual(
             await thing.async_read_property("selector_prop"),
             TestThing.selector_prop.objects[fake.last],
         )
-        await thing.async_write_property(
-            "observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool])
-        )
-        self.assertEqual(
-            await thing.async_read_property("observable_list_prop"), fake.last
-        )
+        await thing.async_write_property("observable_list_prop", fake.pylist(25, value_types=[int, float, str, bool]))
+        self.assertEqual(await thing.async_read_property("observable_list_prop"), fake.last)
         # await complete_pending_tasks_in_current_loop_async()
 
 

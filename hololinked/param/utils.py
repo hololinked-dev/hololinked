@@ -5,36 +5,35 @@ import typing
 from functools import reduce, partial
 
 
-def classlist(class_ : typing.Any) -> typing.Tuple[type]:
+def classlist(class_: typing.Any) -> typing.Tuple[type]:
     """
     Return a list of the class hierarchy above (and including) the given class.
 
     Same as `inspect.getmro(class_)[::-1]`
     """
     return inspect.getmro(class_)[::-1]
-    
 
-def get_dot_resolved_attr(obj : typing.Any, attr : str, *args):
+
+def get_dot_resolved_attr(obj: typing.Any, attr: str, *args):
     def _getattr(obj, attr):
         return getattr(obj, attr, *args)
-    return reduce(_getattr, [obj] + attr.split('.'))
+
+    return reduce(_getattr, [obj] + attr.split("."))
 
 
-def iscoroutinefunction(function : typing.Callable) -> bool:
+def iscoroutinefunction(function: typing.Callable) -> bool:
     """
     Whether the function is an asynchronous coroutine function.
     """
     import asyncio
+
     try:
-        return (
-            inspect.isasyncgenfunction(function) or
-            asyncio.iscoroutinefunction(function)
-        )
+        return inspect.isasyncgenfunction(function) or asyncio.iscoroutinefunction(function)
     except AttributeError:
         return False
-    
 
-def get_method_owner(method : typing.Callable) -> typing.Any:
+
+def get_method_owner(method: typing.Callable) -> typing.Any:
     """
     Gets the instance that owns the supplied method
     """
@@ -52,7 +51,7 @@ def is_ordered_dict(d):
     """
     py3_ordered_dicts = (sys.version_info.major == 3) and (sys.version_info.minor >= 6)
     vanilla_odicts = (sys.version_info.major > 3) or py3_ordered_dicts
-    return isinstance(d, OrderedDict)or (vanilla_odicts and isinstance(d, dict))
+    return isinstance(d, OrderedDict) or (vanilla_odicts and isinstance(d, dict))
 
 
 def get_all_slots(class_):
@@ -66,8 +65,8 @@ def get_all_slots(class_):
     all_slots = []
     parent_param_classes = [c for c in classlist(class_)[1::]]
     for c in parent_param_classes:
-        if hasattr(c,'__slots__'):
-            all_slots+=c.__slots__
+        if hasattr(c, "__slots__"):
+            all_slots += c.__slots__
     return all_slots
 
 
@@ -79,11 +78,14 @@ def get_occupied_slots(instance):
     been set, then it's an AttributeError to request the slot's
     value.)
     """
-    return [slot for slot in get_all_slots(type(instance))
-            if hasattr(instance, slot)]
+    return [slot for slot in get_all_slots(type(instance)) if hasattr(instance, slot)]
 
 
-
-
-__all__ = ['classlist', 'get_dot_resolved_attr', 'iscoroutinefunction', 'get_method_owner', 'get_all_slots', 
-        'get_occupied_slots']
+__all__ = [
+    "classlist",
+    "get_dot_resolved_attr",
+    "iscoroutinefunction",
+    "get_method_owner",
+    "get_all_slots",
+    "get_occupied_slots",
+]

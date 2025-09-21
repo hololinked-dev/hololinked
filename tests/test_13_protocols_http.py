@@ -10,6 +10,7 @@ from typing import Any
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+from hololinked.client.abstractions import SSE
 from hololinked.utils import pep8_to_dashed_name
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
@@ -76,9 +77,7 @@ class TestHTTPServer(TestCase):
         # add an interaction affordance
         server.add_property("/max-intensity", OceanOpticsSpectrometer.max_intensity)
         server.add_action("/connect", OceanOpticsSpectrometer.connect)
-        server.add_event(
-            "/intensity/event", OceanOpticsSpectrometer.intensity_measurement_event
-        )
+        server.add_event("/intensity/event", OceanOpticsSpectrometer.intensity_measurement_event)
 
         self.assertIn("/max-intensity", server.router)
         self.assertIn("/connect", server.router)
@@ -113,9 +112,7 @@ class TestHTTPServer(TestCase):
             OceanOpticsSpectrometer(id="test", log_level=logging.ERROR + 10),
             TestThing(id="test-thing", log_level=logging.ERROR + 10),
         ]:
-            old_number_of_rules = len(server.app.wildcard_router.rules) + len(
-                server.router._pending_rules
-            )
+            old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
             server.add_things(thing)
             # self.assertTrue(
             #     len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >=
@@ -124,14 +121,11 @@ class TestHTTPServer(TestCase):
             # server.router.print_rules()
 
         # adding a metaclass does not raise error, but warns and does nothing
-        old_number_of_rules = len(server.app.wildcard_router.rules) + len(
-            server.router._pending_rules
-        )
+        old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
         for thing_meta in [OceanOpticsSpectrometer, TestThing]:
             self.assertRaises(ValueError, server.add_things, thing_meta)
         self.assertTrue(
-            len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
-            == old_number_of_rules
+            len(server.app.wildcard_router.rules) + len(server.router._pending_rules) == old_number_of_rules
         )
 
         # dont overwrite already given routes
@@ -141,13 +135,9 @@ class TestHTTPServer(TestCase):
         ]:
             # create new server to compute number of rules
             server = HTTPServer(log_level=logging.ERROR + 10)
-            old_number_of_rules = len(server.app.wildcard_router.rules) + len(
-                server.router._pending_rules
-            )
+            old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
             # append route with /custom to denote its a custom route
-            server.add_property(
-                "/max-intensity/custom", OceanOpticsSpectrometer.max_intensity
-            )
+            server.add_property("/max-intensity/custom", OceanOpticsSpectrometer.max_intensity)
             server.add_action("/connect/custom", OceanOpticsSpectrometer.connect)
             server.add_event(
                 "/intensity/event/custom",
@@ -179,17 +169,13 @@ class TestHTTPServer(TestCase):
     def test_04_add_thing_over_zmq_server(self):
         """extension of previous two tests to complete adding a thing running over a zmq server"""
         server = HTTPServer(log_level=logging.ERROR + 10)
-        old_number_of_rules = len(server.app.wildcard_router.rules) + len(
-            server.router._pending_rules
-        )
+        old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
 
         thing_id = f"test-add-zmq-{uuid.uuid4().hex[0:8]}"
         thing = OceanOpticsSpectrometer(id=thing_id, log_level=logging.ERROR + 10)
         thing.run_with_zmq_server(ZMQ_TRANSPORTS.INPROC, forked=True)
 
-        server.add_property(
-            "/max-intensity/custom", OceanOpticsSpectrometer.max_intensity
-        )
+        server.add_property("/max-intensity/custom", OceanOpticsSpectrometer.max_intensity)
         server.add_action("/connect/custom", OceanOpticsSpectrometer.connect)
         server.add_event(
             "/intensity/event/custom",
@@ -207,41 +193,19 @@ class TestHTTPServer(TestCase):
 
         fake_request = SimpleNamespace(path=f"/{thing_id}/max-intensity/custom")
         self.assertTrue(
-            any(
-                [
-                    rule.matcher.match(fake_request) is not None
-                    for rule in server.app.wildcard_router.rules
-                ]
-            )
+            any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules])
         )
-        fake_request = SimpleNamespace(
-            path="/non-existing-path-that-i-know-will-not-match"
-        )
+        fake_request = SimpleNamespace(path="/non-existing-path-that-i-know-will-not-match")
         self.assertFalse(
-            any(
-                [
-                    rule.matcher.match(fake_request) is not None
-                    for rule in server.app.wildcard_router.rules
-                ]
-            )
+            any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules])
         )
         fake_request = SimpleNamespace(path=f"/{thing_id}/connect/custom")
         self.assertTrue(
-            any(
-                [
-                    rule.matcher.match(fake_request) is not None
-                    for rule in server.app.wildcard_router.rules
-                ]
-            )
+            any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules])
         )
         fake_request = SimpleNamespace(path=f"/{thing_id}/intensity/event/custom")
         self.assertTrue(
-            any(
-                [
-                    rule.matcher.match(fake_request) is not None
-                    for rule in server.app.wildcard_router.rules
-                ]
-            )
+            any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules])
         )
 
         thing.rpc_server.stop()
@@ -260,9 +224,7 @@ class TestHTTPServer(TestCase):
         class TestableRPCHandler(RPCHandler):
             def update_latest_request_info(self) -> None:
                 nonlocal latest_request_info
-                server_execution_context, thing_execution_context, _ = (
-                    self.get_execution_parameters()
-                )
+                server_execution_context, thing_execution_context, _ = self.get_execution_parameters()
                 payload, preserialized_payload = self.get_request_payload()
                 latest_request_info = LatestRequestInfo(
                     server_execution_context=server_execution_context,
@@ -359,10 +321,7 @@ class TestHTTPServer(TestCase):
                     )
                 )
                 self.assertTrue(
-                    (
-                        "fetchExecutionLogs" in path
-                        and latest_request_info.thing_execution_context.fetchExecutionLogs
-                    )
+                    ("fetchExecutionLogs" in path and latest_request_info.thing_execution_context.fetchExecutionLogs)
                     or not latest_request_info.thing_execution_context.fetchExecutionLogs
                 )
                 # test ServerExecutionContext
@@ -373,17 +332,13 @@ class TestHTTPServer(TestCase):
                     )
                 )
                 self.assertTrue(
-                    (
-                        "oneway" in path
-                        and latest_request_info.server_execution_context.oneway
-                    )
+                    ("oneway" in path and latest_request_info.server_execution_context.oneway)
                     or not latest_request_info.server_execution_context.oneway
                 )
                 self.assertTrue(
                     (
                         "invokationTimeout" in path
-                        and latest_request_info.server_execution_context.invokationTimeout
-                        == 100
+                        and latest_request_info.server_execution_context.invokationTimeout == 100
                     )
                     or
                     # assume that in all tests where invokation timeout is specified, it will be 100
@@ -393,8 +348,7 @@ class TestHTTPServer(TestCase):
                 self.assertTrue(
                     (
                         "executionTimeout" in path
-                        and latest_request_info.server_execution_context.executionTimeout
-                        == 120
+                        and latest_request_info.server_execution_context.executionTimeout == 120
                     )
                     or
                     # assume that in all tests where execution timeout is specified, it will be 120
@@ -415,16 +369,12 @@ class TestHTTPServer(TestCase):
         logging.getLogger("requests").setLevel(logging.CRITICAL)
         logging.getLogger("urllib3").setLevel(logging.CRITICAL)
         # test end to end
-        for method, path, body in self.generate_endpoints_for_thing(
-            OceanOpticsSpectrometer, thing_id
-        ):
+        for method, path, body in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
             # request will go through the Thing object
             response = session.request(
                 method=method,
                 url=f"http://127.0.0.1:{port}{path}",
-                data=JSONSerializer().dumps(body)
-                if body is not None and method != "get"
-                else None,
+                data=JSONSerializer().dumps(body) if body is not None and method != "get" else None,
                 **request_kwargs,
             )
             self.assertTrue(response.status_code in [200, 201, 202, 204])
@@ -437,9 +387,7 @@ class TestHTTPServer(TestCase):
             self.assertIn("Content-Type", response.headers)
 
         # test unsupported HTTP methods
-        for method, path, body in self.generate_endpoints_for_thing(
-            OceanOpticsSpectrometer, thing_id
-        ):
+        for method, path, body in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
             response = session.request(
                 method="post"
                 if method in ["get", "put"]
@@ -449,20 +397,14 @@ class TestHTTPServer(TestCase):
                 # get and put become post and post becomes put
                 # i.e swap the default HTTP method with an unsupported one to generate 405
                 url=f"http://127.0.0.1:{port}{path}",
-                data=JSONSerializer().dumps(body)
-                if body is not None and method != "get"
-                else None,
+                data=JSONSerializer().dumps(body) if body is not None and method != "get" else None,
                 **request_kwargs,
             )
             self.assertTrue(response.status_code == 405)
 
         # check options for supported HTTP methods
-        for method, path, body in self.generate_endpoints_for_thing(
-            OceanOpticsSpectrometer, thing_id
-        ):
-            response = session.options(
-                f"http://127.0.0.1:{port}{path}", **request_kwargs
-            )
+        for method, path, body in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
+            response = session.options(f"http://127.0.0.1:{port}{path}", **request_kwargs)
             self.assertTrue(response.status_code in [200, 201, 202, 204])
             self.assertIn("Access-Control-Allow-Origin", response.headers)
             self.assertIn("Access-Control-Allow-Credentials", response.headers)
@@ -474,21 +416,15 @@ class TestHTTPServer(TestCase):
                 f"Method {method} not allowed in {allow_methods}",
             )
 
-    def _test_invalid_auth_end_to_end(
-        self, port: int, thing_id: str, wrong_auth_headers: list[str] = None
-    ):
+    def _test_invalid_auth_end_to_end(self, port: int, thing_id: str, wrong_auth_headers: list[str] = None):
         # check wrong credentials
         session = requests.Session()
         for wrong_auth in wrong_auth_headers:
-            for method, path, body in self.generate_endpoints_for_thing(
-                OceanOpticsSpectrometer, thing_id
-            ):
+            for method, path, body in self.generate_endpoints_for_thing(OceanOpticsSpectrometer, thing_id):
                 response = session.request(
                     method=method,
                     url=f"http://127.0.0.1:{port}{path}",
-                    data=JSONSerializer().dumps(body)
-                    if body is not None and method != "get"
-                    else None,
+                    data=JSONSerializer().dumps(body) if body is not None and method != "get" else None,
                     headers=wrong_auth,
                 )
                 self.assertTrue(response.status_code == 401)
@@ -502,9 +438,7 @@ class TestHTTPServer(TestCase):
     ):
         """Test end-to-end with authentication"""
         thing_id = f"test-sec-{uuid.uuid4().hex[0:8]}"
-        thing = OceanOpticsSpectrometer(
-            id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
-        )
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(
             forked=True,
             port=port,
@@ -512,33 +446,23 @@ class TestHTTPServer(TestCase):
             security_schemes=[security_scheme],
         )
         time.sleep(2)  # linux machines need a few moments otherwise the clients error
-        self._test_handlers_end_to_end(
-            port=port, thing_id=thing_id, headers=auth_headers
-        )
-        self._test_invalid_auth_end_to_end(
-            port=port, thing_id=thing_id, wrong_auth_headers=wrong_auth_headers
-        )
+        self._test_handlers_end_to_end(port=port, thing_id=thing_id, headers=auth_headers)
+        self._test_invalid_auth_end_to_end(port=port, thing_id=thing_id, wrong_auth_headers=wrong_auth_headers)
         # reinstate correct credentials to stop
         self.stop_server(port=port, thing_ids=[thing_id], headers=auth_headers)
 
     def test_06_basic_end_to_end(self):
         thing_id = f"test-sec-{uuid.uuid4().hex[0:8]}"
         port = 60004
-        thing = OceanOpticsSpectrometer(
-            id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
-        )
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
         time.sleep(2)  # linux machines need a few moments otherwise the clients error
 
-        self._test_handlers_end_to_end(
-            port=port, thing_id=thing_id, headers={"Content-Type": "application/json"}
-        )
+        self._test_handlers_end_to_end(port=port, thing_id=thing_id, headers={"Content-Type": "application/json"})
         self.stop_server(port, thing_ids=[thing_id])
 
     def test_07_bcrypt_basic_security_end_to_end(self):
-        security_scheme = BcryptBasicSecurity(
-            username="someuser", password="somepassword"
-        )
+        security_scheme = BcryptBasicSecurity(username="someuser", password="somepassword")
         port = 60005
         self._test_authenticated_end_to_end(
             port=port,
@@ -564,9 +488,7 @@ class TestHTTPServer(TestCase):
         )
 
     def test_08_argon2_basic_security_end_to_end(self):
-        security_scheme = Argon2BasicSecurity(
-            username="someuserargon2", password="somepasswordargon2"
-        )
+        security_scheme = Argon2BasicSecurity(username="someuserargon2", password="somepasswordargon2")
         port = 60006
         self._test_authenticated_end_to_end(
             port=port,
@@ -601,9 +523,7 @@ class TestHTTPServer(TestCase):
         Test end-to-end with Server-Sent Events (SSE).
         """
         thing_id = f"test-sse-{uuid.uuid4().hex[0:8]}"
-        thing = OceanOpticsSpectrometer(
-            id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
-        )
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(
             forked=True,
             port=port,
@@ -613,9 +533,7 @@ class TestHTTPServer(TestCase):
         time.sleep(2)  # linux machines need a few moments otherwise the clients error
 
         session = requests.Session()
-        response = session.post(
-            f"http://127.0.0.1:{port}/{thing_id}/start-acquisition", headers=headers
-        )
+        response = session.post(f"http://127.0.0.1:{port}/{thing_id}/start-acquisition", headers=headers)
         self.assertEqual(response.status_code, 200)
         sse_gen = self.sse_stream(
             f"http://127.0.0.1:{port}/{thing_id}/intensity-measurement-event",
@@ -624,9 +542,7 @@ class TestHTTPServer(TestCase):
         for i in range(5):
             evt = next(sse_gen)
             self.assertTrue("exception" not in evt)
-        response = session.post(
-            f"http://127.0.0.1:{port}/{thing_id}/stop-acquisition", headers=headers
-        )
+        response = session.post(f"http://127.0.0.1:{port}/{thing_id}/stop-acquisition", headers=headers)
         self.stop_server(port=port, thing_ids=[thing_id], headers=headers)
 
     def test_09_sse(self):
@@ -643,16 +559,12 @@ class TestHTTPServer(TestCase):
                 }
             else:
                 headers = dict()
-            self._test_sse_end_to_end(
-                port=port, security_scheme=security_scheme, headers=headers
-            )
+            self._test_sse_end_to_end(port=port, security_scheme=security_scheme, headers=headers)
 
     def test_10_forms_generation(self):
         thing_id = f"test-forms-{uuid.uuid4().hex[0:8]}"
         port = 60009
-        thing = OceanOpticsSpectrometer(
-            id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
-        )
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
         time.sleep(2)  # linux machines need a few moments otherwise the clients error
 
@@ -666,11 +578,7 @@ class TestHTTPServer(TestCase):
         self.assertTrue(len(td["properties"]) >= 0)
         self.assertTrue(len(td["actions"]) >= 0)
         self.assertTrue(len(td["events"]) >= 0)
-        for prop in (
-            list(td["properties"].values())
-            + list(td["actions"].values())
-            + list(td["events"].values())
-        ):
+        for prop in list(td["properties"].values()) + list(td["actions"].values()) + list(td["events"].values()):
             self.assertIn("forms", prop)
             self.assertTrue(len(prop["forms"]) > 0)
             for form in prop["forms"]:
@@ -683,15 +591,11 @@ class TestHTTPServer(TestCase):
     def test_11_object_proxy_basic(self):
         thing_id = f"test-obj-proxy-{uuid.uuid4().hex[0:8]}"
         port = 60010
-        thing = OceanOpticsSpectrometer(
-            id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
-        )
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
         time.sleep(2)  # linux machines need a few moments otherwise the clients error
 
-        object_proxy = ClientFactory.http(
-            url=f"http://127.0.0.1:{port}/{thing_id}/resources/wot-td"
-        )
+        object_proxy = ClientFactory.http(url=f"http://127.0.0.1:{port}/{thing_id}/resources/wot-td")
         self.assertIsInstance(object_proxy, ObjectProxy)
         self.assertEqual(object_proxy.test_echo("Hello World!"), "Hello World!")
         self.assertEqual(
@@ -707,9 +611,7 @@ class TestHTTPServer(TestCase):
         security_scheme = BcryptBasicSecurity(username="cliuser", password="clipass")
         port = 60013
         thing_id = f"test-basic-proxy-{uuid.uuid4().hex[0:8]}"
-        thing = OceanOpticsSpectrometer(
-            id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
-        )
+        thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(
             forked=True,
             port=port,
@@ -724,7 +626,10 @@ class TestHTTPServer(TestCase):
             password="clipass",
         )
         self.assertEqual(object_proxy.read_property("max_intensity"), 16384)
-        self.stop_server(port=port, thing_ids=[thing_id])
+        headers = {}
+        token = base64.b64encode("cliuser:clipass".encode("utf-8")).decode("ascii")
+        headers["Authorization"] = f"Basic {token}"
+        self.stop_server(port=port, thing_ids=[thing_id], headers=headers)
 
     @classmethod
     def stop_server(cls, port, thing_ids: list[str] = [], **request_kwargs):
@@ -732,9 +637,7 @@ class TestHTTPServer(TestCase):
         endpoints = [("post", f"/{thing_id}/exit", None) for thing_id in thing_ids]
         endpoints += [("post", "/stop", None)]
         for method, path, body in endpoints:
-            response = session.request(
-                method=method, url=f"http://127.0.0.1:{port}{path}", **request_kwargs
-            )
+            response = session.request(method=method, url=f"http://127.0.0.1:{port}{path}", **request_kwargs)
 
     @classmethod
     def sse_stream(cls, url, chunk_size=2048, **kwargs):
@@ -760,9 +663,7 @@ class TestHTTPServer(TestCase):
                 yield event
 
     @classmethod
-    def generate_endpoints_for_thing(
-        cls, class_: ThingMeta, thing_id: str
-    ) -> list[tuple[str, str, Any]]:
+    def generate_endpoints_for_thing(cls, class_: ThingMeta, thing_id: str) -> list[tuple[str, str, Any]]:
         if class_ == OceanOpticsSpectrometer:
             return [
                 # read Property
@@ -775,9 +676,7 @@ class TestHTTPServer(TestCase):
                 ("post", f"/{thing_id}/disconnect", None),
                 ("post", f"/{thing_id}/connect", None),
             ]
-        raise NotImplementedError(
-            f"Endpoints for {class_.__name__} not implemented yet"
-        )
+        raise NotImplementedError(f"Endpoints for {class_.__name__} not implemented yet")
 
 
 class TestHTTPObjectProxy(TestCase):
@@ -789,17 +688,11 @@ class TestHTTPObjectProxy(TestCase):
         super().setUpClass()
         cls.thing_id = f"test-obj-proxy-{uuid.uuid4().hex[0:8]}"
         cls.port = 60011
-        cls.thing = OceanOpticsSpectrometer(
-            id=cls.thing_id, serial_number="simulation", log_level=logging.ERROR + 10
-        )
-        cls.thing.run_with_http_server(
-            forked=True, port=cls.port, config={"allow_cors": True}
-        )
+        cls.thing = OceanOpticsSpectrometer(id=cls.thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
+        cls.thing.run_with_http_server(forked=True, port=cls.port, config={"allow_cors": True})
         time.sleep(2)  # linux machines need a few moments otherwise the clients error
 
-        cls.object_proxy = ClientFactory.http(
-            url=f"http://127.0.0.1:{cls.port}/{cls.thing_id}/resources/wot-td"
-        )
+        cls.object_proxy = ClientFactory.http(url=f"http://127.0.0.1:{cls.port}/{cls.thing_id}/resources/wot-td")
 
     @classmethod
     def tearDownClass(cls):
@@ -812,36 +705,26 @@ class TestHTTPObjectProxy(TestCase):
         """Test basic functionality of ObjectProxy with HTTP server."""
         self.assertIsInstance(self.object_proxy, ObjectProxy)
         # Test invoke_action method with reply
-        self.assertEqual(
-            self.object_proxy.invoke_action("test_echo", "Hello World!"), "Hello World!"
-        )
+        self.assertEqual(self.object_proxy.invoke_action("test_echo", "Hello World!"), "Hello World!")
         # Test invoke_action with dot notation
         self.assertEqual(self.object_proxy.test_echo(fake.chrome()), fake.last)
         self.assertEqual(self.object_proxy.test_echo(fake.sha256()), fake.last)
         self.assertEqual(self.object_proxy.test_echo(fake.address()), fake.last)
         # Test invoke_action with no reply
         self.assertEqual(
-            self.object_proxy.invoke_action(
-                "test_echo", fake.random_number(), oneway=True
-            ),
+            self.object_proxy.invoke_action("test_echo", fake.random_number(), oneway=True),
             None,
         )
         # # Test invoke_action in non blocking mode
         noblock_payload = fake.pylist(20, value_types=[int, float, str, bool])
-        noblock_msg_id = self.object_proxy.invoke_action(
-            "test_echo", noblock_payload, noblock=True
-        )
+        noblock_msg_id = self.object_proxy.invoke_action("test_echo", noblock_payload, noblock=True)
         self.assertIsInstance(noblock_msg_id, str)
         self.assertEqual(
-            self.object_proxy.invoke_action(
-                "test_echo", fake.pylist(20, value_types=[int, float, str, bool])
-            ),
+            self.object_proxy.invoke_action("test_echo", fake.pylist(20, value_types=[int, float, str, bool])),
             fake.last,
         )
         self.assertEqual(
-            self.object_proxy.invoke_action(
-                "test_echo", fake.pylist(10, value_types=[int, float, str, bool])
-            ),
+            self.object_proxy.invoke_action("test_echo", fake.pylist(10, value_types=[int, float, str, bool])),
             fake.last,
         )
         self.assertEqual(self.object_proxy.read_reply(noblock_msg_id), noblock_payload)
@@ -849,9 +732,7 @@ class TestHTTPObjectProxy(TestCase):
     def test_02_rwd_properties(self):
         # test read and write properties
         self.assertEqual(self.object_proxy.read_property("max_intensity"), 16384)
-        self.assertEqual(
-            self.object_proxy.write_property("integration_time", 1200), None
-        )
+        self.assertEqual(self.object_proxy.write_property("integration_time", 1200), None)
         self.assertEqual(self.object_proxy.read_property("integration_time"), 1200)
         # test read and write properties with dot notation
         self.assertEqual(self.object_proxy.max_intensity, 16384)
@@ -859,36 +740,26 @@ class TestHTTPObjectProxy(TestCase):
         self.object_proxy.integration_time = 1000
         self.assertEqual(self.object_proxy.integration_time, 1000)
         # test oneway write property
-        self.assertEqual(
-            self.object_proxy.write_property("integration_time", 800, oneway=True), None
-        )
+        self.assertEqual(self.object_proxy.write_property("integration_time", 800, oneway=True), None)
         self.assertEqual(self.object_proxy.read_property("integration_time"), 800)
         # test noblock read property
-        noblock_msg_id = self.object_proxy.read_property(
-            "integration_time", noblock=True
-        )
+        noblock_msg_id = self.object_proxy.read_property("integration_time", noblock=True)
         self.assertIsInstance(noblock_msg_id, str)
         self.assertEqual(self.object_proxy.read_property("max_intensity"), 16384)
-        self.assertEqual(
-            self.object_proxy.write_property("integration_time", 1200), None
-        )
+        self.assertEqual(self.object_proxy.write_property("integration_time", 1200), None)
         self.assertEqual(self.object_proxy.read_reply(noblock_msg_id), 800)
 
     def notest_03_rw_multiple_properties(self):
         """Test reading and writing multiple properties at once."""
         # test read multiple properties
-        properties = self.object_proxy.read_multiple_properties(
-            ["max_intensity", "integration_time"]
-        )
+        properties = self.object_proxy.read_multiple_properties(["max_intensity", "integration_time"])
         self.assertEqual(properties["max_intensity"], 16384)
         self.assertEqual(properties["integration_time"], 800)
 
         # test write multiple properties
         new_values = {"integration_time": 1200, "max_intensity": 20000}
         self.object_proxy.write_multiple_properties(new_values)
-        properties = self.object_proxy.read_multiple_properties(
-            ["max_intensity", "integration_time"]
-        )
+        properties = self.object_proxy.read_multiple_properties(["max_intensity", "integration_time"])
         self.assertEqual(properties["max_intensity"], 20000)
         self.assertEqual(properties["integration_time"], 1200)
 
@@ -896,11 +767,9 @@ class TestHTTPObjectProxy(TestCase):
         """Test subscribing to an event and receiving updates."""
         event_name = "intensity_measurement_event"
 
-        def on_event(data):
+        def on_event(data: SSE):
             nonlocal self
-            self.assertTrue(
-                isinstance(data, dict) and "value" in data and "timestamp" in data
-            )
+            self.assertTrue(isinstance(data.data, dict) and "value" in data.data and "timestamp" in data.data)
 
         self.object_proxy.subscribe_event(event_name, on_event)
         self.object_proxy.start_acquisition()
@@ -925,9 +794,7 @@ class TestHTTPEndToEnd(TestRPCEndToEnd):
     def setUpThing(cls):
         """Set up the thing for the http object proxy client"""
         cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR + 10)
-        cls.thing.run_with_http_server(
-            forked=True, port=cls.http_port, config={"allow_cors": True}
-        )
+        cls.thing.run_with_http_server(forked=True, port=cls.http_port, config={"allow_cors": True})
         time.sleep(2)  # linux machines need a few moments otherwise the clients error
 
         cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
@@ -946,7 +813,7 @@ class TestHTTPEndToEnd(TestRPCEndToEnd):
             raise AttributeError()
         except AttributeError:
             cls._client = ClientFactory.http(
-                url=f"http://127.0.0.1:{cls.http_port}/{cls.thing_id}/resources/wot-td"
+                url=f"http://127.0.0.1:{cls.http_port}/{cls.thing_id}/resources/wot-td", ignore_TD_errors=True
             )
             return cls._client
 
@@ -956,8 +823,8 @@ class TestHTTPEndToEnd(TestRPCEndToEnd):
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
-    # suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPObjectProxy))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPServer))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPObjectProxy))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestHTTPEndToEnd))
     return suite
 

@@ -59,9 +59,7 @@ class TestBrokerMixin(MessageValidatorMixin):
 
     @classmethod
     def setUpThing(cls):
-        cls.thing = TestThing(
-            id=cls.thing_id, logger=cls.logger, remote_accessible_logger=True
-        )
+        cls.thing = TestThing(id=cls.thing_id, logger=cls.logger, remote_accessible_logger=True)
 
     @classmethod
     def startServer(cls):
@@ -125,16 +123,10 @@ class TestBasicServerAndClient(TestBrokerMixin):
             # TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
             # EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
             # INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
-            await self.server._handle_timeout(
-                request_message, timeout_type="execution"
-            )  # 5
-            await self.server._handle_invalid_message(
-                request_message, SerializableData(Exception("test"))
-            )  # 7
+            await self.server._handle_timeout(request_message, timeout_type="execution")  # 5
+            await self.server._handle_invalid_message(request_message, SerializableData(Exception("test")))  # 7
             await self.server._handshake(request_message)  # 1
-            await self.server._handle_error_message(
-                request_message, Exception("test")
-            )  # 6
+            await self.server._handle_error_message(request_message, Exception("test"))  # 6
             await self.server.async_send_response(request_message)  # 4
             await self.server.async_send_response_with_message_type(
                 request_message, ERROR, SerializableData(Exception("test"))
@@ -210,9 +202,7 @@ class TestBasicServerAndClient(TestBrokerMixin):
 
         # When the above two functions running,
         # we dont send a message as the thread is also running
-        get_current_async_loop().run_until_complete(
-            asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)])
-        )
+        get_current_async_loop().run_until_complete(asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)]))
 
         self.assertTrue(self.done_queue.get())
         self.assertEqual(self.server.poll_timeout, 1000)
@@ -300,12 +290,8 @@ class TestAsyncZMQClient(TestBrokerMixin):
             # TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
             # EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
             # INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
-            await self.server._handle_timeout(
-                request_message, timeout_type="invokation"
-            )  # 5
-            await self.server._handle_invalid_message(
-                request_message, SerializableData(Exception("test1"))
-            )
+            await self.server._handle_timeout(request_message, timeout_type="invokation")  # 5
+            await self.server._handle_invalid_message(request_message, SerializableData(Exception("test1")))
             await self.server._handshake(request_message)
             await self.server._handle_error_message(request_message, Exception("test2"))
             await self.server.async_send_response(request_message)
@@ -341,9 +327,7 @@ class TestAsyncZMQClient(TestBrokerMixin):
             self.assertEqual(msg.type, INVALID_MESSAGE)
             self.validate_response_message(msg)
 
-            msg = (
-                await self.client.socket.recv_multipart()
-            )  # handshake don't come as response
+            msg = await self.client.socket.recv_multipart()  # handshake don't come as response
             response_message = ResponseMessage(msg)
             self.assertEqual(response_message.type, HANDSHAKE)
             self.validate_response_message(response_message)
@@ -362,9 +346,7 @@ class TestAsyncZMQClient(TestBrokerMixin):
 
         # exit checked separately at the end
         get_current_async_loop().run_until_complete(
-            asyncio.gather(
-                *[handle_message_types_server(), handle_message_types_client()]
-            )
+            asyncio.gather(*[handle_message_types_server(), handle_message_types_client()])
         )
 
     @classmethod
@@ -452,39 +434,27 @@ class TestMessageMappedClientPool(TestBrokerMixin):
             self.client.start_polling()
 
             self.client.events_map[request_message.id] = self.client.event_pool.pop()
-            await self.server._handle_timeout(
-                request_message, timeout_type="invokation"
-            )  # 5
-            msg = await self.client.async_recv_response(
-                self.client_id, request_message.id
-            )
+            await self.server._handle_timeout(request_message, timeout_type="invokation")  # 5
+            msg = await self.client.async_recv_response(self.client_id, request_message.id)
             self.assertEqual(msg.type, TIMEOUT)
             self.validate_response_message(msg)
 
             self.client.events_map[request_message.id] = self.client.event_pool.pop()
-            await self.server._handle_invalid_message(
-                request_message, SerializableData(Exception("test"))
-            )
-            msg = await self.client.async_recv_response(
-                self.client_id, request_message.id
-            )
+            await self.server._handle_invalid_message(request_message, SerializableData(Exception("test")))
+            msg = await self.client.async_recv_response(self.client_id, request_message.id)
             self.assertEqual(msg.type, INVALID_MESSAGE)
             self.validate_response_message(msg)
 
             self.client.events_map[request_message.id] = self.client.event_pool.pop()
             await self.server._handshake(request_message)
-            msg = await self.client.pool[
-                self.client_id
-            ].socket.recv_multipart()  # handshake don't come as response
+            msg = await self.client.pool[self.client_id].socket.recv_multipart()  # handshake don't come as response
             response_message = ResponseMessage(msg)
             self.assertEqual(response_message.type, HANDSHAKE)
             self.validate_response_message(response_message)
 
             self.client.events_map[request_message.id] = self.client.event_pool.pop()
             await self.server.async_send_response(request_message)
-            msg = await self.client.async_recv_response(
-                self.client_id, request_message.id
-            )
+            msg = await self.client.async_recv_response(self.client_id, request_message.id)
             self.assertEqual(msg.type, REPLY)
             self.validate_response_message(msg)
 
@@ -492,18 +462,14 @@ class TestMessageMappedClientPool(TestBrokerMixin):
             await self.server.async_send_response_with_message_type(
                 request_message, ERROR, SerializableData(Exception("test"))
             )
-            msg = await self.client.async_recv_response(
-                self.client_id, request_message.id
-            )
+            msg = await self.client.async_recv_response(self.client_id, request_message.id)
             self.assertEqual(msg.type, ERROR)
             self.validate_response_message(msg)
 
             self.client.stop_polling()
 
         # exit checked separately at the end
-        get_current_async_loop().run_until_complete(
-            asyncio.gather(*[handle_message_types()])
-        )
+        get_current_async_loop().run_until_complete(asyncio.gather(*[handle_message_types()]))
 
     def test_3_verify_polling(self):
         """
@@ -524,9 +490,7 @@ class TestMessageMappedClientPool(TestBrokerMixin):
 
         # When the above two functions running,
         # we dont send a message as the thread is also running
-        get_current_async_loop().run_until_complete(
-            asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)])
-        )
+        get_current_async_loop().run_until_complete(asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)]))
         self.assertTrue(self.done_queue.get())
         self.assertEqual(self.client.poll_timeout, 1000)
 
@@ -552,9 +516,7 @@ def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestBasicServerAndClient))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestAsyncZMQClient))
-    suite.addTest(
-        unittest.TestLoader().loadTestsFromTestCase(TestMessageMappedClientPool)
-    )
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestMessageMappedClientPool))
     return suite
 
 

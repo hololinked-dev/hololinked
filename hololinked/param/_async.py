@@ -13,7 +13,6 @@ to py2 incompatibility with both `async/await` and `yield from` syntax.
 #     return _depends
 
 
-
 # def generate_callback(func, dependencies, kw):
 #     @asyncio.coroutine
 #     def cb(*events):

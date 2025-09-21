@@ -1,5 +1,5 @@
 from typing import Any, Optional
-from ..utils import pep8_to_dashed_name
+
 
 def get_summary(docs: str) -> Optional[str]:
     """Return the first line of the dosctring of an object
@@ -21,5 +21,4 @@ def get_zmq_unique_identifier_from_event_affordance(affordance: Any) -> Optional
     :returns: str: Unique identifier for the object
 
     """
-    return f'{affordance.thing_id}/{affordance.name}'
-
+    return f"{affordance.thing_id}/{affordance.name}"

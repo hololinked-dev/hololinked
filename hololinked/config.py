@@ -134,9 +134,7 @@ class Configuration:
         # environment variables overwrite config items
         file = os.environ.get("HOLOLINKED_CONFIG", None)
         if not file:
-            warnings.warn(
-                "no environment file found although asked to load from one", UserWarning
-            )
+            warnings.warn("no environment file found although asked to load from one", UserWarning)
             return
         with open(file, "r") as file:
             config = PythonBuiltinJSONSerializer.load(file)  # type: typing.Dict

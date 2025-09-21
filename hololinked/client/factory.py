@@ -2,11 +2,10 @@ import logging
 import uuid
 import base64
 
-from tornado.httpclient import HTTPClient, HTTPRequest, HTTPResponse
-from tornado.simple_httpclient import HTTPTimeoutError
+import httpx
 
 from ..core import Thing, Action
-from ..core.zmq import SyncZMQClient, AsyncZMQClient, EventConsumer, AsyncEventConsumer
+from ..core.zmq import SyncZMQClient, AsyncZMQClient
 from ..td.interaction_affordance import (
     PropertyAffordance,
     ActionAffordance,
@@ -82,19 +81,13 @@ class ClientFactory:
         logger = get_default_logger(id, log_level=log_level)
 
         # ZMQ req-rep clients
-        sync_zmq_client = SyncZMQClient(
-            f"{id}|sync", server_id=server_id, logger=logger, access_point=access_point
-        )
-        async_zmq_client = AsyncZMQClient(
-            f"{id}|async", server_id=server_id, logger=logger, access_point=access_point
-        )
+        sync_zmq_client = SyncZMQClient(f"{id}|sync", server_id=server_id, logger=logger, access_point=access_point)
+        async_zmq_client = AsyncZMQClient(f"{id}|async", server_id=server_id, logger=logger, access_point=access_point)
 
         # Fetch the TD
         assert isinstance(Thing.get_thing_model, Action)
         FetchTDAffordance = Thing.get_thing_model.to_affordance()
-        FetchTDAffordance.override_defaults(
-            name="get_thing_description", thing_id=thing_id
-        )
+        FetchTDAffordance.override_defaults(name="get_thing_description", thing_id=thing_id)
         FetchTD = ZMQAction(
             resource=FetchTDAffordance,
             sync_client=sync_zmq_client,
@@ -127,31 +120,14 @@ class ClientFactory:
                 owner_inst=object_proxy,
                 invokation_timeout=invokation_timeout,
                 execution_timeout=execution_timeout,
+                logger=logger,
             )
             self.add_property(object_proxy, consumed_property)
             if hasattr(affordance, "observable") and affordance.observable:
-                form = affordance.retrieve_form("observeproperty", None)
-                if not form:
-                    raise ValueError(
-                        f"No socket address found for observable property {affordance.name}"
-                    )
-                sync_event_client = EventConsumer(
-                    id=f"{TD['id']}|{affordance.name}|sync",
-                    event_unique_identifier=f"{TD['id']}/{affordance.name}",
-                    access_point=form.href,
-                    logger=logger,
-                )
-                async_event_client = AsyncEventConsumer(
-                    id=f"{TD['id']}|{affordance.name}|async",
-                    event_unique_identifier=f"{TD['id']}/{affordance.name}",
-                    access_point=form.href,
-                    logger=logger,
-                )
                 consumed_observable = ZMQEvent(
                     resource=affordance,
-                    sync_zmq_client=sync_event_client,
-                    async_zmq_client=async_event_client,
                     owner_inst=object_proxy,
+                    logger=logger,
                 )
                 self.add_event(object_proxy, consumed_observable)
         # add actions
@@ -164,31 +140,16 @@ class ClientFactory:
                 owner_inst=object_proxy,
                 invokation_timeout=invokation_timeout,
                 execution_timeout=execution_timeout,
+                logger=logger,
             )
             self.add_action(object_proxy, consumed_action)
         # add events
         for event in TD.get("events", []):
             affordance = EventAffordance.from_TD(event, TD)
-            form = affordance.retrieve_form("subscribeevent", None)
-            if not form:
-                raise ValueError(f"No socket address found for event {affordance.name}")
-            sync_event_client = EventConsumer(
-                id=f"{TD['id']}|{affordance.name}|sync",
-                event_unique_identifier=f"{TD['id']}/{affordance.name}",
-                access_point=form.href,
-                logger=logger,
-            )
-            async_event_client = AsyncEventConsumer(
-                id=f"{TD['id']}|{affordance.name}|async",
-                event_unique_identifier=f"{TD['id']}/{affordance.name}",
-                access_point=form.href,
-                logger=logger,
-            )
             consumed_event = ZMQEvent(
                 resource=affordance,
                 owner_inst=object_proxy,
-                sync_zmq_client=sync_event_client,
-                async_zmq_client=async_event_client,
+                logger=logger,
             )
             self.add_event(object_proxy, consumed_event)
         # add top level form handlers (for ZMQ even if said form exists or not)
@@ -205,6 +166,7 @@ class ClientFactory:
                     owner_inst=object_proxy,
                     invokation_timeout=invokation_timeout,
                     execution_timeout=execution_timeout,
+                    logger=logger,
                 ),
             )
         return object_proxy
@@ -217,28 +179,58 @@ class ClientFactory:
         skip_interaction_affordances = kwargs.get("skip_interaction_affordances", [])
         invokation_timeout = kwargs.get("invokation_timeout", 5.0)
         execution_timeout = kwargs.get("execution_timeout", 5.0)
-        connect_timeout = kwargs.get("connect_timeout", 60.0)
+        connect_timeout = kwargs.get("connect_timeout", 10.0)
         request_timeout = kwargs.get("request_timeout", 60.0)
+        use_localhost = False
+        if (
+            "http://localhost" in url
+            or "http://localhost" in url
+            or "http://[::1]" in url
+            or "http://[::1]" in url
+            or "http://127.0.0.1" in url
+        ):
+            use_localhost = True
+
+        # create clients
+        req_rep_timeout = httpx.Timeout(
+            connect=connect_timeout,
+            read=request_timeout,
+            write=request_timeout,
+            pool=2,
+        )
+        sse_timeout = httpx.Timeout(
+            connect=connect_timeout,
+            read=3,
+            write=request_timeout,
+            pool=2,
+        )
+
+        req_rep_sync_client = httpx.Client(timeout=req_rep_timeout)
+        req_rep_async_client = httpx.AsyncClient(timeout=req_rep_timeout)
+        sse_sync_client = httpx.Client(timeout=sse_timeout)
+        sse_async_client = httpx.AsyncClient(timeout=sse_timeout)
 
         # fetch TD
-        headers = {}
+        url = (
+            f"{url}?"
+            + f"ignore_errors={str(kwargs.get('ignore_TD_errors', False)).lower()}"
+            + (f"&skip_names={','.join(skip_interaction_affordances)}" if skip_interaction_affordances else "")
+            + f"&use_localhost={str(use_localhost).lower()}"
+        )
+
+        # fetch TD
+        headers = {"Content-Type": "application/json"}
         username = kwargs.get("username")
         password = kwargs.get("password")
         if username and password:
-            token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode(
-                "ascii"
-            )
+            token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
             headers["Authorization"] = f"Basic {token}"
 
-        response = HTTPClient().fetch(HTTPRequest(url, headers=headers))
+        response = req_rep_sync_client.get(url, headers=headers)  # type: httpx.Response
+        response.raise_for_status()
 
-        assert response.code >= 200 and response.code < 300, (
-            f"Fetch TD HTTP request failed with status code {response.code}"
-        )
-        # assert response.headers.get('Content-Type') == 'application/json'
-
-        TD = Serializers.json.loads(response.body)
-        id = f"client|{TD['id']}|HTTP|{uuid.uuid4()}"
+        TD = Serializers.json.loads(response.content)
+        id = f"client|{TD['id']}|HTTP|{uuid.uuid4().hex[:8]}"
         log_level = kwargs.get("log_level", logging.INFO)
         logger = get_default_logger(id, log_level=log_level)
         object_proxy = ObjectProxy(id, td=TD, logger=logger, **kwargs)
@@ -247,8 +239,8 @@ class ClientFactory:
             affordance = PropertyAffordance.from_TD(name, TD)
             consumed_property = HTTPProperty(
                 resource=affordance,
-                connect_timeout=connect_timeout,
-                request_timeout=request_timeout,
+                sync_client=req_rep_sync_client,
+                async_client=req_rep_async_client,
                 invokation_timeout=invokation_timeout,
                 execution_timeout=execution_timeout,
                 owner_inst=object_proxy,
@@ -258,8 +250,8 @@ class ClientFactory:
             if affordance.observable:
                 consumed_event = HTTPEvent(
                     resource=affordance,
-                    connect_timeout=None,
-                    request_timeout=None,
+                    sync_client=sse_sync_client,
+                    async_client=sse_async_client,
                     invokation_timeout=invokation_timeout,
                     execution_timeout=execution_timeout,
                     owner_inst=object_proxy,
@@ -270,8 +262,8 @@ class ClientFactory:
             affordance = ActionAffordance.from_TD(action, TD)
             consumed_action = HTTPAction(
                 resource=affordance,
-                connect_timeout=connect_timeout,
-                request_timeout=request_timeout,
+                sync_client=req_rep_sync_client,
+                async_client=req_rep_async_client,
                 invokation_timeout=invokation_timeout,
                 execution_timeout=execution_timeout,
                 owner_inst=object_proxy,
@@ -282,8 +274,8 @@ class ClientFactory:
             affordance = EventAffordance.from_TD(event, TD)
             consumed_event = HTTPEvent(
                 resource=affordance,
-                connect_timeout=None,
-                request_timeout=None,
+                sync_client=sse_sync_client,
+                async_client=sse_async_client,
                 invokation_timeout=invokation_timeout,
                 execution_timeout=execution_timeout,
                 owner_inst=object_proxy,

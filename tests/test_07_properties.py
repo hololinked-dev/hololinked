@@ -87,18 +87,14 @@ class TestProperty(TestCase):
         # Test deletion
         instance = TestThing(id="test5", log_level=logging.WARN)
         del TestThing.deletable_class_prop
-        self.assertEqual(
-            TestThing.deletable_class_prop, 100
-        )  # Should return to default
+        self.assertEqual(TestThing.deletable_class_prop, 100)  # Should return to default
         self.assertEqual(instance.deletable_class_prop, 100)
 
         # Test instance-level deletion
         instance.deletable_class_prop = 200
         self.assertEqual(TestThing.deletable_class_prop, 200)
         del instance.deletable_class_prop
-        self.assertEqual(
-            TestThing.deletable_class_prop, 100
-        )  # Should return to default
+        self.assertEqual(TestThing.deletable_class_prop, 100)  # Should return to default
 
     def test_05_descriptor_access(self):
         """Test descriptor access for class properties"""
@@ -132,9 +128,7 @@ class TestProperty(TestCase):
             self.assertEqual(thing.db_persist_selector_prop, "a")
             thing.db_persist_selector_prop = "c"
             self.assertEqual(thing.db_persist_selector_prop, "c")
-            self.assertEqual(
-                thing.db_engine.get_property("db_persist_selector_prop"), "c"
-            )
+            self.assertEqual(thing.db_engine.get_property("db_persist_selector_prop"), "c")
 
             # test db init property
             self.assertEqual(thing.db_init_int_prop, 1)
@@ -152,18 +146,14 @@ class TestProperty(TestCase):
             self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
             self.assertEqual(thing.db_persist_selector_prop, "c")
             self.assertNotEqual(thing.db_commit_number_prop, 100)
-            self.assertEqual(
-                thing.db_commit_number_prop, TestThing.db_commit_number_prop.default
-            )
+            self.assertEqual(thing.db_commit_number_prop, TestThing.db_commit_number_prop.default)
 
         return test_prekill, test_postkill
 
     def test_06_sqlalchemy_db_operations(self):
         """Test SQLAlchemy database operations"""
         thing_id = "test-db-operations"
-        file_path = (
-            f"{BaseDB.get_temp_dir_for_class_name(TestThing.__name__)}/{thing_id}.db"
-        )
+        file_path = f"{BaseDB.get_temp_dir_for_class_name(TestThing.__name__)}/{thing_id}.db"
         try:
             os.remove(file_path)
         except (OSError, FileNotFoundError):

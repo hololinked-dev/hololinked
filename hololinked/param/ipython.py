@@ -30,11 +30,10 @@ import param
 WARN_MISFORMATTED_DOCSTRINGS = False
 
 # ANSI color codes for the IPython pager
-red   = '\x1b[1;31m%s\x1b[0m'
-blue  = '\x1b[1;34m%s\x1b[0m'
-green = '\x1b[1;32m%s\x1b[0m'
-cyan = '\x1b[1;36m%s\x1b[0m'
-
+red = "\x1b[1;31m%s\x1b[0m"
+blue = "\x1b[1;34m%s\x1b[0m"
+green = "\x1b[1;32m%s\x1b[0m"
+cyan = "\x1b[1;36m%s\x1b[0m"
 
 
 class ParamPager(object):
@@ -50,9 +49,8 @@ class ParamPager(object):
         ParameterizedMetaclass for automatic docstring generation.
         """
         # Order of the information to be listed in the table (left to right)
-        self.order = ['name', 'changed', 'value', 'type', 'bounds', 'mode']
+        self.order = ["name", "changed", "value", "type", "bounds", "mode"]
         self.metaclass = metaclass
-
 
     def get_param_info(self, obj, include_super=True):
         """
@@ -62,9 +60,9 @@ class ParamPager(object):
         """
 
         params = dict(obj.parameters.objects(existing=True))
-        if isinstance(obj,type):
+        if isinstance(obj, type):
             changed = []
-            val_dict = dict((k,p.default) for (k,p) in params.items())
+            val_dict = dict((k, p.default) for (k, p) in params.items())
             self_class = obj
         else:
             changed = list(obj.param.values(onlychanged=True).keys())
@@ -72,12 +70,10 @@ class ParamPager(object):
             self_class = obj.__class__
 
         if not include_super:
-            params = dict((k,v) for (k,v) in params.items()
-                          if k in self_class.__dict__)
+            params = dict((k, v) for (k, v) in params.items() if k in self_class.__dict__)
 
-        params.pop('name') # Already displayed in the title.
+        params.pop("name")  # Already displayed in the title.
         return (params, val_dict, changed)
-
 
     def param_docstrings(self, info, max_col_len=100, only_changed=False):
         """
@@ -94,36 +90,35 @@ class ParamPager(object):
                 continue
             displayed_params.append((name, params[name]))
 
-        right_shift = max(len(name) for name, _ in displayed_params)+2
+        right_shift = max(len(name) for name, _ in displayed_params) + 2
 
         for i, (name, p) in enumerate(displayed_params):
             heading = "%s: " % name
             unindented = textwrap.dedent("< No docstring available >" if p.doc is None else p.doc)
 
-            if (WARN_MISFORMATTED_DOCSTRINGS
-                and not unindented.startswith("\n")  and len(unindented.splitlines()) > 1):
-                param.main.warning("Multi-line docstring for %r is incorrectly formatted "
-                                   " (should start with newline)", name)
+            if WARN_MISFORMATTED_DOCSTRINGS and not unindented.startswith("\n") and len(unindented.splitlines()) > 1:
+                param.main.warning(
+                    "Multi-line docstring for %r is incorrectly formatted  (should start with newline)", name
+                )
             # Strip any starting newlines
             while unindented.startswith("\n"):
                 unindented = unindented[1:]
 
             lines = unindented.splitlines()
             if len(lines) > 1:
-                tail = ['%s%s' % (' '  * right_shift, line) for line in lines[1:]]
-                all_lines = [ heading.ljust(right_shift) + lines[0]] + tail
+                tail = ["%s%s" % (" " * right_shift, line) for line in lines[1:]]
+                all_lines = [heading.ljust(right_shift) + lines[0]] + tail
             elif len(lines) == 1:
-                all_lines = [ heading.ljust(right_shift) + lines[0]]
+                all_lines = [heading.ljust(right_shift) + lines[0]]
             else:
                 all_lines = []
 
             if i % 2:  # Alternate red and blue for docstrings
-                contents.extend([red %el for el in all_lines])
+                contents.extend([red % el for el in all_lines])
             else:
-                contents.extend([blue %el for el in all_lines])
+                contents.extend([blue % el for el in all_lines])
 
         return "\n".join(contents)
-
 
     def sort_by_precedence(self, parameters):
         """
@@ -138,15 +133,13 @@ class ParamPager(object):
         groups = itertools.groupby(sorted_params, key=key_fn)
         # Params preserve definition order in Python 3.6+
         dict_ordered = (
-            (sys.version_info.major == 3 and sys.version_info.minor >= 6) or
-            (sys.version_info.major > 3) or
-            all(p.precedence is not None for p in parameters.values())
+            (sys.version_info.major == 3 and sys.version_info.minor >= 6)
+            or (sys.version_info.major > 3)
+            or all(p.precedence is not None for p in parameters.values())
         )
         ordered_groups = [list(grp) if dict_ordered else sorted(grp) for (_, grp) in groups]
-        ordered_params = [el[0] for group in ordered_groups for el in group
-                          if (el[0] != 'name' or el[0] in parameters)]
+        ordered_params = [el[0] for group in ordered_groups for el in group if (el[0] != "name" or el[0] in parameters)]
         return ordered_params
-
 
     def _build_table(self, info, order, max_col_len=40, only_changed=False):
         """
@@ -156,7 +149,7 @@ class ParamPager(object):
 
         info_list, bounds_dict = [], {}
         (params, val_dict, changed) = info
-        col_widths = dict((k,0) for k in order)
+        col_widths = dict((k, 0) for k in order)
 
         ordering = self.sort_by_precedence(params)
         for name in ordering:
@@ -164,25 +157,24 @@ class ParamPager(object):
             if only_changed and not (name in changed):
                 continue
 
-            constant = 'C' if p.constant else 'V'
-            readonly = 'RO' if p.readonly else 'RW'
-            allow_None = ' AN' if hasattr(p, 'allow_None') and p.allow_None else ''
+            constant = "C" if p.constant else "V"
+            readonly = "RO" if p.readonly else "RW"
+            allow_None = " AN" if hasattr(p, "allow_None") and p.allow_None else ""
 
-            mode = '%s %s%s' % (constant, readonly, allow_None)
+            mode = "%s %s%s" % (constant, readonly, allow_None)
 
             value = repr(val_dict[name])
             if len(value) > (max_col_len - 3):
-                value = value[:max_col_len-3] + '...'
+                value = value[: max_col_len - 3] + "..."
 
-            p_dict = {'name': name, 'type': p.__class__.__name__,
-                      'mode': mode, 'value': value}
+            p_dict = {"name": name, "type": p.__class__.__name__, "mode": mode, "value": value}
 
-            if hasattr(p, 'bounds'):
-                lbound, ubound = (None,None) if p.bounds is None else p.bounds
+            if hasattr(p, "bounds"):
+                lbound, ubound = (None, None) if p.bounds is None else p.bounds
 
                 mark_lbound, mark_ubound = False, False
                 # Use soft_bounds when bounds not defined.
-                if hasattr(p, 'get_soft_bounds'):
+                if hasattr(p, "get_soft_bounds"):
                     soft_lbound, soft_ubound = p.get_soft_bounds()
                     if lbound is None and soft_lbound is not None:
                         lbound = soft_lbound
@@ -191,9 +183,9 @@ class ParamPager(object):
                         ubound = soft_ubound
                         mark_ubound = True
 
-                if (lbound, ubound) != (None,None):
+                if (lbound, ubound) != (None, None):
                     bounds_dict[name] = (mark_lbound, mark_ubound)
-                    p_dict['bounds'] = '(%s, %s)' % (lbound, ubound)
+                    p_dict["bounds"] = "(%s, %s)" % (lbound, ubound)
 
             for col in p_dict:
                 max_width = max([col_widths[col], len(p_dict[col])])
@@ -202,7 +194,6 @@ class ParamPager(object):
             info_list.append((name, p_dict))
 
         return self._tabulate(info_list, col_widths, changed, order, bounds_dict)
-
 
     def _tabulate(self, info_list, col_widths, changed, order, bounds_dict):
         """
@@ -223,38 +214,37 @@ class ParamPager(object):
         title_row = []
         # Generate the column headings
         for i, col in enumerate(columns):
-            width = col_widths[col]+2
+            width = col_widths[col] + 2
             col = col.capitalize()
             formatted = col.ljust(width) if i == 0 else col.center(width)
             title_row.append(formatted)
-        contents.append(blue % ''.join(title_row)+"\n")
+        contents.append(blue % "".join(title_row) + "\n")
 
         # Format the table rows
         for row, info in info_list:
             row_list = []
-            for i,col in enumerate(columns):
-                width = col_widths[col]+2
-                val = info[col] if (col in info) else ''
-                formatted = val.ljust(width) if i==0 else val.center(width)
+            for i, col in enumerate(columns):
+                width = col_widths[col] + 2
+                val = info[col] if (col in info) else ""
+                formatted = val.ljust(width) if i == 0 else val.center(width)
 
-                if col == 'bounds' and bounds_dict.get(row,False):
+                if col == "bounds" and bounds_dict.get(row, False):
                     (mark_lbound, mark_ubound) = bounds_dict[row]
-                    lval, uval = formatted.rsplit(',')
-                    lspace, lstr = lval.rsplit('(')
-                    ustr, uspace = uval.rsplit(')')
-                    lbound = lspace + '('+(cyan % lstr) if mark_lbound else lval
-                    ubound = (cyan % ustr)+')'+uspace if mark_ubound else uval
+                    lval, uval = formatted.rsplit(",")
+                    lspace, lstr = lval.rsplit("(")
+                    ustr, uspace = uval.rsplit(")")
+                    lbound = lspace + "(" + (cyan % lstr) if mark_lbound else lval
+                    ubound = (cyan % ustr) + ")" + uspace if mark_ubound else uval
                     formatted = "%s,%s" % (lbound, ubound)
                 row_list.append(formatted)
 
-            row_text = ''.join(row_list)
+            row_text = "".join(row_list)
             if row in changed:
                 row_text = red % row_text
 
             contents.append(row_text)
 
-        return '\n'.join(contents+tail)
-
+        return "\n".join(contents + tail)
 
     def __call__(self, param_obj):
         """
@@ -264,8 +254,7 @@ class ParamPager(object):
         title = None
         if not self.metaclass:
             parameterized_object = isinstance(param_obj, param.parameterized)
-            parameterized_class = (isinstance(param_obj,type)
-                                   and  issubclass(param_obj,param.parameterized))
+            parameterized_class = isinstance(param_obj, type) and issubclass(param_obj, param.parameterized)
 
             if not (parameterized_object or parameterized_class):
                 print("Object is not a Parameterized class or object.")
@@ -274,46 +263,44 @@ class ParamPager(object):
             if parameterized_object:
                 # Only show the name if not autogenerated
                 class_name = param_obj.__class__.__name__
-                default_name = re.match('^'+class_name+'[0-9]+$', param_obj.name)
-                obj_name = '' if default_name else (' %r' % param_obj.name)
-                title = 'Parameters of %r instance%s' % (class_name, obj_name)
+                default_name = re.match("^" + class_name + "[0-9]+$", param_obj.name)
+                obj_name = "" if default_name else (" %r" % param_obj.name)
+                title = "Parameters of %r instance%s" % (class_name, obj_name)
 
         if title is None:
-            title = 'Parameters of %r' % param_obj.name
+            title = "Parameters of %r" % param_obj.name
 
-        heading_line = '=' * len(title)
+        heading_line = "=" * len(title)
         heading_text = "%s\n%s\n" % (title, heading_line)
 
         param_info = self.get_param_info(param_obj, include_super=True)
         if not param_info[0]:
             return "%s\n%s" % ((green % heading_text), "Object has no parameters.")
 
-        table = self._build_table(param_info, self.order, max_col_len=40,
-                                  only_changed=False)
+        table = self._build_table(param_info, self.order, max_col_len=40, only_changed=False)
 
         docstrings = self.param_docstrings(param_info, max_col_len=100, only_changed=False)
         dflt_msg = "Parameters changed from their default values are marked in red."
-        top_heading = (green % heading_text)
+        top_heading = green % heading_text
         top_heading += "\n%s" % (red % dflt_msg)
         top_heading += "\n%s" % (cyan % "Soft bound values are marked in cyan.")
-        top_heading += '\nC/V= Constant/Variable, RO/RW = ReadOnly/ReadWrite, AN=Allow None'
+        top_heading += "\nC/V= Constant/Variable, RO/RW = ReadOnly/ReadWrite, AN=Allow None"
 
-        heading_text = 'Parameter docstrings:'
-        heading_string = "%s\n%s" % (heading_text, '=' * len(heading_text))
-        docstring_heading = (green % heading_string)
+        heading_text = "Parameter docstrings:"
+        heading_string = "%s\n%s" % (heading_text, "=" * len(heading_text))
+        docstring_heading = green % heading_string
         return "%s\n\n%s\n\n%s\n\n%s" % (top_heading, table, docstring_heading, docstrings)
 
 
 message = """Welcome to the param IPython extension! (https://param.holoviz.org/)"""
-message += '\nAvailable magics: %params'
+message += "\nAvailable magics: %params"
 
 _loaded = False
 
-def load_ipython_extension(ip, verbose=True):
 
+def load_ipython_extension(ip, verbose=True):
     from IPython.core.magic import Magics, magics_class, line_magic
     from IPython.core import page
-
 
     @magics_class
     class ParamMagics(Magics):
@@ -321,13 +308,13 @@ def load_ipython_extension(ip, verbose=True):
         Implements the %params line magic used to inspect the parameters
         of a parameterized class or object.
         """
+
         def __init__(self, *args, **kwargs):
             super(ParamMagics, self).__init__(*args, **kwargs)
             self.param_pager = ParamPager()
 
-
         @line_magic
-        def params(self, parameter_s='', namespaces=None):
+        def params(self, parameter_s="", namespaces=None):
             """
             The %params line magic accepts a single argument which is a
             handle on the parameterized object to be inspected. If the
@@ -336,7 +323,7 @@ def load_ipython_extension(ip, verbose=True):
 
             Usage: %params <parameterized class or object>
             """
-            if parameter_s=='':
+            if parameter_s == "":
                 print("Please specify an object to inspect.")
                 return
 
@@ -348,8 +335,8 @@ def load_ipython_extension(ip, verbose=True):
 
             page.page(self.param_pager(obj.obj))
 
-
-    if verbose: print(message)
+    if verbose:
+        print(message)
 
     global _loaded
     if not _loaded:

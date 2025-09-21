@@ -4,10 +4,8 @@ import re
 import asyncio
 import inspect
 import typing
-import asyncio
 import types
 import traceback
-import typing
 import ifaddr
 import threading
 from functools import wraps
@@ -102,19 +100,13 @@ def get_default_logger(
 
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG if global_config.DEBUG else log_level)
-    if not any(
-        isinstance(handler, logging.StreamHandler) for handler in logger.handlers
-    ):
+    if not any(isinstance(handler, logging.StreamHandler) for handler in logger.handlers):
         default_handler = logging.StreamHandler(sys.stdout)
-        default_handler.setFormatter(
-            logging.Formatter(format, datefmt="%Y-%m-%dT%H:%M:%S")
-        )
+        default_handler.setFormatter(logging.Formatter(format, datefmt="%Y-%m-%dT%H:%M:%S"))
         logger.addHandler(default_handler)
     if log_file:
         file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(
-            logging.Formatter(format, datefmt="%Y-%m-%dT%H:%M:%S")
-        )
+        file_handler.setFormatter(logging.Formatter(format, datefmt="%Y-%m-%dT%H:%M:%S"))
         logger.addHandler(file_handler)
     return logger
 
@@ -166,9 +158,7 @@ def complete_pending_tasks_in_current_loop():
     """
     Complete all pending tasks in the current asyncio event loop.
     """
-    get_current_async_loop().run_until_complete(
-        asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
-    )
+    get_current_async_loop().run_until_complete(asyncio.gather(*asyncio.all_tasks(get_current_async_loop())))
 
 
 async def complete_pending_tasks_in_current_loop_async():
@@ -211,9 +201,7 @@ def get_signature(
 
     for param in inspect.signature(callable).parameters.values():
         arg_name = param.name
-        arg_type = (
-            param.annotation if param.annotation != inspect.Parameter.empty else None
-        )
+        arg_type = param.annotation if param.annotation != inspect.Parameter.empty else None
 
         arg_names.append(arg_name)
         arg_types.append(arg_type)
@@ -239,9 +227,7 @@ def getattr_without_descriptor_read(instance, key):
             return value
     # for descriptor, first try to find it in class dict or instance dict (for instance descriptors (per_instance_descriptor=True))
     # and then getattr from the instance. For descriptors/property, it will be mostly at above two levels.
-    return getattr(
-        instance, key, None
-    )  # we can deal with None where we use this getter, so dont raise AttributeError
+    return getattr(instance, key, None)  # we can deal with None where we use this getter, so dont raise AttributeError
 
 
 def isclassmethod(method) -> bool:
@@ -418,10 +404,7 @@ def get_input_model_from_signature(
     if len(parameters) == 0:
         return None
 
-    if (
-        all(p.annotation is Parameter.empty for p in parameters.values())
-        and not model_for_empty_annotations
-    ):
+    if all(p.annotation is Parameter.empty for p in parameters.values()) and not model_for_empty_annotations:
         return None
 
     if remove_first_positional_arg:
@@ -438,9 +421,7 @@ def get_input_model_from_signature(
             continue
         if p.kind == Parameter.VAR_KEYWORD:
             p_type = typing.Annotated[
-                typing.Dict[str, typing.Any]
-                if p.annotation is Parameter.empty
-                else type_hints[name],
+                typing.Dict[str, typing.Any] if p.annotation is Parameter.empty else type_hints[name],
                 Parameter.VAR_KEYWORD,
             ]
             default = dict() if p.default is Parameter.empty else p.default
@@ -468,6 +449,28 @@ def get_input_model_from_signature(
         __config__=ConfigDict(extra="forbid", strict=True),
     )
     return model
+
+
+def get_return_type_from_signature(func: typing.Callable) -> RootModel | None:
+    """Determine the return type of a function."""
+    sig = inspect.signature(func)
+    if sig.return_annotation == inspect.Signature.empty:
+        return None  # type: ignore[return-value]
+    else:
+        # We use `get_type_hints` rather than just `sig.return_annotation`
+        # because it resolves forward references, etc.
+        type_hints = typing.get_type_hints(func, include_extras=True)
+        from .core.property import wrap_plain_types_in_rootmodel
+
+        if (
+            "return" not in type_hints
+            or type_hints["return"] is typing.Any
+            or type_hints["return"] is None
+            or type_hints["return"] is type(None)
+        ):
+            return None
+
+        return wrap_plain_types_in_rootmodel(type_hints["return"])
 
 
 def pydantic_validate_args_kwargs(
@@ -505,9 +508,7 @@ def pydantic_validate_args_kwargs(
     # Assign positional arguments to the corresponding fields
     for i, arg in enumerate(args):
         if i >= len(field_names):
-            raise ValueError(
-                f"Too many positional arguments. Expected at most {len(field_names)}."
-            )
+            raise ValueError(f"Too many positional arguments. Expected at most {len(field_names)}.")
         field_name = field_names[i]
         if Parameter.VAR_POSITIONAL in model.model_fields[field_name].metadata:
             if typing.get_origin(model.model_fields[field_name].annotation) is list:
@@ -535,9 +536,7 @@ def pydantic_validate_args_kwargs(
                 data[field_names[i]] = extra_kwargs
                 break
             elif i == len(field_names) - 1:
-                raise ValueError(
-                    f"Unexpected keyword arguments: {', '.join(extra_kwargs.keys())}"
-                )
+                raise ValueError(f"Unexpected keyword arguments: {', '.join(extra_kwargs.keys())}")
     # Validate and create the model instance
     model.model_validate(data)
 
@@ -570,9 +569,7 @@ def json_schema_merge_args_to_kwargs(
 
     for i, arg in enumerate(args):
         if i >= len(field_names):
-            raise ValueError(
-                f"Too many positional arguments. Expected at most {len(field_names)}."
-            )
+            raise ValueError(f"Too many positional arguments. Expected at most {len(field_names)}.")
         field_name = field_names[i]
         if field_name in data:
             raise ValueError(f"Multiple values for argument '{field_name}'.")
@@ -593,20 +590,6 @@ def json_schema_merge_args_to_kwargs(
     return data
 
 
-def get_return_type_from_signature(func: typing.Callable) -> RootModel:
-    """Determine the return type of a function."""
-    sig = inspect.signature(func)
-    if sig.return_annotation == inspect.Signature.empty:
-        return typing.Any  # type: ignore[return-value]
-    else:
-        # We use `get_type_hints` rather than just `sig.return_annotation`
-        # because it resolves forward references, etc.
-        type_hints = typing.get_type_hints(func, include_extras=True)
-        from server.property import wrap_plain_types_in_rootmodel
-
-        return wrap_plain_types_in_rootmodel(type_hints["return"])
-
-
 def get_all_sub_things_recusively(thing) -> typing.List:
     sub_things = [thing]
     for sub_thing in thing.sub_things.values():
@@ -619,13 +602,9 @@ def forkable(func):
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        forked = kwargs.get(
-            "forked", False
-        )  # Extract 'fork' argument, default to False
+        forked = kwargs.get("forked", False)  # Extract 'fork' argument, default to False
         if forked:
-            thread = threading.Thread(
-                target=func, args=args, kwargs=kwargs, daemon=True
-            )
+            thread = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
             thread.start()
             return thread
         else:
