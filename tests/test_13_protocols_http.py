@@ -703,6 +703,29 @@ class TestHTTPServer(TestCase):
         self.assertEqual(object_proxy.read_property("integration_time"), 1200)
         self.stop_server(port=port, thing_ids=[thing_id])
 
+    def test_12_object_proxy_with_basic_auth(self):
+        security_scheme = BcryptBasicSecurity(username="cliuser", password="clipass")
+        port = 60013
+        thing_id = f"test-basic-proxy-{uuid.uuid4().hex[0:8]}"
+        thing = OceanOpticsSpectrometer(
+            id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10
+        )
+        thing.run_with_http_server(
+            forked=True,
+            port=port,
+            config={"allow_cors": True},
+            security_schemes=[security_scheme],
+        )
+        time.sleep(2)
+
+        object_proxy = ClientFactory.http(
+            url=f"http://127.0.0.1:{port}/{thing_id}/resources/wot-td",
+            username="cliuser",
+            password="clipass",
+        )
+        self.assertEqual(object_proxy.read_property("max_intensity"), 16384)
+        self.stop_server(port=port, thing_ids=[thing_id])
+
     @classmethod
     def stop_server(cls, port, thing_ids: list[str] = [], **request_kwargs):
         session = requests.Session()
