@@ -76,21 +76,18 @@ class HTTPConsumedAffordanceMixin:
         form: Form,
         raise_exception: bool = True,
     ) -> Any:
-        try:
-            if response.status_code >= 200 and response.status_code < 300:
-                body = response.content
-                if not body:
-                    return
-                serializer = Serializers.content_types.get(form.contentType or "application/json")
-                if serializer is None:
-                    raise ValueError(f"Unsupported content type: {form.contentType}")
-                body = serializer.loads(body)
-                if isinstance(body, dict) and "exception" in body and raise_exception:
-                    raise_local_exception(body)
-                return body
-            response.raise_for_status()
-        finally:
-            response.close()
+        if response.status_code >= 200 and response.status_code < 300:
+            body = response.content
+            if not body:
+                return
+            serializer = Serializers.content_types.get(form.contentType or "application/json")
+            if serializer is None:
+                raise ValueError(f"Unsupported content type: {form.contentType}")
+            body = serializer.loads(body)
+            if isinstance(body, dict) and "exception" in body and raise_exception:
+                raise_local_exception(body)
+            return body
+        response.raise_for_status()
 
     def create_http_request(self, form: Form, default_method: str, body: bytes | None = None) -> httpx.Request:
         """Creates an HTTP request for the given form and body."""
@@ -338,12 +335,12 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
     def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = False, deserialize: bool = True):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         callback_id = threading.get_ident()
-        self._subscribed[callback_id] = True
 
         with self._sync_http_client.stream(
             method="GET", url=form.href, headers={"Accept": "text/event-stream"}
         ) as resp:
             resp.raise_for_status()
+            self._subscribed[callback_id] = (True, resp)
             event_data = SSE()
             for line in resp.iter_lines():
                 try:
@@ -370,12 +367,12 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
     ):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         callback_id = asyncio.current_task().get_name()
-        self._subscribed[callback_id] = True
 
         async with self._async_http_client.stream(
             method="GET", url=form.href, headers={"Accept": "text/event-stream"}
         ) as resp:
             resp.raise_for_status()
+            self._subscribed[callback_id] = (True, resp)
             event_data = SSE()
             async for line in resp.aiter_lines():
                 try:
@@ -415,6 +412,16 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                 event_data.retry = int(value)
             except ValueError:
                 self.logger.warning(f"Invalid retry value: {value}")
+
+    def unsubscribe(self):
+        """Unsubscribe from the event."""
+        for callback_id, (subscribed, resp) in list(self._subscribed.items()):
+            if resp is not None:
+                try:
+                    resp.close()
+                except Exception as ex:
+                    self.logger.error(f"Error closing SSE response: {ex}")
+        return super().unsubscribe()
 
 
 __all__ = [HTTPProperty.__name__, HTTPAction.__name__, HTTPEvent.__name__]

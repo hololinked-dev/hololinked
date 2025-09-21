@@ -214,9 +214,8 @@ class ClientFactory:
         url = (
             f"{url}?"
             + f"ignore_errors={str(kwargs.get('ignore_TD_errors', False)).lower()}"
-            + f"&skip_names={','.join(skip_interaction_affordances)}"
-            if skip_interaction_affordances
-            else "" + f"&use_localhost={str(use_localhost).lower()}"
+            + (f"&skip_names={','.join(skip_interaction_affordances)}" if skip_interaction_affordances else "")
+            + f"&use_localhost={str(use_localhost).lower()}"
         )
 
         # fetch TD
