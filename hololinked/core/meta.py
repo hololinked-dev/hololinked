@@ -194,14 +194,10 @@ class DescriptorRegistry:
 
     def __str__(self) -> int:
         if self.owner_inst:
-            return (
-                f"<DescriptorRegistry({self.owner_cls.__name__}({self.owner_inst.id}))>"
-            )
+            return f"<DescriptorRegistry({self.owner_cls.__name__}({self.owner_inst.id}))>"
         return f"<DescriptorRegistry({self.owner_cls.__name__})>"
 
-    def get_descriptors(
-        self, recreate: bool = False
-    ) -> typing.Dict[str, Property | Action | Event]:
+    def get_descriptors(self, recreate: bool = False) -> typing.Dict[str, Property | Action | Event]:
         """
         a dictionary with all the descriptors as values and their names as keys.
 
@@ -213,9 +209,7 @@ class DescriptorRegistry:
         if recreate:
             self.clear()
         try:
-            return getattr(
-                self, f"_{self._qualified_prefix}_{self.__class__.__name__.lower()}"
-            )
+            return getattr(self, f"_{self._qualified_prefix}_{self.__class__.__name__.lower()}")
         except AttributeError:
             descriptors = dict()
             for name, objekt in inspect._getmembers(
@@ -289,9 +283,7 @@ class PropertiesRegistry(DescriptorRegistry):
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/DescriptorRegistry.pdf)
     """
 
-    def __init__(
-        self, owner_cls: ThingMeta, owner_class_members: dict, owner_inst=None
-    ):
+    def __init__(self, owner_cls: ThingMeta, owner_class_members: dict, owner_inst=None):
         super().__init__(owner_cls, owner_inst)
         if self.owner_inst is None and owner_class_members is not None:
             # instantiated by class
@@ -302,9 +294,7 @@ class PropertiesRegistry(DescriptorRegistry):
             # instantiated by instance
             self._instance_params = {}
             self.event_resolver = self.owner_cls.properties.event_resolver
-            self.event_dispatcher = ParamEventDispatcher(
-                owner_inst, self.event_resolver
-            )
+            self.event_dispatcher = ParamEventDispatcher(owner_inst, self.event_resolver)
             self.event_dispatcher.prepare_instance_dependencies()
 
     @property
@@ -317,9 +307,7 @@ class PropertiesRegistry(DescriptorRegistry):
             return super().get_descriptors()
         return dict(super().get_descriptors(), **self._instance_params)
 
-    values = property(
-        DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__
-    )  # type: typing.Dict[str, Parameter | Property | typing.Any]
+    values = property(DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__)  # type: typing.Dict[str, Parameter | Property | typing.Any]
 
     def __getitem__(self, key: str) -> Property | Parameter:
         return self.descriptors[key]
@@ -368,9 +356,7 @@ class PropertiesRegistry(DescriptorRegistry):
         (`db_init`, `db_persist` or `db_commit` set to True)
         """
         try:
-            return getattr(
-                self, f"_{self._qualified_prefix}_{self.__class__.__name__.lower()}_db"
-            )
+            return getattr(self, f"_{self._qualified_prefix}_{self.__class__.__name__.lower()}_db")
         except AttributeError:
             propdict = self.descriptors
             db_props = {}
@@ -494,19 +480,13 @@ class PropertiesRegistry(DescriptorRegistry):
             kwargs = {name: name for name in names}
         for requested_prop, rename in kwargs.items():
             if not isinstance(requested_prop, str):
-                raise TypeError(
-                    f"property name must be a string. Given type {type(requested_prop)}"
-                )
+                raise TypeError(f"property name must be a string. Given type {type(requested_prop)}")
             if not isinstance(rename, str):
-                raise TypeError(
-                    f"requested new name must be a string. Given type {type(rename)}"
-                )
+                raise TypeError(f"requested new name must be a string. Given type {type(rename)}")
             if requested_prop not in self.descriptors:
                 raise AttributeError(f"property {requested_prop} does not exist")
             if requested_prop not in self.remote_objects:
-                raise AttributeError(
-                    f"property {requested_prop} is not remote accessible"
-                )
+                raise AttributeError(f"property {requested_prop} is not remote accessible")
             prop = self.descriptors[requested_prop]
             if self.owner_inst is None and not prop.class_member:
                 continue
@@ -537,9 +517,7 @@ class PropertiesRegistry(DescriptorRegistry):
                     raise AttributeError(f"property {name} is not remote accessible")
                 prop = self.descriptors[name]
                 if self.owner_inst is None and not prop.class_member:
-                    raise AttributeError(
-                        f"property {name} is not a class member and cannot be set at class level"
-                    )
+                    raise AttributeError(f"property {name} is not a class member and cannot be set at class level")
                 setattr(self.owner, name, value)
             except Exception as ex:
                 errors += f"{name}: {str(ex)}\n"
@@ -582,9 +560,7 @@ class PropertiesRegistry(DescriptorRegistry):
             except AttributeError:
                 pass
 
-    @supports_only_instance_access(
-        "database operations are only supported at instance level"
-    )
+    @supports_only_instance_access("database operations are only supported at instance level")
     def get_from_DB(self) -> typing.Dict[str, typing.Any]:
         """
         get all properties (i.e. their values) currently stored in the database
@@ -595,9 +571,7 @@ class PropertiesRegistry(DescriptorRegistry):
             dictionary of property names and their values
         """
         if not hasattr(self.owner_inst, "db_engine"):
-            raise AttributeError(
-                "database engine not set, this object is not connected to a database"
-            )
+            raise AttributeError("database engine not set, this object is not connected to a database")
         props = self.owner_inst.db_engine.get_all_properties()  # type: typing.Dict
         final_list = {}
         for name, prop in props.items():
@@ -612,9 +586,7 @@ class PropertiesRegistry(DescriptorRegistry):
                 )
         return final_list
 
-    @supports_only_instance_access(
-        "database operations are only supported at instance level"
-    )
+    @supports_only_instance_access("database operations are only supported at instance level")
     def load_from_DB(self):
         """
         Load and apply property values from database which have `db_init` or `db_persist` set to `True`
@@ -630,22 +602,16 @@ class PropertiesRegistry(DescriptorRegistry):
             for db_prop, value in self.get_from_DB().items():
                 try:
                     prop_desc = self.descriptors[db_prop]  # type: Property
-                    if (
-                        prop_desc.db_init or prop_desc.db_persist
-                    ) and db_prop not in missing_properties:
+                    if (prop_desc.db_init or prop_desc.db_persist) and db_prop not in missing_properties:
                         setattr(self.owner_inst, db_prop, value)  # type: ignore
                 except Exception as ex:
-                    self.owner_inst.logger.error(
-                        f"could not set attribute {db_prop} due to error {str(ex)}"
-                    )
+                    self.owner_inst.logger.error(f"could not set attribute {db_prop} due to error {str(ex)}")
 
     @classmethod
     def get_type_from_name(cls, name: str) -> typing.Type[Property]:
         return Property
 
-    @supports_only_instance_access(
-        "additional property setup is required only for instances"
-    )
+    @supports_only_instance_access("additional property setup is required only for instances")
     def _setup_parameters(self, **parameters):
         """
         Initialize default and keyword parameter values.
@@ -686,9 +652,7 @@ class PropertiesRegistry(DescriptorRegistry):
                 # Its erroneous to set a non-descriptor (& non-param-descriptor) with a value from init.
                 # we dont know what that value even means, so we silently ignore
 
-    @supports_only_instance_access(
-        "additional property setup is required only for instances"
-    )
+    @supports_only_instance_access("additional property setup is required only for instances")
     def _deep_copy_param_default(self, param_obj: "Parameter") -> None:
         # deepcopy param_obj.default into self.__dict__ (or dict_ if supplied)
         # under the parameter's _internal_name (or key if supplied)
@@ -698,9 +662,7 @@ class PropertiesRegistry(DescriptorRegistry):
         # remember : simply setting in the dict does not activate post setter and remaining logic which is sometimes important
         self.owner_inst.__dict__[param_obj._internal_name] = new_object
 
-    @supports_only_instance_access(
-        "additional property setup is required only for instances"
-    )
+    @supports_only_instance_access("additional property setup is required only for instances")
     def _deep_copy_param_descriptor(self, param_obj: Parameter):
         param_obj_copy = copy.deepcopy(param_obj)
         self._instance_params[param_obj.name] = param_obj_copy
@@ -719,9 +681,7 @@ class ActionsRegistry(DescriptorRegistry):
 
     descriptors = property(DescriptorRegistry.get_descriptors)  # type: typing.Dict[str, Action]
 
-    values = property(
-        DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__
-    )  # type: typing.Dict[str, Action]
+    values = property(DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__)  # type: typing.Dict[str, Action]
 
     def __getitem__(self, key: str) -> Action | BoundAction:
         if self.owner_inst is not None:
@@ -745,9 +705,7 @@ class EventsRegistry(DescriptorRegistry):
 
     descriptors = property(DescriptorRegistry.get_descriptors)  # type: typing.Dict[str, Event]
 
-    values = property(
-        DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__
-    )  # type: typing.Dict[str, EventDispatcher]
+    values = property(DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__)  # type: typing.Dict[str, EventDispatcher]
 
     def __getitem__(self, key: str) -> Event | EventDispatcher:
         if self.owner_inst is not None:
@@ -850,9 +808,7 @@ class Propertized(Parameterized):
     def create_param_container(self, **params):
         self._properties_registry = PropertiesRegistry(self.__class__, None, self)
         self._properties_registry._setup_parameters(**params)
-        self._param_container = (
-            self._properties_registry
-        )  # backwards compatibility with param
+        self._param_container = self._properties_registry  # backwards compatibility with param
 
     @property
     def properties(self) -> PropertiesRegistry:
@@ -903,9 +859,7 @@ class Propertized(Parameterized):
         prop: Property
             property object
         """
-        raise NotImplementedError(
-            "this method will be implemented properly in a future release"
-        )
+        raise NotImplementedError("this method will be implemented properly in a future release")
         prop = Property(**prop)
         self.properties.add(name, prop)
         self._prepare_resources()

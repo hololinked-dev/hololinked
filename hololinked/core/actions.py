@@ -90,9 +90,7 @@ class BoundAction:
         "bound_obj",
     ]
 
-    def __init__(
-        self, obj: FunctionType, descriptor: Action, owner_inst, owner
-    ) -> None:
+    def __init__(self, obj: FunctionType, descriptor: Action, owner_inst, owner) -> None:
         self.obj = obj
         self.descriptor = descriptor
         self.execution_info = descriptor._execution_info
@@ -118,9 +116,7 @@ class BoundAction:
         Errors are raised as exceptions.
         """
         if self.execution_info.isparameterized and len(args) > 0:
-            raise RuntimeError(
-                "parameterized functions cannot have positional arguments"
-            )
+            raise RuntimeError("parameterized functions cannot have positional arguments")
         if self.owner_inst is None:
             return
         if self.execution_info.state is None or (
@@ -259,16 +255,12 @@ def action(
             and not isclassmethod(obj)
             and not issubklass(obj, ParameterizedFunction)
         ):
-            raise TypeError(
-                f"target for action or is not a function/method. Given type {type(obj)}"
-            ) from None
+            raise TypeError(f"target for action or is not a function/method. Given type {type(obj)}") from None
         if isclassmethod(obj):
             obj = obj.__func__
         if isinstance(obj, (Action, BoundAction)):
             if obj.execution_info.isclassmethod:
-                raise RuntimeError(
-                    "cannot wrap a classmethod as action once again, please skip"
-                )
+                raise RuntimeError("cannot wrap a classmethod as action once again, please skip")
             warnings.warn(
                 f"{obj.name} is already wrapped as an action, wrapping it again with newer settings.",
                 category=UserWarning,
@@ -302,9 +294,7 @@ def action(
 
         if not input_schema:
             try:
-                input_schema = get_input_model_from_signature(
-                    obj, remove_first_positional_arg=True
-                )
+                input_schema = get_input_model_from_signature(obj, remove_first_positional_arg=True)
             except Exception as ex:
                 if global_config.VALIDATE_SCHEMAS:
                     warnings.warn(
@@ -314,18 +304,12 @@ def action(
                     )
         if global_config.VALIDATE_SCHEMAS and input_schema:
             if isinstance(input_schema, dict):
-                execution_info_validator.schema_validator = JSONSchemaValidator(
-                    input_schema
-                )
+                execution_info_validator.schema_validator = JSONSchemaValidator(input_schema)
             elif issubklass(input_schema, (BaseModel, RootModel)):
-                execution_info_validator.schema_validator = PydanticSchemaValidator(
-                    input_schema
-                )
+                execution_info_validator.schema_validator = PydanticSchemaValidator(input_schema)
             else:
                 raise TypeError(
-                    "input schema must be a JSON schema or a Pydantic model, got {}".format(
-                        type(input_schema)
-                    )
+                    "input schema must be a JSON schema or a Pydantic model, got {}".format(type(input_schema))
                 )
         execution_info_validator.argument_schema = input_schema
 
@@ -348,9 +332,7 @@ def action(
                 execution_info_validator.return_value_schema = output_schema
             else:
                 raise TypeError(
-                    "output schema must be a JSON schema or a Pydantic model, got {}".format(
-                        type(output_schema)
-                    )
+                    "output schema must be a JSON schema or a Pydantic model, got {}".format(type(output_schema))
                 )
 
         final_obj = Action(original)  # type: Action

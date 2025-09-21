@@ -82,9 +82,7 @@ class ObjectProxy:
         password = kwargs.get("password")
         if username and password:
             token = f"{username}:{password}".encode("utf-8")
-            self._auth_header = {
-                "Authorization": f"Basic {base64.b64encode(token).decode('utf-8')}"
-            }
+            self._auth_header = {"Authorization": f"Basic {base64.b64encode(token).decode('utf-8')}"}
 
     def __getattribute__(self, __name: str) -> typing.Any:
         obj = super().__getattribute__(__name)

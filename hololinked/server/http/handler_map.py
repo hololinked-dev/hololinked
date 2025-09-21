@@ -1,12 +1,4 @@
-from ...core.properties import (
-    String,
-    Bytes,
-    Integer,
-    Number,
-    Boolean,
-    List,
-    Tuple
-)
+from ...core.properties import String, Bytes, Integer, Number, Boolean, List, Tuple
 from .handlers import PropertyHandler, JPEGImageHandler, PNGImageHandler
 
 

@@ -124,9 +124,7 @@ class Property(Parameter):
         readonly: bool = False,
         allow_None: bool = False,
         label: typing.Optional[str] = None,
-        state: typing.Optional[
-            typing.Union[typing.List, typing.Tuple, str, Enum]
-        ] = None,
+        state: typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
         db_persist: bool = False,
         db_init: bool = False,
         db_commit: bool = False,
@@ -169,12 +167,8 @@ class Property(Parameter):
         self._execution_info_validator = None
         self.execution_info = None  # typing.Optional[RemoteResource]
         if remote:
-            self._execution_info_validator = RemoteResourceInfoValidator(
-                state=state, isproperty=True, obj=self
-            )
-            self.execution_info = (
-                self._execution_info_validator
-            )  # TODO: use dataclass or remove this attribute
+            self._execution_info_validator = RemoteResourceInfoValidator(state=state, isproperty=True, obj=self)
+            self.execution_info = self._execution_info_validator  # TODO: use dataclass or remove this attribute
         self.model = None
         self.validator = None
         if model:
@@ -194,15 +188,11 @@ class Property(Parameter):
             self._old_value_internal_name = f"{self._internal_name}_old_value"
             self._observable_event_descriptor.doc = f"change event for {self.name}"
             self._observable_event_descriptor._observable = True
-            self._observable_event_descriptor.__set_name__(
-                owner, _observable_event_name
-            )
+            self._observable_event_descriptor.__set_name__(owner, _observable_event_name)
             # This is a descriptor object, so we need to set it on the owner class
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
 
-    def __get__(
-        self, obj: Parameterized, objtype: ParameterizedMetaclass
-    ) -> typing.Any:
+    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
         read_value = super().__get__(obj, objtype)
         self.push_change_event(obj, read_value)
         return read_value
@@ -215,9 +205,7 @@ class Property(Parameter):
         if obj is None:
             return
         if self._observable_event_descriptor and obj.event_publisher:
-            event_dispatcher = getattr(
-                obj, self._observable_event_descriptor.name, None
-            )  # type: EventDispatcher
+            event_dispatcher = getattr(obj, self._observable_event_descriptor.name, None)  # type: EventDispatcher
             old_value = obj.__dict__.get(self._old_value_internal_name, NotImplemented)
             obj.__dict__[self._old_value_internal_name] = value
             if self.fcomparator:
@@ -250,8 +238,7 @@ class Property(Parameter):
         Set the value of the property from an external source, e.g. a remote client.
         """
         if self.execution_info.state is None or (
-            hasattr(obj, "state_machine")
-            and obj.state_machine.current_state in self.execution_info.state
+            hasattr(obj, "state_machine") and obj.state_machine.current_state in self.execution_info.state
         ):
             return self.__set__(obj, value)
         else:
@@ -316,9 +303,7 @@ try:
 except ImportError:
 
     def wrap_plain_types_in_rootmodel(model: type) -> type:
-        raise ImportError(
-            "pydantic is not installed, please install it to use this feature"
-        ) from None
+        raise ImportError("pydantic is not installed, please install it to use this feature") from None
 
 
 __all__ = [Property.__name__]

@@ -3,15 +3,11 @@ Classes that contain the client logic for the HTTP protocol.
 """
 
 import asyncio
-import socket
 import threading
 import httpx
-from typing import Any, Callable, Optional
-from dataclasses import dataclass
+from typing import Any, Callable
 from copy import deepcopy
 
-
-from ...utils import get_current_async_loop
 from ...constants import Operations
 from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception, SSE
 from ...td.interaction_affordance import (

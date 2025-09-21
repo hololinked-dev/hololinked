@@ -1,9 +1,4 @@
-
-
-
-
 class BaseProtocolServer:
-
     def add_thing(self, thing):
         pass
 
@@ -21,5 +16,3 @@ class BaseProtocolServer:
 
     def build_thing_description(self, thing):
         pass
-        
-

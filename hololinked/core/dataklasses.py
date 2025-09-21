@@ -106,22 +106,14 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
         # due to schema validation, this has to be a dict, and not a special dict like TypedDict
         doc="schema for return value of a callable",
     )
-    create_task = Boolean(
-        default=True, doc="should a coroutine be tasked or run in the same loop?"
-    )  # type: bool
+    create_task = Boolean(default=True, doc="should a coroutine be tasked or run in the same loop?")  # type: bool
     iscoroutine = Boolean(
         default=False,  # not sure if isFuture or isCoroutine is correct, something to fix later
         doc="whether the callable should be awaited",
     )  # type: bool
-    safe = Boolean(
-        default=True, doc="metadata information whether the action is safe to execute"
-    )  # type: bool
-    idempotent = Boolean(
-        default=False, doc="metadata information whether the action is idempotent"
-    )  # type: bool
-    synchronous = Boolean(
-        default=True, doc="metadata information whether the action is synchronous"
-    )  # type: bool
+    safe = Boolean(default=True, doc="metadata information whether the action is safe to execute")  # type: bool
+    idempotent = Boolean(default=False, doc="metadata information whether the action is idempotent")  # type: bool
+    synchronous = Boolean(default=True, doc="metadata information whether the action is synchronous")  # type: bool
     isparameterized = Boolean(default=False, doc="True for a parameterized function")  # type: bool
     isclassmethod = Boolean(default=False, doc="True for a classmethod")  # type: bool
     schema_validator = ClassSelector(
@@ -150,12 +142,6 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
         setattr(self, "_return_value_schema", value)
 
     def action_payload_schema_validator(self, value: Any) -> Any:
-        if (
-            value is None
-            or isinstance(value, dict)
-            or issubklass(value, (BaseModel, RootModel))
-        ):
+        if value is None or isinstance(value, dict) or issubklass(value, (BaseModel, RootModel)):
             return value
-        raise TypeError(
-            "Schema must be None, a dict, or a subclass of BaseModel or RootModel"
-        )
+        raise TypeError("Schema must be None, a dict, or a subclass of BaseModel or RootModel")
