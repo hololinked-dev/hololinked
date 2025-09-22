@@ -853,24 +853,26 @@ class ApplicationRouter:
                 f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}. error: {str(ex)}"
             )
 
-    def get_href_for_affordance(self, affordance, use_localhost: bool = False) -> str:
+    def get_href_for_affordance(self, affordance, authority: str = None, use_localhost: bool = False) -> str:
         if affordance not in self:
             raise ValueError(f"affordance {affordance} not found in the application router")
         for rule in self.app.wildcard_router.rules:
             if rule.target_kwargs.get("resource", None) == affordance:
                 path = str(rule.matcher.regex.pattern).rstrip("$")
-                return f"{self.get_basepath(use_localhost)}{path}"
+                return f"{self.get_basepath(authority, use_localhost)}{path}"
 
-    def get_basepath(self, use_localhost: bool = False) -> str:
+    def get_basepath(self, authority: str = None, use_localhost: bool = False) -> str:
+        if authority:
+            return authority
         protocol = "https" if self.server.ssl_context else "http"
         port = f":{self.server.port}" if self.server.port != 80 else ""
-        if use_localhost:
-            if self.server.address == "0.0.0.0" or self.server.address == "127.0.0.1":
-                return f"{protocol}://127.0.0.1{port}"
-            elif self.server.address == "::":
-                return f"{protocol}://[::1]{port}"
-            return f"{protocol}://localhost{port}"
-        return f"{protocol}://{socket.gethostname()}{port}"
+        if not use_localhost:
+            return f"{protocol}://{socket.gethostname()}{port}"
+        if self.server.address == "0.0.0.0" or self.server.address == "127.0.0.1":
+            return f"{protocol}://127.0.0.1{port}"
+        elif self.server.address == "::":
+            return f"{protocol}://[::1]{port}"
+        return f"{protocol}://localhost{port}"
 
     basepath = property(fget=get_basepath, doc="basepath of the server")
 
