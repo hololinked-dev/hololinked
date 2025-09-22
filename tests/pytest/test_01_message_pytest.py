@@ -208,3 +208,5 @@ class TestMessagingContract(MessageValidatorMixin):
             preserialized_payload=PreserializedData(b"test"),
         )
         self.validate_event_message(event_message)
+
+
