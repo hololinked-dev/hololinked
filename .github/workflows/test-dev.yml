@@ -90,11 +90,11 @@ jobs:
           path: coverage.xml
           if-no-files-found: warn
 
-  publish:
+  publish_coverage:
     name: Publish coverage (Ubuntu Python 3.13)
     needs: test
     runs-on: ubuntu-latest
-    if: ${{ always() }}
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -121,3 +121,27 @@ jobs:
       - name: Skip note (no Ubuntu 3.13 artifact found)
         if: steps.dl.outcome != 'success'
         run: echo "No Ubuntu 3.13 coverage artifact present; skipping Codecov upload."
+
+  publish_package:
+    name: Publish package to Test PyPI
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      id-token: write # IMPORTANT: mandatory for trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.11
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Build package
+        run: uv build
+      - name: Publish package
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/
