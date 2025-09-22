@@ -26,7 +26,16 @@ from ...td import (
     ActionAffordance,
     EventAffordance,
 )
-from ..security import BcryptBasicSecurity, Argon2BasicSecurity
+
+try:
+    from ..security import BcryptBasicSecurity
+except ImportError:
+    BcryptBasicSecurity = None  # type: ignore
+
+try:
+    from ..security import Argon2BasicSecurity
+except ImportError:
+    Argon2BasicSecurity = None  # type: ignore
 
 
 class BaseHandler(RequestHandler):
@@ -702,7 +711,9 @@ class ThingDescriptionHandler(BaseHandler):
 
                 payload = self.get_response_payload(response_message)
                 TM = payload.deserialize()
-                TD = self.generate_td(TM, use_localhost=body.get("use_localhost", False))
+                TD = self.generate_td(
+                    TM, authority=body.get("authority", None), use_localhost=body.get("use_localhost", False)
+                )
 
                 self.set_status(200, "ok")
                 self.set_header("Content-Type", "application/json")
@@ -712,16 +723,20 @@ class ThingDescriptionHandler(BaseHandler):
             self.set_custom_default_headers()
         self.finish()
 
-    def generate_td(self, TM: dict[str, JSONSerializable], use_localhost: bool = False) -> dict[str, JSONSerializable]:
+    def generate_td(
+        self, TM: dict[str, JSONSerializable], authority: str = None, use_localhost: bool = False
+    ) -> dict[str, JSONSerializable]:
         from ...td.forms import Form
 
         TD = copy.deepcopy(TM)
         # sanitize some things
-        TD["id"] = f"{self.server.router.get_basepath(use_localhost=use_localhost)}/{TD['id']}"
+        TD["id"] = f"{self.server.router.get_basepath(authority=authority, use_localhost=use_localhost)}/{TD['id']}"
         # add forms
         for name in TM.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, TM)
-            href = self.server.router.get_href_for_affordance(affordance, use_localhost=use_localhost)
+            href = self.server.router.get_href_for_affordance(
+                affordance, authority=authority, use_localhost=use_localhost
+            )
             if not TD["properties"][name].get("forms", None):
                 TD["properties"][name]["forms"] = []
             http_methods = (
@@ -733,6 +748,7 @@ class ThingDescriptionHandler(BaseHandler):
                 if affordance.readOnly and http_method.upper() != "GET":
                     break
                 if http_method.upper() == "DELETE":
+                    # currently not in spec although we support it
                     continue
                 form = Form()
                 form.href = href
@@ -750,7 +766,9 @@ class ThingDescriptionHandler(BaseHandler):
                 TD["properties"][name]["forms"].append(form.json())
         for name in TM.get("actions", []):
             affordance = ActionAffordance.from_TD(name, TM)
-            href = self.server.router.get_href_for_affordance(affordance, use_localhost=use_localhost)
+            href = self.server.router.get_href_for_affordance(
+                affordance, authority=authority, use_localhost=use_localhost
+            )
             if not TD["actions"][name].get("forms", None):
                 TD["actions"][name]["forms"] = []
             http_methods = (
@@ -767,7 +785,9 @@ class ThingDescriptionHandler(BaseHandler):
                 TD["actions"][name]["forms"].append(form.json())
         for name in TM.get("events", []):
             affordance = EventAffordance.from_TD(name, TM)
-            href = self.server.router.get_href_for_affordance(affordance, use_localhost=use_localhost)
+            href = self.server.router.get_href_for_affordance(
+                affordance, authority=authority, use_localhost=use_localhost
+            )
             if not TD["events"][name].get("forms", None):
                 TD["events"][name]["forms"] = []
             http_methods = (
@@ -787,7 +807,6 @@ class ThingDescriptionHandler(BaseHandler):
         return TD
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
-        from ..security import BcryptBasicSecurity, Argon2BasicSecurity
         from ...td.security_definitions import SecurityScheme
 
         TD["securityDefinitions"] = {}
