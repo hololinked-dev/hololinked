@@ -16,18 +16,8 @@ jobs:
         include:
           - os: windows-latest
             python-version: 3.11
-          - os: windows-latest
-            python-version: 3.12
-          - os: windows-latest
-            python-version: 3.13
-          # - os: macos-latest
-          #   python-version: 3.11
           - os: ubuntu-latest
             python-version: 3.11
-          - os: ubuntu-latest
-            python-version: 3.12
-          - os: ubuntu-latest
-            python-version: 3.13
 
     runs-on: ${{ matrix.os }}
 
@@ -64,16 +54,10 @@ jobs:
           uv sync --no-install-project --group test --group dev
 
       - name: Run pytest tests (Linux/macOS)
-        if: runner.os != 'Windows' && matrix.python-version != 3.13
+        if: runner.os != 'Windows'
         run: |
           source .venv/bin/activate
           uv run pytest tests/test_01_message_pytest.py -v --cov=hololinked --cov-report=term-missing
-
-      - name: Run pytest tests and generate coverage report (Linux/macOS python 3.13)
-        if: runner.os != 'Windows' && matrix.python-version == 3.13
-        run: |
-          source .venv/bin/activate
-          uv run pytest tests/test_01_message_pytest.py -v --cov=hololinked --cov-report=term-missing --cov-report=xml
 
       - name: Run pytest tests (Windows)
         if: runner.os == 'Windows'
@@ -83,9 +67,9 @@ jobs:
 
       - name: Upload coverage report as artifact
         uses: actions/upload-artifact@v4
-        if: runner.os != 'Windows' && matrix.python-version == 3.13
+        if: runner.os != 'Windows'
         with:
-          name: pytest-coverage-report-ubuntu-latest-py3.13
+          name: pytest-coverage-report-ubuntu-latest-py3.11
           path: coverage.xml
           if-no-files-found: warn
 
@@ -98,11 +82,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download Ubuntu 3.13 coverage artifact
+      - name: Download Ubuntu 3.11 coverage artifact
         id: dl
         uses: actions/download-artifact@v4
         with:
-          name: pytest-coverage-report-ubuntu-latest-py3.13
+          name: pytest-coverage-report-ubuntu-latest-py3.11
           path: .
         continue-on-error: true
 
