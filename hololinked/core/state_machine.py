@@ -53,14 +53,14 @@ class StateMachine:
     )  # type: typing.Dict[str, typing.List[typing.Callable, Property]]
 
     push_state_change_event = Boolean(
-        default=True, doc="if True, when the state changes, an event is pushed with the new state"
+        default=True, doc="if `True`, when the state changes, an event is pushed with the new state"
     )  # type: bool
 
     valid = Boolean(
         default=False,
         readonly=True,
         fget=lambda self: self._valid,
-        doc="internally computed, True if states, initial_states and the machine is valid",
+        doc="internally computed, `True` if states, initial_states and the machine is valid",
     )
 
     def __init__(
@@ -80,7 +80,7 @@ class StateMachine:
             enumeration of states
         initial_state: str
             initial state of machine
-        push_state_change_event : bool, default True
+        push_state_change_event : bool, default `True`
             when the state changes, an event is pushed to clients with the new state as the payload
         on_enter: Dict[str, Callable | Property]
             callbacks to be invoked when a certain state is entered. It is to be specified
@@ -220,6 +220,16 @@ class StateMachine:
         Check if specified object is found in any of the state machine states.
         Supply unbound method for checking methods, as state machine is specified at class level
         when the methods are unbound.
+
+        Parameters
+        ----------
+        object: Property | Callable
+            The unbound method or property
+
+        Returns
+        -------
+        bool
+            `True` if the object is found in any of the states, `False` otherwise
         """
         for objects in self.machine.values():
             if object in objects:

@@ -24,10 +24,10 @@ class ThingMeta(ParameterizedMetaclass):
     and events' descriptor objects.
     Accessing properties, actions and events at the class level returns the descriptor object through the `DescriptorRegistry`
     implementation. Accessing properties, actions and events at instance level return their values (for example -
-    the value of Property `foo` being '5'). At instance level, the descriptors can be accessed through the `descriptors`
-    property of the `DescriptorRegistry`.
-    Currently `__post_init__()`, which is run after the user's `__init__()` method, properties that can be
-    loaded from a database are loaded and written.
+    the value of Property `foo` being `5`).
+    `__post_init__()` is run after the user's `__init__()` method, properties that can be
+    loaded from a database are loaded and written at this time. Overload `__post_init__()` in subclasses
+    to add additional functionality.
 
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/Thing.pdf)
     """
@@ -156,7 +156,7 @@ class DescriptorRegistry:
 
     def clear(self) -> None:
         """
-        Deletes the descriptors dictionary (value of the `descriptors` proeprty) so that it can be recreated.
+        Deletes the descriptors dictionary (value of the `descriptors` property) so that it can be recreated.
         Does not delete the descriptors themselves. Call this method once if new descriptors are added to the
         class/instance dynamically in runtime.
         """
@@ -174,7 +174,7 @@ class DescriptorRegistry:
         raise NotImplementedError("Implement __getitem__ in subclass")
 
     def __contains__(self, obj: Property | Action | Event) -> bool:
-        """Returns True if the descriptor object is in the descriptors dictionary."""
+        """Returns `True` if the descriptor object is in the descriptors dictionary."""
         raise NotImplementedError("contains not implemented yet")
 
     def __dir__(self) -> typing.List[str]:
@@ -204,7 +204,7 @@ class DescriptorRegistry:
         Parameters
         ----------
         recreate: bool
-            if True, the descriptors dictionary is recreated and returned, otherwise, the cached dictionary is returned.
+            if `True`, the descriptors dictionary is recreated and returned, otherwise, the cached dictionary is returned.
         """
         if recreate:
             self.clear()
@@ -353,7 +353,7 @@ class PropertiesRegistry(DescriptorRegistry):
     def db_objects(self) -> typing.Dict[str, Property]:
         """
         dictionary of properties that are stored or loaded from the database
-        (`db_init`, `db_persist` or `db_commit` set to True)
+        (`db_init`, `db_persist` or `db_commit` set to `True`)
         """
         try:
             return getattr(self, f"_{self._qualified_prefix}_{self.__class__.__name__.lower()}_db")
@@ -374,7 +374,7 @@ class PropertiesRegistry(DescriptorRegistry):
 
     @property
     def db_init_objects(self) -> typing.Dict[str, Property]:
-        """dictionary of properties that are initialized from the database (`db_init` or `db_persist` set to True)"""
+        """dictionary of properties that are initialized from the database (`db_init` or `db_persist` set to `True`)"""
         try:
             return getattr(
                 self,
@@ -395,7 +395,7 @@ class PropertiesRegistry(DescriptorRegistry):
 
     @property
     def db_commit_objects(self) -> typing.Dict[str, Property]:
-        """dictionary of properties that are committed to the database (`db_commit` or `db_persist` set to True)"""
+        """dictionary of properties that are committed to the database (`db_commit` or `db_persist` set to `True`)"""
         try:
             return getattr(
                 self,
@@ -416,7 +416,7 @@ class PropertiesRegistry(DescriptorRegistry):
 
     @property
     def db_persisting_objects(self) -> typing.Dict[str, Property]:
-        """dictionary of properties that are persisted through the database (`db_persist` set to True)"""
+        """dictionary of properties that are persisted through the database (`db_persist` set to `True`)"""
         try:
             return getattr(
                 self,
@@ -442,9 +442,11 @@ class PropertiesRegistry(DescriptorRegistry):
         Parameters
         ----------
         **kwargs: typing.Dict[str, typing.Any]
+
             - names: `List[str]`
                 list of property names to be fetched
-            - name: `str`
+
+            - or, key-value pairs of property
                 name of the property to be fetched, along with a 'rename' for the property in the response.
                 For example { 'foo_prop' : 'fooProp' } will return the property 'foo_prop' as 'fooProp' in the response.
 
@@ -531,7 +533,7 @@ class PropertiesRegistry(DescriptorRegistry):
 
     def add(self, name: str, config: JSON) -> None:
         """
-        add a property to the object
+        add a property to the `Thing` object
 
         Parameters
         ----------
@@ -748,7 +750,7 @@ class EventsRegistry(DescriptorRegistry):
 
     @property
     def change_events(self) -> typing.Dict[str, Event]:
-        """dictionary of change events of observable properties"""
+        """dictionary of change events belonging to observable properties"""
         try:
             return getattr(
                 self,

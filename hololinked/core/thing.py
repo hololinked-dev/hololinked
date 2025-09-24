@@ -93,17 +93,17 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             Default serializer to be used for serializing and deserializing data.
             If not supplied, a `msgspec` based JSON Serializer is used.
         **kwargs: typing.Dict[str, Any]
-            - `remote_accessible_logger`: `bool`, Default False.
-                if True, the log records can be streamed by a remote client. `remote_accessible_logger` can also be set as a
+            - `remote_accessible_logger`: `bool`, Default `False`.
+                if `True`, the log records can be streamed by a remote client. `remote_accessible_logger` can also be set as a
                 class attribute.
-            - `use_default_db`: `bool`, Default False.
-                if True, default SQLite database is created where properties can be stored and loaded. There is no need to supply
+            - `use_default_db`: `bool`, Default `False`.
+                if `True`, default SQLite database is created where properties can be stored and loaded. There is no need to supply
                 any database credentials. `use_default_db` value can also be set as a class attribute.
             - `db_config_file`: `str`, optional.
                 if not using a default database, supply a JSON configuration file to create a database connection. Check documentaion
                 of `hololinked.core.database`.
-            - `use_json_file`: `bool`, Default False
-                if True, a JSON file will be used as the property storage instead of a database. This value can also be
+            - `use_json_file`: `bool`, Default `False`
+                if `True`, a JSON file will be used as the property storage instead of a database. This value can also be
                 set as a class attribute.
             - `json_filename`: `str`, optional
                 If using JSON storage, this filename is used to persist property values. If not provided, a default filename
@@ -197,8 +197,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         Parameters
         ----------
-        ignore_errors: bool, optional, Default False
-            if True, offending interaction affordances will be removed from the JSON
+        ignore_errors: bool, optional, Default `False`
+            if `True`, offending interaction affordances will be removed from the JSON
             (i.e. those who have wrong metadata or non-JSON metadata).
             This is useful to build partial but always working ThingModel.
         skip_names: list[str], optional
@@ -224,7 +224,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self,
         access_points: list[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS | str | list[str] = ZMQ_TRANSPORTS.IPC,
         forked: bool = False,  # used by decorator
-        # expose_eventloop : bool = False,
         **kwargs: typing.Dict[str, typing.Any],
     ) -> None:
         """
@@ -250,8 +249,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             irrespective of origin. For multiple transports, supply a list of transports. For example: `[ZMQ_TRANSPORTS.TCP, ZMQ_TRANSPORTS.IPC]`,
             `["TCP", "IPC"]`, `["tcp://*:5555", "IPC"]` or `["IPC", "INPROC"]`.
 
-        forked: bool, Default False
-            if True, the server is started in a separate thread and this method returns immediately.
+        forked: bool, Default `False`
+            if `True`, the server is started in a separate thread and this method returns immediately.
 
         **kwargs:
             - context: `zmq.asyncio.Context`, optional,
@@ -291,8 +290,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             serves request and sets CORS only from these clients, other clients are rejected with 403. Uses remote IP
             header value to achieve this. Unlike CORS, the server resource is not even executed if the client is not an allowed client.
             Note that the remote IP in a HTTP request is believable only from a trusted HTTP client, not a modified one.
-        forked: bool, Default False
-            if True, the server is started in a separate thread and this method returns immediately
+        forked: bool, Default `False`
+            if `True`, the server is started in a separate thread and this method returns immediately
         **kwargs: typing.Dict[str, typing.Any]
             additional keyword arguments:
 
