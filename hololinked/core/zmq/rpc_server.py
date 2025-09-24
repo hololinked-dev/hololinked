@@ -34,7 +34,7 @@ from ..thing import Thing
 from ..property import Property
 from ..properties import TypedDict
 from ..actions import BoundAction, action as remote_method
-from ..logger import ListHandler
+from ..logger import LogHistoryHandler
 
 
 if global_config.TRACE_MALLOC:
@@ -152,17 +152,10 @@ class RPCServer(BaseZMQServer):
                 assert isinstance(instance, Thing), "instance must be of type Thing"
                 instance.rpc_server = self
                 for action in instance.actions.descriptors.values():
-                    if (
-                        action.execution_info.iscoroutine
-                        and not action.execution_info.synchronous
-                    ):
-                        self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = (
-                            AsyncScheduler
-                        )
+                    if action.execution_info.iscoroutine and not action.execution_info.synchronous:
+                        self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = AsyncScheduler
                     elif not action.execution_info.synchronous:
-                        self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = (
-                            ThreadedScheduler
-                        )
+                        self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = ThreadedScheduler
                     # else QueuedScheduler which is default
                 # properties need not dealt yet, but may be in future
 
@@ -170,9 +163,7 @@ class RPCServer(BaseZMQServer):
 
     def __post_init__(self):
         super().__post_init__()
-        self.logger.info(
-            "Server with name '{}' can be started using run().".format(self.id)
-        )
+        self.logger.info("Server with name '{}' can be started using run().".format(self.id))
 
     @property
     def is_running(self) -> bool:
@@ -187,11 +178,7 @@ class RPCServer(BaseZMQServer):
         requirements of a how an object (property/action/event) must be executed (queued/threaded/async).
         Also handles messages that dont need separate jobs like `HANDSHAKE`, `EXIT`, timeouts etc.
         """
-        self.logger.debug(
-            "started polling with server {} at socket {}".format(
-                server.id, server.socket_address
-            )
-        )
+        self.logger.debug("started polling with server {} at socket {}".format(server.id, server.socket_address))
         eventloop = asyncio.get_event_loop()
         while self._run:
             try:
@@ -200,17 +187,13 @@ class RPCServer(BaseZMQServer):
             except BreakLoop:
                 break
             except Exception as ex:
-                self.logger.error(
-                    f"exception occurred while polling for server '{server.id}' - {str(ex)}"
-                )
+                self.logger.error(f"exception occurred while polling for server '{server.id}' - {str(ex)}")
                 continue
 
             for request_message in request_messages:
                 try:
                     # handle invokation timeout
-                    invokation_timeout = request_message.server_execution_context.get(
-                        "invokation_timeout", None
-                    )
+                    invokation_timeout = request_message.server_execution_context.get("invokation_timeout", None)
 
                     ready_to_process_event = None
                     timeout_task = None
@@ -236,28 +219,22 @@ class RPCServer(BaseZMQServer):
                         ready_to_process_event,
                     )  # type: Scheduler.JobInvokationType
                     if request_message.qualified_operation in self.schedulers:
-                        scheduler = self.schedulers[
-                            request_message.qualified_operation
-                        ](self.things[request_message.thing_id], self)
+                        scheduler = self.schedulers[request_message.qualified_operation](
+                            self.things[request_message.thing_id], self
+                        )
                     else:
                         scheduler = self.schedulers[request_message.thing_id]
                     scheduler.dispatch_job(job)
 
                 except Exception as ex:
                     # handle invalid message
-                    self.logger.error(
-                        f"exception occurred for message id '{request_message.id}' - {str(ex)}"
-                    )
+                    self.logger.error(f"exception occurred for message id '{request_message.id}' - {str(ex)}")
                     invalid_message_task = asyncio.create_task(
-                        server._handle_invalid_message(
-                            request_message=request_message, exception=ex
-                        )
+                        server._handle_invalid_message(request_message=request_message, exception=ex)
                     )
                     eventloop.call_soon(lambda: invalid_message_task)
         self.stop()
-        self.logger.info(
-            f"stopped polling for server '{server.id}' {server.socket_address.split(':')[0].upper()}"
-        )
+        self.logger.info(f"stopped polling for server '{server.id}' {server.socket_address.split(':')[0].upper()}")
 
     async def tunnel_message_to_things(self, scheduler: "Scheduler") -> None:
         """
@@ -272,9 +249,7 @@ class RPCServer(BaseZMQServer):
                 continue
 
             # retrieve from messages list - message, execution context, event, timeout task, origin socket
-            origin_server, request_message, timeout_task, ready_to_process_event = (
-                scheduler.next_job
-            )
+            origin_server, request_message, timeout_task, ready_to_process_event = scheduler.next_job
             server_execution_context = request_message.server_execution_context
 
             # handle invokation timeout
@@ -287,9 +262,7 @@ class RPCServer(BaseZMQServer):
                 continue
 
             # handle execution through thing
-            scheduler.last_operation_request = (
-                scheduler.extract_operation_tuple_from_request(request_message)
-            )
+            scheduler.last_operation_request = scheduler.extract_operation_tuple_from_request(request_message)
 
             # schedule an execution timeout
             execution_timeout = server_execution_context.get("execution_timeout", None)
@@ -322,9 +295,7 @@ class RPCServer(BaseZMQServer):
                     exception=RuntimeError("No reply from thing - logic error"),
                 )
                 continue
-            payload, preserialized_payload, reply_message_type = (
-                scheduler.last_operation_reply
-            )
+            payload, preserialized_payload, reply_message_type = scheduler.last_operation_reply
             scheduler.reset_operation_reply()
 
             # check if execution completed within time
@@ -349,9 +320,7 @@ class RPCServer(BaseZMQServer):
         scheduler.cleanup()
         self.logger.info("stopped tunneling messages to things")
 
-    async def run_thing_instance(
-        self, instance: Thing, scheduler: typing.Optional["Scheduler"] = None
-    ) -> None:
+    async def run_thing_instance(self, instance: Thing, scheduler: typing.Optional["Scheduler"] = None) -> None:
         """
         run a single `Thing` instance in an infinite loop by allowing the scheduler to schedule operations on it.
 
@@ -363,9 +332,7 @@ class RPCServer(BaseZMQServer):
             scheduler that schedules operations on the `Thing` instance, a default is always available.
         """
         self.logger.info(
-            "starting to run operations on thing {} of class {}".format(
-                instance.id, instance.__class__.__name__
-            )
+            "starting to run operations on thing {} of class {}".format(instance.id, instance.__class__.__name__)
         )
         if self.logger.level >= logging.ERROR:
             # sleep added to resolve some issue with logging related IO bound tasks in asyncio - not really clear what it is.
@@ -380,9 +347,7 @@ class RPCServer(BaseZMQServer):
             await scheduler.wait_for_operation(eventloop)
             # await scheduler.wait_for_operation()
             if scheduler.last_operation_request is Undefined:
-                instance.logger.warning(
-                    "No operation request found in thing '{}'".format(instance.id)
-                )
+                instance.logger.warning("No operation request found in thing '{}'".format(instance.id))
                 continue
 
             try:
@@ -405,28 +370,21 @@ class RPCServer(BaseZMQServer):
                 )
 
                 # start activities related to thing execution context
-                fetch_execution_logs = execution_context.pop(
-                    "fetch_execution_logs", False
-                )
+                fetch_execution_logs = execution_context.pop("fetch_execution_logs", False)
                 if fetch_execution_logs:
-                    list_handler = ListHandler([])
+                    list_handler = LogHistoryHandler([])
                     list_handler.setLevel(logging.DEBUG)
                     list_handler.setFormatter(instance.logger.handlers[0].formatter)
                     instance.logger.addHandler(list_handler)
 
                 # execute the operation
-                return_value = await self.execute_operation(
-                    instance, objekt, operation, payload, preserialized_payload
-                )
+                return_value = await self.execute_operation(instance, objekt, operation, payload, preserialized_payload)
 
                 # handle return value
                 if (
                     isinstance(return_value, tuple)
                     and len(return_value) == 2
-                    and (
-                        isinstance(return_value[1], bytes)
-                        or isinstance(return_value[1], PreserializedData)
-                    )
+                    and (isinstance(return_value[1], bytes) or isinstance(return_value[1], PreserializedData))
                 ):
                     if fetch_execution_logs:
                         return_value[0] = {
@@ -435,9 +393,7 @@ class RPCServer(BaseZMQServer):
                         }
                     payload = SerializableData(
                         return_value[0],
-                        Serializers.for_object(
-                            thing_id, instance.__class__.__name__, objekt
-                        ),
+                        Serializers.for_object(thing_id, instance.__class__.__name__, objekt),
                     )
                     if isinstance(return_value[1], bytes):
                         preserialized_payload = PreserializedData(return_value[1])
@@ -462,13 +418,9 @@ class RPCServer(BaseZMQServer):
                         }
                     payload = SerializableData(
                         return_value,
-                        Serializers.for_object(
-                            thing_id, instance.__class__.__name__, objekt
-                        ),
+                        Serializers.for_object(thing_id, instance.__class__.__name__, objekt),
                     )
-                    preserialized_payload = PreserializedData(
-                        EMPTY_BYTE, content_type="text/plain"
-                    )
+                    preserialized_payload = PreserializedData(EMPTY_BYTE, content_type="text/plain")
                 # set reply
                 scheduler.last_operation_reply = (payload, preserialized_payload, REPLY)
             except BreakInnerLoop:
@@ -570,22 +522,14 @@ class RPCServer(BaseZMQServer):
                 # this will be a blocking call
                 return await action.external_call(*args, **payload)
             return action.external_call(*args, **payload)
-        elif (
-            operation == Operations.readmultipleproperties
-            or operation == Operations.readallproperties
-        ):
+        elif operation == Operations.readmultipleproperties or operation == Operations.readallproperties:
             if objekt is None:
                 return instance.properties.get()
             return instance.properties.get(names=objekt)
-        elif (
-            operation == Operations.writemultipleproperties
-            or operation == Operations.writeallproperties
-        ):
+        elif operation == Operations.writemultipleproperties or operation == Operations.writeallproperties:
             return instance.properties.set(payload)
         raise NotImplementedError(
-            "Unimplemented execution path for Thing {} for operation {}".format(
-                instance.id, operation
-            )
+            "Unimplemented execution path for Thing {} for operation {}".format(instance.id, operation)
         )
 
     async def _process_timeouts(
@@ -619,10 +563,7 @@ class RPCServer(BaseZMQServer):
         eventloop.run_until_complete(
             asyncio.gather(
                 self.recv_requests_and_dispatch_jobs(self.req_rep_server),
-                *[
-                    self.tunnel_message_to_things(scheduler)
-                    for scheduler in self.schedulers.values()
-                ],
+                *[self.tunnel_message_to_things(scheduler) for scheduler in self.schedulers.values()],
                 *existing_tasks,
             )
         )
@@ -683,9 +624,7 @@ class RPCServer(BaseZMQServer):
             if self.event_publisher is not None:
                 self.event_publisher.exit()
         except Exception as ex:
-            self.logger.warning(
-                f"Exception occurred while exiting the server - {str(ex)}"
-            )
+            self.logger.warning(f"Exception occurred while exiting the server - {str(ex)}")
 
     def __hash__(self):
         return hash(str(self))
@@ -718,9 +657,7 @@ class RPCServer(BaseZMQServer):
         JSON
             The Thing Description in JSON format.
         """
-        TM = instance.get_thing_model(
-            ignore_errors=ignore_errors, skip_names=skip_names
-        ).json()  # type: dict[str, typing.Any]
+        TM = instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()  # type: dict[str, typing.Any]
         TD = copy.deepcopy(TM)
         from ...td import PropertyAffordance, ActionAffordance, EventAffordance
         from ...td.forms import Form
@@ -741,13 +678,13 @@ class RPCServer(BaseZMQServer):
                     "This server cannot generate TD for TCP protocol, consider using thing model directly."
                 )
             req_rep_socket_address = self.tcp_server.socket_address  # type: str
-            req_rep_socket_address = req_rep_socket_address.replace(
-                "*", socket.gethostname()
-            ).replace("0.0.0.0", socket.gethostname())
+            req_rep_socket_address = req_rep_socket_address.replace("*", socket.gethostname()).replace(
+                "0.0.0.0", socket.gethostname()
+            )
             pub_sub_socket_address = self.tcp_event_publisher.socket_address  # type: str
-            pub_sub_socket_address = pub_sub_socket_address.replace(
-                "*", socket.gethostname()
-            ).replace("0.0.0.0", socket.gethostname())
+            pub_sub_socket_address = pub_sub_socket_address.replace("*", socket.gethostname()).replace(
+                "0.0.0.0", socket.gethostname()
+            )
         else:
             raise ValueError(f"Unsupported protocol '{protocol}' for ZMQ.")
 
@@ -759,27 +696,21 @@ class RPCServer(BaseZMQServer):
             form = Form()
             form.href = req_rep_socket_address
             form.op = Operations.readproperty
-            form.contentType = Serializers.for_object(
-                instance.id, instance.__class__.__name__, name
-            ).content_type
+            form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
             TD["properties"][name]["forms"].append(form.json())
 
             if not affordance.readOnly:
                 form = Form()
                 form.href = req_rep_socket_address
                 form.op = Operations.writeproperty
-                form.contentType = Serializers.for_object(
-                    instance.id, instance.__class__.__name__, name
-                ).content_type
+                form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
                 TD["properties"][name]["forms"].append(form.json())
 
             if affordance.observable:
                 form = Form()
                 form.href = pub_sub_socket_address
                 form.op = Operations.observeproperty
-                form.contentType = Serializers.for_object(
-                    instance.id, instance.__class__.__name__, name
-                ).content_type
+                form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
                 TD["properties"][name]["forms"].append(form.json())
 
         for name in TM.get("actions", []):
@@ -790,9 +721,7 @@ class RPCServer(BaseZMQServer):
             form = Form()
             form.href = req_rep_socket_address
             form.op = Operations.invokeaction
-            form.contentType = Serializers.for_object(
-                instance.id, instance.__class__.__name__, name
-            ).content_type
+            form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
             TD["actions"][name]["forms"].append(form.json())
 
         for name in TM.get("events", []):
@@ -803,9 +732,7 @@ class RPCServer(BaseZMQServer):
             form = Form()
             form.href = pub_sub_socket_address
             form.op = Operations.subscribeevent
-            form.contentType = Serializers.for_object(
-                instance.id, instance.__class__.__name__, name
-            ).content_type
+            form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
             TD["events"][name]["forms"].append(form.json())
 
         return TD
@@ -821,13 +748,9 @@ class Scheduler:
     [UML Diagram subclasses](http://localhost:8000/UML/PDF/Scheduler.pdf)
     """
 
-    OperationRequest = typing.Tuple[
-        str, str, str, SerializableData, PreserializedData, typing.Dict[str, typing.Any]
-    ]
+    OperationRequest = typing.Tuple[str, str, str, SerializableData, PreserializedData, typing.Dict[str, typing.Any]]
     OperationReply = typing.Tuple[SerializableData, PreserializedData, str]
-    JobInvokationType = typing.Tuple[
-        AsyncZMQServer, RequestMessage, asyncio.Task, asyncio.Event
-    ]
+    JobInvokationType = typing.Tuple[AsyncZMQServer, RequestMessage, asyncio.Task, asyncio.Event]
     # [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
     _operation_execution_complete_event: asyncio.Event | threading.Event
     _operation_execution_ready_event: asyncio.Event | threading.Event
@@ -872,23 +795,17 @@ class Scheduler:
         await self._job_queued_event.wait()
         self._job_queued_event.clear()
 
-    async def wait_for_operation(
-        self, eventloop: asyncio.AbstractEventLoop | None
-    ) -> None:
+    async def wait_for_operation(self, eventloop: asyncio.AbstractEventLoop | None) -> None:
         # assert isinstance(self._operation_execution_ready_event, threading.Event), "not a threaded scheduler"
         if isinstance(self._operation_execution_ready_event, threading.Event):
-            await eventloop.run_in_executor(
-                None, self._operation_execution_ready_event.wait
-            )
+            await eventloop.run_in_executor(None, self._operation_execution_ready_event.wait)
         else:
             await self._operation_execution_ready_event.wait()
         self._operation_execution_ready_event.clear()
 
     async def wait_for_reply(self, eventloop: asyncio.AbstractEventLoop | None) -> None:
         if isinstance(self._operation_execution_complete_event, threading.Event):
-            await eventloop.run_in_executor(
-                None, self._operation_execution_complete_event.wait
-            )
+            await eventloop.run_in_executor(None, self._operation_execution_complete_event.wait)
         else:
             await self._operation_execution_complete_event.wait()
         self._operation_execution_complete_event.clear()
@@ -902,9 +819,7 @@ class Scheduler:
         raise NotImplementedError("next_job method must be implemented in the subclass")
 
     def dispatch_job(self, job: JobInvokationType) -> None:
-        raise NotImplementedError(
-            "dispatch_job method must be implemented in the subclass"
-        )
+        raise NotImplementedError("dispatch_job method must be implemented in the subclass")
 
     def cleanup(self):
         self.run = False
@@ -913,9 +828,7 @@ class Scheduler:
         self._operation_execution_complete_event.set()
 
     @classmethod
-    def extract_operation_tuple_from_request(
-        self, request_message: RequestMessage
-    ) -> OperationRequest:
+    def extract_operation_tuple_from_request(self, request_message: RequestMessage) -> OperationRequest:
         """thing execution info"""
         return (
             request_message.header["thingID"],
@@ -994,14 +907,8 @@ class AsyncScheduler(Scheduler):
     def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
         self._job = job
         eventloop = get_current_async_loop()
-        eventloop.call_soon(
-            lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self))
-        )
-        eventloop.call_soon(
-            lambda: asyncio.create_task(
-                self.rpc_server.run_thing_instance(self.instance, self)
-            )
-        )
+        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
+        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.run_thing_instance(self.instance, self)))
         self._job_queued_event.set()
 
 
@@ -1032,9 +939,7 @@ class ThreadedScheduler(Scheduler):
         """"""
         self._job = job
         eventloop = get_current_async_loop()
-        eventloop.call_soon(
-            lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self))
-        )
+        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
         self._execution_thread = threading.Thread(
             target=asyncio.run,
             args=(self.rpc_server.run_thing_instance(self.instance, self),),
@@ -1058,9 +963,7 @@ def prepare_rpc_server(
     context = context or global_config.zmq_context()
 
     if access_points == "INPROC" or access_points == ZMQ_TRANSPORTS.INPROC:
-        RPCServer(
-            id=instance.id, things=[instance], context=context, logger=instance.logger
-        )
+        RPCServer(id=instance.id, things=[instance], context=context, logger=instance.logger)
     else:
         from ...server.zmq import ZMQServer
 
