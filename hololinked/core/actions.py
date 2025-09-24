@@ -29,7 +29,13 @@ class Action:
 
     __slots__ = ["obj", "owner", "_execution_info"]
 
-    def __init__(self, obj: FunctionType) -> None:
+    def __init__(self, obj: MethodType) -> None:
+        """
+        Parameters
+        ----------
+        obj: MethodType
+            the method that is being wrapped as an action
+        """
         self.obj = obj
 
     def __set_name__(self, owner, name):
@@ -66,6 +72,11 @@ class Action:
 
     @property
     def execution_info(self) -> ActionInfoValidator:
+        """
+        internal dataclass that holds all information about the action
+
+        TODO: this can be refactored
+        """
         return self._execution_info
 
     @execution_info.setter
@@ -75,12 +86,29 @@ class Action:
         self._execution_info = value  # type: ActionInfoValidator
 
     def to_affordance(self, owner_inst=None):
+        """
+        Generates a `ActionAffordance` TD fragment for this Action.
+
+        Parameters
+        ----------
+        owner_inst: Thing, optional
+            The instance of the owning `Thing` object. If not supplied, the class is used.
+
+        Returns
+        -------
+        ActionAffordance
+            the affordance TD fragment for this action
+        """
         from ..td import ActionAffordance
 
         return ActionAffordance.generate(self, owner_inst or self.owner)
 
 
 class BoundAction:
+    """
+    A bound action - base class for both sync and async methods.
+    """
+
     __slots__ = [
         "obj",
         "execution_info",
@@ -165,6 +193,19 @@ class BoundAction:
         return super().__getattribute__(name)
 
     def to_affordance(self):
+        """
+        Generates a `ActionAffordance` TD fragment for this Action.
+
+        Parameters
+        ----------
+        owner_inst: Thing, optional
+            The instance of the owning `Thing` object. If not supplied, the class is used.
+
+        Returns
+        -------
+        ActionAffordance
+            the affordance TD fragment for this action
+        """
         return Action.to_affordance(self.descriptor, self.owner_inst or self.owner)
 
 
@@ -212,7 +253,7 @@ def action(
     **kwargs,
 ) -> Action:
     """
-    decorate on your methods with this function to make them accessible remotely or create 'actions' out of them.
+    decorate on your methods to make them accessible remotely or create 'actions' out of them.
 
     Parameters
     ----------
@@ -224,13 +265,17 @@ def action(
         state machine state under which the action can be executed. When not provided, the action can be executed
         under any state.
     **kwargs:
+        additional keyword arguments to specify action characteristics:
+
         - `synchronous`: bool,
             indicate in thing description if action is synchronous (not long running or async) - completes in a deterministic
             (& usually) short period of time, default `True`
         - `threaded`: bool,
-            indicate that a method should be run in a separate thread, default `False`. Alternative to synchronous for non-async methods.
+            indicate that a method should be run in a separate thread, default `False`.
+            Alternative to synchronous for non-async methods.
         - `create_task`: bool,
-            indicate that a method function should be run in a new task, default `True`. Alternative to synchronous for async methods.
+            indicate that a method function should be run in a new task, default `True`.
+            Alternative to synchronous for async methods.
         - `safe`: bool,
             indicate in thing description if action is safe to execute, default `False`
         - `idempotent`: bool,
@@ -240,7 +285,8 @@ def action(
     Returns
     -------
     Action
-        returns the callable object wrapped in an `Action` object
+        returns the callable object wrapped in an `Action` object. When accessed at instance level,
+        a `BoundSyncAction` or `BoundAsyncAction` object is returned.
     """
 
     def inner(obj):

@@ -227,6 +227,10 @@ class Property(Parameter):
             event_dispatcher.push(value)
 
     def validate_and_adapt(self, value) -> typing.Any:
+        """
+        Validate the given value and adapt it if a proper logical reasoning can be given,
+        for example, cropping a number to its bounds. Returns modified value.
+        """
         if value is None:
             if self.allow_None:
                 return
@@ -313,8 +317,12 @@ class Property(Parameter):
         ----------
         owner_inst: Thing, optional
             The instance of the owning `Thing` object. If not supplied, the class is used.
-        """
 
+        Returns
+        -------
+        PropertyAffordance
+            the affordance TD fragment for this property
+        """
         from ..td import PropertyAffordance
 
         return PropertyAffordance.generate(self, owner_inst or self.owner)
