@@ -9,7 +9,7 @@ from ..constants import ZMQ_TRANSPORTS
 from ..utils import *  # noqa: F403
 from ..exceptions import *  # noqa: F403
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
-from ..server.server import BaseProtocolServer
+from ..server.server import BaseProtocolServer  # noqa: F401
 from .properties import String, ClassSelector
 from .property import Property
 from .actions import BoundAction, action
@@ -174,7 +174,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     @property
     def sub_things(self) -> typing.Dict[str, "Thing"]:
-        """other `Thing`'s that are composed within this `Thing`."""
+        """other `Thing`s' that are composed within this `Thing`."""
         things = dict()
         for name, subthing in inspect._getmembers(
             self,
@@ -198,7 +198,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         Parameters
         ----------
         ignore_errors: bool, optional, Default False
-            if True, offending interaction affordances will be removed from the JSON.
+            if True, offending interaction affordances will be removed from the JSON
+            (i.e. those who have wrong metadata or non-JSON metadata).
             This is useful to build partial but always working ThingModel.
         skip_names: list[str], optional
             List of affordances names (of any type) to skip in the generated model.
@@ -227,33 +228,35 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         **kwargs: typing.Dict[str, typing.Any],
     ) -> None:
         """
-        Quick-start to serve `Thing` over ZMQ. This method is fully blocking. This
-        method is blocking until `exit()` is called.
+        Quick-start to serve `Thing` over ZMQ. This method is fully blocking.
+        Call `exit()` to resume (untested).
 
         Parameters
         ----------
-        transports: Sequence[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS, Default ZMQ_TRANSPORTS.IPC or "IPC"
+        access_points: list[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS | str | list[str], Default ZMQ_TRANSPORTS.IPC or "IPC"
             ZMQ transport layers at which the object is exposed:
 
-            - TCP -  custom implemented protocol in plain TCP - supply a socket address additionally or a random port
-            will be automatically used.
-            - IPC - inter process communication - connection can be made from other processes running
+            - `TCP` -  custom implemented protocol in plain TCP - supply a socket address additionally in the format
+            `tcp://*:<port>` (for example - `tcp://*:5555`) or a random port will be automatically used.
+            The star `*` indicates that the server will listen on all available network interfaces.
+            - `IPC` - inter process communication - connection can be made from other processes running
             locally within same computer. No client on the network will be able to contact the object using
-            this transport. Beginners may use this transport for learning and testing without worrying about
-            network security or technicalities of a sophisticated protocol like HTTP or MQTT. Also, use this transport
-            if you wish to avoid configuring your firewall.
-            - INPROC - one main python process spawns several threads in one of which the `Thing`
+            this transport. Use this transport if you wish to avoid configuring your firewall for a local client.
+            - `INPROC` - one main python process spawns several threads in one of which the `Thing`
             will be running. The object can be contacted by a client on another thread but not from other processes
-            or the network. One may use more than one form of transport.  All requests made will be anyway queued internally
-            irrespective of origin.
+            or the network.
 
-            For multiple transports, supply a list of transports. For example: `[ZMQ_TRANSPORTS.TCP, ZMQ_TRANSPORTS.IPC]`,
-            `["TCP", "IPC"]` or `["IPC", "INPROC"]`.
+            One may use more than one form of transport.  All requests made will be anyway queued internally
+            irrespective of origin. For multiple transports, supply a list of transports. For example: `[ZMQ_TRANSPORTS.TCP, ZMQ_TRANSPORTS.IPC]`,
+            `["TCP", "IPC"]`, `["tcp://*:5555", "IPC"]` or `["IPC", "INPROC"]`.
+
+        forked: bool, Default False
+            if True, the server is started in a separate thread and this method returns immediately.
 
         **kwargs:
             - context: `zmq.asyncio.Context`, optional,
-                ZMQ context object to be used for creating sockets. If not supplied, a new context is created.
-                For INPROC clients, you need to provide the same context used here.
+                ZMQ context object to be used for creating sockets. If not supplied, a global shared context is used.
+                For INPROC, either do not supply context or use the same context across all threads.
         """
         from .zmq.rpc_server import prepare_rpc_server
 
@@ -281,25 +284,24 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         port: int
             the port at which the HTTP server should be run (unique)
         address: str
-            A convenience option to set IP address apart from 0.0.0.0 (which is default)
+            A convenience option to set IP address apart from 0.0.0.0 (i.e. bind to all interfaces, which is default)
         ssl_context: ssl.SSLContext | None
-            use it for customized SSL context to provide encrypted communication. For certificate file and key file,
-            one may also use `certfile` and `keyfile` options.
+            provide custom certificates with an SSL context for encrypted communication
         allowed_clients: typing.Iterable[str] | str | None
             serves request and sets CORS only from these clients, other clients are rejected with 403. Uses remote IP
             header value to achieve this. Unlike CORS, the server resource is not even executed if the client is not an allowed client.
             Note that the remote IP in a HTTP request is believable only from a trusted HTTP client, not a modified one.
+        forked: bool, Default False
+            if True, the server is started in a separate thread and this method returns immediately
         **kwargs: typing.Dict[str, typing.Any]
-            - certfile: `str`,
-                alternative to SSL context, provide certificate file & key file to allow the server to create a SSL connection on its own
-            - keyfile: `str`,
-                alternative to SSL context, provide certificate file & key file to allow the server to create a SSL connection on its own
-            - property_handler: `BaseHandler` | `PropertyHandler`,
+            additional keyword arguments:
+
+            - `property_handler`: `BaseHandler` | `PropertyHandler`,
                 custom web request handler for property operations
-            - action_handler: `BaseHandler` | `ActionHandler`,
+            - `action_handler`: `BaseHandler` | `ActionHandler`,
                 custom web request handler for action operations
-            - event_handler: `BaseHandler` | `EventHandler`,
-                custom event handler of your choice for handling events
+            - `event_handler`: `BaseHandler` | `EventHandler`,
+                custom event handler for handling events
         """
         # network_interface: str
         #     Currently there is no logic to detect the IP addresss (as externally visible) correctly, therefore please
@@ -332,8 +334,15 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         Parameters
         ----------
-        servers: Sequence[BaseProtocolServer]
-            list of instantiated servers to expose the object.
+        kwargs: typing.Dict[str, Any]
+            keyword arguments
+
+            - `access_points`: dict[str, dict | int | str | list[str]], optional
+                The protocol name and its port or parameters to expose the object.
+                for example - `[('HTTP', 9000), ('ZMQ', 'tcp://*:5555')]`
+
+            - `servers`: list[BaseProtocolServer]
+                list of instantiated servers to expose the object.
         """
         from ..server.http import HTTPServer
         from ..server.zmq import ZMQServer
@@ -392,7 +401,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     @action()
     def exit(self) -> None:
-        """Stop serving the object. This method can only be called remotely"""
+        """Stop serving the object. This method usually needs to be called remotely"""
         if self.rpc_server is None:
             self.logger.debug("exit() called on a object that is not exposed yet.")
             return
@@ -406,7 +415,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     @action()
     def ping(self) -> None:
         """
-        ping the `Thing` to see if it is alive. Ping successful when action succeeds with no return value and
+        ping to see if it is alive. Successful when action succeeds with no return value and
         no timeout or exception raised on the client side.
         """
         pass
@@ -414,9 +423,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def __hash__(self) -> int:
         filename = inspect.getfile(self.__class__)
         if filename is not None:
+            # i.e. try to make it as unique as possible
             return hash(filename + self.__class__.__name__ + self.id)
         return hash(self.__class__.__name__ + self.id)
-        # i.e. unique to a computer
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Thing):
