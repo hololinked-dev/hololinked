@@ -44,26 +44,26 @@ jobs:
         run: |
           uv venv .venv
           source .venv/bin/activate
-          uv sync --no-install-project --group test --group dev
+          uv sync --group test --group dev
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
           uv venv .venv
           .venv\Scripts\activate
-          uv sync --no-install-project --group test --group dev
+          uv sync --group test --group dev
 
       - name: Run pytest tests (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
           source .venv/bin/activate
-          uv run pytest tests/test_01_message_pytest.py -v --cov=hololinked --cov-report=term-missing
+          pytest tests/pytests-new -s -v --cov=hololinked --cov-report=term-missing
 
       - name: Run pytest tests (Windows)
         if: runner.os == 'Windows'
         run: |
           .venv\Scripts\activate
-          uv run pytest tests/test_01_message_pytest.py -v --cov=hololinked --cov-report=term-missing
+          pytest tests/pytests-new -s -v --cov=hololinked --cov-report=term-missing
 
       - name: Upload coverage report as artifact
         uses: actions/upload-artifact@v4
