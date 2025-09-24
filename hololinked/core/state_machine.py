@@ -23,9 +23,11 @@ class StateMachine:
     initial_state = ClassSelector(
         default=None, allow_None=True, constant=True, class_=(Enum, str), doc="initial state of the machine"
     )  # type: typing.Union[Enum, str]
+
     states = ClassSelector(
         default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list), doc="list/enum of allowed states"
     )  # type: typing.Union[EnumMeta, tuple, list]
+
     on_enter = TypedDict(
         default=None,
         allow_None=True,
@@ -33,6 +35,7 @@ class StateMachine:
         doc="""callbacks to execute when a certain state is entered; 
                         specfied as map with state as keys and callbacks as list""",
     )  # type: typing.Dict[str, typing.List[typing.Callable]]
+
     on_exit = TypedDict(
         default=None,
         allow_None=True,
@@ -40,6 +43,7 @@ class StateMachine:
         doc="""callbacks to execute when certain state is exited; 
                         specfied as map with state as keys and callbacks as list""",
     )  # type: typing.Dict[str, typing.List[typing.Callable]]
+
     machine = TypedDict(
         default=None,
         allow_None=True,
@@ -47,6 +51,11 @@ class StateMachine:
         key_type=str,  # i.e. its like JSON
         doc="the machine specification with state as key and objects as list",
     )  # type: typing.Dict[str, typing.List[typing.Callable, Property]]
+
+    push_state_change_event = Boolean(
+        default=True, doc="if True, when the state changes, an event is pushed with the new state"
+    )  # type: bool
+
     valid = Boolean(
         default=False,
         readonly=True,
@@ -72,19 +81,22 @@ class StateMachine:
         initial_state: str
             initial state of machine
         push_state_change_event : bool, default True
-            when the state changes, an event is pushed with the new state
+            when the state changes, an event is pushed to clients with the new state as the payload
         on_enter: Dict[str, Callable | Property]
             callbacks to be invoked when a certain state is entered. It is to be specified
-            as a dictionary with the states being the keys
+            as a dictionary with the states being the keys and the list of functions or methods as values.
         on_exit: Dict[str, Callable | Property]
             callbacks to be invoked when a certain state is exited.
             It is to be specified as a dictionary with the states being the keys
+            and the list of functions or methods as values.
         **machine:
-            state name: List[Callable, Property]
-                directly pass the state name as an argument along with the methods/properties which are allowed to execute
-                in that state
+            the state machine specification with state as key and list of methods or properties as values.
+
+            `state name`: List[Callable, Property]
+                directly pass the state name as an argument along with the methods/properties
+                which are allowed to execute in that state
         """
-        self._valid = False  #
+        self._valid = False
         self.name = None
         self.on_enter = on_enter
         self.on_exit = on_exit
@@ -205,7 +217,7 @@ class StateMachine:
 
     def contains_object(self, object: typing.Union[Property, typing.Callable]) -> bool:
         """
-        returns True if specified object is found in any of the state machine states.
+        Check if specified object is found in any of the state machine states.
         Supply unbound method for checking methods, as state machine is specified at class level
         when the methods are unbound.
         """
@@ -230,11 +242,12 @@ class BoundFSM:
 
     def get_state(self) -> typing.Union[str, StrEnum, None]:
         """
-        return the current state. one can also access the property `current state`.
+        return the current state, one can also access it using the property `current state`.
 
         Returns
         -------
-        current state: str
+        str
+            current state of the state machine
         """
         try:
             return self.owner._state_machine_state
@@ -245,10 +258,13 @@ class BoundFSM:
         self, value: typing.Union[str, StrEnum, Enum], push_event: bool = True, skip_callbacks: bool = False
     ) -> None:
         """
-        set state of state machine. Also triggers state change callbacks if skip_callbacks=False and pushes a state
-        change event when push_event=True. One can also set state using '=' operator of `current_state` property in which case
-        callbacks will be called. If originally an enumeration for the list of allowed states was supplied,
-        then an enumeration member must be used to set state. If a list of strings were supplied, then a string is accepted.
+        set state of state machine. Also triggers state change callbacks if `skip_callbacks=False` and pushes a state
+        change event when `push_event=True`. One can also set state using the '=' operator of the `current_state` property,
+        in which case `skip_callbacks=False` and `push_event=True` will be used.
+
+        If originally an enumeration for the list of allowed states was supplied,
+        then an enumeration member must be used to set the state. If a list of strings were supplied,
+        then a string is accepted.
 
         Raises
         ------
@@ -277,7 +293,7 @@ class BoundFSM:
 
     def contains_object(self, object: typing.Union[Property, typing.Callable]) -> bool:
         """
-        returns True if specified object is found in any of the state machine states.
+        Check if specified object is found in any of the state machine states.
         Supply unbound method for checking methods, as state machine is specified at class level
         when the methods are unbound.
         """
@@ -334,9 +350,7 @@ class BoundFSM:
 
 
 def prepare_object_FSM(instance: Thing) -> None:
-    """
-    prepare state machine attached to thing class
-    """
+    """validate and prepare the state machine attached to a Thing class"""
     assert isinstance(instance, Thing), "state machine can only be attached to a Thing class."
     cls = instance.__class__
     if cls.state_machine and isinstance(cls.state_machine, StateMachine):
