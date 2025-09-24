@@ -105,20 +105,6 @@ class HTTPServer(Parameterized):
         doc="SSL context to provide encrypted communication",
     )  # type: typing.Optional[ssl.SSLContext]
 
-    certfile = String(
-        default=None,
-        allow_None=True,
-        doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
-                        create a SSL context""",
-    )  # type: str
-
-    keyfile = String(
-        default=None,
-        allow_None=True,
-        doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
-                        create a SSL context""",
-    )  # type: str
-
     allowed_clients = TypedList(
         item_type=str,
         doc="""Serves request and sets CORS only from these clients, other clients are rejected with 403. 
@@ -192,8 +178,6 @@ class HTTPServer(Parameterized):
         ssl_context: typing.Optional[ssl.SSLContext] = None,
         security_schemes: typing.Optional[typing.List[Security]] = None,
         schema_validator: typing.Optional[BaseSchemaValidator] = JSONSchemaValidator,
-        certfile: str = None,
-        keyfile: str = None,
         # protocol_version : int = 1, network_interface : str = 'Ethernet',
         allowed_clients: typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,
         config: typing.Optional[dict[str, typing.Any]] = None,
@@ -216,10 +200,6 @@ class HTTPServer(Parameterized):
             json serializer used by the server
         ssl_context: ssl.SSLContext
             SSL context to provide encrypted communication
-        certfile: str
-            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context
-        keyfile: str
-            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context
         allowed_clients: List[str]
             serves request and sets CORS only from these clients, other clients are reject with 403. Unlike pure CORS
             feature, the server resource is not even executed if the client is not an allowed client.
@@ -239,9 +219,7 @@ class HTTPServer(Parameterized):
             serializer=serializer or JSONSerializer(),
             # protocol_version=1,
             schema_validator=schema_validator,
-            certfile=certfile,
             security_schemes=security_schemes,
-            keyfile=keyfile,
             ssl_context=ssl_context,
             # network_interface='Ethernet',# network_interface,
             property_handler=kwargs.get("property_handler", PropertyHandler),
