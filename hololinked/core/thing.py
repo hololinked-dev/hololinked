@@ -45,7 +45,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         allow_None=True,
         remote=False,
         doc="""logging.Logger instance to track log messages. Default logger with a IO-stream handler 
-                    and network accessible handler is created if none supplied.""",
+            and network accessible handler is created if none supplied.""",
     )  # type: logging.Logger
 
     state_machine = None  # type: typing.Optional["StateMachine"]
@@ -87,25 +87,25 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             creating zmq socket address, tables in databases, and to identify the instance in a
             HTTP Server - (http(s)://{domain and sub domain}/{id}).
         logger: logging.Logger, optional
-            logging.Logger instance to track log messages. Default logger with a IO-stream handler
+            `logging.Logger` instance to track log messages. Default logger with a IO-stream handler
             and network accessible handler is created if None supplied.
         serializer: BaseSerializer | JSONSerializer, optional
-            Serializer to be used for serializing and deserializing data - preferred is a JSON Serializer.
+            Default serializer to be used for serializing and deserializing data.
             If not supplied, a `msgspec` based JSON Serializer is used.
         **kwargs: typing.Dict[str, Any]
-            - remote_accessible_logger: `bool`, Default False.
-                if False, network accessible handler is not attached to the logger. `remote_accessible_logger` can also be set as a
+            - `remote_accessible_logger`: `bool`, Default False.
+                if True, the log records can be streamed by a remote client. `remote_accessible_logger` can also be set as a
                 class attribute.
-            - use_default_db: `bool`, Default False.
+            - `use_default_db`: `bool`, Default False.
                 if True, default SQLite database is created where properties can be stored and loaded. There is no need to supply
                 any database credentials. `use_default_db` value can also be set as a class attribute.
-            - db_config_file: `str`, optional.
+            - `db_config_file`: `str`, optional.
                 if not using a default database, supply a JSON configuration file to create a database connection. Check documentaion
                 of `hololinked.core.database`.
-            - use_json_file: bool, Default False
+            - `use_json_file`: `bool`, Default False
                 if True, a JSON file will be used as the property storage instead of a database. This value can also be
                 set as a class attribute.
-            - json_filename: str, optional
+            - `json_filename`: `str`, optional
                 If using JSON storage, this filename is used to persist property values. If not provided, a default filename
                 is generated based on the instance name.
         """
