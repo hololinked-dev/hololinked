@@ -3,7 +3,6 @@ import jsonschema
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass
 from ..constants import JSON
-from ..utils import pep8_to_dashed_name
 from ..config import global_config
 
 
@@ -12,16 +11,6 @@ class Event:
     Asynchronously push arbitrary messages to clients. Apart from default events created by the package (like state
     change event, observable properties etc.), events are supposed to be created at class level or at `__init__`
     as a instance attribute, otherwise their publishing socket is unbound and will lead to `AttributeError`.
-
-    Parameters
-    ----------
-    name: str
-        name of the event, specified name may contain dashes and can be used on client side to subscribe to this event.
-    doc: str
-        docstring for the event
-    schema: JSON
-        schema of the event, if the event is JSON complaint. HTTP clients can validate the data with this schema. There
-        is no validation on server side.
     """
 
     # security: Any
@@ -32,9 +21,21 @@ class Event:
     def __init__(
         self,
         doc: typing.Optional[str] = None,
-        schema: typing.Optional[JSON] = None,  # security : typing.Optional[BaseSecurityDefinition] = None,
+        schema: typing.Optional[JSON] = None,
         label: typing.Optional[str] = None,
     ) -> None:
+        """
+        Parameters
+        ----------
+        doc: str
+            docstring for the event
+        schema: JSON
+            schema of the event, if the event is JSON complaint. HTTP clients can validate the data with this schema. There
+            is no validation on server side.
+        label: str
+            a descriptive label for the event, to be shown in a GUI for example.
+        """
+
         self.doc = doc
         if global_config.VALIDATE_SCHEMAS and schema:
             jsonschema.Draft7Validator.check_schema(schema)
@@ -69,6 +70,19 @@ class Event:
             )
 
     def to_affordance(self, owner_inst=None):
+        """
+        Generates a `EventAffordance` TD fragment for this Event
+
+        Parameters
+        ----------
+        owner_inst: Thing, optional
+            The instance of the owning `Thing` object. If not supplied, the class is used.
+
+        Returns
+        -------
+        EventAffordance
+            the affordance TD fragment for this event
+        """
         from ..td import EventAffordance
 
         return EventAffordance.generate(self, owner_inst or self.owner)
@@ -76,7 +90,7 @@ class Event:
 
 class EventDispatcher:
     """
-    The actual worker which pushes the event. The separation is necessary between `Event` and
+    The worker that pushes an event. The separation is necessary between `Event` and
     `EventDispatcher` to allow class level definitions of the `Event`
     """
 
@@ -117,8 +131,9 @@ class EventDispatcher:
 
     def receive_acknowledgement(self, timeout: typing.Union[float, int, None]) -> bool:
         """
-        Receive acknowlegement for event receive. When the timeout argument is present and not None,
-        it should be a floating point number specifying a timeout for the operation in seconds (or fractions thereof).
+        Unimplemented.
+
+        Receive acknowledgement for an event that was just pushed.
         """
         raise NotImplementedError("Event acknowledgement is not implemented yet.")
         return self._synchronize_event.wait(timeout=timeout)

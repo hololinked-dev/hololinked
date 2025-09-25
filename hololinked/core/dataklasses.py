@@ -3,9 +3,9 @@ The following is a list of all dataclasses used to store information on the expo
 resources on the network. These classese are generally not for consumption by the package-end-user.
 """
 
+import typing
 from enum import Enum
 from types import FunctionType, MethodType
-from typing import Any
 
 from pydantic import BaseModel, RootModel
 
@@ -45,6 +45,7 @@ class RemoteResourceInfoValidator:
         accept_item=True,
         doc="State machine state at which a callable will be executed or attribute/property can be written.",
     )  # type: typing.Tuple[typing.Union[Enum, str]]
+
     obj = ClassSelector(
         default=None,
         allow_None=True,
@@ -57,11 +58,14 @@ class RemoteResourceInfoValidator:
         ),  # Property will need circular import so we stick to base class Parameter
         doc="the unbound object like the unbound method",
     )
+
     obj_name = String(
         default=USE_OBJECT_NAME,
         doc="the name of the object which will be supplied to the ``ObjectProxy`` class to populate its own namespace.",
     )  # type: str
+
     isaction = Boolean(default=False, doc="True for a method or function or callable")  # type: bool
+
     isproperty = Boolean(default=False, doc="True for a property")  # type: bool
 
     def __init__(self, **kwargs) -> None:
@@ -94,28 +98,38 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
         default=False,
         doc="if True, http/RPC request object will be passed as an argument to the callable.",
     )  # type: bool
+
     argument_schema = Parameter(
         default=None,
         allow_None=True,
         # due to schema validation, this has to be a dict, and not a special dict like TypedDict
         doc="JSON schema validations for arguments of a callable",
     )
+
     return_value_schema = Parameter(
         default=None,
         allow_None=True,
         # due to schema validation, this has to be a dict, and not a special dict like TypedDict
         doc="schema for return value of a callable",
     )
+
     create_task = Boolean(default=True, doc="should a coroutine be tasked or run in the same loop?")  # type: bool
+
     iscoroutine = Boolean(
         default=False,  # not sure if isFuture or isCoroutine is correct, something to fix later
         doc="whether the callable should be awaited",
     )  # type: bool
+
     safe = Boolean(default=True, doc="metadata information whether the action is safe to execute")  # type: bool
+
     idempotent = Boolean(default=False, doc="metadata information whether the action is idempotent")  # type: bool
+
     synchronous = Boolean(default=True, doc="metadata information whether the action is synchronous")  # type: bool
+
     isparameterized = Boolean(default=False, doc="True for a parameterized function")  # type: bool
+
     isclassmethod = Boolean(default=False, doc="True for a classmethod")  # type: bool
+
     schema_validator = ClassSelector(
         default=None,
         allow_None=True,
@@ -141,7 +155,7 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
         value = self.action_payload_schema_validator(value)
         setattr(self, "_return_value_schema", value)
 
-    def action_payload_schema_validator(self, value: Any) -> Any:
+    def action_payload_schema_validator(self, value: typing.Any) -> typing.Any:
         if value is None or isinstance(value, dict) or issubklass(value, (BaseModel, RootModel)):
             return value
         raise TypeError("Schema must be None, a dict, or a subclass of BaseModel or RootModel")

@@ -111,6 +111,8 @@ class StateMachine:
         self.owner = owner
 
     def validate(self, owner: Thing) -> None:
+        """validate the state machine, whether the properties, actions and states are correctly specified"""
+
         # cannot merge this with __set_name__ because descriptor objects are not ready at that time.
         # reason - metaclass __init__ is called after __set_name__ of descriptors, therefore the new "proper" desriptor
         # registries are available only after that. Until then only the inherited descriptor registries are available,
@@ -122,7 +124,6 @@ class StateMachine:
         elif self.initial_state not in self.states:
             raise AttributeError(f"specified initial state {self.initial_state} not in Enum of states {self.states}.")
 
-        # owner._state_machine_state = self._get_machine_compliant_state(self.initial_state)
         owner_properties = owner.properties.get_descriptors(recreate=True).values()
         owner_methods = owner.actions.get_descriptors(recreate=True).values()
 
@@ -247,8 +248,6 @@ class BoundFSM:
         self.descriptor = state_machine
         self.push_state_change_event = state_machine.push_state_change_event
         self.owner = owner
-        # self.owner._state_machine_state = state_machine.initial_state
-        # self.state_machine._prepare(owner)
 
     def get_state(self) -> typing.Union[str, StrEnum, None]:
         """

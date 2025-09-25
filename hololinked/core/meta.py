@@ -69,8 +69,8 @@ class ThingMeta(ParameterizedMetaclass):
     @property
     def properties(cls) -> "PropertiesRegistry":
         """
-        Container object for Property descriptors. Returns `PropertiesRegistry` instance instead of `param`'s own
-        `Parameters` instance.
+        Container object for Property descriptors. Returns `PropertiesRegistry`
+        instance instead of `param`'s own `Parameters` instance.
         """
         return cls._param_container
 
