@@ -258,7 +258,7 @@ class TestHTTPServer(TestCase):
             property_handler=TestableRPCHandler,
             action_handler=TestableRPCHandler,
         )
-        time.sleep(2)  # linux machines need a few moments otherwise the clients error
+        self.wait_until_server_ready(port=port)
         session = requests.session()
         for serializer in [JSONSerializer(), MsgpackSerializer(), PickleSerializer()]:
             serializer: BaseSerializer
@@ -445,7 +445,7 @@ class TestHTTPServer(TestCase):
             config={"allow_cors": True},
             security_schemes=[security_scheme],
         )
-        time.sleep(2)  # linux machines need a few moments otherwise the clients error
+        self.wait_until_server_ready(port=port)
         self._test_handlers_end_to_end(port=port, thing_id=thing_id, headers=auth_headers)
         self._test_invalid_auth_end_to_end(port=port, thing_id=thing_id, wrong_auth_headers=wrong_auth_headers)
         # reinstate correct credentials to stop
@@ -456,7 +456,7 @@ class TestHTTPServer(TestCase):
         port = 60004
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
-        time.sleep(2)  # linux machines need a few moments otherwise the clients error
+        self.wait_until_server_ready(port=port)
 
         self._test_handlers_end_to_end(port=port, thing_id=thing_id, headers={"Content-Type": "application/json"})
         self.stop_server(port, thing_ids=[thing_id])
@@ -530,7 +530,7 @@ class TestHTTPServer(TestCase):
             config={"allow_cors": True},
             security_schemes=[security_scheme] if security_scheme else None,
         )
-        time.sleep(2)  # linux machines need a few moments otherwise the clients error
+        self.wait_until_server_ready(port=port)
 
         session = requests.Session()
         response = session.post(f"http://127.0.0.1:{port}/{thing_id}/start-acquisition", headers=headers)
@@ -566,7 +566,7 @@ class TestHTTPServer(TestCase):
         port = 60009
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
-        time.sleep(2)  # linux machines need a few moments otherwise the clients error
+        self.wait_until_server_ready(port=port)
 
         session = requests.Session()
         response = session.get(f"http://127.0.0.1:{port}/{thing_id}/resources/wot-td")
@@ -593,7 +593,7 @@ class TestHTTPServer(TestCase):
         port = 60010
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
-        time.sleep(2)  # linux machines need a few moments otherwise the clients error
+        self.wait_until_server_ready(port=port)
 
         object_proxy = ClientFactory.http(url=f"http://127.0.0.1:{port}/{thing_id}/resources/wot-td")
         self.assertIsInstance(object_proxy, ObjectProxy)
@@ -618,7 +618,7 @@ class TestHTTPServer(TestCase):
             config={"allow_cors": True},
             security_schemes=[security_scheme],
         )
-        time.sleep(2)
+        self.wait_until_server_ready(port=port)
 
         object_proxy = ClientFactory.http(
             url=f"http://127.0.0.1:{port}/{thing_id}/resources/wot-td",
@@ -638,6 +638,20 @@ class TestHTTPServer(TestCase):
         endpoints += [("post", "/stop", None)]
         for method, path, body in endpoints:
             response = session.request(method=method, url=f"http://127.0.0.1:{port}{path}", **request_kwargs)
+            if response.status_code not in [200, 201, 202, 204]:
+                logging.warning(f"Failed to stop server or thing at {path} with status {response.status_code}")
+
+    @classmethod
+    def wait_until_server_ready(cls, port, tries: int = 10):
+        session = requests.Session()
+        for i in range(tries):
+            try:
+                response = session.get(f"http://127.0.0.1:{port}/liveness")
+                if response.status_code in [200, 201, 202, 204]:
+                    return
+            except Exception:
+                time.sleep(1)
+        raise TimeoutError(f"Server on port {port} not ready after {tries} tries")
 
     @classmethod
     def sse_stream(cls, url, chunk_size=2048, **kwargs):
@@ -690,7 +704,7 @@ class TestHTTPObjectProxy(TestCase):
         cls.port = 60011
         cls.thing = OceanOpticsSpectrometer(id=cls.thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
         cls.thing.run_with_http_server(forked=True, port=cls.port, config={"allow_cors": True})
-        time.sleep(2)  # linux machines need a few moments otherwise the clients error
+        TestHTTPServer.wait_until_server_ready(port=cls.port)
 
         cls.object_proxy = ClientFactory.http(url=f"http://127.0.0.1:{cls.port}/{cls.thing_id}/resources/wot-td")
 
@@ -795,7 +809,7 @@ class TestHTTPEndToEnd(TestRPCEndToEnd):
         """Set up the thing for the http object proxy client"""
         cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR + 10)
         cls.thing.run_with_http_server(forked=True, port=cls.http_port, config={"allow_cors": True})
-        time.sleep(2)  # linux machines need a few moments otherwise the clients error
+        TestHTTPServer.wait_until_server_ready(port=cls.http_port)
 
         cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
 
