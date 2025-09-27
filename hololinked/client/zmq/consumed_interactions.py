@@ -74,8 +74,6 @@ class ZMQConsumedAffordanceMixin:
                 timeout for invokation of action or property read/write
             - `execution_timeout`: float, default 5.0
                 timeout for execution of action or property read/write
-            - `schema_validator`: BaseSchemaValidator
-                schema validator class to validate input arguments
         """
         self._sync_zmq_client = sync_client
         self._async_zmq_client = async_client
@@ -130,8 +128,9 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         self,
         resource: ActionAffordance,
         sync_client: SyncZMQClient,
-        async_client: AsyncZMQClient | None = None,
-        owner_inst: typing.Optional[typing.Any] = None,
+        async_client: AsyncZMQClient,
+        owner_inst: typing.Any,
+        logger: logging.Logger,
         **kwargs,
         # schema_validator: typing.Type[BaseSchemaValidator] | None = None
     ) -> None:
@@ -145,7 +144,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         async_zmq_client: AsyncZMQClient
             asynchronous ZMQ client for async calls
         """
-        ConsumedThingAction.__init__(self, resource=resource, owner_inst=owner_inst)
+        ConsumedThingAction.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
         self.resource = resource
 
@@ -157,8 +156,8 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
     def __call__(self, *args, **kwargs) -> typing.Any:
         if len(args) > 0:
             kwargs["__args__"] = args
-        elif self._schema_validator:
-            self._schema_validator.validate(kwargs)
+        elif self.schema_validator:
+            self.schema_validator.validate(kwargs)
         form = self.resource.retrieve_form(Operations.invokeaction, Form())
         # works over ThingModel, there can be a default empty form
         response = self._sync_zmq_client.execute(
@@ -180,8 +179,8 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             raise RuntimeError("async calls not possible as async_mixin was not set True at __init__()")
         if len(args) > 0:
             kwargs["__args__"] = args
-        elif self._schema_validator:
-            self._schema_validator.validate(kwargs)
+        elif self.schema_validator:
+            self.schema_validator.validate(kwargs)
         response = await self._async_zmq_client.async_execute(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -203,8 +202,8 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
     def oneway(self, *args, **kwargs) -> None:
         if len(args) > 0:
             kwargs["__args__"] = args
-        elif self._schema_validator:
-            self._schema_validator.validate(kwargs)
+        elif self.schema_validator:
+            self.schema_validator.validate(kwargs)
         self._sync_zmq_client.send_request(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -225,8 +224,8 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
     def noblock(self, *args, **kwargs) -> str:
         if len(args) > 0:
             kwargs["__args__"] = args
-        elif self._schema_validator:
-            self._schema_validator.validate(kwargs)
+        elif self.schema_validator:
+            self.schema_validator.validate(kwargs)
         msg_id = self._sync_zmq_client.send_request(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -254,8 +253,9 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self,
         resource: PropertyAffordance,
         sync_client: SyncZMQClient,
-        async_client: AsyncZMQClient | None = None,
-        owner_inst: typing.Optional[typing.Any] = None,
+        async_client: AsyncZMQClient,
+        owner_inst: typing.Any,
+        logger: logging.Logger,
         **kwargs,
     ) -> None:
         """
@@ -268,7 +268,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         async_client: AsyncZMQClient
             asynchronous ZMQ client for async calls
         """
-        ConsumedThingProperty.__init__(self, resource=resource, owner_inst=owner_inst)
+        ConsumedThingProperty.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
         self.resource = resource
 
@@ -411,11 +411,12 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         logger: logging.Logger = None,
         **kwargs,
     ) -> None:
-        super().__init__(
+        ConsumedThingEvent.__init__(
+            self,
             resource=resource,
             logger=logger,
-            **kwargs,
         )
+        ZMQConsumedAffordanceMixin.__init__(self, sync_client=None, async_client=None, **kwargs)
 
     def listen(self, form: Form, callbacks: list[typing.Callable], concurrent: bool, deserialize: bool) -> None:
         sync_event_client = EventConsumer(
