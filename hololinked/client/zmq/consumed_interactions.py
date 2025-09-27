@@ -364,7 +364,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
             ),
         )
 
-    def noblock_get(self) -> None:
+    def noblock_get(self) -> str:
         msg_id = self._sync_zmq_client.send_request(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
