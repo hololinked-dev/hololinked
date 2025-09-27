@@ -374,7 +374,7 @@ class RPCHandler(BaseHandler):
             self.logger.debug(f"traceback - {ex.__traceback__}")
             self.set_status(500, "error while scheduling RPC call")
             response_payload = SerializableData(
-                value=self.serializer.dumps({"exception": format_exception_as_json(ex)}),
+                value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
                 content_type="application/json",
             )
             response_payload.serialize()
@@ -408,7 +408,7 @@ class RPCHandler(BaseHandler):
             self.logger.error(f"error while receiving no-block response - {str(ex)}")
             self.set_status(500, f"error while receiving no-block response - {str(ex)}")
             response_payload = SerializableData(
-                value=self.serializer.dumps({"exception": format_exception_as_json(ex)}),
+                value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
                 content_type="application/json",
             )
             response_payload.serialize()
@@ -565,7 +565,7 @@ class EventHandler(BaseHandler):
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
             self.set_status(500, "could not subscribe to event source from thing")
-            self.write(self.serializer.dumps({"exception": format_exception_as_json(ex)}))
+            self.write(Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
             return
 
         while True:
@@ -582,7 +582,7 @@ class EventHandler(BaseHandler):
                 break
             except Exception as ex:
                 self.logger.error(f"error while pushing event - {str(ex)}")
-                self.write(self.data_header % self.serializer.dumps({"exception": format_exception_as_json(ex)}))
+                self.write(self.data_header % Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
         event_consumer.exit()
 
 
@@ -681,6 +681,15 @@ class StopHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Credentials", "true")
         except Exception as ex:
             self.set_status(500, str(ex))
+        self.finish()
+
+
+class LivenessProbeHandler(BaseHandler):
+    """Liveness probe handler"""
+
+    async def get(self):
+        self.set_status(200, "ok")
+        self.set_header("Access-Control-Allow-Credentials", "true")
         self.finish()
 
 
