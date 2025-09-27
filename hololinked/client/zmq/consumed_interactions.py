@@ -8,15 +8,9 @@ import uuid
 
 from ...constants import Operations
 from ...serializers.payloads import SerializableData
+from ...core import Thing, Action
 from ...td import PropertyAffordance, ActionAffordance, EventAffordance
 from ...td.forms import Form
-from ...client.abstractions import (
-    ConsumedThingAction,
-    ConsumedThingEvent,
-    ConsumedThingProperty,
-    raise_local_exception,
-    SSE,
-)
 from ...core.zmq.message import ResponseMessage
 from ...core.zmq.message import EMPTY_BYTE, TIMEOUT, ERROR, INVALID_MESSAGE
 from ...core.zmq.brokers import (
@@ -25,7 +19,13 @@ from ...core.zmq.brokers import (
     EventConsumer,
     AsyncEventConsumer,
 )
-from ...core import Thing, Action
+from ...client.abstractions import (
+    ConsumedThingAction,
+    ConsumedThingEvent,
+    ConsumedThingProperty,
+    raise_local_exception,
+    SSE,
+)
 from ..exceptions import ReplyNotArrivedError
 from ...exceptions import BreakLoop
 
@@ -34,13 +34,17 @@ __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
 
 class ZMQConsumedAffordanceMixin:
+    # A utility mixin class for ZMQ based affordances
+    # Dont add doc otherwise __doc__ in slots will conflict with class variable
+
     __slots__ = [
-        "_resource",
-        "_schema_validator",
+        "resource",
+        "logger",
+        "schema_validator",
+        "owner_inst",
         "__name__",
         "__qualname__",
         "__doc__",
-        "_owner_inst",
         "_sync_zmq_client",
         "_async_zmq_client",
         "_invokation_timeout",
@@ -56,16 +60,40 @@ class ZMQConsumedAffordanceMixin:
         **kwargs,
         # schema_validator: typing.Type[BaseSchemaValidator] | None = None
     ) -> None:
+        """
+        Parameters
+        ----------
+        sync_client: SyncZMQClient
+            synchronous ZMQ client
+        async_client: AsyncZMQClient
+            asynchronous ZMQ client for async calls
+        kwargs:
+            additional keyword arguments:
+
+            - `invokation_timeout`: float, default 5.0
+                timeout for invokation of action or property read/write
+            - `execution_timeout`: float, default 5.0
+                timeout for execution of action or property read/write
+            - `schema_validator`: BaseSchemaValidator
+                schema validator class to validate input arguments
+        """
         self._sync_zmq_client = sync_client
         self._async_zmq_client = async_client
-        self._invokation_timeout = kwargs.get("invokation_timeout", 5)
-        self._execution_timeout = kwargs.get("execution_timeout", 5)
+        self._invokation_timeout = kwargs.get("invokation_timeout", 5.0)
+        self._execution_timeout = kwargs.get("execution_timeout", 5.0)
         self._thing_execution_context = dict(fetch_execution_logs=False)
         self._last_zmq_response = None  # type: typing.Optional[ResponseMessage]
 
     def get_last_return_value(self, response: ResponseMessage, raise_exception: bool = False) -> typing.Any:
         """
-        cached return value of the last call to the method
+        cached return value of the last operation performed.
+
+        Parameters
+        ----------
+        response: ResponseMessage
+            last response message received from the server
+        raise_exception: bool
+            whether to raise exception if the last response was an error message
         """
         if response is None:
             raise RuntimeError("No last response available. Did you make an operation?")
@@ -81,9 +109,7 @@ class ZMQConsumedAffordanceMixin:
 
     @property
     def last_zmq_response(self) -> ResponseMessage:
-        """
-        cache of last message received for this property
-        """
+        """cache of last message received for this property"""
         return self._last_zmq_response
 
     def read_reply(self, message_id: str, timeout: int = None) -> typing.Any:
@@ -376,10 +402,6 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
     __slots__ = [
-        "__name__",
-        "__qualname__",
-        "__doc__",
-        "logger",
         "_subscribed",
     ]
 
@@ -395,7 +417,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
             **kwargs,
         )
 
-    def listen(self, form: Form, callbacks: list[typing.Callable], concurrent: bool, deserialize: bool):
+    def listen(self, form: Form, callbacks: list[typing.Callable], concurrent: bool, deserialize: bool) -> None:
         sync_event_client = EventConsumer(
             id=f"{self.resource.thing_id}|{self.resource.name}|sync|{uuid.uuid4().hex[:8]}",
             event_unique_identifier=f"{self.resource.thing_id}/{self.resource.name}",
@@ -428,7 +450,9 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                     category=RuntimeWarning,
                 )
 
-    async def async_listen(self, form: Form, callbacks: list[typing.Callable], concurrent: bool, deserialize: bool):
+    async def async_listen(
+        self, form: Form, callbacks: list[typing.Callable], concurrent: bool, deserialize: bool
+    ) -> None:
         async_event_client = AsyncEventConsumer(
             id=f"{self.resource.thing_id}|{self.resource.name}|async|{uuid.uuid4().hex[:8]}",
             event_unique_identifier=f"{self.resource.thing_id}/{self.resource.name}",

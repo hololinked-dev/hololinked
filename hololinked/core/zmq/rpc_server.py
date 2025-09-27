@@ -44,37 +44,35 @@ set_global_event_loop_policy()
 
 Undefined = NotImplemented
 
-RemoteObject = Thing  # reading convenience
-
 
 class RPCServer(BaseZMQServer):
     """
     The `RPCServer` implements a infinite loop where ZMQ sockets listen for messages, in any transport layer possible
     (`INPROC`, `IPC` or `TCP`). Once requests are received, jobs are dispatched to the `Thing` instances which are being served,
-    with timeouts or any other execution requirements (called execution context). Within the jobs, the requested
-    operation information is made available which is extracted and executed by a `Thing` instance.
-    The results are then sent back to the client. Operations information include `Thing` ID, the property, action or
+    with timeouts or any other execution requirements (called execution context). After being executed by a `Thing` instance,
+    the results are then sent back to the client. Operations information include `Thing` ID, the property, action or
     event to be executed (events are usually PUB-SUB and are largely handled by the `EventPublisher` directly),
-    what to do on them (`readProperty`, `invokeAction` etc.), the payload and the execution contexts (like timeouts).
+    what to do on them (i.e. `readProperty`, `invokeAction` etc.), the payload and the execution contexts (like timeouts).
     This is structured as a JSON.
 
     Jobs determine how to execute the operations on the `Thing` instance, whether in queued, async or threaded modes.
-    This is their main function. Queued mode is the default as it is assumed that multiple physical operations in the physical world is not
-    always practical. Jobs also help the `Thing` instance to retrieve operation information from a request object.
+    This is their main function. Queued mode is the default as it is assumed that multiple physical operations in the physical world
+    is not always practical.
 
     Default ZMQ transport layer is `INPROC`, but `IPC` or `TCP` can also be added simultaneously. The purpose of `INPROC`
     being default is that, the `RPCServer` is the only server implementing the operations directly on the `Thing`
-    instances. All other protocols like HTTP, MQTT, CoAP etc. will be used to send requests to the `RPCServer` only
-    and do not directly operate on the `Thing` instances. Instead, the incoming requests in other protocols are converted
+    instances. All other protocols like HTTP, MQTT, CoAP etc. will be used to redirect requests to the `RPCServer` only
+    and do not directly operate on the `Thing` instances. Instead, the incoming requests in those protocols are converted
     to the above stated "Operation Information" which are in JSON format.
-    `INPROC` is the fastest and most efficient way to communicate between
-    multiple independently running loops, whether the loop belongs to a specific protocol's request listener or
-    the `RPCServer` itself. The same `INPROC` messaging contract is also used for `IPC` and `TCP`, thus eliminating the
+
+    `INPROC` is the fastest and most efficient way to communicate between multiple independently running loops,
+    whether the loop belongs to a specific protocol's request listener or the `RPCServer` itself.
+    The same `INPROC` messaging contract is also used for `IPC` and `TCP`, thus eliminating the
     need to separately implement messaging contracts at different layers of communication for ZMQ.
 
     Therefore, if a `Thing` instance is to be served by a well known protocol, say HTTP, the server behaves like HTTP-RPC.
 
-    [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
+    [UML Diagram](http://docs.hololinked.dev/UML/PDF/RPCServer.pdf)
     """
 
     things = TypedDict(
@@ -104,13 +102,9 @@ class RPCServer(BaseZMQServer):
         things: List[Thing]
             list of `Thing` instances to be served
         context: Optional, zmq.asyncio.Context
-            ZeroMQ async Context object to use. All sockets except those created by event publisher share this context.
-            Automatically created when None is supplied.
+            ZeroMQ async Context object to use. Automatically created when None is supplied.
         access_point: ZMQ_TRANSPORTS
             transport layer to be used for the server, default is `INPROC`
-        **kwargs:
-            tcp_socket_address: str
-                address of the `TCP` socket, if not given, a random port is chosen
         """
         super().__init__(id=id, **kwargs)
         self.things = dict()
@@ -743,15 +737,15 @@ class Scheduler:
     Scheduler class to schedule the operations of a thing either in queued mode, or a one-shot mode in either
     async or threaded loops.
 
-    [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
+    [UML Diagram](http://docs.hololinked.dev/UML/PDF/RPCServer.pdf)
 
-    [UML Diagram subclasses](http://localhost:8000/UML/PDF/Scheduler.pdf)
+    [UML Diagram subclasses](http://docs.hololinked.dev/UML/PDF/Scheduler.pdf)
     """
 
     OperationRequest = typing.Tuple[str, str, str, SerializableData, PreserializedData, typing.Dict[str, typing.Any]]
     OperationReply = typing.Tuple[SerializableData, PreserializedData, str]
     JobInvokationType = typing.Tuple[AsyncZMQServer, RequestMessage, asyncio.Task, asyncio.Event]
-    # [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
+    # [UML Diagram](http://docs.hololinked.dev/UML/PDF/RPCServer.pdf)
     _operation_execution_complete_event: asyncio.Event | threading.Event
     _operation_execution_ready_event: asyncio.Event | threading.Event
 
