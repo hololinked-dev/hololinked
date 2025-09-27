@@ -58,6 +58,8 @@ class ClientFactory:
         kwargs:
             Additional configuration options:
 
+            - `logger`: `logging.Logger`, optional.
+                 A custom logger instance to use for logging
             - `log_level`: `int`, default `logging.INFO`.
                 The logging level to use for the client (e.g., logging.DEBUG, logging.INFO)
             - `ignore_TD_errors`: `bool`, default `False`.
@@ -74,15 +76,14 @@ class ClientFactory:
         ObjectProxy
             An ObjectProxy instance representing the remote Thing
         """
+        id = f"{server_id}|{thing_id}|{access_point}|{uuid.uuid4()}"
+
         # configs
         ignore_TD_errors = kwargs.get("ignore_TD_errors", False)
         skip_interaction_affordances = kwargs.get("skip_interaction_affordances", [])
         invokation_timeout = kwargs.get("invokation_timeout", 5.0)
         execution_timeout = kwargs.get("execution_timeout", 5.0)
-
-        id = f"{server_id}|{thing_id}|{access_point}|{uuid.uuid4()}"
-        log_level = kwargs.get("log_level", logging.INFO)
-        logger = get_default_logger(id, log_level=log_level)
+        logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
 
         # ZMQ req-rep clients
         sync_zmq_client = SyncZMQClient(f"{id}|sync", server_id=server_id, logger=logger, access_point=access_point)
@@ -187,6 +188,8 @@ class ClientFactory:
         kwargs:
             Additional configuration options:
 
+            - `logger`: `logging.Logger`, optional.
+                A custom logger instance to use for logging
             - `log_level`: `int`, default `logging.INFO`.
                 The logging level to use for the client (e.g., logging.DEBUG, logging.INFO)
             - `ignore_TD_errors`: `bool`, default `False`.
@@ -211,7 +214,6 @@ class ClientFactory:
         ObjectProxy
             An ObjectProxy instance representing the remote Thing
         """
-        from .proxy import ObjectProxy
 
         # config
         skip_interaction_affordances = kwargs.get("skip_interaction_affordances", [])
@@ -269,8 +271,7 @@ class ClientFactory:
 
         TD = Serializers.json.loads(response.content)
         id = f"client|{TD['id']}|HTTP|{uuid.uuid4().hex[:8]}"
-        log_level = kwargs.get("log_level", logging.INFO)
-        logger = get_default_logger(id, log_level=log_level)
+        logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
         object_proxy = ObjectProxy(id, td=TD, logger=logger, **kwargs)
 
         for name in TD.get("properties", []):

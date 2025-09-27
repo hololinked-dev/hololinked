@@ -47,27 +47,18 @@ class ObjectProxy:
         **kwargs:
             additional keyword arguments:
 
-            - `allow_foreign_attributes`: bool, default False
+            - `allow_foreign_attributes`: `bool`, default `False`.
                 allows local attributes for proxy apart from properties fetched from the server.
-            - `logger`: logging.Logger
+            - `logger`: `logging.Logger`, default `None`.
                 logger instance
-            - `log_level`: int
+            - `log_level`: `int`, default `logging.INFO`.
                 log level corresponding to logging.Logger when internally created
-            - `invokation_timeout`: float, int, default 5.0
-                timeout to schedule an action or property read/write in server. When invokation timeout expires,
-                the operation is not executed.
-            - `execution_timeout`: float, int, default 5.0
-                timeout to return without a reply after scheduling a action or property read/write. This timer starts
-                ticking only after the operation has started to execute. Returning a call before end of execution can lead to
-                unintended consequences on the server.
         """
         self.id = id
         self._allow_foreign_attributes = kwargs.get("allow_foreign_attributes", False)
         self._noblock_messages = dict()  # type: typing.Dict[str, ConsumedThingAction | ConsumedThingProperty]
         self._schema_validator = kwargs.get("schema_validator", None)
         self.logger = kwargs.pop("logger", get_default_logger(self.id, kwargs.get("log_level", logging.INFO)))
-        self.invokation_timeout = kwargs.get("invokation_timeout", 5.0)
-        self.execution_timeout = kwargs.get("execution_timeout", 5.0)
         self.td = kwargs.get("td", dict())  # type: typing.Dict[str, typing.Any]
 
         self._auth_header = None
@@ -122,41 +113,6 @@ class ObjectProxy:
 
     def __hash__(self) -> int:
         return hash(self.id)
-
-    def get_invokation_timeout(self) -> typing.Union[float, int]:
-        return self._invokation_timeout
-
-    def set_invokation_timeout(self, value: typing.Union[float, int]) -> None:
-        if not isinstance(value, (float, int, type(None))):
-            raise TypeError(f"Timeout can only be float or int greater than 0, or None. Given type {type(value)}.")
-        elif value is not None and value < 0:
-            raise ValueError("Timeout must be at least 0 or None, not negative.")
-        self._invokation_timeout = value
-
-    invokation_timeout = property(
-        fget=get_invokation_timeout,
-        fset=set_invokation_timeout,
-        doc="Timeout in seconds on server side for invoking a method or read/write property. \
-                                Defaults to 5 seconds and network times not considered.",
-    )
-
-    def get_execution_timeout(self) -> typing.Union[float, int]:
-        return self._execution_timeout
-
-    def set_execution_timeout(self, value: typing.Union[float, int]) -> None:
-        if not isinstance(value, (float, int, type(None))):
-            raise TypeError(f"Timeout can only be float or int greater than 0, or None. Given type {type(value)}.")
-        elif value is not None and value < 0:
-            raise ValueError("Timeout must be at least 0 or None, not negative.")
-        self._execution_timeout = value
-
-    execution_timeout = property(
-        fget=get_execution_timeout,
-        fset=set_execution_timeout,
-        doc="Timeout in seconds on server side for execution of method or read/write property."
-        + "Starts ticking after invokation timeout completes."
-        + "Defaults to None (i.e. waits indefinitely until return) and network times not considered.",
-    )
 
     # @abstractmethod
     # def is_supported_interaction(self, td, name):
@@ -306,9 +262,9 @@ class ObjectProxy:
 
         Raises
         ------
-        AttributeError:
+        AttributeError
             if no property with specified name found in the Thing Description
-        Exception:
+        Exception
             server raised exception are propagated
         """
         prop = self.__dict__.get(name, None)  # type: ConsumedThingProperty
@@ -559,7 +515,7 @@ class ObjectProxy:
             # create_new_connection=create_new_connection,
         )
 
-    def unsubscribe_event(self, name: str):
+    def unsubscribe_event(self, name: str) -> None:
         """
         Unsubscribe to event specified by name.
 
