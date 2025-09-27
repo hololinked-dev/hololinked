@@ -123,9 +123,9 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         )
 
     async def async_call(self, *args, **kwargs):
-        form = self._resource.retrieve_form(Operations.invokeaction, None)
+        form = self.resource.retrieve_form(Operations.invokeaction, None)
         if form is None:
-            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
+            raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
         if args:
             kwargs.update({"__args__": args})
         serializer = Serializers.content_types.get(form.contentType or "application/json")
@@ -135,9 +135,9 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         return self.get_body_from_response(response, form)
 
     def __call__(self, *args, **kwargs):
-        form = self._resource.retrieve_form(Operations.invokeaction, None)
+        form = self.resource.retrieve_form(Operations.invokeaction, None)
         if form is None:
-            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
+            raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
         if args:
             kwargs.update({"__args__": args})
         serializer = Serializers.content_types.get(form.contentType or "application/json")
@@ -148,9 +148,9 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
 
     def oneway(self, *args, **kwargs):
         """Invoke the action without waiting for a response."""
-        form = deepcopy(self._resource.retrieve_form(Operations.invokeaction, None))
+        form = deepcopy(self.resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
-            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
+            raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
         if args:
             kwargs.update({"__args__": args})
         serializer = Serializers.content_types.get(form.contentType or "application/json")
@@ -164,9 +164,9 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
 
     def noblock(self, *args, **kwargs) -> str:
         """Invoke the action in non-blocking mode."""
-        form = deepcopy(self._resource.retrieve_form(Operations.invokeaction, None))
+        form = deepcopy(self.resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
-            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
+            raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
         if args:
             kwargs.update({"__args__": args})
         serializer = Serializers.content_types.get(form.contentType or "application/json")
@@ -177,13 +177,13 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         if response.headers.get("X-Message-ID", None) is None:
             raise ValueError("The server did not return a message ID for the non-blocking action.")
         message_id = response.headers["X-Message-ID"]
-        self._owner_inst._noblock_messages[message_id] = self
+        self.owner_inst._noblock_messages[message_id] = self
         return message_id
 
     def read_reply(self, message_id, timeout=None):
-        form = deepcopy(self._resource.retrieve_form(Operations.invokeaction, None))
+        form = deepcopy(self.resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
-            raise ValueError(f"No form found for invokeAction operation for {self._resource.name}")
+            raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
         return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
 
 
@@ -208,11 +208,11 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         self._read_reply_op_map = dict()
 
     async def async_set(self, value: Any) -> None:
-        if self._resource.readOnly:
+        if self.resource.readOnly:
             raise NotImplementedError("This property is not writable")
-        form = self._resource.retrieve_form(Operations.writeproperty, None)
+        form = self.resource.retrieve_form(Operations.writeproperty, None)
         if form is None:
-            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+            raise ValueError(f"No form found for writeproperty operation for {self.resource.name}")
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
         http_request = self.create_http_request(form, "PUT", body)
@@ -223,11 +223,11 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
 
     def set(self, value: Any) -> None:
         """Synchronous set of the property value."""
-        if self._resource.readOnly:
+        if self.resource.readOnly:
             raise NotImplementedError("This property is not writable")
-        form = self._resource.retrieve_form(Operations.writeproperty, None)
+        form = self.resource.retrieve_form(Operations.writeproperty, None)
         if form is None:
-            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+            raise ValueError(f"No form found for writeproperty operation for {self.resource.name}")
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
         http_request = self.create_http_request(form, "PUT", body)
@@ -237,27 +237,27 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         return None
 
     async def async_get(self):
-        form = self._resource.retrieve_form(Operations.readproperty, None)
+        form = self.resource.retrieve_form(Operations.readproperty, None)
         if form is None:
-            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
+            raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
         http_request = self.create_http_request(form, "GET", b"")
         response = await self._async_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
     def get(self):
-        form = self._resource.retrieve_form(Operations.readproperty, None)
+        form = self.resource.retrieve_form(Operations.readproperty, None)
         if form is None:
-            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
+            raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
         http_request = self.create_http_request(form, "GET", None)
         response = self._sync_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
     def oneway_set(self, value: Any) -> None:
-        if self._resource.readOnly:
+        if self.resource.readOnly:
             raise NotImplementedError("This property is not writable")
-        form = deepcopy(self._resource.retrieve_form(Operations.writeproperty, None))
+        form = deepcopy(self.resource.retrieve_form(Operations.writeproperty, None))
         if form is None:
-            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
+            raise ValueError(f"No form found for writeproperty operation for {self.resource.name}")
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
         form.href = f"{form.href}?oneway=true"
@@ -268,9 +268,9 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         return None
 
     def noblock_get(self) -> str:
-        form = deepcopy(self._resource.retrieve_form(Operations.readproperty, None))
+        form = deepcopy(self.resource.retrieve_form(Operations.readproperty, None))
         if form is None:
-            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
+            raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
         form.href = f"{form.href}?noblock=true"
         http_request = self.create_http_request(form, "GET", None)
         response = self._sync_http_client.send(http_request)
@@ -278,14 +278,14 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
             raise ValueError("The server did not return a message ID for the non-blocking property read.")
         message_id = response.headers["X-Message-ID"]
         self._read_reply_op_map[message_id] = "readproperty"
-        self._owner_inst._noblock_messages[message_id] = self
+        self.owner_inst._noblock_messages[message_id] = self
         return message_id
 
     def noblock_set(self, value):
-        form = deepcopy(self._resource.retrieve_form(Operations.writeproperty, None))
+        form = deepcopy(self.resource.retrieve_form(Operations.writeproperty, None))
         if form is None:
-            raise ValueError(f"No form found for writeproperty operation for {self._resource.name}")
-        if self._resource.readOnly:
+            raise ValueError(f"No form found for writeproperty operation for {self.resource.name}")
+        if self.resource.readOnly:
             raise NotImplementedError("This property is not writable")
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
@@ -298,14 +298,14 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
                 + f" response headers: {response.headers}, code {response.status_code}"
             )
         message_id = response.headers["X-Message-ID"]
-        self._owner_inst._noblock_messages[message_id] = self
+        self.owner_inst._noblock_messages[message_id] = self
         self._read_reply_op_map[message_id] = "writeproperty"
         return message_id
 
     def read_reply(self, message_id, timeout=None):
-        form = deepcopy(self._resource.retrieve_form(op=self._read_reply_op_map.get(message_id, "readproperty")))
+        form = deepcopy(self.resource.retrieve_form(op=self._read_reply_op_map.get(message_id, "readproperty")))
         if form is None:
-            raise ValueError(f"No form found for readproperty operation for {self._resource.name}")
+            raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
         return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
 
 
