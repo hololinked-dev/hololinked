@@ -468,7 +468,7 @@ def raise_local_exception(error_message: typing.Dict[str, typing.Any]) -> None:
 
     Parameters
     ----------
-    exception: dict[str, Any]
+    error_message: dict[str, Any]
         exception dictionary made by server with following keys - `type`, `message`, `traceback`, `notes`
     """
     if isinstance(error_message, Exception):

@@ -3,7 +3,6 @@ import logging
 import base64
 
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
-from .factory import ClientFactory
 from ..utils import get_default_logger
 
 
@@ -31,6 +30,12 @@ class ObjectProxy:
             "_schema_validator",
             "_auth_header",
         ]
+    )
+
+    __allowed_attribute_types__ = (
+        ConsumedThingProperty,
+        ConsumedThingAction,
+        ConsumedThingEvent,
     )
 
     def __init__(self, id: str, **kwargs) -> None:
@@ -81,7 +86,7 @@ class ObjectProxy:
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
         if (
             __name in ObjectProxy._own_attrs
-            or (__name not in self.__dict__ and isinstance(__value, ClientFactory.__allowed_attribute_types__))
+            or (__name not in self.__dict__ and isinstance(__value, ObjectProxy.__allowed_attribute_types__))
             or self._allow_foreign_attributes
         ):
             # allowed attribute types are ConsumedThingProperty and ConsumedThingAction defined after this class
