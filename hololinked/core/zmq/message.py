@@ -33,9 +33,9 @@ EMPTY_BYTE = b""
 """
 Message indices 
 
-| Index | 0       | 1      |   2     |          3            |
-|-------|---------|--------|---------|-----------------------|
-| Desc  | address | header | payload | preserialized payload |
+| Index | 0       | 1          | 2      | 3      | 4                     |
+|-------|---------|------------|--------|--------|-----------------------|
+| Desc  | address | empty byte | header | payload| preserialized payload |
 
 """
 # CM = Client Message
@@ -47,12 +47,16 @@ INDEX_PRESERIALIZED_BODY = 4
 
 
 class ServerExecutionContext(msgspec.Struct):
+    """Additional context for the server while executing an operation"""
+
     invokationTimeout: float
     executionTimeout: float
     oneway: bool
 
 
 class ThingExecutionContext(msgspec.Struct):
+    """Additional context for the thing while executing an operation"""
+
     fetchExecutionLogs: bool
 
 
@@ -65,10 +69,7 @@ PreserializedEmptyByte = PreserializedData(EMPTY_BYTE, content_type="text/plain"
 
 
 class RequestHeader(msgspec.Struct):
-    """
-    Header of a request message
-    For detailed schema, visit [here](https://hololinked.readthedocs.io/en/latest/protocols/zmq/request-message-header.json).
-    """
+    """Header of a request message"""
 
     messageType: str
     messageID: str
@@ -97,10 +98,7 @@ class RequestHeader(msgspec.Struct):
 
 
 class ResponseHeader(msgspec.Struct):
-    """
-    Header of a response message
-    For detailed schema, visit [here](https://hololinked.readthedocs.io/en/latest/protocols/zmq/response-message-header.json).
-    """
+    """Header of a response message"""
 
     messageType: str
     messageID: str
@@ -120,10 +118,7 @@ class ResponseHeader(msgspec.Struct):
 
 
 class EventHeader(msgspec.Struct):
-    """
-    Header of an event message
-    For detailed schema, visit [here](https://hololinked.readthedocs.io/en/latest/protocols/zmq/event-message-header.json).
-    """
+    """Header of an event message"""
 
     messageType: str
     messageID: str
