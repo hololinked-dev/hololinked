@@ -873,7 +873,7 @@ class QueuedScheduler(Scheduler):
 
         Parameters
         ----------
-        item: Tuple[RequestMessage, asyncio.Event, asyncio.Task, AsyncZMQServer]
+        job: Tuple[RequestMessage, asyncio.Event, asyncio.Task, AsyncZMQServer]
             tuple of request message, event to indicate if request message can be executed, invokation timeout task
             and originating server of the request
         """

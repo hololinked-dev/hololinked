@@ -805,7 +805,13 @@ class ApplicationRouter:
             assert isinstance(Thing.get_thing_model, Action)  # type definition
             FetchTMAffordance = Thing.get_thing_model.to_affordance()
             FetchTMAffordance.override_defaults(thing_id=thing_id, name="get_thing_description")
-            fetch_td = ZMQAction(resource=FetchTMAffordance, sync_client=None, async_client=client)
+            fetch_td = ZMQAction(
+                resource=FetchTMAffordance,
+                sync_client=None,
+                async_client=client,
+                logger=self.server.logger,
+                owner_inst=None,
+            )
             if isinstance(access_point, str) and len(access_point) in [3, 6]:
                 access_point = access_point.upper()
             elif access_point.lower().startswith("tcp://"):

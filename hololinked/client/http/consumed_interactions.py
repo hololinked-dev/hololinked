@@ -4,7 +4,9 @@ Classes that contain the client logic for the HTTP protocol.
 
 import asyncio
 import contextlib
+import logging
 import threading
+import typing
 import httpcore
 import httpx
 from typing import Any, AsyncIterator, Callable, Iterator
@@ -111,9 +113,10 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        **kwargs,
+        owner_inst: typing.Any = None,
+        logger: logging.Logger = None,
     ) -> None:
-        ConsumedThingAction.__init__(self=self, resource=resource, **kwargs)
+        ConsumedThingAction.__init__(self=self, resource=resource, owner_inst=owner_inst, logger=logger)
         HTTPConsumedAffordanceMixin.__init__(
             self=self,
             sync_client=sync_client,
@@ -195,9 +198,10 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        **kwargs,
+        owner_inst: typing.Any = None,
+        logger: logging.Logger = None,
     ) -> None:
-        ConsumedThingProperty.__init__(self=self, resource=resource, **kwargs)
+        ConsumedThingProperty.__init__(self=self, resource=resource, owner_inst=owner_inst, logger=logger)
         HTTPConsumedAffordanceMixin.__init__(
             self=self,
             sync_client=sync_client,
@@ -317,9 +321,10 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
         async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        **kwargs,
+        owner_inst: typing.Any = None,
+        logger: logging.Logger = None,
     ) -> None:
-        ConsumedThingEvent.__init__(self, resource=resource, **kwargs)
+        ConsumedThingEvent.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
         HTTPConsumedAffordanceMixin.__init__(
             self,
             sync_client=sync_client,

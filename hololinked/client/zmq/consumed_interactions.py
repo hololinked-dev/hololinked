@@ -143,6 +143,10 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             synchronous ZMQ client
         async_zmq_client: AsyncZMQClient
             asynchronous ZMQ client for async calls
+        owner_inst: typing.Any
+            the parent object that owns this action
+        logger: logging.Logger
+            logger instance
         """
         ConsumedThingAction.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
@@ -267,6 +271,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
             synchronous ZMQ client
         async_client: AsyncZMQClient
             asynchronous ZMQ client for async calls
+        owner_inst: typing.Any
+            the parent object that owns this property
+        logger: logging.Logger
+            logger instance for logging
         """
         ConsumedThingProperty.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
@@ -408,13 +416,15 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     def __init__(
         self,
         resource: EventAffordance,
-        logger: logging.Logger = None,
+        logger: logging.Logger,
+        owner_inst: typing.Any,
         **kwargs,
     ) -> None:
         ConsumedThingEvent.__init__(
             self,
             resource=resource,
             logger=logger,
+            owner_inst=owner_inst,
         )
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=None, async_client=None, **kwargs)
 

@@ -99,6 +99,8 @@ class ClientFactory:
             async_client=async_zmq_client,
             invokation_timeout=invokation_timeout,
             execution_timeout=execution_timeout,
+            owner_inst=None,
+            logger=logger,
         )
         TD = FetchTD(
             ignore_errors=ignore_TD_errors,

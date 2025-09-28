@@ -306,27 +306,32 @@ class Serializers(metaclass=MappableSingleton):
         class_member=True,
         doc="The default serializer for all properties, actions and events",
     )  # type: BaseSerializer
+
     pickle = ClassSelector(
         default=PickleSerializer(),
         class_=BaseSerializer,
         class_member=True,
         doc="pickle serializer, unsafe without encryption but useful for faster & flexible serialization of python specific types",
     )  # type: BaseSerializer
+
     msgpack = ClassSelector(
         default=MsgpackSerializer(),
         class_=BaseSerializer,
         class_member=True,
         doc="MessagePack serializer, efficient binary format that is both fast & interoperable between languages ",
     )  # type: BaseSerializer
+
     text = ClassSelector(
         default=TextSerializer(),
         class_=BaseSerializer,
         class_member=True,
         doc="Text serializer, converts string or string compatible types to bytes and vice versa",
     )  # type: BaseSerializer
+
     default = ClassSelector(
         default=json.default, class_=BaseSerializer, class_member=True, doc="The default serialization to be used"
     )  # type: BaseSerializer
+
     default_content_type = String(
         fget=lambda self: self.default.content_type,
         class_member=True,
@@ -344,24 +349,28 @@ class Serializers(metaclass=MappableSingleton):
         readonly=True,
         class_member=True,
     )  # type: typing.Dict[str, BaseSerializer]
+
     allowed_content_types = Parameter(
         default=None,
         class_member=True,
         doc="A list of content types that are usually considered safe and will be supported by default without any configuration",
         readonly=True,
     )  # type: typing.List[str]
+
     object_content_type_map = Parameter(
         default=dict(),
         class_member=True,
         doc="A dictionary of content types for specific properties, actions and events",
         readonly=True,
     )  # type: typing.Dict[str, typing.Dict[str, str]]
+
     object_serializer_map = Parameter(
         default=dict(),
         class_member=True,
         doc="A dictionary of serializer for specific properties, actions and events",
         readonly=True,
     )  # type: typing.Dict[str, typing.Dict[str, BaseSerializer]]
+
     protocol_serializer_map = Parameter(
         default=dict(), class_member=True, doc="A dictionary of serializer for a specific protocol", readonly=True
     )  # type: typing.Dict[str, BaseSerializer]
@@ -403,8 +412,10 @@ class Serializers(metaclass=MappableSingleton):
 
         Parameters
         ----------
-        thing: str | typing.Any
+        thing_id: str | typing.Any
             the id of the Thing or the Thing that owns the property, action or event
+        thing_cls: str | typing.Any
+            the class name of the Thing or the Thing that owns the property, action or event
         objekt: str | Property | Action | Event
             the name of the property, action or event
 

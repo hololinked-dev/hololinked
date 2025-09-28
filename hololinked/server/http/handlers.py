@@ -687,6 +687,12 @@ class StopHandler(BaseHandler):
 class LivenessProbeHandler(BaseHandler):
     """Liveness probe handler"""
 
+    def initialize(self, owner_inst=None) -> None:
+        from . import HTTPServer
+
+        assert isinstance(owner_inst, HTTPServer)
+        self.server = owner_inst
+
     async def get(self):
         self.set_status(200, "ok")
         self.set_header("Access-Control-Allow-Credentials", "true")

@@ -309,9 +309,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         #     Host Server to subscribe to coordinate starting sequence of things & web GUI
         from ..server.http import HTTPServer
 
-        self.run_with_zmq_server(transports=ZMQ_TRANSPORTS.INPROC, forked=True)
+        self.run_with_zmq_server(access_points=ZMQ_TRANSPORTS.INPROC, forked=True)
         http_server = HTTPServer(
-            [],
             port=port,
             address=address,
             logger=self.logger,
@@ -360,7 +359,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 if protocol.upper() == "HTTP":
                     if isinstance(params, int):
                         params = dict(port=params)
-                    http_server = HTTPServer([], **params)
+                    http_server = HTTPServer(**params)
                     servers.append(http_server)
                 elif protocol.upper() == "ZMQ":
                     if isinstance(params, int):

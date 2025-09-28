@@ -166,7 +166,7 @@ class ConsumedThingAction:
     def __eq__(self, other):
         if not isinstance(other, ConsumedThingAction):
             return False
-        return self.resource.name == other._resource.name
+        return self.resource.name == other.resource.name
 
 
 class ConsumedThingProperty:
@@ -324,6 +324,7 @@ class ConsumedThingEvent:
         self,
         resource: EventAffordance,
         logger: logging.Logger,
+        owner_inst: typing.Any,
     ) -> None:
         """
         Parameters
@@ -332,9 +333,12 @@ class ConsumedThingEvent:
             dataclass object representing the event
         logger: logging.Logger
             logger instance
+        owner_inst: typing.Any
+            the parent object that owns this event
         """
         self.resource = resource
         self.logger = logger
+        self.owner_inst = owner_inst
         self._subscribed = dict()
         # self._sync_callbacks = []
         # self._async_callbacks = []
