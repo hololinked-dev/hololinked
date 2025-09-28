@@ -2142,23 +2142,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
 
 class BaseEventConsumer(BaseZMQClient):
-    """
-    Consumes events published at PUB sockets using SUB socket.
-
-    Parameters
-    ----------
-    unique_identifier: str
-        identifier of the event registered at the PUB socket
-    socket_address: str
-        socket address of the event publisher (`EventPublisher`)
-    identity: str
-        unique identity for the consumer
-    client_type: bytes
-        b'HTTP_SERVER' or b'PROXY'
-    **kwargs:
-        server_id: str
-            instance name of the Thing publishing the event
-    """
+    """Consumes events published at PUB sockets using SUB socket"""
 
     def __init__(
         self,
@@ -2168,6 +2152,26 @@ class BaseEventConsumer(BaseZMQClient):
         context: zmq.Context | None = None,
         **kwargs,
     ) -> None:
+        """
+        Parameters
+        ----------
+        id: str
+            unique identity for the consumer
+        event_unique_identifier: str
+            unique identifier of the event registered at the PUB socket
+        access_point: str
+            socket address of the event publisher (`EventPublisher`), properly qualified with transport method
+        context: zmq.Context
+            ZMQ context to use, if None, a global context is used.
+        **kwargs:
+            additional arguments:
+
+            - `log_level`: `int`, logging level for the logger if `logger` is not supplied.
+            - `logger`: `logging.Logger`, logger instance to use. If None, a default
+            - `poll_timeout`: `int`, socket polling timeout in milliseconds greater than 0.
+            - `server_id`: `str`, id of the PUB socket server, usually not necessary as `access_point` is sufficient.
+        """
+
         if isinstance(self, BaseSyncZMQ):
             self.context = context or global_config.zmq_context()
             self.poller = zmq.Poller()
@@ -2201,6 +2205,7 @@ class BaseEventConsumer(BaseZMQClient):
         self._stop = False
 
     def subscribe(self) -> None:
+        """subscribe to the event at the PUB socket"""
         self.socket.setsockopt(zmq.SUBSCRIBE, self.event_unique_identifier)
         # pair sockets cannot be polled unforunately, so we use router
         # if self.socket in self.poller._map:
@@ -2211,9 +2216,15 @@ class BaseEventConsumer(BaseZMQClient):
         self.poller.register(self.interruptor, zmq.POLLIN)
 
     def stop_polling(self) -> None:
+        """stop polling for events when `receive()` is called"""
         self._stop = True
 
-    def craft_interrupt_message(self) -> EventMessage:
+    @property
+    def interrupt_message(self) -> EventMessage:
+        """
+        craft an interrupt message to be sent to the interruptor socket, if `stop_polling()` is not sufficient as
+        the poll timeout is infinite. Used internally by `interrupt()` method.
+        """
         return EventMessage.craft_from_arguments(
             event_id=f"{self.id}/interrupting-server",
             sender_id=self.id,
@@ -2240,21 +2251,7 @@ class BaseEventConsumer(BaseZMQClient):
 
 
 class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
-    """
-    Listens to events published at PUB sockets using SUB socket, listen in blocking fashion or use in threads.
-
-    Parameters
-    ----------
-    unique_identifier: str
-        identifier of the event registered at the PUB socket
-    socket_address: str
-        socket address of the event publisher (`EventPublisher`)
-    identity: str
-        unique identity for the consumer
-    **kwargs:
-        server_id: str
-            instance name of the Thing publishing the event
-    """
+    """Sync Event Consumer to used outside of async loops"""
 
     def receive(
         self, timeout: typing.Optional[float] = 1000, raise_interrupt_as_exception: bool = False
@@ -2266,8 +2263,8 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         ----------
         timeout: float, int, None
             timeout in milliseconds, None for blocking
-        deserialize: bool, default True
-            deseriliaze the data, use False for HTTP server sent event to simply bypass
+        raise_interrupt_as_exception: bool
+            if True, raises BreakLoop exception when interrupted, otherwise returns None
         """
         self._stop = False
         while not self._stop:
@@ -2304,29 +2301,14 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
 
     def interrupt(self):
         """
-        interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method,
-        generally should be used for exiting this object if there is no poll period / infinite polling.
-        Otherwise please use stop_polling().
+        interrupts the event consumer. Generally should be used for exiting this object if there is no poll
+        period/infinite polling. Otherwise please use stop_polling().
         """
-        self.interrupting_peer.send_multipart(self.craft_interrupt_message().byte_array)
+        self.interrupting_peer.send_multipart(self.interrupt_message.byte_array)
 
 
 class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
-    """
-    Listens to events published at PUB sockets using SUB socket, use in async loops.
-
-    Parameters
-    ----------
-    unique_identifier: str
-        identifier of the event registered at the PUB socket
-    socket_address: str
-        socket address of the event publisher (`EventPublisher`)
-    identity: str
-        unique identity for the consumer
-    **kwargs:
-        server_id: str
-            instance name of the Thing publishing the event
-    """
+    """Async Event Consumer to be used inside async loops"""
 
     async def receive(
         self,
@@ -2340,8 +2322,8 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         ----------
         timeout: float, int, None
             timeout in milliseconds, None for blocking
-        deserialize: bool, default True
-            deseriliaze the data, use False for HTTP server sent event to simply bypass
+        raise_interrupt_as_exception: bool
+            if True, raises BreakLoop exception when interrupted, otherwise returns None
         """
         # TODO - use raise_interrupt_as_exception
         self._stop = False
@@ -2383,11 +2365,10 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
 
     async def interrupt(self):
         """
-        interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method,
-        generally should be used for exiting this object, if there is no poll period / infinite polling.
-        Otherwise please use stop_polling().
+        interrupts the event consumer. Generally should be used for exiting this object if there is no poll
+        period/infinite polling. Otherwise please use stop_polling().
         """
-        await self.interrupting_peer.send_multipart(self.craft_interrupt_message().byte_array)
+        await self.interrupting_peer.send_multipart(self.interrupt_message.byte_array)
 
 
 from ...core.events import EventDispatcher  # noqa
