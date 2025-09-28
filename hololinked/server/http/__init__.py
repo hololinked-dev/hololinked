@@ -32,7 +32,7 @@ from ...utils import (
     get_default_logger,
     run_callable_somehow,
 )
-from ...serializers.serializers import JSONSerializer
+from ...serializers import Serializers
 from ...schema_validators import BaseSchemaValidator, JSONSchemaValidator
 from ...core.property import Property
 from ...core.actions import Action
@@ -43,6 +43,7 @@ from ...core.zmq.brokers import AsyncZMQClient, MessageMappedZMQClientPool
 from ..security import Security
 from .handlers import (
     ActionHandler,
+    LivenessProbeHandler,
     PropertyHandler,
     EventHandler,
     BaseHandler,
@@ -54,7 +55,8 @@ from .handlers import (
 
 class HTTPServer(Parameterized):
     """
-    HTTP(s) server to route requests to `Thing`.
+    HTTP(s) server to expose `Thing` over HTTP protocol. Supports HTTP 1.1.
+    Use `add_thing` or `add_property` or `add_action` or `add_event` methods to add things to the server.
     """
 
     things = TypedList(
@@ -91,33 +93,12 @@ class HTTPServer(Parameterized):
                     along with a IO stream handler.""",
     )  # type: int
 
-    serializer = ClassSelector(
-        class_=JSONSerializer,
-        default=None,
-        allow_None=True,
-        doc="""json serializer used by the server""",
-    )  # type: JSONSerializer
-
     ssl_context = ClassSelector(
         class_=ssl.SSLContext,
         default=None,
         allow_None=True,
         doc="SSL context to provide encrypted communication",
     )  # type: typing.Optional[ssl.SSLContext]
-
-    certfile = String(
-        default=None,
-        allow_None=True,
-        doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
-                        create a SSL context""",
-    )  # type: str
-
-    keyfile = String(
-        default=None,
-        allow_None=True,
-        doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
-                        create a SSL context""",
-    )  # type: str
 
     allowed_clients = TypedList(
         item_type=str,
@@ -181,19 +162,15 @@ class HTTPServer(Parameterized):
 
     def __init__(
         self,
-        things: typing.List[str] | typing.List[Thing] | typing.List[ThingMeta] | None = None,
         *,
         port: int = 8080,
         address: str = "0.0.0.0",
         # host: typing.Optional[str] = None,
         logger: typing.Optional[logging.Logger] = None,
         log_level: int = logging.INFO,
-        serializer: typing.Optional[JSONSerializer] = None,
         ssl_context: typing.Optional[ssl.SSLContext] = None,
         security_schemes: typing.Optional[typing.List[Security]] = None,
-        schema_validator: typing.Optional[BaseSchemaValidator] = JSONSchemaValidator,
-        certfile: str = None,
-        keyfile: str = None,
+        # schema_validator: typing.Optional[BaseSchemaValidator] = JSONSchemaValidator,
         # protocol_version : int = 1, network_interface : str = 'Ethernet',
         allowed_clients: typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,
         config: typing.Optional[dict[str, typing.Any]] = None,
@@ -202,8 +179,6 @@ class HTTPServer(Parameterized):
         """
         Parameters
         ----------
-        things: List[str]
-            instance name of the things to be served as a list.
         port: int, default 8080
             the port at which the server should be run
         address: str, default 0.0.0.0
@@ -212,36 +187,30 @@ class HTTPServer(Parameterized):
             logging.Logger instance
         log_level: int
             alternative to logger, this creates an internal logger with the specified log level along with a IO stream handler.
-        serializer: JSONSerializer, optional
-            json serializer used by the server
         ssl_context: ssl.SSLContext
             SSL context to provide encrypted communication
-        certfile: str
-            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context
-        keyfile: str
-            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context
         allowed_clients: List[str]
             serves request and sets CORS only from these clients, other clients are reject with 403. Unlike pure CORS
             feature, the server resource is not even executed if the client is not an allowed client.
         **kwargs:
-            rpc_handler: RPCHandler | RPCHandler, optional
-                custom web request handler of your choice for property read-write & action execution
-            event_handler: EventHandler | BaseHandler, optional
-                custom event handler of your choice for handling events
+            additional keyword arguments for server configuration. Usually:
+
+            - `property_handler`: `BaseHandler` | `PropertyHandler`, optional.
+                custom web request handler for property read-write
+            - `action_handler`: `BaseHandler` | `ActionHandler`, optional.
+                custom web request handler for action
+            - `event_handler`: `EventHandler` | `BaseHandler`, optional.
+                custom event handler for sending HTTP SSE
         """
         super().__init__(
-            things=things,
             port=port,
             address=address,
             # host=host,
             logger=logger,
             log_level=log_level,
-            serializer=serializer or JSONSerializer(),
             # protocol_version=1,
-            schema_validator=schema_validator,
-            certfile=certfile,
+            # schema_validator=schema_validator,
             security_schemes=security_schemes,
-            keyfile=keyfile,
             ssl_context=ssl_context,
             # network_interface='Ethernet',# network_interface,
             property_handler=kwargs.get("property_handler", PropertyHandler),
@@ -259,7 +228,12 @@ class HTTPServer(Parameterized):
             )
 
         self.tornado_instance = None
-        self.app = Application(handlers=[(r"/stop", StopHandler, dict(owner_inst=self))])
+        self.app = Application(
+            handlers=[
+                (r"/stop", StopHandler, dict(owner_inst=self)),
+                (r"/liveness", LivenessProbeHandler, dict(owner_inst=self)),
+            ]
+        )
         self.router = ApplicationRouter(self.app, self)
 
         self.zmq_client_pool = MessageMappedZMQClientPool(
@@ -273,14 +247,9 @@ class HTTPServer(Parameterized):
         self._disconnected_things = dict()
         self._registered_things = dict()  # type: typing.Dict[typing.Type[ThingMeta], typing.List[str]]
 
-        if self.things is not None:
-            self.add_things(*self.things)
-
     @property
     def all_ok(self) -> bool:
-        """
-        check if all the requirements are met before starting the server, auto invoked by listen().
-        """
+        """check if all the requirements are met before starting the server, auto invoked by listen()"""
         # Add only those code here that needs to be redone always before restarting the server.
         # One time creation attributes/activities must be in init
         ioloop.IOLoop.clear_current()  # cleat the event in case any pending tasks exist, also restarting with same
@@ -296,18 +265,21 @@ class HTTPServer(Parameterized):
         # set value based on what event loop we use, there is some difference
         # between the asyncio event loop and the tornado event loop
 
-        # if self.protocol_version == 2:
-        #     raise NotImplementedError("Current HTTP2 is not implemented.")
-        #     self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
-        # else:
         self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)  # type: TornadoHTTP1Server
         return True
 
     @forkable
     def listen(self, forked: bool = False) -> None:
         """
-        Start the HTTP server. This method is blocking. Async event loops intending to schedule the HTTP server should instead use
-        the inner tornado instance's (``HTTPServer.tornado_instance``) listen() method.
+        Start the HTTP server. This method is blocking.
+        Async event loops intending to schedule the HTTP server should instead use
+        the inner tornado instance's (`HTTPServer.tornado_instance`) listen() method.
+
+        Parameters
+        ----------
+        forked: bool, default `False`
+            if `True`, the server is started in a separate thread and the method returns immediately.
+            If `False`, the method blocks until the server is stopped.
         """
         assert self.all_ok, (
             "HTTPServer all is not ok before starting"
@@ -320,9 +292,14 @@ class HTTPServer(Parameterized):
 
     def stop(self, attempt_async_stop: bool = True) -> None:
         """
-        Stop the HTTP server - unreliable, use async_stop() if possible.
-        A stop handler at the path '/stop' with POST method is already implemented that invokes this
+        Stop the HTTP server - unreliable, use `async_stop()` if possible.
+        A stop handler at the path `/stop` with POST method is already implemented that invokes this
         method for the clients.
+
+        Parameters
+        ----------
+        attempt_async_stop: bool, default `True`
+            if `True`, attempts to run the `async_stop` method to close all connections gracefully.
         """
         if attempt_async_stop:
             run_callable_somehow(self.async_stop())
@@ -338,7 +315,7 @@ class HTTPServer(Parameterized):
 
     async def async_stop(self) -> None:
         """
-        Stop the HTTP server. A stop handler at the path '/stop' with POST method is already implemented that invokes this
+        Stop the HTTP server. A stop handler at the path `/stop` with POST method is already implemented that invokes this
         method for the clients.
         """
         self.zmq_client_pool.stop_polling()
@@ -350,15 +327,15 @@ class HTTPServer(Parameterized):
             self.tornado_event_loop.stop()
             self.logger.info(f"stopped tornado event loop for server {self._IP}")
 
-    def add_things(self, *things: Thing | ThingMeta | dict | str) -> None:
+    def add_things(self, *things: Thing | dict | str) -> None:
         """
         Add things to be served by the HTTP server
 
         Parameters
         ----------
-        *things: Thing | ThingMeta | dict | str
+        *things: Thing | dict | str
             the thing instance(s) or thing classe(s) to be served, or a map of address/ZMQ protocol to thing id,
-            for example - {'tcp://my-pc:5555': 'my-thing-id', 'IPC' : 'my-thing-id-2'}
+            for example - `{'tcp://my-pc:5555': 'my-thing-id', 'IPC' : 'my-thing-id-2'}`
             The server ID needs to match the thing ID, otherwise this method would be unable to find the thing.
         """
         for thing in things:
@@ -390,7 +367,7 @@ class HTTPServer(Parameterized):
 
         Parameters
         ----------
-        thing: str | Thing | ThingMeta
+        thing: str | Thing
             id of the thing or the thing instance or thing class to be served
         """
         self.router.add_zmq_thing_instance(
@@ -487,7 +464,7 @@ class HTTPServer(Parameterized):
             http method to be used for the action
         handler: BaseHandler | ActionHandler, optional
             custom handler for the action
-        kwargs : dict
+        kwargs: dict
             additional keyword arguments to be passed to the handler's __init__
         """
         if not isinstance(action, (Action, ActionAffordance)):
@@ -547,7 +524,7 @@ class HTTPServer(Parameterized):
                     HTTPRequest(
                         url=f"{self.host}/subscribers",
                         method="POST",
-                        body=JSONSerializer.dumps(
+                        body=Serializers.json.dumps(
                             dict(
                                 hostname=socket.gethostname(),
                                 IPAddress=get_IP_from_interface(self.network_interface),
@@ -572,7 +549,7 @@ class HTTPServer(Parameterized):
                     break
                 elif i >= 299:
                     raise RuntimeError(
-                        f"could not subsribe to host {self.host}. response {JSONSerializer.loads(res.body)}"
+                        f"could not subsribe to host {self.host}. response {Serializers.json.loads(res.body)}"
                     )
             await asyncio.sleep(1)
         # we lose the client anyway so we close it. if we decide to reuse the client, changes needed
@@ -828,7 +805,13 @@ class ApplicationRouter:
             assert isinstance(Thing.get_thing_model, Action)  # type definition
             FetchTMAffordance = Thing.get_thing_model.to_affordance()
             FetchTMAffordance.override_defaults(thing_id=thing_id, name="get_thing_description")
-            fetch_td = ZMQAction(resource=FetchTMAffordance, sync_client=None, async_client=client)
+            fetch_td = ZMQAction(
+                resource=FetchTMAffordance,
+                sync_client=None,
+                async_client=client,
+                logger=self.server.logger,
+                owner_inst=None,
+            )
             if isinstance(access_point, str) and len(access_point) in [3, 6]:
                 access_point = access_point.upper()
             elif access_point.lower().startswith("tcp://"):

@@ -84,9 +84,9 @@ class InteractionAffordanceMixin(TestBrokerMixin):
             sync_client=cls.sync_client,
             async_client=cls.async_client,
             owner_inst=owner_inst,
+            logger=cls.logger,
             invokation_timeout=5,
             execution_timeout=5,
-            schema_validator=None,
         )
 
         cls.action_get_serialized_data = ZMQAction(
@@ -94,9 +94,9 @@ class InteractionAffordanceMixin(TestBrokerMixin):
             sync_client=cls.sync_client,
             async_client=cls.async_client,
             owner_inst=owner_inst,
+            logger=cls.logger,
             invokation_timeout=5,
             execution_timeout=5,
-            schema_validator=None,
         )
 
         cls.action_sleep = ZMQAction(
@@ -104,9 +104,9 @@ class InteractionAffordanceMixin(TestBrokerMixin):
             sync_client=cls.sync_client,
             async_client=cls.async_client,
             owner_inst=owner_inst,
+            logger=cls.logger,
             invokation_timeout=5,
             execution_timeout=5,
-            schema_validator=None,
         )
 
         cls.action_get_mixed_content_data = ZMQAction(
@@ -114,18 +114,18 @@ class InteractionAffordanceMixin(TestBrokerMixin):
             sync_client=cls.sync_client,
             async_client=cls.async_client,
             owner_inst=owner_inst,
+            logger=cls.logger,
             invokation_timeout=5,
             execution_timeout=5,
-            schema_validator=None,
         )
         cls.action_push_events = ZMQAction(
             resource=ActionAffordance.from_TD("push_events", test_thing_TD),
             sync_client=cls.sync_client,
             async_client=cls.async_client,
             owner_inst=owner_inst,
+            logger=cls.logger,
             invokation_timeout=5,
             execution_timeout=5,
-            schema_validator=None,
         )
 
     @classmethod
@@ -138,18 +138,18 @@ class InteractionAffordanceMixin(TestBrokerMixin):
             sync_client=cls.sync_client,
             async_client=cls.async_client,
             owner_inst=owner_inst,
+            logger=cls.logger,
             invokation_timeout=5,
             execution_timeout=5,
-            schema_validator=None,
         )
         cls.total_number_of_events = ZMQProperty(
             resource=PropertyAffordance.from_TD("total_number_of_events", test_thing_TD),
             sync_client=cls.sync_client,
             async_client=cls.async_client,
             owner_inst=owner_inst,
+            logger=cls.logger,
             invokation_timeout=5,
             execution_timeout=5,
-            schema_validator=None,
         )
 
     @classmethod
@@ -159,8 +159,8 @@ class InteractionAffordanceMixin(TestBrokerMixin):
         test_thing_TD["id"] = cls.thing_id
         cls.test_event = ZMQEvent(
             resource=EventAffordance.from_TD("test_event", test_thing_TD),
-            sync_zmq_client=None,
             owner_inst=owner_inst,
+            logger=cls.logger,
         )
 
 
@@ -577,29 +577,53 @@ class TestExposedActions(InteractionAffordanceMixin):
 
         # thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
         assert isinstance(thing.action_echo, BoundAction)  # type definition
-        action_echo = ZMQAction(resource=thing.action_echo.to_affordance(), sync_client=self.client)
+        action_echo = ZMQAction(
+            resource=thing.action_echo.to_affordance(),
+            sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
+        )
         self.assertEqual(action_echo(1), 1)
 
         assert isinstance(thing.action_echo_with_classmethod, BoundAction)  # type definition
         action_echo_with_classmethod = ZMQAction(
             resource=thing.action_echo_with_classmethod.to_affordance(),
             sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
         )
         self.assertEqual(action_echo_with_classmethod(2), 2)
 
         assert isinstance(thing.action_echo_async, BoundAction)  # type definition
-        action_echo_async = ZMQAction(resource=thing.action_echo_async.to_affordance(), sync_client=self.client)
+        action_echo_async = ZMQAction(
+            resource=thing.action_echo_async.to_affordance(),
+            sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
+        )
         self.assertEqual(action_echo_async("string"), "string")
 
         assert isinstance(thing.action_echo_async_with_classmethod, BoundAction)  # type definition
         action_echo_async_with_classmethod = ZMQAction(
             resource=thing.action_echo_async_with_classmethod.to_affordance(),
             sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
         )
         self.assertEqual(action_echo_async_with_classmethod([1, 2]), [1, 2])
 
         assert isinstance(thing.parameterized_action, BoundAction)  # type definition
-        parameterized_action = ZMQAction(resource=thing.parameterized_action.to_affordance(), sync_client=self.client)
+        parameterized_action = ZMQAction(
+            resource=thing.parameterized_action.to_affordance(),
+            sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
+        )
         self.assertEqual(
             parameterized_action(arg1=1, arg2="hello", arg3=5),
             [self.server_id, 1, "hello", 5],
@@ -609,6 +633,9 @@ class TestExposedActions(InteractionAffordanceMixin):
         parameterized_action_async = ZMQAction(
             resource=thing.parameterized_action_async.to_affordance(),
             sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
         )
         self.assertEqual(
             parameterized_action_async(arg1=2.5, arg2="hello", arg3="foo"),
@@ -619,6 +646,9 @@ class TestExposedActions(InteractionAffordanceMixin):
         parameterized_action_without_call = ZMQAction(
             resource=thing.parameterized_action_without_call.to_affordance(),
             sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
         )
         with self.assertRaises(NotImplementedError) as ex:
             parameterized_action_without_call(arg1=2, arg2="hello", arg3=5)
@@ -636,7 +666,9 @@ class TestExposedActions(InteractionAffordanceMixin):
         # JSON schema validation
         assert isinstance(thing.json_schema_validated_action, BoundAction)  # type definition
         action_affordance = thing.json_schema_validated_action.to_affordance()
-        json_schema_validated_action = ZMQAction(resource=action_affordance, sync_client=self.client)
+        json_schema_validated_action = ZMQAction(
+            resource=action_affordance, sync_client=self.client, async_client=None, logger=self.logger, owner_inst=None
+        )
         # data with invalid schema
         with self.assertRaises(Exception) as ex1:
             json_schema_validated_action(val1="1", val2="hello", val3={"field": "value"}, val4=[])
@@ -665,7 +697,9 @@ class TestExposedActions(InteractionAffordanceMixin):
         # Pydantic schema validation
         assert isinstance(thing.pydantic_validated_action, BoundAction)  # type definition
         action_affordance = thing.pydantic_validated_action.to_affordance()
-        pydantic_validated_action = ZMQAction(resource=action_affordance, sync_client=self.client)
+        pydantic_validated_action = ZMQAction(
+            resource=action_affordance, sync_client=self.client, async_client=None, logger=self.logger, owner_inst=None
+        )
         # data with invalid schema
         with self.assertRaises(Exception) as ex1:
             pydantic_validated_action(val1="1", val2="hello", val3={"field": "value"}, val4=[])
@@ -763,7 +797,13 @@ class TestExposedProperties(InteractionAffordanceMixin):
 
         descriptor = thing.properties["number_prop"]
         assert isinstance(descriptor, Property)  # type definition
-        number_prop = ZMQProperty(resource=descriptor.to_affordance(thing), sync_client=self.client)
+        number_prop = ZMQProperty(
+            resource=descriptor.to_affordance(thing),
+            sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
+        )
         self.assertEqual(number_prop.get(), descriptor.default)
         number_prop.set(100)
         self.assertEqual(number_prop.get(), 100)
@@ -795,8 +835,11 @@ class TestExposedProperties(InteractionAffordanceMixin):
         json_schema_prop = ZMQProperty(
             resource=PropertyAffordance.from_TD("json_schema_prop", test_thing_TD),
             sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
         )
-        json_schema_prop._resource._thing_id = self.server_id
+        json_schema_prop.resource._thing_id = self.server_id
         json_schema_prop.set("hello")
         self.assertEqual(json_schema_prop.get(), "hello")
         json_schema_prop.set("world")
@@ -812,8 +855,11 @@ class TestExposedProperties(InteractionAffordanceMixin):
         pydantic_prop = ZMQProperty(
             resource=PropertyAffordance.from_TD("pydantic_prop", test_thing_TD),
             sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
         )
-        pydantic_prop._resource._thing_id = self.server_id
+        pydantic_prop.resource._thing_id = self.server_id
 
         valid_value = {"foo": "foo", "bar": 1, "foo_bar": 1.0}
         pydantic_prop.set(valid_value)
@@ -827,8 +873,11 @@ class TestExposedProperties(InteractionAffordanceMixin):
         pydantic_simple_prop = ZMQProperty(
             resource=PropertyAffordance.from_TD("pydantic_simple_prop", test_thing_TD),
             sync_client=self.client,
+            async_client=None,
+            logger=self.logger,
+            owner_inst=None,
         )
-        pydantic_simple_prop._resource._thing_id = self.server_id
+        pydantic_simple_prop.resource._thing_id = self.server_id
         pydantic_simple_prop.set(5)
         self.assertEqual(pydantic_simple_prop.get(), 5)
         with self.assertRaises(Exception) as ex:
@@ -872,7 +921,7 @@ class TestExposedEvents(TestRPCServerMixin):
             form.op = "subscribeevent"
             form.subprotocol = "sse"
             event_affordance.forms = [form]
-            event = ZMQEvent(resource=event_affordance)
+            event = ZMQEvent(resource=event_affordance, logger=cls.logger, owner_inst=None)
             setattr(cls, event_name, event)
 
     def test_1_creation_defaults(self):
@@ -893,8 +942,8 @@ class TestExposedEvents(TestRPCServerMixin):
             event_client = getattr(self, event_name)  # type: ZMQEvent
 
             self.assertEqual(
-                get_zmq_unique_identifier_from_event_affordance(event_client._resource),
-                getattr(self.thing, event_client._resource.name)._unique_identifier,  # type: EventDispatcher
+                get_zmq_unique_identifier_from_event_affordance(event_client.resource),
+                getattr(self.thing, event_client.resource.name)._unique_identifier,  # type: EventDispatcher
             )
             attempts = 100
             results = []
@@ -936,8 +985,8 @@ class TestExposedEvents(TestRPCServerMixin):
         async def test_events(event_name: str, expected_data: typing.Any) -> None:
             event_client = getattr(self, event_name)  # type: ZMQEvent
             self.assertEqual(
-                get_zmq_unique_identifier_from_event_affordance(event_client._resource),
-                getattr(self.thing, event_client._resource.name)._unique_identifier,  # type: EventDispatcher
+                get_zmq_unique_identifier_from_event_affordance(event_client.resource),
+                getattr(self.thing, event_client.resource.name)._unique_identifier,  # type: EventDispatcher
             )
             attempts = 100
             results = []
@@ -996,7 +1045,7 @@ class TestExposedEvents(TestRPCServerMixin):
                 form.op = "subscribeevent"
                 form.subprotocol = "sse"
                 event_affordance.forms = [form]
-                event._resource.forms = event_affordance.forms
+                event.resource.forms = event_affordance.forms
             self.test_2_sync_client_event_stream()
             self.test_3_async_client_event_stream()
 

@@ -14,37 +14,13 @@ from .thing import Thing as RemoteObject
 from .actions import action as remote_method
 
 
-class ListHandler(logging.Handler):
-    """
-    Log history handler. Add and remove this handler to hold a bunch of specific logs. Currently used by execution context
-    within ``EventLoop`` where one can fetch the execution logs while an action is being executed.
-    """
-
-    def __init__(self, log_list: typing.Optional[typing.List] = None):
-        super().__init__()
-        self.log_list: typing.List[typing.Dict] = [] if not log_list else log_list
-
-    def emit(self, record: logging.LogRecord):
-        # log_entry = self.format(record)
-        self.format(record)
-        self.log_list.insert(
-            0,
-            {
-                "level": record.levelname,
-                "timestamp": datetime.datetime.fromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S.%f"),
-                "thread_id": threading.get_ident(),
-                "message": record.msg,
-            },
-        )
-
-
 log_message_schema = {
     "type": "object",
     "properties": {
-        "level": {"type": "string"},
-        "timestamp": {"type": "string"},
-        "thread_id": {"type": "integer"},
-        "message": {"type": "string"},
+        "level": {"type": "string", "description": "log level, one of DEBUG, INFO, WARN, ERROR, CRITICAL"},
+        "timestamp": {"type": "string", "description": "timestamp of the log entry"},
+        "thread_id": {"type": "integer", "description": "ID of the thread that generated the log entry"},
+        "message": {"type": "string", "description": "log message"},
     },
     "required": ["level", "timestamp", "thread_id", "message"],
     "additionalProperties": False,
@@ -53,18 +29,36 @@ log_message_schema = {
 
 class RemoteAccessHandler(logging.Handler, RemoteObject):
     """
-    Log handler with remote access attached to ``Thing``'s logger if logger_remote_access is True.
-    The schema of the pushed logs are a list containing a dictionary for each log message with
-    the following fields:
+    Log handler with remote access attached to `Thing`'s logger, capable of streaming the log entries as events.
+    Set `remote_accessible_logger` to True in the `Thing` to enable this handler.
+    The schema of the pushed logs is an array of objects,
+    where each object has the following JSON schema:
 
-    .. code-block:: python
-
-        {
-            "level" : str,
-            "timestamp" : str,
-            "thread_id" : int,
-            "message" : str
-        }
+    ```json
+    {
+        "type": "object",
+        "properties": {
+            "level": {
+                "type": "string",
+                "description": "log level, one of DEBUG, INFO, WARN, ERROR, CRITICAL"
+            },
+            "timestamp": {
+                "type": "string",
+                "description": "timestamp of the log entry"
+            },
+            "thread_id": {
+                "type": "integer",
+                "description": "ID of the thread that generated the log entry"
+            },
+            "message": {
+                "type": "string",
+                "description": "log message"
+            }
+        },
+        "required": ["level", "timestamp", "thread_id", "message"],
+        "additionalProperties": false
+    }
+    ```
     """
 
     def __init__(self, id: str = "logger", maxlen: int = 500, stream_interval: float = 1.0, **kwargs) -> None:
@@ -72,22 +66,24 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         Parameters
         ----------
         id: str, default 'logger'
-            instance name of the object, generally only one instance per ``Thing`` necessary, therefore defaults to
+            id of the object, generally only one instance per `Thing` necessary, therefore defaults to
             'logger'
         maxlen: int, default 500
             history of log entries to store in RAM
         stream_interval: float, default 1.0
             when streaming logs using log-events endpoint, this value is the stream interval.
         **kwargs:
-            len_debug: int
+            additional keyword arguments, currently supports:
+
+            - `len_debug`: int
                 length of debug logs, default maxlen/5
-            len_info: int
+            - `len_info`: int
                 length of info logs, default maxlen/5
-            len_warn: int
+            - `len_warn`: int
                 length of warn logs, default maxlen/5
-            len_error: int
+            - `len_error`: int
                 length of error logs, default maxlen/5
-            len_critical: int
+            - `len_critical`: int
                 length of critical logs, default maxlen/5
         """
         RemoteObject.__init__(self, id=id, **kwargs)
@@ -106,7 +102,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         crop_to_bounds=True,
         step=0.05,
         doc="interval at which logs should be published to a client.",
-    )
+    )  # type: float
 
     def get_maxlen(self):
         return self._maxlen
@@ -127,24 +123,28 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         fget=get_maxlen,
         fset=set_maxlen,
         doc="length of execution log history to store",
-    )
+    )  # type: int
 
-    @remote_method()
+    @remote_method(
+        input_schema={
+            "scheduling": {"type": "string", "enum": ["threaded", "async"]},
+            "stream_interval": {"type": "number", "minimum": 0.025},
+        },
+    )
     def push_events(self, scheduling: str = "threaded", stream_interval: float = 1) -> None:
         """
-        Push events to client. This method is intended to be called remotely for
-        debugging the Thing.
+        Push log events to a client.
 
         Parameters
         ----------
         scheduling: str
-            'threaded' or 'async. threaded starts a new thread, async schedules a task to the
+            'threaded' or 'async'. threaded starts a new thread, async schedules a task to the
             main event loop.
         stream_interval: float
-            interval of push in seconds.
+            push interval in seconds.
         """
         self.stream_interval = stream_interval
-        if scheduling == "asyncio":
+        if scheduling == "async":
             asyncio.get_event_loop().call_soon(lambda: asyncio.create_task(self._async_push_diff_logs()))
         elif scheduling == "threading":
             if self._events_thread is not None:  # dont create again if one is already running
@@ -156,7 +156,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
     @remote_method()
     def stop_events(self) -> None:
         """
-        stop pushing events
+        stop pushing log events
         """
         self._push_events = False
         if self._events_thread:  # coroutine variant will resolve automatically
@@ -165,6 +165,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
             self._events_thread = None
 
     def emit(self, record: logging.LogRecord) -> None:
+        # automatically called when a log entry is created
         # log_entry = self.format(record)
         self.format(record)
         info = {
@@ -193,17 +194,19 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         while self._push_events:
             time.sleep(self.stream_interval)
             if len(self.diff_logs) > 0:
-                self.event.push(self.diff_logs)
+                self.log_events.push(self.diff_logs)
                 self.diff_logs.clear()
         # give time to collect final logs with certainty
-        self._owner.logger.info(f"ending log event source with thread-id {threading.get_ident()}.")
+        # self.owner.logger.info(f"ending log event source with thread-id {threading.get_ident()}.")
 
     async def _async_push_diff_logs(self) -> None:
         while self._push_events:
             await asyncio.sleep(self.stream_interval)
-            self.event.push(self.diff_logs)
-            self.diff_logs.clear()
-        self._owner.logger.info("ending log events.")
+            # TODO: can use an async EventPublisher in the future
+            if len(self.diff_logs) > 0:
+                self.log_events.push(self.diff_logs)
+                self.diff_logs.clear()
+        # self.owner.logger.info("ending log events.")
 
     debug_logs = List(default=[], readonly=True, fget=lambda self: self._debug_logs, doc="logs at logging.DEBUG level")  # type: list[typing.Dict[str, typing.Any]]
 
@@ -258,4 +261,36 @@ def prepare_object_logger(instance: RemoteObject, log_level: int, log_file: str,
                 instance._remote_access_loghandler = handler
 
 
-__all__ = [ListHandler.__name__, RemoteAccessHandler.__name__]
+class LogHistoryHandler(logging.Handler):
+    """
+    Log history handler. Add and remove this handler at specific points to hold specific logs that are generated
+    between those points. Currently used by execution context within `RPCServer` where one can fetch the
+    execution logs that were collected during a specific operation.
+    """
+
+    def __init__(self, log_list: typing.Optional[typing.List] = None):
+        """
+        Parameters
+        ----------
+
+        log_list: list, optional
+            Initial set of log entries to start with. Optional, defaults to empty list.
+        """
+        super().__init__()
+        self.log_list: typing.List[typing.Dict] = [] if not log_list else log_list
+
+    def emit(self, record: logging.LogRecord):
+        # log_entry = self.format(record)
+        self.format(record)
+        self.log_list.insert(
+            0,
+            {
+                "level": record.levelname,
+                "timestamp": datetime.datetime.fromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S.%f"),
+                "thread_id": threading.get_ident(),
+                "message": record.msg,
+            },
+        )
+
+
+__all__ = [LogHistoryHandler.__name__, RemoteAccessHandler.__name__]

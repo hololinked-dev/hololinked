@@ -11,6 +11,10 @@ from ..core.zmq.rpc_server import RPCServer
 
 
 class ZMQServer(RPCServer):
+    """
+    Server to expose `Thing` over `ZeroMQ` protocol. Extends `RPCServer` to support `IPC` & `TCP`.
+    """
+
     def __init__(
         self,
         *,
@@ -20,6 +24,24 @@ class ZMQServer(RPCServer):
         access_points: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC,
         **kwargs,
     ) -> None:
+        """
+        Parameters
+        ----------
+        id : str
+            Unique identifier for the server instance.
+        things : List[Thing]
+            List of `Thing` instances to be managed by the server.
+        context : zmq.asyncio.Context, optional
+            ZeroMQ context for socket management. If `None`, a global context is used.
+        access_points : ZMQ_TRANSPORTS or List[ZMQ_TRANSPORTS], default ZMQ_TRANSPORTS.IPC
+            Transport protocols for communication. Supported values are `ZMQ_TRANSPORTS.IPC`, `ZMQ_TRANSPORTS.TCP` or
+            a TCP socket address `tcp://*:<port>`. Can be a single value or a list of values.
+        **kwargs
+            Additional keyword arguments for server configuration. Usually:
+
+            - `logger`: `logging.Logger`, custom logger instance.
+            - `poll_timeout`: `int`, polling timeout in milliseconds.
+        """
         self.ipc_server = self.tcp_server = None
         self.ipc_event_publisher = self.tcp_event_publisher = self.inproc_events_proxy = None
         super().__init__(id=id, things=things, context=context, **kwargs)

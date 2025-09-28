@@ -1,7 +1,6 @@
 import logging
 import uuid
 import base64
-
 import httpx
 
 from ..core import Thing, Action
@@ -12,8 +11,11 @@ from ..td.interaction_affordance import (
     EventAffordance,
 )
 from ..serializers import Serializers
-from ..utils import get_default_logger
+from ..utils import get_default_logger, set_global_event_loop_policy
+from ..constants import ZMQ_TRANSPORTS
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
+from .proxy import ObjectProxy
+from .http.consumed_interactions import HTTPProperty, HTTPAction, HTTPEvent
 from .zmq.consumed_interactions import (
     ZMQAction,
     ZMQEvent,
@@ -21,21 +23,18 @@ from .zmq.consumed_interactions import (
     WriteMultipleProperties,
     ReadMultipleProperties,
 )
-from .http.consumed_interactions import HTTPProperty, HTTPAction, HTTPEvent
-from ..utils import set_global_event_loop_policy
-from ..constants import ZMQ_TRANSPORTS
 
 
 set_global_event_loop_policy()
 
 
 class ClientFactory:
-    __allowed_attribute_types__ = (
-        ConsumedThingProperty,
-        ConsumedThingAction,
-        ConsumedThingEvent,
-    )
-    __WRAPPER_ASSIGNMENTS__ = ("__name__", "__qualname__", "__doc__")
+    """
+    An factory class for creating clients to interact with Things over different protocols.
+    This object is not meant to be instantiated, but rather to provide class methods for creating clients.
+    """
+
+    __wrapper_assignments__ = ("__name__", "__qualname__", "__doc__")
 
     @classmethod
     def zmq(
@@ -44,7 +43,7 @@ class ClientFactory:
         thing_id: str,
         access_point: str = ZMQ_TRANSPORTS.IPC,
         **kwargs,
-    ):
+    ) -> ObjectProxy:
         """
         Create a ZMQ client for the specified server and thing.
 
@@ -53,32 +52,38 @@ class ClientFactory:
         server_id: str
             The ID of the server to connect to
         thing_id: str
-            The ID of the thing to interact with.
+            The ID of the thing to interact with
         access_point: str
-            The ZMQ protocol to use for communication ("IPC" or "INPROC") or tcp://<host>:<port> for TCP
+            The ZMQ protocol to use for communication (`IPC` or `INPROC`) or `tcp://<host>:<port>` for TCP
         kwargs:
-            - log_level: int
+            Additional configuration options:
+
+            - `logger`: `logging.Logger`, optional.
+                 A custom logger instance to use for logging
+            - `log_level`: `int`, default `logging.INFO`.
                 The logging level to use for the client (e.g., logging.DEBUG, logging.INFO)
-            - ignore_TD_errors: bool
+            - `ignore_TD_errors`: `bool`, default `False`.
                 Whether to ignore errors while fetching the Thing Description (TD)
-            - skip_interaction_affordances: list[str]
-                A list of interaction names to skip
-            - invokation_timeout: float
+            - `skip_interaction_affordances`: `list[str]`, default `[]`.
+                A list of interaction names to skip (property, action or event names)
+            - `invokation_timeout`: `float`, optional, default `5.0`.
                 The timeout for invokation requests (in seconds)
-            - execution_timeout: float
+            - `execution_timeout`: `float`, optional, default `5.0`.
                 The timeout for execution requests (in seconds)
+
+        Returns
+        -------
+        ObjectProxy
+            An ObjectProxy instance representing the remote Thing
         """
-        from .proxy import ObjectProxy
+        id = f"{server_id}|{thing_id}|{access_point}|{uuid.uuid4()}"
 
         # configs
         ignore_TD_errors = kwargs.get("ignore_TD_errors", False)
         skip_interaction_affordances = kwargs.get("skip_interaction_affordances", [])
         invokation_timeout = kwargs.get("invokation_timeout", 5.0)
         execution_timeout = kwargs.get("execution_timeout", 5.0)
-
-        id = f"{server_id}|{thing_id}|{access_point}|{uuid.uuid4()}"
-        log_level = kwargs.get("log_level", logging.INFO)
-        logger = get_default_logger(id, log_level=log_level)
+        logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
 
         # ZMQ req-rep clients
         sync_zmq_client = SyncZMQClient(f"{id}|sync", server_id=server_id, logger=logger, access_point=access_point)
@@ -94,6 +99,8 @@ class ClientFactory:
             async_client=async_zmq_client,
             invokation_timeout=invokation_timeout,
             execution_timeout=execution_timeout,
+            owner_inst=None,
+            logger=logger,
         )
         TD = FetchTD(
             ignore_errors=ignore_TD_errors,
@@ -172,8 +179,43 @@ class ClientFactory:
         return object_proxy
 
     @classmethod
-    def http(self, url: str, **kwargs):
-        from .proxy import ObjectProxy
+    def http(self, url: str, **kwargs) -> ObjectProxy:
+        """
+        Create a HTTP client using the Thing Description (TD) available at the specified URL.
+
+        Parameters
+        ----------
+        url: str
+            The URL of the Thing Description (TD) to fetch.
+        kwargs:
+            Additional configuration options:
+
+            - `logger`: `logging.Logger`, optional.
+                A custom logger instance to use for logging
+            - `log_level`: `int`, default `logging.INFO`.
+                The logging level to use for the client (e.g., logging.DEBUG, logging.INFO)
+            - `ignore_TD_errors`: `bool`, default `False`.
+                Whether to ignore errors while fetching the Thing Description (TD)
+            - `skip_interaction_affordances`: `list[str]`, default `[]`.
+                A list of interaction names to skip (property, action or event names)
+            - `invokation_timeout`: `float`, optional, default `5.0`.
+                The timeout for operation invokation (in seconds)
+            - `execution_timeout`: `float`, optional, default `5.0`.
+                The timeout for operation execution (in seconds)
+            - `connect_timeout`: `float`, optional, default `10.0`.
+                The timeout for establishing a HTTP connection (in seconds)
+            - `request_timeout`: `float`, optional, default `60.0`.
+                The timeout for completing a HTTP request (in seconds)
+            - `username`: `str`, optional.
+                The username for HTTP Basic Authentication
+            - `password`: `str`, optional.
+                The password for HTTP Basic Authentication
+
+        Returns
+        -------
+        ObjectProxy
+            An ObjectProxy instance representing the remote Thing
+        """
 
         # config
         skip_interaction_affordances = kwargs.get("skip_interaction_affordances", [])
@@ -231,8 +273,7 @@ class ClientFactory:
 
         TD = Serializers.json.loads(response.content)
         id = f"client|{TD['id']}|HTTP|{uuid.uuid4().hex[:8]}"
-        log_level = kwargs.get("log_level", logging.INFO)
-        logger = get_default_logger(id, log_level=log_level)
+        logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
         object_proxy = ObjectProxy(id, td=TD, logger=logger, **kwargs)
 
         for name in TD.get("properties", []):
@@ -290,13 +331,13 @@ class ClientFactory:
         # if not func_info.top_owner:
         #     return
         #     raise RuntimeError("logic error")
-        # for dunder in ClientFactory.__WRAPPER_ASSIGNMENTS__:
+        # for dunder in ClientFactory.__wrapper_assignments__:
         #     if dunder == '__qualname__':
         #         info = '{}.{}'.format(client.__class__.__name__, func_info.get_dunder_attr(dunder).split('.')[1])
         #     else:
         #         info = func_info.get_dunder_attr(dunder)
         #     setattr(action, dunder, info)
-        setattr(client, action._resource.name, action)
+        setattr(client, action.resource.name, action)
 
     @classmethod
     def add_property(self, client, property: ConsumedThingProperty) -> None:
@@ -306,11 +347,11 @@ class ClientFactory:
         # for attr in ['__doc__', '__name__']:
         #     # just to imitate _add_method logic
         #     setattr(property, attr, property_info.get_dunder_attr(attr))
-        setattr(client, property._resource.name, property)
+        setattr(client, property.resource.name, property)
 
     @classmethod
     def add_event(cls, client, event: ConsumedThingEvent) -> None:
-        if hasattr(event._resource, "observable") and event._resource.observable:
-            setattr(client, f"{event._resource.name}_change_event", event)
+        if hasattr(event.resource, "observable") and event.resource.observable:
+            setattr(client, f"{event.resource.name}_change_event", event)
         else:
-            setattr(client, event._resource.name, event)
+            setattr(client, event.resource.name, event)

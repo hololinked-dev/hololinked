@@ -23,7 +23,6 @@ class InteractionAffordance(Schema):
 
     [Specification Definitions](https://www.w3.org/TR/wot-thing-description11/#interactionaffordance) <br>
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/InteractionAffordance.pdf) <br>
-    [Supported Fields]() <br>
     """
 
     title: Optional[str] = None

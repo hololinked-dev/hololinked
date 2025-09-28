@@ -10,6 +10,13 @@ from ..core import Thing
 
 
 class ThingModel(Schema):
+    """
+    Thing Model as per W3C WoT Thing Description v1.1
+
+    [Specification](https://www.w3.org/TR/wot-thing-description11/) <br>
+    [UML Diagram](https://docs.hololinked.dev/UML/PDF/ThingModel.pdf) <br>
+    """
+
     context: typing.List[str | typing.Dict[str, str]] = Field(["https://www.w3.org/2022/wot/td/v1.1"], alias="@context")
     type: typing.Optional[typing.Union[str, typing.List[str]]] = None
     id: str = None
