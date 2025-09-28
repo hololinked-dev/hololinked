@@ -50,23 +50,24 @@ class RPCServer(BaseZMQServer):
     The `RPCServer` implements a infinite loop where ZMQ sockets listen for messages, in any transport layer possible
     (`INPROC`, `IPC` or `TCP`). Once requests are received, jobs are dispatched to the `Thing` instances which are being served,
     with timeouts or any other execution requirements (called execution context). After being executed by a `Thing` instance,
-    the results are then sent back to the client. Operations information include `Thing` ID, the property, action or
+    the results are then sent back to the client. Execution information include `Thing` ID, the property, action or
     event to be executed (events are usually PUB-SUB and are largely handled by the `EventPublisher` directly),
-    what to do on them (i.e. `readProperty`, `invokeAction` etc.), the payload and the execution contexts (like timeouts).
+    what operation to do on them (i.e. `readproperty`, `invokeaction` etc.), the payload and the execution contexts (like timeouts).
     This is structured as a JSON.
 
     Jobs determine how to execute the operations on the `Thing` instance, whether in queued, async or threaded modes.
     This is their main function. Queued mode is the default as it is assumed that multiple physical operations in the physical world
     is not always practical.
 
-    Default ZMQ transport layer is `INPROC`, but `IPC` or `TCP` can also be added simultaneously. The purpose of `INPROC`
-    being default is that, the `RPCServer` is the only server implementing the operations directly on the `Thing`
+    Default ZMQ transport layer is `INPROC`, but `IPC` or `TCP` can also be added simultaneously using `ZMQServer`
+    instance instead of `RPCServer`. The purpose of `INPROC` being default is that, the `RPCServer` is the only server
+    implementing the operations directly on the `Thing`
     instances. All other protocols like HTTP, MQTT, CoAP etc. will be used to redirect requests to the `RPCServer` only
     and do not directly operate on the `Thing` instances. Instead, the incoming requests in those protocols are converted
-    to the above stated "Operation Information" which are in JSON format.
+    to the above stated "Jobs" which are in JSON format.
 
     `INPROC` is the fastest and most efficient way to communicate between multiple independently running loops,
-    whether the loop belongs to a specific protocol's request listener or the `RPCServer` itself.
+    whether the loop belongs to a specific protocol's request listener or the `RPCServer` itself, as it used shared memory.
     The same `INPROC` messaging contract is also used for `IPC` and `TCP`, thus eliminating the
     need to separately implement messaging contracts at different layers of communication for ZMQ.
 
@@ -161,9 +162,7 @@ class RPCServer(BaseZMQServer):
 
     @property
     def is_running(self) -> bool:
-        """
-        Check if the server is running or not.
-        """
+        """Check if the server is running or not."""
         return self._run
 
     async def recv_requests_and_dispatch_jobs(self, server: AsyncZMQServer) -> None:
@@ -171,6 +170,11 @@ class RPCServer(BaseZMQServer):
         Continuously receives messages from different clients and dispatches them as jobs according to the specific
         requirements of a how an object (property/action/event) must be executed (queued/threaded/async).
         Also handles messages that dont need separate jobs like `HANDSHAKE`, `EXIT`, timeouts etc.
+
+        Parameters
+        ----------
+        server: AsyncZMQServer
+            the server instance to poll for requests
         """
         self.logger.debug("started polling with server {} at socket {}".format(server.id, server.socket_address))
         eventloop = asyncio.get_event_loop()
@@ -231,9 +235,7 @@ class RPCServer(BaseZMQServer):
         self.logger.info(f"stopped polling for server '{server.id}' {server.socket_address.split(':')[0].upper()}")
 
     async def tunnel_message_to_things(self, scheduler: "Scheduler") -> None:
-        """
-        message tunneler between external sockets and interal inproc client
-        """
+        """message tunneler/coordinator between external sockets listening thread and `Thing` object executor thread"""
         eventloop = get_current_async_loop()
         while self._run and scheduler.run:
             # wait for message first
@@ -585,9 +587,9 @@ class RPCServer(BaseZMQServer):
 
     def run(self):
         """
-        Start the server. This method is blocking.
+        Start & run the server. This method is blocking.
         Creates job schedulers for each `Thing`, dispatches each `Thing` to its own thread and starts the ZMQ sockets
-        polling loop. Call stop() (threadsafe) to stop the server.
+        request polling loop. Call `stop()` (threadsafe) to stop the server.
         """
         self._run = True
         self.logger.info(f"starting RPC server {self.id}")
@@ -611,6 +613,7 @@ class RPCServer(BaseZMQServer):
             scheduler.cleanup()
 
     def exit(self):
+        """Stop and try to clean up resources used by the server."""
         try:
             self.stop()
             if self.req_rep_server is not None:
@@ -644,7 +647,13 @@ class RPCServer(BaseZMQServer):
         Parameters
         ----------
         instance: Thing
-            The Thing instance for which to retrieve the TD.
+            The Thing instance for which to retrieve the TD
+        protocol: str
+            The protocol for which to generate the TD - `INPROC`, `IPC` or `TCP`
+        ignore_errors: bool
+            Whether to ignore errors while generating the TD. Default is False.
+        skip_names: List[str]
+            List of property, action or event names to skip while generating the TD. Default is empty list.
 
         Returns
         -------
