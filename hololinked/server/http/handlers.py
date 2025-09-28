@@ -57,6 +57,8 @@ class BaseHandler(RequestHandler):
             ZMQ Request object
         owner_inst: HTTPServer
             owning `hololinked.server.HTTPServer` instance
+        metadata: typing.Optional[typing.Dict[str, typing.Any]]
+            additional metadata about the resource, like allowed HTTP methods
         """
         from . import HTTPServer
 
@@ -73,9 +75,9 @@ class BaseHandler(RequestHandler):
     @property
     def has_access_control(self) -> bool:
         """
-        Checks if a client is an allowed client. Requests from un-allowed clients are rejected without execution.
-        Custom web request handlers can use this property to check if a client has access control on the server or ``Thing``
-        and automatically generate a 401.
+        Checks if a client is an allowed client and enforces security schemes.
+        Custom web request handlers can use this property to check if a client has access control on the server or `Thing`
+        and automatically generate a 401/403.
         """
         if not self.allowed_clients and not self.security_schemes:
             return True
@@ -186,9 +188,7 @@ class BaseHandler(RequestHandler):
 
     @property
     def message_id(self) -> str:
-        """
-        retrieves the message id from the request headers.
-        """
+        """retrieves the message id from the request headers"""
         try:
             return self._message_id
         except AttributeError:
@@ -200,9 +200,7 @@ class BaseHandler(RequestHandler):
             return message_id
 
     def get_request_payload(self) -> typing.Tuple[SerializableData, PreserializedData]:
-        """
-        retrieves the payload from the request body and deserializes it.
-        """
+        """retrieves the payload from the request body, does not necessarily deserialize it"""
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
         if self.request.body:
@@ -219,9 +217,7 @@ class BaseHandler(RequestHandler):
         return payload, preserialized_payload
 
     def get_response_payload(self, zmq_response: ResponseMessage) -> PreserializedData | SerializableData:
-        """
-        cached return value of the last call to the method
-        """
+        """retrieves the payload from the ZMQ response message, does not necessarily deserialize it"""
         # print("zmq_response - ", zmq_response)
         if zmq_response is None:
             raise RuntimeError("No last response available. Did you make an operation?")
@@ -236,21 +232,15 @@ class BaseHandler(RequestHandler):
         return zmq_response.payload  # dont deseriablize, there is no need, just pass it on to the client
 
     async def get(self) -> None:
-        """
-        runs property or action if accessible by 'GET' method. Default for property reads.
-        """
+        """runs property or action if accessible by 'GET' method. Default for property reads"""
         raise NotImplementedError("implement GET request method in child handler class")
 
     async def post(self) -> None:
-        """
-        runs property or action if accessible by 'POST' method. Default for action execution.
-        """
+        """runs property or action if accessible by 'POST' method. Default for action execution"""
         raise NotImplementedError("implement POST request method in child handler class")
 
     async def put(self) -> None:
-        """
-        runs property or action if accessible by 'PUT' method. Default for property writes.
-        """
+        """runs property or action if accessible by 'PUT' method. Default for property writes"""
         raise NotImplementedError("implement PUT request method in child handler class")
 
     async def delete(self) -> None:
@@ -261,9 +251,7 @@ class BaseHandler(RequestHandler):
         raise NotImplementedError("implement DELETE request method in child handler class")
 
     def is_method_allowed(self, method: str) -> bool:
-        """
-        checks if the method is allowed for the property.
-        """
+        """checks if the method is allowed for the property"""
         raise NotImplementedError("implement is_method_allowed in child handler class")
 
 
@@ -316,6 +304,12 @@ class RPCHandler(BaseHandler):
     async def handle_through_thing(self, operation: str) -> None:
         """
         handles the Thing operations and writes the reply to the HTTP client.
+
+        Parameters
+        ----------
+        operation: str
+            operation to be performed on the Thing, like `readproperty`,
+            `writeproperty`, `invokeaction`, `deleteproperty`
         """
         try:
             server_execution_context, thing_execution_context, additional_execution_context = (
@@ -416,10 +410,9 @@ class RPCHandler(BaseHandler):
 
 
 class PropertyHandler(RPCHandler):
+    """handles property requests"""
+
     async def get(self) -> None:
-        """
-        runs property or action if accessible by 'GET' method. Default for property reads.
-        """
         if self.is_method_allowed("GET"):
             if self.message_id is not None:
                 await self.handle_no_block_response()
@@ -428,35 +421,25 @@ class PropertyHandler(RPCHandler):
         self.finish()
 
     async def post(self) -> None:
-        """
-        runs property or action if accessible by 'POST' method. Default for action execution.
-        """
         if self.is_method_allowed("POST"):
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def put(self) -> None:
-        """
-        runs property or action if accessible by 'PUT' method. Default for property writes.
-        """
         if self.is_method_allowed("PUT"):
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def delete(self) -> None:
-        """
-        runs property or action if accessible by 'DELETE' method. Default for property deletes.
-        """
         if self.is_method_allowed("DELETE"):
             await self.handle_through_thing(Operations.deleteproperty)
         self.finish()
 
 
 class ActionHandler(RPCHandler):
+    """handles action requests"""
+
     async def get(self) -> None:
-        """
-        runs property or action if accessible by 'GET' method. Default for property reads.
-        """
         if self.is_method_allowed("GET"):
             if self.message_id is not None:
                 await self.handle_no_block_response()
@@ -465,34 +448,23 @@ class ActionHandler(RPCHandler):
         self.finish()
 
     async def post(self) -> None:
-        """
-        runs property or action if accessible by 'POST' method. Default for action execution.
-        """
         if self.is_method_allowed("POST"):
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def put(self) -> None:
-        """
-        runs property or action if accessible by 'PUT' method. Default for property writes.
-        """
         if self.is_method_allowed("PUT"):
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def delete(self) -> None:
-        """
-        runs property or action if accessible by 'DELETE' method. Default for property deletes.
-        """
         if self.is_method_allowed("DELETE"):
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
 
 class EventHandler(BaseHandler):
-    """
-    handles events emitted by ``Thing`` and tunnels them as HTTP SSE.
-    """
+    """handles events emitted by `Thing` and tunnels them as HTTP SSE"""
 
     def initialize(
         self,
@@ -507,13 +479,13 @@ class EventHandler(BaseHandler):
         """
         sets default headers for event handling. The general headers are listed as follows:
 
-        .. code-block:: yaml
-
-            Content-Type: text/event-stream
-            Cache-Control: no-cache
-            Connection: keep-alive
-            Access-Control-Allow-Credentials: true
-            Access-Control-Allow-Origin: <client>
+        ```yml
+        Content-Type: text/event-stream
+        Cache-Control: no-cache
+        Connection: keep-alive
+        Access-Control-Allow-Credentials: true
+        Access-Control-Allow-Origin: <client>
+        ```
         """
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
@@ -587,9 +559,7 @@ class EventHandler(BaseHandler):
 
 
 class JPEGImageEventHandler(EventHandler):
-    """
-    handles events with images with image data header
-    """
+    """handles events with images with image data header"""
 
     def initialize(self, resource, validator: BaseSchemaValidator, owner_inst=None) -> None:
         super().initialize(resource, validator, owner_inst)
@@ -597,9 +567,7 @@ class JPEGImageEventHandler(EventHandler):
 
 
 class PNGImageEventHandler(EventHandler):
-    """
-    handles events with images with image data header
-    """
+    """handles events with images with image data header"""
 
     def initialize(self, resource, validator: BaseSchemaValidator, owner_inst=None) -> None:
         super().initialize(resource, validator, owner_inst)
@@ -607,13 +575,15 @@ class PNGImageEventHandler(EventHandler):
 
 
 class FileHandler(StaticFileHandler):
+    """serves static files from a directory"""
+
     @classmethod
     def get_absolute_path(cls, root: str, path: str) -> str:
         """
-        Returns the absolute location of ``path`` relative to ``root``.
+        Returns the absolute location of `path` relative to `root`.
 
-        ``root`` is the path configured for this `StaticFileHandler`
-        (in most cases the ``static_path`` `Application` setting).
+        `root` is the path configured for this `StaticFileHandler`
+        (in most cases the `static_path` `Application` setting).
 
         This class method may be overridden in subclasses.  By default
         it returns a filesystem path, but other strings may be used
@@ -626,9 +596,9 @@ class FileHandler(StaticFileHandler):
 
 
 class ThingsHandler(BaseHandler):
-    """
-    add or remove things
-    """
+    """add or remove things from the server"""
+
+    # not working or untested
 
     async def get(self):
         self.set_status(404)
@@ -700,6 +670,8 @@ class LivenessProbeHandler(BaseHandler):
 
 
 class ThingDescriptionHandler(BaseHandler):
+    """Thing Description generation handler"""
+
     def set_custom_default_headers(self):
         self.set_header("Access-Control-Allow-Credentials", "true")
         if global_config.ALLOW_CORS or self.server.config.get("allow_cors", False):

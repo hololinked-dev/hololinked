@@ -921,7 +921,7 @@ class TestExposedEvents(TestRPCServerMixin):
             form.op = "subscribeevent"
             form.subprotocol = "sse"
             event_affordance.forms = [form]
-            event = ZMQEvent(resource=event_affordance, logger=cls.logger)
+            event = ZMQEvent(resource=event_affordance, logger=cls.logger, owner_inst=None)
             setattr(cls, event_name, event)
 
     def test_1_creation_defaults(self):
