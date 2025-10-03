@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ✓ means ready to try
 
+## [v0.3.3] - 2025-09-25
+
+- updates API reference largely to latest version
+
 ## [v0.3.2] - 2025-09-21
 
 - adds TD security definition for BCryptBasicSecurity and ArgsBasicSecurity
