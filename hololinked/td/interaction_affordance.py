@@ -137,6 +137,30 @@ class InteractionAffordance(Schema):
                 return form
         return default
 
+    def pop_form(self, op: str, default: typing.Any = None) -> Form:
+        """
+        retrieve and remove form for a certain operation, return default if not found
+
+        Parameters
+        ----------
+        op: str
+            operation for which the form is to be retrieved
+        default: typing.Any, optional
+            default value to return if form is not found, by default None.
+            One can make use of a sensible default value for one's logic.
+
+        Returns
+        -------
+        Dict[str, typing.Any]
+            JSON representation of the form
+        """
+        if self.forms is None:
+            return default
+        for i, form in enumerate(self.forms):
+            if form.op == op:
+                return self.forms.pop(i)
+        return default
+
     @classmethod
     def generate(
         cls, interaction: Property | Action | Event, owner: Thing

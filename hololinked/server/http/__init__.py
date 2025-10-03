@@ -4,6 +4,7 @@ import logging
 import socket
 import ssl
 import typing
+from copy import deepcopy
 from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
@@ -73,6 +74,7 @@ class HTTPServer(Parameterized):
     )  # type: int
 
     address = IPAddress(default="0.0.0.0", doc="IP address")  # type: str
+
     # protocol_version = Selector(objects=[1, 1.1, 2], default=2,
     #                 doc="for HTTP 2, SSL is mandatory. HTTP2 is recommended. \
     #                 When no SSL configurations are provided, defaults to 1.1" ) # type: float
@@ -103,8 +105,8 @@ class HTTPServer(Parameterized):
     allowed_clients = TypedList(
         item_type=str,
         doc="""Serves request and sets CORS only from these clients, other clients are rejected with 403. 
-                                Unlike pure CORS, the server resource is not even executed if the client is not 
-                                an allowed client. if None any client is served.""",
+            Unlike pure CORS, the server resource is not even executed if the client is not 
+            an allowed client. if None any client is served.""",
     )
 
     host = String(
@@ -112,6 +114,7 @@ class HTTPServer(Parameterized):
         allow_None=True,
         doc="Host Server to subscribe to coordinate starting sequence of remote objects & web GUI",
     )  # type: str
+
     # network_interface = String(default='Ethernet',
     #                         doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
     #                         therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
@@ -121,21 +124,21 @@ class HTTPServer(Parameterized):
         default=PropertyHandler,
         class_=(PropertyHandler, RPCHandler),
         isinstance=False,
-        doc="custom web request handler of your choice for property read-write & action execution",
+        doc="custom web request handler for property read-write",
     )  # type: typing.Union[RPCHandler, PropertyHandler]
 
     action_handler = ClassSelector(
         default=ActionHandler,
         class_=(ActionHandler, RPCHandler),
         isinstance=False,
-        doc="custom web request handler of your choice for property read-write & action execution",
+        doc="custom web request handler for actions",
     )  # type: typing.Union[RPCHandler, ActionHandler]
 
     event_handler = ClassSelector(
         default=EventHandler,
         class_=(EventHandler, RPCHandler),
         isinstance=False,
-        doc="custom event handler of your choice for handling events",
+        doc="custom event handler for sending HTTP SSE",
     )  # type: typing.Union[RPCHandler, EventHandler]
 
     schema_validator = ClassSelector(
@@ -157,7 +160,7 @@ class HTTPServer(Parameterized):
         default=None,
         allow_None=True,
         doc="""Set CORS headers for the HTTP server. If set to False, CORS headers are not set. 
-                        This is useful when the server is used in a controlled environment where CORS is not needed.""",
+            This is useful when the server is used in a controlled environment where CORS is not needed.""",
     )  # type: bool
 
     def __init__(
@@ -696,6 +699,7 @@ class ApplicationRouter:
         for property in properties:
             if property in self:
                 continue
+            self.server.logger.debug(f"adding property {property.name} for thing id {property.thing_id}")
             if property.thing_id is not None:
                 path = f"/{property.thing_id}/{pep8_to_dashed_name(property.name)}"
             else:
@@ -720,6 +724,7 @@ class ApplicationRouter:
         for action in actions:
             if action in self:
                 continue
+            self.server.logger.debug(f"adding action {action.name} for thing id {action.thing_id}")
             name = get_alternate_name(action.name)
             if action.thing_id is not None:
                 path = f"/{action.thing_id}/{pep8_to_dashed_name(name)}"
@@ -729,16 +734,25 @@ class ApplicationRouter:
         for event in events:
             if event in self:
                 continue
+            self.server.logger.debug(f"adding event {event.name} for thing id {event.thing_id}")
             if event.thing_id is not None:
                 path = f"/{event.thing_id}/{pep8_to_dashed_name(event.name)}"
             else:
                 path = f"/{pep8_to_dashed_name(event.name)}"
             self.server.add_event(URL_path=path, event=event, handler=self.server.event_handler)
+
+        get_thing_model_action = next((action for action in actions if action.name == "get_thing_model"), None)
+        get_thing_description_action = deepcopy(get_thing_model_action)
+        get_thing_description_action.override_defaults(name="get_thing_description")
         self.server.add_action(
             URL_path=f"/{thing_id}/resources/wot-td" if thing_id else "/resources/wot-td",
-            action=next((action for action in actions if action.name == "get_thing_model"), None),
+            action=get_thing_description_action,
             http_method=("GET",),
             handler=ThingDescriptionHandler,
+        )
+        self.server.logger.debug(
+            f"added thing description action for thing id {thing_id if thing_id else 'unknown'} at path "
+            + f"{f'/{thing_id}/resources/wot-td' if thing_id else '/resources/wot-td'}"
         )
 
     def add_thing_instance(self, thing: Thing) -> None:
@@ -904,7 +918,7 @@ class ApplicationRouter:
 
 def get_alternate_name(interaction_affordance_name: str) -> str:
     if interaction_affordance_name == "get_thing_model":
-        return "resources/thing-model"
+        return "resources/wot-tm"
     return interaction_affordance_name
 
 

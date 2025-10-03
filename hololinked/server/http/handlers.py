@@ -26,6 +26,7 @@ from ...td import (
     ActionAffordance,
     EventAffordance,
 )
+from ...td.forms import Form
 
 try:
     from ..security import BcryptBasicSecurity
@@ -691,7 +692,13 @@ class ThingDescriptionHandler(BaseHandler):
                     operation=Operations.invokeaction,
                     payload=SerializableData(
                         value=dict(
-                            ignore_errors=body.get("ignore_errors", False), skip_names=body.get("skip_names", [])
+                            ignore_errors=body.get("ignore_errors", False),
+                            skip_names=body.get("skip_names", []),
+                            protocol=self.zmq_client_pool[
+                                self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id)
+                            ]
+                            .socket_address.split("://")[0]
+                            .upper(),
                         ),
                     ),
                 )
@@ -713,85 +720,105 @@ class ThingDescriptionHandler(BaseHandler):
     def generate_td(
         self, TM: dict[str, JSONSerializable], authority: str = None, use_localhost: bool = False
     ) -> dict[str, JSONSerializable]:
-        from ...td.forms import Form
-
         TD = copy.deepcopy(TM)
         # sanitize some things
         TD["id"] = f"{self.server.router.get_basepath(authority=authority, use_localhost=use_localhost)}/{TD['id']}"
-        # add forms
+
+        self.add_properties(TD, TM, authority=authority, use_localhost=use_localhost)
+        self.add_actions(TD, TM, authority=authority, use_localhost=use_localhost)
+        self.add_events(TD, TM, authority=authority, use_localhost=use_localhost)
+
+        self.add_security_definitions(TD)
+        return TD
+
+    def add_properties(
+        self, TD: dict[str, JSONSerializable], TM: dict[str, JSONSerializable], authority: str, use_localhost: bool
+    ) -> dict[str, JSONSerializable]:
         for name in TM.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, TM)
             href = self.server.router.get_href_for_affordance(
                 affordance, authority=authority, use_localhost=use_localhost
             )
-            if not TD["properties"][name].get("forms", None):
-                TD["properties"][name]["forms"] = []
+            TD["properties"][name]["forms"] = []
             http_methods = (
                 self.server.router.get_target_kwargs_for_affordance(affordance)
                 .get("metadata", {})
                 .get("http_methods", [])
             )
             for http_method in http_methods:
-                if affordance.readOnly and http_method.upper() != "GET":
-                    break
                 if http_method.upper() == "DELETE":
                     # currently not in spec although we support it
                     continue
-                form = Form()
+                if affordance.readOnly and http_method.upper() != "GET":
+                    break
+                op = Operations.readproperty if http_method.upper() == "GET" else Operations.writeproperty
+                form = affordance.retrieve_form(op)
+                if not form:
+                    form = Form()
+                    form.op = op
+                    form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                 form.href = href
                 form.htv_methodName = http_method
-                form.op = Operations.readproperty if http_method.upper() == "GET" else Operations.writeproperty
-                form.contentType = "application/json"
                 TD["properties"][name]["forms"].append(form.json())
             if affordance.observable:
-                form = Form()
+                form = affordance.retrieve_form(Operations.observeproperty)
+                if not form:
+                    form = Form()
+                    form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
+                    form.op = Operations.observeproperty
                 form.href = f"{href}/change-event"
                 form.htv_methodName = "GET"
-                form.contentType = "application/json"
-                form.op = Operations.observeproperty
                 form.subprotocol = "sse"
                 TD["properties"][name]["forms"].append(form.json())
+
+    def add_actions(
+        self, TD: dict[str, JSONSerializable], TM: dict[str, JSONSerializable], authority: str, use_localhost: bool
+    ) -> dict[str, JSONSerializable]:
         for name in TM.get("actions", []):
             affordance = ActionAffordance.from_TD(name, TM)
             href = self.server.router.get_href_for_affordance(
                 affordance, authority=authority, use_localhost=use_localhost
             )
-            if not TD["actions"][name].get("forms", None):
-                TD["actions"][name]["forms"] = []
+            TD["actions"][name]["forms"] = []
             http_methods = (
                 self.server.router.get_target_kwargs_for_affordance(affordance)
                 .get("metadata", {})
                 .get("http_methods", [])
             )
             for http_method in http_methods:
-                form = Form()
+                form = affordance.retrieve_form(Operations.invokeaction)
+                if not form:
+                    form = Form()
+                    form.op = Operations.invokeaction
+                    form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                 form.href = href
                 form.htv_methodName = http_method
-                form.op = Operations.invokeaction
-                form.contentType = "application/json"
                 TD["actions"][name]["forms"].append(form.json())
+
+    def add_events(
+        self, TD: dict[str, JSONSerializable], TM: dict[str, JSONSerializable], authority: str, use_localhost: bool
+    ) -> dict[str, JSONSerializable]:
         for name in TM.get("events", []):
             affordance = EventAffordance.from_TD(name, TM)
             href = self.server.router.get_href_for_affordance(
                 affordance, authority=authority, use_localhost=use_localhost
             )
-            if not TD["events"][name].get("forms", None):
-                TD["events"][name]["forms"] = []
+            TD["events"][name]["forms"] = []
             http_methods = (
                 self.server.router.get_target_kwargs_for_affordance(affordance)
                 .get("metadata", dict(http_methods=["GET"]))
                 .get("http_methods", ["GET"])
             )
             for http_method in http_methods:
-                form = Form()
+                form = affordance.retrieve_form(Operations.subscribeevent)
+                if not form:
+                    form = Form()
+                    form.op = Operations.subscribeevent
+                    form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                 form.href = href
                 form.htv_methodName = http_method
-                form.op = Operations.subscribeevent
-                form.contentType = "application/json"
                 form.subprotocol = "sse"
                 TD["events"][name]["forms"].append(form.json())
-        self.add_security_definitions(TD)
-        return TD
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
         from ...td.security_definitions import SecurityScheme
