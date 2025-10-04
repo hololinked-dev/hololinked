@@ -1,4 +1,5 @@
 import typing
+import copy
 from enum import Enum
 from typing import ClassVar, Optional
 from pydantic import ConfigDict
@@ -239,6 +240,29 @@ class InteractionAffordance(Schema):
             )
         InteractionAffordance._custom_schema_generators[descriptor] = schema_generator
 
+    def build_non_compliant_metadata(self) -> None:
+        """
+        If by chance, there is additional non standard metadata to be added (i.e. also that is outside LD, or
+        may not even be within the TD), they can be added here.
+        """
+        pass
+
+    def override_defaults(self, **kwargs):
+        """
+        Override default values with provided keyword arguments, especially thing_id, owner name, object name etc.
+        """
+        for key, value in kwargs.items():
+            if key == "name":
+                self._name = value
+            elif key == "thing_id":
+                self._thing_id = value
+            elif key == "owner":
+                self._owner = value
+            elif key == "thing_cls":
+                self._thing_cls = value
+            elif hasattr(self, key) or key in self.model_fields:
+                setattr(self, key, value)
+
     def __hash__(self):
         return hash(self.thing_id + "" if not self.thing_cls else self.thing_cls.__name__ + self.name)
 
@@ -262,28 +286,29 @@ class InteractionAffordance(Schema):
             return False
         return self.thing_id == value.thing_id and self.name == value.name
 
-    def build_non_compliant_metadata(self) -> None:
-        """
-        If by chance, there is additional non standard metadata to be added (i.e. also that is outside LD, or
-        may not even be within the TD), they can be added here.
-        """
-        pass
+    def __deepcopy__(self, memo):
+        if self.__class__ == PropertyAffordance:
+            result = PropertyAffordance()
+        elif self.__class__ == ActionAffordance:
+            result = ActionAffordance()
+        elif self.__class__ == EventAffordance:
+            result = EventAffordance()
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            if k not in ("_owner", "_thing_cls", "_objekt"):
+                setattr(result, k, copy.deepcopy(v, memo))
+        return result
 
-    def override_defaults(self, **kwargs):
-        """
-        Override default values with provided keyword arguments, especially thing_id, owner name, object name etc.
-        """
-        for key, value in kwargs.items():
-            if key == "name":
-                self._name = value
-            elif key == "thing_id":
-                self._thing_id = value
-            elif key == "owner":
-                self._owner = value
-            elif key == "thing_cls":
-                self._thing_cls = value
-            elif hasattr(self, key) or key in self.model_fields:
-                setattr(self, key, value)
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Remove possibly unpicklable entries
+        if "_owner" in state:
+            del state["_owner"]
+        if "_thing_cls" in state:
+            del state["_thing_cls"]
+        if "_objekt" in state:
+            del state["_objekt"]
+        return state
 
 
 class PropertyAffordance(DataSchema, InteractionAffordance):
