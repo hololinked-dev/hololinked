@@ -349,9 +349,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         access_points = kwargs.get("access_points", None)  # type: dict[str, dict | int | str | list[str]]
         servers = kwargs.get("servers", [])  # type: typing.Optional[typing.List[BaseProtocolServer]]
 
-        if access_points is None and servers is None:
+        if access_points is None and len(servers) == 0:
             raise ValueError("At least one of access_points or servers must be provided.")
-        if access_points is not None and servers is not None:
+        if access_points is not None and len(servers) > 0:
             raise ValueError("Only one of access_points or servers can be provided.")
 
         if access_points is not None:

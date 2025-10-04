@@ -27,6 +27,7 @@ SOFTWARE.
 import inspect
 import array
 import datetime
+import io
 import uuid
 import decimal
 import typing
@@ -221,10 +222,32 @@ class MsgpackSerializer(BaseSerializer):
         self.type = msgpack
 
     def dumps(self, value) -> bytes:
-        return msgpack.encode(value)
+        return msgpack.encode(value, enc_hook=self.default_encode)
 
     def loads(self, value) -> typing.Any:
-        return msgpack.decode(self.convert_to_bytes(value))
+        value = msgpack.decode(self.convert_to_bytes(value))
+        # TODO decoder hook not called, not sure why
+        if isinstance(value, (memoryview, bytearray, bytes)):
+            return self.default_decode(value)
+
+    @classmethod
+    def default_encode(cls, obj) -> typing.Any:
+        if "numpy" in globals() and isinstance(obj, numpy.ndarray):
+            buf = io.BytesIO()
+            # .npy stores dtype, shape, order, endianness
+            numpy.save(buf, obj, allow_pickle=False)
+            return buf.getvalue()
+        raise TypeError("Given type cannot be converted to MessagePack : {}".format(type(obj)))
+
+    @classmethod
+    def default_decode(cls, obj) -> typing.Any:
+        # If numpy is available and obj is a memoryview, convert back to numpy array
+        if "numpy" in globals():
+            try:
+                return numpy.load(io.BytesIO(obj), allow_pickle=False)
+            except Exception:
+                pass
+        return obj
 
     @property
     def content_type(self) -> str:
