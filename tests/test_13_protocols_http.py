@@ -648,6 +648,7 @@ class TestHTTPServer(TestCase):
             try:
                 response = session.get(f"http://127.0.0.1:{port}/liveness")
                 if response.status_code in [200, 201, 202, 204]:
+                    time.sleep(2)
                     return
             except Exception:
                 pass

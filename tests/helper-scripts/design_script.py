@@ -5,12 +5,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"
 
 from hololinked.server.http import HTTPServer
 from hololinked.server.zmq import ZMQServer
+from hololinked.serializers import Serializers
 from hololinked.config import global_config
 from things import TestThing
 
 global_config.DEBUG = True
 
 thing = TestThing(id="example-test")
+
+Serializers.register_for_object(TestThing.db_init_int_prop, Serializers.pickle)
+Serializers.register_for_object(TestThing.set_non_remote_number_prop, Serializers.msgpack)
 # thing.run(
 #     access_points=[
 #         ("ZMQ", "IPC"),
