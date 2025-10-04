@@ -16,6 +16,8 @@ thing = TestThing(id="example-test")
 Serializers.register_for_object(TestThing.db_init_int_prop, Serializers.pickle)
 Serializers.register_for_object(TestThing.set_non_remote_number_prop, Serializers.msgpack)
 Serializers.register_for_object(TestThing.get_non_remote_number_prop, Serializers.msgpack)
+Serializers.register_for_object(TestThing.numpy_array_prop, Serializers.msgpack)
+
 # thing.run(
 #     access_points=[
 #         ("ZMQ", "IPC"),

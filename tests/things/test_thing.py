@@ -2,6 +2,7 @@ import asyncio
 import threading
 import time
 import typing
+import numpy as np
 from pydantic import BaseModel, Field
 
 from hololinked.core import Thing, action, Property, Event
@@ -15,19 +16,27 @@ from hololinked.core.properties import (
 )
 from hololinked.core.actions import Action, BoundAction
 from hololinked.param import ParameterizedFunction
+from hololinked.schema_validators import JSONSchema
 
 
 class TestThing(Thing):
+    """
+    A test thing with various API options for properties, actions and events that were collected from examples from
+    real world implementations, testing, features offered etc.
+
+    Add your own use case here as needed.
+    """
+
+    # ----------- Actions --------------
+
     @action()
     def get_transports(self):
         transports = []
-        if self.rpc_server.req_rep_server is not None and self.rpc_server.req_rep_server.socket_address.startswith(
-            "inproc://"
-        ):
+        if self.rpc_server.req_rep_server and self.rpc_server.req_rep_server.socket_address.startswith("inproc://"):
             transports.append("INPROC")
-        if self.rpc_server.ipc_server is not None and self.rpc_server.ipc_server.socket_address.startswith("ipc://"):
+        if self.rpc_server.ipc_server and self.rpc_server.ipc_server.socket_address.startswith("ipc://"):
             transports.append("IPC")
-        if self.rpc_server.tcp_server is not None and self.rpc_server.tcp_server.socket_address.startswith("tcp://"):
+        if self.rpc_server.tcp_server and self.rpc_server.tcp_server.socket_address.startswith("tcp://"):
             transports.append("TCP")
         return transports
 
@@ -317,6 +326,28 @@ class TestThing(Thing):
         print(f"db_init_int_prop: {self.db_init_int_prop}")
         print(f"db_persist_selctor_prop: {self.db_persist_selector_prop}")
         print(f"non_remote_number_prop: {self.non_remote_number_prop}")
+
+    # ----------- Pythonic objects as properties --------------
+
+    numpy_array_prop = ClassSelector(
+        default=None,
+        allow_None=True,
+        class_=(np.ndarray,),
+        doc="A property with a numpy array as value",
+    )
+
+    @numpy_array_prop.setter
+    def set_numpy_array_prop(self, value):
+        self._numpy_array_prop = value
+
+    @numpy_array_prop.getter
+    def get_numpy_array_prop(self):
+        try:
+            return self._numpy_array_prop
+        except AttributeError:
+            return np.array([1, 2, 3])
+
+    JSONSchema.register_type_replacement(np.ndarray, "array")
 
     # ----------- Events --------------
 
