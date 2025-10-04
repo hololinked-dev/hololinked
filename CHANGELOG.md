@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ✓ means ready to try
 
+## [v0.3.4] - 2025-10-02
+
+- fixes a bug in content type in the forms of TD for HTTP protocol binding, when multiple serializers are used
+- one can specify numpy array or arbitrary python objects in pydantic models for properties, actions and events
+
+## [v0.3.3] - 2025-09-25
+
+- updates API reference largely to latest version
+
 ## [v0.3.2] - 2025-09-21
 
 - adds TD security definition for BCryptBasicSecurity and ArgsBasicSecurity

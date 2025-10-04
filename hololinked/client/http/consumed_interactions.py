@@ -49,7 +49,8 @@ class HTTPConsumedAffordanceMixin:
             body = response.content
             if not body:
                 return
-            serializer = Serializers.content_types.get(form.contentType or "application/json")
+            givenContentType = response.headers.get("Content-Type", None)
+            serializer = Serializers.content_types.get(givenContentType or form.contentType or "application/json")
             if serializer is None:
                 raise ValueError(f"Unsupported content type: {form.contentType}")
             body = serializer.loads(body)

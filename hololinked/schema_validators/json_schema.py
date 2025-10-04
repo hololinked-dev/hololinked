@@ -59,7 +59,7 @@ class JSONSchema:
         self, type: typing.Any, json_schema_base_type: str, schema: typing.Optional[JSON] = None
     ) -> None:
         """
-        Specify a python type to map to a specific JSON type. Schema only supported for array and objects.
+        Specify a python type to map to a specific JSON type.
 
         For example:
         - `JSONSchema.register_type_replacement(MyCustomObject, 'object', schema=MyCustomObject.schema())`
@@ -87,7 +87,7 @@ class JSONSchema:
                 JSONSchema._schemas[type] = schema
         else:
             raise TypeError(
-                f"json schema replacement type must be one of allowed type - 'string', 'object', 'array', 'string', "
+                "json schema replacement type must be one of allowed type - 'string', 'object', 'array', 'string', "
                 + f"'number', 'integer', 'boolean', 'null'. Given value {json_schema_base_type}"
             )
 

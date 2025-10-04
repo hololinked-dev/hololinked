@@ -102,9 +102,7 @@ def run_thing_with_zmq_server_forked(
         return T
 
 
-def run_zmq_server(
-    server: AsyncZMQServer, owner, done_queue: multiprocessing.Queue
-) -> None:
+def run_zmq_server(server: AsyncZMQServer, owner, done_queue: multiprocessing.Queue) -> None:
     event_loop = get_current_async_loop()
 
     async def run():

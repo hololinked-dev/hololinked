@@ -2228,7 +2228,7 @@ class BaseEventConsumer(BaseZMQClient):
         return EventMessage.craft_from_arguments(
             event_id=f"{self.id}/interrupting-server",
             sender_id=self.id,
-            payload=SerializableData("INTERRUPT"),
+            payload=SerializableData("INTERRUPT", content_type="application/json"),
         )
 
     def exit(self):

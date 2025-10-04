@@ -15,9 +15,12 @@ class SerializableData:
     value: typing.Any
     serializer: BaseSerializer | None = None
     content_type: str = "application/json"
+    _serialized: bytes | None = None
 
     def serialize(self):
         """serialize the value"""
+        if self._serialized is not None:
+            return self._serialized
         if isinstance(self.value, byte_types):
             return self.value
         if self.serializer is not None:
@@ -38,6 +41,10 @@ class SerializableData:
             return serializer.loads(self.value)
         raise ValueError(f"content type {self.content_type} not supported for deserialization")
 
+    def require_serialized(self) -> None:
+        """ensure the value is serialized"""
+        self._serialized = self.serialize()
+
 
 @dataclass
 class PreserializedData:
@@ -47,4 +54,4 @@ class PreserializedData:
     """
 
     value: bytes
-    content_type: str = "unknown"
+    content_type: str = "application/octet-stream"

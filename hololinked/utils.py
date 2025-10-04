@@ -446,7 +446,7 @@ def get_input_model_from_signature(
     model = create_model(  # type: ignore[call-overload]
         f"{func.__name__}_input",
         **fields,
-        __config__=ConfigDict(extra="forbid", strict=True),
+        __config__=ConfigDict(extra="forbid", strict=True, arbitrary_types_allowed=True),
     )
     return model
 
@@ -598,7 +598,10 @@ def get_all_sub_things_recusively(thing) -> typing.List:
 
 
 def forkable(func):
-    """Decorator to make a function forkable. This is useful for functions that need to be run in a separate thread."""
+    """
+    Decorator to make a function forkable.
+    This is useful for functions that need to be run in a separate thread.
+    """
 
     @wraps(func)
     def wrapper(*args, **kwargs):

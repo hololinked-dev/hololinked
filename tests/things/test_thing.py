@@ -1,6 +1,9 @@
-import asyncio, threading, time, logging, unittest, os
+import asyncio
+import threading
+import time
 import typing
-from pydantic import BaseModel, Field
+import numpy as np
+from pydantic import BaseModel, Field, WithJsonSchema
 
 from hololinked.core import Thing, action, Property, Event
 from hololinked.core.properties import (
@@ -11,35 +14,29 @@ from hololinked.core.properties import (
     Integer,
     ClassSelector,
 )
-from hololinked.core.actions import (
-    Action,
-    BoundAction,
-    BoundSyncAction,
-    BoundAsyncAction,
-)
+from hololinked.core.actions import Action, BoundAction
 from hololinked.param import ParameterizedFunction
-from hololinked.core.dataklasses import ActionInfoValidator
-from hololinked.utils import isclassmethod
+from hololinked.schema_validators import JSONSchema
 
 
 class TestThing(Thing):
+    """
+    A test thing with various API options for properties, actions and events that were collected from examples from
+    real world implementations, testing, features offered etc.
+
+    Add your own use case/snippets used in tests here as needed.
+    """
+
+    # ----------- Actions --------------
+
     @action()
     def get_transports(self):
         transports = []
-        if (
-            self.rpc_server.req_rep_server is not None
-            and self.rpc_server.req_rep_server.socket_address.startswith("inproc://")
-        ):
+        if self.rpc_server.req_rep_server and self.rpc_server.req_rep_server.socket_address.startswith("inproc://"):
             transports.append("INPROC")
-        if (
-            self.rpc_server.ipc_server is not None
-            and self.rpc_server.ipc_server.socket_address.startswith("ipc://")
-        ):
+        if self.rpc_server.ipc_server and self.rpc_server.ipc_server.socket_address.startswith("ipc://"):
             transports.append("IPC")
-        if (
-            self.rpc_server.tcp_server is not None
-            and self.rpc_server.tcp_server.socket_address.startswith("tcp://")
-        ):
+        if self.rpc_server.tcp_server and self.rpc_server.tcp_server.socket_address.startswith("tcp://"):
             transports.append("TCP")
         return transports
 
@@ -70,9 +67,7 @@ class TestThing(Thing):
             doc="arg1 description",
         )
         arg2 = String(default="hello", doc="arg2 description", regex="[a-z]+")
-        arg3 = ClassSelector(
-            class_=(int, float, str), default=5, doc="arg3 description"
-        )
+        arg3 = ClassSelector(class_=(int, float, str), default=5, doc="arg3 description")
 
         def __call__(self, instance, arg1, arg2, arg3):
             return instance.id, arg1, arg2, arg3
@@ -86,9 +81,7 @@ class TestThing(Thing):
             doc="arg1 description",
         )
         arg2 = String(default="hello", doc="arg2 description", regex="[a-z]+")
-        arg3 = ClassSelector(
-            class_=(int, float, str), default=5, doc="arg3 description"
-        )
+        arg3 = ClassSelector(class_=(int, float, str), default=5, doc="arg3 description")
 
     class parameterized_action_async(ParameterizedFunction):
         arg1 = Number(
@@ -99,9 +92,7 @@ class TestThing(Thing):
             doc="arg1 description",
         )
         arg2 = String(default="hello", doc="arg2 description", regex="[a-z]+")
-        arg3 = ClassSelector(
-            class_=(int, float, str), default=5, doc="arg3 description"
-        )
+        arg3 = ClassSelector(class_=(int, float, str), default=5, doc="arg3 description")
 
         async def __call__(self, instance, arg1, arg2, arg3):
             await asyncio.sleep(0.1)
@@ -120,9 +111,7 @@ class TestThing(Thing):
         await asyncio.sleep(0.1)
         return value
 
-    def json_schema_validated_action(
-        self, val1: int, val2: str, val3: dict, val4: list
-    ):
+    def json_schema_validated_action(self, val1: int, val2: str, val3: dict, val4: list):
         return {"val1": val1, "val3": val3}
 
     def pydantic_validated_action(
@@ -145,54 +134,63 @@ class TestThing(Thing):
     # ----------- Properties --------------
 
     base_property = Property(default=None, allow_None=True, doc="a base Property class")
+
     number_prop = Number(doc="A fully editable number property", default=1)
+
     string_prop = String(
         default="hello",
         regex="^[a-z]+",
         doc="A string property with a regex constraint to check value errors",
     )
+
     int_prop = Integer(
         default=5,
         step=2,
         bounds=(0, 100),
         doc="An integer property with step and bounds constraints to check RW",
     )
-    selector_prop = Selector(
-        objects=["a", "b", "c", 1], default="a", doc="A selector property to check RW"
-    )
+
+    selector_prop = Selector(objects=["a", "b", "c", 1], default="a", doc="A selector property to check RW")
+
     observable_list_prop = List(
         default=None,
         allow_None=True,
         observable=True,
         doc="An observable list property to check observable events on write operations",
     )
+
     observable_readonly_prop = Number(
         default=0,
         readonly=True,
         observable=True,
         doc="An observable readonly property to check observable events on read operations",
     )
+
     db_commit_number_prop = Number(
         default=0,
         db_commit=True,
         doc="A fully editable number property to check commits to db on write operations",
     )
+
     db_init_int_prop = Integer(
         default=1,
         db_init=True,
         doc="An integer property to check initialization from db",
     )
+
     db_persist_selector_prop = Selector(
         objects=["a", "b", "c", 1],
         default="a",
         db_persist=True,
         doc="A selector property to check persistence to db on write operations",
     )
+
     non_remote_number_prop = Number(
         default=5,
         remote=False,
         doc="A non remote number property to check non-availability on client",
     )
+
     sleeping_prop = Number(
         default=0,
         observable=True,
@@ -262,13 +260,9 @@ class TestThing(Thing):
 
     # ----------- Class properties --------------
 
-    simple_class_prop = Number(
-        class_member=True, default=42, doc="simple class property with default value"
-    )
+    simple_class_prop = Number(class_member=True, default=42, doc="simple class property with default value")
 
-    managed_class_prop = Number(
-        class_member=True, doc="(managed) class property with custom getter/setter"
-    )
+    managed_class_prop = Number(class_member=True, doc="(managed) class property with custom getter/setter")
 
     @managed_class_prop.getter
     def get_managed_class_prop(cls):
@@ -280,9 +274,7 @@ class TestThing(Thing):
             raise ValueError("Value must be non-negative")
         cls._managed_value = value
 
-    readonly_class_prop = String(
-        class_member=True, readonly=True, doc="read-only class property"
-    )
+    readonly_class_prop = String(class_member=True, readonly=True, doc="read-only class property")
 
     @readonly_class_prop.getter
     def get_readonly_class_prop(cls):
@@ -307,9 +299,7 @@ class TestThing(Thing):
         if hasattr(cls, "_deletable_value"):
             del cls._deletable_value
 
-    not_a_class_prop = Number(
-        class_member=False, default=43, doc="test property with class_member=False"
-    )
+    not_a_class_prop = Number(class_member=False, default=43, doc="test property with class_member=False")
 
     @not_a_class_prop.getter
     def get_not_a_class_prop(self):
@@ -337,27 +327,55 @@ class TestThing(Thing):
         print(f"db_persist_selctor_prop: {self.db_persist_selector_prop}")
         print(f"non_remote_number_prop: {self.non_remote_number_prop}")
 
+    # ----------- Pythonic objects as properties --------------
+
+    numpy_array_prop = ClassSelector(
+        default=None,
+        allow_None=True,
+        class_=(np.ndarray,),
+        doc="A property with a numpy array as value",
+    )
+
+    @numpy_array_prop.setter
+    def set_numpy_array_prop(self, value):
+        self._numpy_array_prop = value
+
+    @numpy_array_prop.getter
+    def get_numpy_array_prop(self):
+        try:
+            return self._numpy_array_prop
+        except AttributeError:
+            return np.array([1, 2, 3])
+
+    JSONSchema.register_type_replacement(np.ndarray, "array")
+
+    NDArray = typing.Annotated[
+        np.ndarray,
+        WithJsonSchema(
+            {
+                "type": "array",
+                "items": {"type": "number"},
+            }
+        ),
+    ]
+
+    @action()
+    def numpy_action(self, array: NDArray) -> NDArray:
+        return array * 2
+
     # ----------- Events --------------
 
     test_event = Event(doc="test event with arbitrary payload")
 
-    total_number_of_events = Number(
-        default=100, bounds=(1, None), doc="Total number of events pushed"
-    )
+    total_number_of_events = Number(default=100, bounds=(1, None), doc="Total number of events pushed")
 
     @action()
-    def push_events(
-        self, event_name: str = "test_event", total_number_of_events: int = 100
-    ):
+    def push_events(self, event_name: str = "test_event", total_number_of_events: int = 100):
         if event_name not in self.events:
             raise ValueError(f"Event {event_name} is not a valid event")
-        threading.Thread(
-            target=self._push_worker, args=(event_name, total_number_of_events)
-        ).start()
+        threading.Thread(target=self._push_worker, args=(event_name, total_number_of_events)).start()
 
-    def _push_worker(
-        self, event_name: str = "test_event", total_number_of_events: int = 100
-    ):
+    def _push_worker(self, event_name: str = "test_event", total_number_of_events: int = 100):
         for i in range(total_number_of_events):
             event_descriptor = self.events.descriptors[event_name]
             if event_descriptor == self.__class__.test_event:
@@ -392,15 +410,11 @@ class TestThing(Thing):
 
     test_binary_payload_event = Event(doc="test event with binary payload")
 
-    test_mixed_content_payload_event = Event(
-        doc="test event with mixed content payload"
-    )
+    test_mixed_content_payload_event = Event(doc="test event with mixed content payload")
 
     test_event_with_json_schema = Event(doc="test event with schema validation")
 
-    test_event_with_pydantic_schema = Event(
-        doc="test event with pydantic schema validation"
-    )
+    test_event_with_pydantic_schema = Event(doc="test event with pydantic schema validation")
 
     # --- Examples from existing device implementations
 
@@ -444,13 +458,9 @@ class TestThing(Thing):
         input_schema=analog_offset_input_schema,
         output_schema=analog_offset_output_schema,
     )
-    def get_analogue_offset(
-        self, voltage_range: str, coupling: str
-    ) -> typing.Tuple[float, float]:
+    def get_analogue_offset(self, voltage_range: str, coupling: str) -> typing.Tuple[float, float]:
         """analogue offset for a voltage range and coupling"""
-        print(
-            f"get_analogue_offset called with voltage_range={voltage_range}, coupling={coupling}"
-        )
+        print(f"get_analogue_offset called with voltage_range={voltage_range}, coupling={coupling}")
         return 0.0, 0.0
 
     set_channel_schema = {
@@ -536,9 +546,7 @@ class TestThing(Thing):
 
     # ---- Gentec Optical Energy Meter
 
-    @action(
-        input_schema={"type": "string", "enum": ["QE25LP-S-MB", "QE12LP-S-MB-QED-D0"]}
-    )
+    @action(input_schema={"type": "string", "enum": ["QE25LP-S-MB", "QE12LP-S-MB-QED-D0"]})
     def set_sensor_model(self, value: str):
         """
         Set the attached sensor to the meter under control.
@@ -547,9 +555,7 @@ class TestThing(Thing):
         print(f"set_sensor_model called with value={value}")
 
     @action()
-    def set_sensor_model_pydantic(
-        self, value: typing.Literal["QE25LP-S-MB", "QE12LP-S-MB-QED-D0"]
-    ):
+    def set_sensor_model_pydantic(self, value: typing.Literal["QE25LP-S-MB", "QE12LP-S-MB-QED-D0"]):
         """
         Set the attached sensor to the meter under control.
         Sensor should be defined as a class and added to the AllowedSensors dict.
@@ -582,17 +588,13 @@ class TestThing(Thing):
 
     # ----- Serial Utility
     @action()
-    def execute_instruction(
-        self, command: str, return_data_size: typing.Annotated[int, Field(ge=0)] = 0
-    ) -> str:
+    def execute_instruction(self, command: str, return_data_size: typing.Annotated[int, Field(ge=0)] = 0) -> str:
         """
         executes instruction given by the ASCII string parameter 'command'.
         If return data size is greater than 0, it reads the response and returns the response.
         Return Data Size - in bytes - 1 ASCII character = 1 Byte.
         """
-        print(
-            f"execute_instruction called with command={command}, return_data_size={return_data_size}"
-        )
+        print(f"execute_instruction called with command={command}, return_data_size={return_data_size}")
         return b""
 
 
@@ -605,9 +607,7 @@ def replace_methods_with_actions(thing_cls: typing.Type[TestThing]) -> None:
 
     if not isinstance(thing_cls.action_echo_with_classmethod, (Action, BoundAction)):
         # classmethod can be decorated with action
-        thing_cls.action_echo_with_classmethod = action()(
-            thing_cls.action_echo_with_classmethod
-        )
+        thing_cls.action_echo_with_classmethod = action()(thing_cls.action_echo_with_classmethod)
         # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
     exposed_actions.append("action_echo_with_classmethod")
 
@@ -617,42 +617,28 @@ def replace_methods_with_actions(thing_cls: typing.Type[TestThing]) -> None:
         thing_cls.action_echo_async.__set_name__(thing_cls, "action_echo_async")
     exposed_actions.append("action_echo_async")
 
-    if not isinstance(
-        thing_cls.action_echo_async_with_classmethod, (Action, BoundAction)
-    ):
+    if not isinstance(thing_cls.action_echo_async_with_classmethod, (Action, BoundAction)):
         # async classmethods can be decorated with action
-        thing_cls.action_echo_async_with_classmethod = action()(
-            thing_cls.action_echo_async_with_classmethod
-        )
+        thing_cls.action_echo_async_with_classmethod = action()(thing_cls.action_echo_async_with_classmethod)
         # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
     exposed_actions.append("action_echo_async_with_classmethod")
 
     if not isinstance(thing_cls.parameterized_action, (Action, BoundAction)):
         # parameterized function can be decorated with action
-        thing_cls.parameterized_action = action(safe=True)(
-            thing_cls.parameterized_action
-        )
+        thing_cls.parameterized_action = action(safe=True)(thing_cls.parameterized_action)
         thing_cls.parameterized_action.__set_name__(thing_cls, "parameterized_action")
     exposed_actions.append("parameterized_action")
 
-    if not isinstance(
-        thing_cls.parameterized_action_without_call, (Action, BoundAction)
-    ):
+    if not isinstance(thing_cls.parameterized_action_without_call, (Action, BoundAction)):
         thing_cls.parameterized_action_without_call = action(idempotent=True)(
             thing_cls.parameterized_action_without_call
         )
-        thing_cls.parameterized_action_without_call.__set_name__(
-            thing_cls, "parameterized_action_without_call"
-        )
+        thing_cls.parameterized_action_without_call.__set_name__(thing_cls, "parameterized_action_without_call")
     exposed_actions.append("parameterized_action_without_call")
 
     if not isinstance(thing_cls.parameterized_action_async, (Action, BoundAction)):
-        thing_cls.parameterized_action_async = action(synchronous=True)(
-            thing_cls.parameterized_action_async
-        )
-        thing_cls.parameterized_action_async.__set_name__(
-            thing_cls, "parameterized_action_async"
-        )
+        thing_cls.parameterized_action_async = action(synchronous=True)(thing_cls.parameterized_action_async)
+        thing_cls.parameterized_action_async.__set_name__(thing_cls, "parameterized_action_async")
     exposed_actions.append("parameterized_action_async")
 
     if not isinstance(thing_cls.json_schema_validated_action, (Action, BoundAction)):
@@ -672,18 +658,12 @@ def replace_methods_with_actions(thing_cls: typing.Type[TestThing]) -> None:
                 "properties": {"val1": {"type": "integer"}, "val3": {"type": "object"}},
             },
         )(thing_cls.json_schema_validated_action)
-        thing_cls.json_schema_validated_action.__set_name__(
-            thing_cls, "json_schema_validated_action"
-        )
+        thing_cls.json_schema_validated_action.__set_name__(thing_cls, "json_schema_validated_action")
     exposed_actions.append("json_schema_validated_action")
 
     if not isinstance(thing_cls.pydantic_validated_action, (Action, BoundAction)):
-        thing_cls.pydantic_validated_action = action()(
-            thing_cls.pydantic_validated_action
-        )
-        thing_cls.pydantic_validated_action.__set_name__(
-            thing_cls, "pydantic_validated_action"
-        )
+        thing_cls.pydantic_validated_action = action()(thing_cls.pydantic_validated_action)
+        thing_cls.pydantic_validated_action.__set_name__(thing_cls, "pydantic_validated_action")
     exposed_actions.append("pydantic_validated_action")
 
     replace_methods_with_actions._exposed_actions = exposed_actions

@@ -313,7 +313,10 @@ if __name__ == '__main__':
         id='spectrometer',
         serial_number='S14155',
     ).run(
-        access_points=['HTTP', 'ZMQ-IPC']
+       access_points=[
+            ("ZMQ", "IPC"),
+            ("HTTP", 8080),
+        ]
     )
     # HTTP & ZMQ Interprocess Communication
 ```

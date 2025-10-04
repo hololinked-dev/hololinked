@@ -27,6 +27,7 @@ SOFTWARE.
 import inspect
 import array
 import datetime
+import io
 import uuid
 import decimal
 import typing
@@ -220,11 +221,30 @@ class MsgpackSerializer(BaseSerializer):
         super().__init__()
         self.type = msgpack
 
+    codes = dict(NDARRAY_EXT=1)
+
     def dumps(self, value) -> bytes:
-        return msgpack.encode(value)
+        return msgpack.encode(value, enc_hook=self.default_encode)
 
     def loads(self, value) -> typing.Any:
-        return msgpack.decode(self.convert_to_bytes(value))
+        return msgpack.decode(self.convert_to_bytes(value), ext_hook=self.ext_decode)
+
+    @classmethod
+    def default_encode(cls, obj) -> typing.Any:
+        if "numpy" in globals() and isinstance(obj, numpy.ndarray):
+            buf = io.BytesIO()
+            numpy.save(buf, obj, allow_pickle=False)  # use .npy. which stores dtype, shape, order, endianness
+            return msgpack.Ext(MsgpackSerializer.codes["NDARRAY_EXT"], buf.getvalue())
+        raise TypeError("Given type cannot be converted to MessagePack : {}".format(type(obj)))
+
+    @classmethod
+    def ext_decode(cls, code: int, obj: memoryview) -> typing.Any:
+        if code == MsgpackSerializer.codes["NDARRAY_EXT"]:
+            if "numpy" in globals():
+                return numpy.load(io.BytesIO(obj), allow_pickle=False)
+            else:
+                raise ValueError("numpy is required to decode numpy array from MessagePack")
+        return obj
 
     @property
     def content_type(self) -> str:
@@ -379,7 +399,7 @@ class Serializers(metaclass=MappableSingleton):
     def register(cls, serializer: BaseSerializer, name: str | None = None, override: bool = False) -> None:
         """
         Register a new serializer. It is recommended to implement a content type property/attribute for the serializer
-        to facilitate automatic deserialization on client side, otherwise deserialization is not gauranteed by this package.
+        to facilitate automatic deserialization on client side, otherwise deserialization is not gauranteed by this implementation.
 
         Parameters
         ----------
@@ -437,6 +457,39 @@ class Serializers(metaclass=MappableSingleton):
                     return cls.content_types[cls.object_content_type_map[thing][objekt]]
                 return cls.content_types[cls.object_content_type_map[thing].get(thing, cls.default_content_type)]
         return cls.default  # JSON is default serializer
+
+    # @validate_call
+    @classmethod
+    def register_for_object(cls, objekt: typing.Any, serializer: BaseSerializer) -> None:
+        """
+        Register (an existing) serializer for a property, action or event. Other option is to register a content type,
+        the effects are similar.
+
+        Parameters
+        ----------
+        objekt: str | Property | Action | Event
+            the property, action or event
+        serializer: BaseSerializer
+            the serializer to be used
+        """
+        if not isinstance(serializer, BaseSerializer):
+            raise ValueError("serializer must be an instance of BaseSerializer, given : {}".format(type(serializer)))
+        from ..core import Property, Action, Event, Thing
+
+        if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
+            raise ValueError("object must be a Property, Action or Event, or Thing, got : {}".format(type(objekt)))
+        if issubklass(objekt, Thing):
+            owner = objekt.__name__
+        elif not objekt.owner:
+            raise ValueError("object owner cannot be determined : {}".format(objekt))
+        else:
+            owner = objekt.owner.__name__
+        if owner not in cls.object_serializer_map:
+            cls.object_serializer_map[owner] = dict()
+        if issubklass(objekt, Thing):
+            cls.object_serializer_map[owner][objekt.__name__] = serializer
+        else:
+            cls.object_serializer_map[owner][objekt.name] = serializer
 
     # @validate_call
     @classmethod
@@ -522,39 +575,6 @@ class Serializers(metaclass=MappableSingleton):
             raise ValueError("content type {} unsupported".format(content_type))
         cls.object_content_type_map[thing_id][thing_id] = content_type
         # remember, its a redundant key, TODO
-
-    # @validate_call
-    @classmethod
-    def register_for_object(cls, objekt: typing.Any, serializer: BaseSerializer) -> None:
-        """
-        Register (an existing) serializer for a property, action or event. Other option is to register a content type,
-        the effects are similar.
-
-        Parameters
-        ----------
-        objekt: str | Property | Action | Event
-            the property, action or event
-        serializer: BaseSerializer
-            the serializer to be used
-        """
-        if not isinstance(serializer, BaseSerializer):
-            raise ValueError("serializer must be an instance of BaseSerializer, given : {}".format(type(serializer)))
-        from ..core import Property, Action, Event, Thing
-
-        if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
-            raise ValueError("object must be a Property, Action or Event, or Thing, got : {}".format(type(objekt)))
-        if issubklass(objekt, Thing):
-            owner = objekt.__name__
-        elif not objekt.owner:
-            raise ValueError("object owner cannot be determined : {}".format(objekt))
-        else:
-            owner = objekt.owner.__name__
-        if owner not in cls.object_serializer_map:
-            cls.object_serializer_map[owner] = dict()
-        if issubklass(objekt, Thing):
-            cls.object_serializer_map[owner][objekt.__name__] = serializer
-        else:
-            cls.object_serializer_map[owner][objekt.name] = serializer
 
     @classmethod
     def register_for_object_per_thing_instance(cls, thing_id: str, objekt: str, serializer: BaseSerializer) -> None:
