@@ -477,6 +477,12 @@ class RPCServer(BaseZMQServer):
         elif operation == Operations.deleteproperty:
             prop = instance.properties[objekt]  # type: Property
             del prop  # raises NotImplementedError when deletion is not implemented which is mostly the case
+        elif operation == Operations.invokeaction and objekt == "get_thing_description":
+            # special case
+            if payload is None:
+                payload = dict()
+            args = payload.pop("__args__", tuple())
+            return self.get_thing_description(instance, *args, **payload)
         elif operation == Operations.invokeaction:
             if payload is None:
                 payload = dict()
@@ -484,10 +490,6 @@ class RPCServer(BaseZMQServer):
             # payload then become kwargs
             if preserialized_payload != EMPTY_BYTE:
                 args = (preserialized_payload,) + args
-            # special case
-            if objekt == "get_thing_description":
-                return self.get_thing_description(instance, *args, **payload)
-            # normal Thing action
             action = instance.actions[objekt]  # type: BoundAction
             if action.execution_info.iscoroutine:
                 # the actual scheduling as a purely async task is done by the scheduler, not here,

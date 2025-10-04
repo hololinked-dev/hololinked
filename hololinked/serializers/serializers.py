@@ -221,33 +221,29 @@ class MsgpackSerializer(BaseSerializer):
         super().__init__()
         self.type = msgpack
 
+    codes = dict(NDARRAY_EXT=1)
+
     def dumps(self, value) -> bytes:
         return msgpack.encode(value, enc_hook=self.default_encode)
 
     def loads(self, value) -> typing.Any:
-        value = msgpack.decode(self.convert_to_bytes(value))
-        # TODO decoder hook not called, not sure why
-        if isinstance(value, (memoryview, bytearray, bytes)):
-            return self.default_decode(value)
-        return value
+        return msgpack.decode(self.convert_to_bytes(value), ext_hook=self.ext_decode)
 
     @classmethod
     def default_encode(cls, obj) -> typing.Any:
         if "numpy" in globals() and isinstance(obj, numpy.ndarray):
             buf = io.BytesIO()
-            # .npy stores dtype, shape, order, endianness
-            numpy.save(buf, obj, allow_pickle=False)
-            return buf.getvalue()
+            numpy.save(buf, obj, allow_pickle=False)  # use .npy. which stores dtype, shape, order, endianness
+            return msgpack.Ext(MsgpackSerializer.codes["NDARRAY_EXT"], buf.getvalue())
         raise TypeError("Given type cannot be converted to MessagePack : {}".format(type(obj)))
 
     @classmethod
-    def default_decode(cls, obj) -> typing.Any:
-        # If numpy is available and obj is a memoryview, convert back to numpy array
-        if "numpy" in globals():
-            try:
+    def ext_decode(cls, code: int, obj: memoryview) -> typing.Any:
+        if code == MsgpackSerializer.codes["NDARRAY_EXT"]:
+            if "numpy" in globals():
                 return numpy.load(io.BytesIO(obj), allow_pickle=False)
-            except Exception:
-                pass
+            else:
+                raise ValueError("numpy is required to decode numpy array from MessagePack")
         return obj
 
     @property
