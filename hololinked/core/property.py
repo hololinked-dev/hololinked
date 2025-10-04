@@ -329,7 +329,7 @@ class Property(Parameter):
 
 
 try:
-    from pydantic import BaseModel, RootModel, create_model
+    from pydantic import BaseModel, RootModel, create_model, ConfigDict
 
     def wrap_plain_types_in_rootmodel(model: type) -> type[BaseModel] | type[RootModel]:
         """
@@ -344,7 +344,12 @@ try:
             return
         if issubklass(model, BaseModel):
             return model
-        return create_model(f"{model!r}", root=(model, ...), __base__=RootModel)
+        return create_model(
+            f"{model!r}",
+            root=(model, ...),
+            __base__=RootModel,
+            __config__=ConfigDict(arbitrary_types_allowed=True),
+        )  # type: ignore[call-overload]
 except ImportError:
 
     def wrap_plain_types_in_rootmodel(model: type) -> type:

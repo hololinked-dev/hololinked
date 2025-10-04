@@ -3,7 +3,7 @@ import threading
 import time
 import typing
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, WithJsonSchema
 
 from hololinked.core import Thing, action, Property, Event
 from hololinked.core.properties import (
@@ -24,7 +24,7 @@ class TestThing(Thing):
     A test thing with various API options for properties, actions and events that were collected from examples from
     real world implementations, testing, features offered etc.
 
-    Add your own use case here as needed.
+    Add your own use case/snippets used in tests here as needed.
     """
 
     # ----------- Actions --------------
@@ -348,6 +348,20 @@ class TestThing(Thing):
             return np.array([1, 2, 3])
 
     JSONSchema.register_type_replacement(np.ndarray, "array")
+
+    NDArray = typing.Annotated[
+        np.ndarray,
+        WithJsonSchema(
+            {
+                "type": "array",
+                "items": {"type": "number"},
+            }
+        ),
+    ]
+
+    @action()
+    def numpy_action(self, array: NDArray) -> NDArray:
+        return array * 2
 
     # ----------- Events --------------
 

@@ -377,18 +377,18 @@ class RPCServer(BaseZMQServer):
                 return_value = await self.execute_operation(instance, objekt, operation, payload, preserialized_payload)
 
                 # handle return value
-                serialization = Serializers.for_object(thing_id, instance.__class__.__name__, objekt)
-                payload, preserialized_payload = self.format_return_value(return_value, serializer=serialization)
+                serializer = Serializers.for_object(thing_id, instance.__class__.__name__, objekt)
+                rpayload, rpreserialized_payload = self.format_return_value(return_value, serializer=serializer)
 
                 # complete thing execution context
                 if fetch_execution_logs:
-                    payload.value = dict(return_value=payload.value, execution_logs=list_handler.log_list)
+                    rpayload.value = dict(return_value=rpayload.value, execution_logs=list_handler.log_list)
 
                 # raise any payload errors now
-                payload.require_serialized()
+                rpayload.require_serialized()
 
                 # set reply
-                scheduler.last_operation_reply = (payload, preserialized_payload, REPLY)
+                scheduler.last_operation_reply = (rpayload, rpreserialized_payload, REPLY)
 
             except BreakInnerLoop:
                 # exit the loop and stop the thing
@@ -397,14 +397,14 @@ class RPCServer(BaseZMQServer):
                 )
 
                 # send a reply with None return value
-                payload, preserialized_payload = self.format_return_value(None, Serializers.json)
+                rpayload, rpreserialized_payload = self.format_return_value(None, Serializers.json)
 
                 # complete thing execution context
                 if fetch_execution_logs:
-                    payload.value = dict(return_value=payload.value, execution_logs=list_handler.log_list)
+                    rpayload.value = dict(return_value=rpayload.value, execution_logs=list_handler.log_list)
 
                 # set reply, let the message broker decide
-                scheduler.last_operation_reply = (payload, preserialized_payload, None)
+                scheduler.last_operation_reply = (rpayload, rpreserialized_payload, None)
 
                 # quit the loop
                 break
@@ -418,16 +418,16 @@ class RPCServer(BaseZMQServer):
                 )
 
                 # send a reply with error
-                payload, preserialized_payload = self.format_return_value(
+                rpayload, rpreserialized_payload = self.format_return_value(
                     dict(exception=format_exception_as_json(ex)), Serializers.json
                 )
 
                 # complete thing execution context
                 if fetch_execution_logs:
-                    payload.value["execution_logs"] = list_handler.log_list
+                    rpayload.value["execution_logs"] = list_handler.log_list
 
                 # set error reply
-                scheduler.last_operation_reply = (payload, preserialized_payload, ERROR)
+                scheduler.last_operation_reply = (rpayload, rpreserialized_payload, ERROR)
 
             finally:
                 # cleanup
@@ -514,7 +514,7 @@ class RPCServer(BaseZMQServer):
             and len(return_value) == 2
             and (isinstance(return_value[1], bytes) or isinstance(return_value[1], PreserializedData))
         ):
-            payload = SerializableData(return_value[0], serializer=serializer)
+            payload = SerializableData(return_value[0], serializer=serializer, content_type=serializer.content_type)
             if isinstance(return_value[1], bytes):
                 preserialized_payload = PreserializedData(return_value[1])
         elif isinstance(return_value, bytes):
@@ -524,7 +524,7 @@ class RPCServer(BaseZMQServer):
             payload = SerializableData(None, content_type="application/json")
             preserialized_payload = return_value
         else:
-            payload = SerializableData(return_value, serializer=serializer)
+            payload = SerializableData(return_value, serializer=serializer, content_type=serializer.content_type)
             preserialized_payload = PreserializedData(EMPTY_BYTE, content_type="text/plain")
         return payload, preserialized_payload
 

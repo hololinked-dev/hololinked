@@ -229,6 +229,7 @@ class MsgpackSerializer(BaseSerializer):
         # TODO decoder hook not called, not sure why
         if isinstance(value, (memoryview, bytearray, bytes)):
             return self.default_decode(value)
+        return value
 
     @classmethod
     def default_encode(cls, obj) -> typing.Any:
