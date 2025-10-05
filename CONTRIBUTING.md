@@ -8,50 +8,52 @@ All types of contributions are encouraged and valued.
 >
 > - Star the project
 > - Tweet about it or share in social media
-> - Create examples & refer this project in your project's readme. I can add your example in my [example repository](https://github.com/VigneshVSV/hololinked-examples) if its really helpful, including use cases in more sophisticated integrations
+> - Create examples & refer this project in your project's readme. I can add your example in my [example repository](https://github.com/hololinked-dev/hololinked-examples) if its really helpful, including use cases in more sophisticated integrations
 > - Mention the project at local meetups/conferences and tell your friends/colleagues
 > - Donate to cover the costs of maintaining it
-
-## I Have a Question
-
-Do feel free to reach out to me at vignesh.vaidyanathan@hololinked.dev or in discord. I will try my very best to respond.
-
-Nevertheless, one may also refer the available how-to section of the [Documentation](https://hololinked.readthedocs.io/en/latest/index.html).
-If the documentation is insufficient for any reason including being poorly documented, one may open a new discussion in the [Q&A](https://github.com/VigneshVSV/hololinked/discussions/categories/q-a) section of GitHub discussions.
-
-For questions related to workings of HTTP, JSON schema, basic concepts of python like descriptors, decorators etc., it is also advisable to search the internet for answers first.
-For generic questions related to web of things standards or its ideas, it is recommended to join web of things [discord](https://discord.com/invite/RJNYJsEgnb) group and [community](https://www.w3.org/community/wot/) group.
-
-If you believe your question might also be a bug, you might want to search for existing [Issues](https://github.com/VigneshVSV/hololinked/issues) that might help you.
-In case you have found a suitable issue and still need clarification, you can write your question in this issue. If an issue is not found:
-
-- Open an [Issue](https://github.com/VigneshVSV/hololinked/issues/new).
-- Provide as much context as you can about what you're running into.
-  - Stack trace (Traceback)
-  - OS, Platform and Version (Windows, Linux, macOS, x86, ARM)
-  - Version of python
-  - Possibly your input and the output
-  - Can you reliably reproduce the issue?
-
-One may submit a bug report at any level of information, especially if you reached out to me at my email upfront. If you also know how to fix it, lets discuss, once the idea is clear, you can fork and make a pull request.
-
-Otherwise, I will then take care of the issue as soon as possible.
-
-> You must never report security related issues, vulnerabilities or bugs including sensitive information to the issue tracker, or elsewhere in public. Instead sensitive bugs must be sent by email to vignesh.vaidyanathan@hololinked.dev.
 
 ## I Want To Contribute
 
 > ### Legal Notice <!-- omit in toc -->
 >
-> When contributing to this project, you must agree that you have authored 100% of the content or that you have the necessary rights to the content. For example, you copied code from projects with MIT/BSD License. Content from GPL-related licenses may be maintained in a separate repository as an add-on.
+> When contributing to this project, you must agree that you have authored 100% of the content or that you have the necessary rights to the content, and agree to release it under the license of the project.
 
-Developers are always welcome to contribute to the code base. If you want to tackle any issues, un-existing features, let me know (at my email), I can create some open issues and features which I was never able to solve or did not have the time. You can also suggest what else can be contributed functionally, conceptually or also simply code-refactoring.
+If you want to tackle any issues, un-existing features, please do have a look at [good-first-issues](https://github.com/hololinked-dev/hololinked/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). Issues are separated by (perceived-) level of difficulty (`beginner`, `intermediate`) and type of contribution (`bug`, `feature`, `documentation` etc.). If you wish to propose a feature or bugfix, we could discuss it on discord/email (links in README) before you start working on it.
+
+Partial contributions are also taken if its easier to continue working on it. In this case, you can submit your fork to merge into a separate branch until it meets the required standards for release.
 
 There are also other repositories which can use your skills:
 
-- An [admin client](https://github.com/VigneshVSV/thing-control-panel) in react
-- [Documentation](https://github.com/VigneshVSV/hololinked-docs) in sphinx which needs significant improvement in How-To's, beginner level docs which may teach people concepts of data acquisition or IoT, Docstring or API documentation of this repository itself
-- [Examples](https://github.com/VigneshVSV/hololinked-examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package. Hardware implementations of unexisting examples are also welcome, I can open a directory where people can search for code based on hardware and just download your code.
+- An [admin client](https://github.com/hololinked-dev/thing-control-panel) in react
+- [Documentation](https://github.com/hololinked-dev/docs) in sphinx which needs significant improvement in How-To's, beginner level docs which may teach people concepts of data acquisition or IoT, Docstring or API documentation of this repository itself
+- [Examples](https://github.com/hololinked-dev/hololinked-examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package. Hardware implementations of unexisting examples are also welcome, I can open a directory where people can search for code based on hardware and just download your code.
+
+## I Have a Question
+
+Do feel free to reach out to me at email or in discord (links in README). I will try my very best to respond.
+
+Nevertheless, one may also refer the available how-to section of the [Documentation](https://docs.hololinked.dev/beginners-guide/articles/servers/).
+If the documentation is insufficient for any reason including being poorly documented, one may open a new discussion in the [Q&A](https://github.com/hololinked-dev/hololinked/discussions/categories/q-a) section of GitHub discussions.
+
+For questions related to workings of HTTP, JSON schema, basic concepts of python like descriptors, decorators etc., it is also advisable to search the internet for answers first.
+For generic questions related to web of things standards or its ideas, it is recommended to join web of things [discord](https://discord.com/invite/RJNYJsEgnb) group and [community](https://www.w3.org/community/wot/) group.
+
+If you believe your question might also be a bug, you might want to search for existing [Issues](https://github.com/hololinked-dev/hololinked/issues) that might help you.
+In case you have found a suitable issue and still need clarification, you can write your question in this issue. If an issue is not found:
+
+- Open an [Issue](https://github.com/hololinked-dev/hololinked/issues/new).
+- Provide as much context as you can about what you're running into.
+  - Stack trace (Traceback)
+  - OS, Platform and Version (Windows, Linux, macOS)
+  - Version of python
+  - Possibly your input and the output
+  - Can you reliably reproduce the issue?
+
+One may submit a bug report at any level of information, especially if you reached out to me upfront. If you also know how to fix it, lets discuss, once the idea is clear, you can fork and make a pull request.
+
+Otherwise, I will then take care of the issue as soon as possible.
+
+> You must never report security related issues, vulnerabilities or bugs including sensitive information to the issue tracker, or elsewhere in public. Instead sensitive bugs must be sent by email to info@hololinked.dev.
 
 ## Git Branching
 
