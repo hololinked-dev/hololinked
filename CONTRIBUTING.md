@@ -25,7 +25,7 @@ Partial contributions are also taken if its easier to continue working on it. In
 There are also other repositories which can use your skills:
 
 - An [admin client](https://github.com/hololinked-dev/thing-control-panel) in react
-- [Documentation](https://github.com/hololinked-dev/docs) in sphinx which needs significant improvement in How-To's, beginner level docs which may teach people concepts of data acquisition or IoT, Docstring or API documentation of this repository itself
+- [Documentation](https://github.com/hololinked-dev/docs) in mkdocs which needs significant improvement in beginner level docs which may teach people concepts of data acquisition or IoT, Docstring or API documentation of this repository itself
 - [Examples](https://github.com/hololinked-dev/hololinked-examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package. Hardware implementations of unexisting examples are also welcome, I can open a directory where people can search for code based on hardware and just download your code.
 
 ## I Have a Question
