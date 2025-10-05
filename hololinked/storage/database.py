@@ -7,6 +7,128 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Integer, String, JSON, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDataclass
 from sqlite3 import DatabaseError
+from pymongo import MongoClient, errors as mongo_errors
+from ..param import Parameterized
+from ..core.property import Property
+class MongoThingDB:
+    """
+    MongoDB-backed database engine for Thing properties and info.
+    
+    This class provides persistence for Thing properties using MongoDB.
+    Properties are stored in the 'properties' collection, with fields:
+    - id: Thing instance identifier
+    - name: property name
+    - serialized_value: serialized property value
+    
+    Methods mirror the interface of ThingDB for compatibility.
+    """
+    def __init__(self, instance: Parameterized, config_file: typing.Union[str, None] = None) -> None:
+        """
+        Initialize MongoThingDB for a Thing instance.
+        Connects to MongoDB and sets up collections.
+        """
+        self.thing_instance = instance
+        self.id = instance.id
+        self.config = self.load_conf(config_file)
+        self.client = MongoClient(self.config.get("mongo_uri", "mongodb://localhost:27017"))
+        self.db = self.client[self.config.get("database", "hololinked")]
+        self.properties = self.db["properties"]
+        self.things = self.db["things"]
+
+    @classmethod
+    def load_conf(cls, config_file: str) -> typing.Dict[str, typing.Any]:
+        """
+        Load configuration from JSON file if provided.
+        """
+        if not config_file:
+            return {}
+        elif config_file.endswith(".json"):
+            with open(config_file, "r") as file:
+                return JSONSerializer.load(file)
+        else:
+            raise ValueError(f"config files of extension - ['json'] expected, given file name {config_file}")
+
+    def fetch_own_info(self):
+        """
+        Fetch Thing instance metadata from the 'things' collection.
+        """
+        doc = self.things.find_one({"id": self.id})
+        return doc
+
+    def get_property(self, property: typing.Union[str, Property], deserialized: bool = True) -> typing.Any:
+        """
+        Get a property value from MongoDB for this Thing.
+        If deserialized=True, returns the Python value.
+        """
+        name = property if isinstance(property, str) else property.name
+        doc = self.properties.find_one({"id": self.id, "name": name})
+        if not doc:
+            raise mongo_errors.PyMongoError(f"property {name} not found in database")
+        if not deserialized:
+            return doc
+        import base64, pickle
+        return pickle.loads(base64.b64decode(doc["serialized_value"]))
+
+    def set_property(self, property: typing.Union[str, Property], value: typing.Any) -> None:
+        """
+        Set a property value in MongoDB for this Thing.
+        Value is serialized before storage.
+        """
+        name = property if isinstance(property, str) else property.name
+        import base64, pickle
+        serialized_value = base64.b64encode(pickle.dumps(value)).decode("utf-8")
+        self.properties.update_one(
+            {"id": self.id, "name": name},
+            {"$set": {"serialized_value": serialized_value}},
+            upsert=True
+        )
+
+    def get_properties(self, properties: typing.Dict[typing.Union[str, Property], typing.Any], deserialized: bool = True) -> typing.Dict[str, typing.Any]:
+        """
+        Get multiple property values from MongoDB for this Thing.
+        Returns a dict of property names to values.
+        """
+        names = [obj if isinstance(obj, str) else obj.name for obj in properties.keys()]
+        cursor = self.properties.find({"id": self.id, "name": {"$in": names}})
+        result = {}
+        import base64, pickle
+        for doc in cursor:
+            result[doc["name"]] = doc["serialized_value"] if not deserialized else pickle.loads(base64.b64decode(doc["serialized_value"]))
+        return result
+
+    def set_properties(self, properties: typing.Dict[typing.Union[str, Property], typing.Any]) -> None:
+        """
+        Set multiple property values in MongoDB for this Thing.
+        """
+        for obj, value in properties.items():
+            name = obj if isinstance(obj, str) else obj.name
+            import base64, pickle
+            serialized_value = base64.b64encode(pickle.dumps(value)).decode("utf-8")
+            self.properties.update_one(
+                {"id": self.id, "name": name},
+                {"$set": {"serialized_value": serialized_value}},
+                upsert=True
+            )
+
+    def get_all_properties(self, deserialized: bool = True) -> typing.Dict[str, typing.Any]:
+        cursor = self.properties.find({"id": self.id})
+        result = {}
+        import base64, pickle
+        for doc in cursor:
+            result[doc["name"]] = doc["serialized_value"] if not deserialized else pickle.loads(base64.b64decode(doc["serialized_value"]))
+        return result
+
+    def create_missing_properties(self, properties: typing.Dict[str, Property], get_missing_property_names: bool = False) -> typing.Any:
+        missing_props = []
+        existing_props = self.get_all_properties()
+        import base64, pickle
+        for name, new_prop in properties.items():
+            if name not in existing_props:
+                serialized_value = base64.b64encode(pickle.dumps(getattr(self.thing_instance, new_prop.name))).decode("utf-8")
+                self.properties.insert_one({"id": self.id, "name": new_prop.name, "serialized_value": serialized_value})
+                missing_props.append(name)
+        if get_missing_property_names:
+            return missing_props
 from dataclasses import dataclass
 
 from ..param import Parameterized
