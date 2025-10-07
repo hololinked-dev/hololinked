@@ -464,6 +464,34 @@ class ActionHandler(RPCHandler):
         self.finish()
 
 
+class RWMultiplePropertiesHandler(ActionHandler):
+    def initialize(self, resource, owner_inst=None, metadata=None, **kwargs) -> None:
+        self.read_properties_resource = kwargs.pop("read_properties_resource", None)
+        self.write_properties_resource = kwargs.pop("write_properties_resource", None)
+        return super().initialize(resource, owner_inst, metadata)
+
+    async def get(self) -> None:
+        if self.is_method_allowed("GET"):
+            self.resource = self.read_properties_resource
+            if self.message_id is not None:
+                await self.handle_no_block_response()
+            else:
+                await self.handle_through_thing(Operations.invokeaction)
+        self.finish()
+
+    async def put(self) -> None:
+        if self.is_method_allowed("PUT"):
+            self.resource = self.write_properties_resource
+            await self.handle_through_thing(Operations.invokeaction)
+        self.finish()
+
+    async def patch(self) -> None:
+        if self.is_method_allowed("PATCH"):
+            self.resource = self.write_properties_resource
+            await self.handle_through_thing(Operations.invokeaction)
+        self.finish()
+
+
 class EventHandler(BaseHandler):
     """handles events emitted by `Thing` and tunnels them as HTTP SSE"""
 
@@ -722,11 +750,11 @@ class ThingDescriptionHandler(BaseHandler):
     ) -> dict[str, JSONSerializable]:
         TD = copy.deepcopy(TM)
         # sanitize some things
-        TD["id"] = f"{self.server.router.get_basepath(authority=authority, use_localhost=use_localhost)}/{TD['id']}"
 
         self.add_properties(TD, TM, authority=authority, use_localhost=use_localhost)
         self.add_actions(TD, TM, authority=authority, use_localhost=use_localhost)
         self.add_events(TD, TM, authority=authority, use_localhost=use_localhost)
+        self.add_top_level_forms(TD, authority=authority, use_localhost=use_localhost)
 
         self.add_security_definitions(TD)
         return TD
@@ -819,6 +847,42 @@ class ThingDescriptionHandler(BaseHandler):
                 form.htv_methodName = http_method
                 form.subprotocol = "sse"
                 TD["events"][name]["forms"].append(form.json())
+
+    def add_top_level_forms(self, TD: dict[str, JSONSerializable], authority: str, use_localhost: bool) -> None:
+        """adds top level forms for reading and writing multiple properties"""
+
+        properties_end_point = f"{self.server.router.get_basepath(authority, use_localhost)}/{TD['id']}/properties"
+
+        if TD.get("forms", None) is None:
+            TD["forms"] = []
+
+        readallproperties = Form()
+        readallproperties.href = properties_end_point
+        readallproperties.op = "readallproperties"
+        readallproperties.htv_methodName = "GET"
+        readallproperties.contentType = "application/json"
+        TD["forms"].append(readallproperties.json())
+
+        writeallproperties = Form()
+        writeallproperties.href = properties_end_point
+        writeallproperties.op = "writeallproperties"
+        writeallproperties.htv_methodName = "PUT"
+        writeallproperties.contentType = "application/json"
+        TD["forms"].append(writeallproperties.json())
+
+        readmultipleproperties = Form()
+        readmultipleproperties.href = properties_end_point
+        readmultipleproperties.op = "readmultipleproperties"
+        readmultipleproperties.htv_methodName = "GET"
+        readmultipleproperties.contentType = "application/json"
+        TD["forms"].append(readmultipleproperties.json())
+
+        writemultipleproperties = Form()
+        writemultipleproperties.href = properties_end_point
+        writemultipleproperties.op = "writemultipleproperties"
+        writemultipleproperties.htv_methodName = "PATCH"
+        writemultipleproperties.contentType = "application/json"
+        TD["forms"].append(writemultipleproperties.json())
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
         from ...td.security_definitions import SecurityScheme

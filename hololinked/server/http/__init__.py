@@ -48,6 +48,7 @@ from .handlers import (
     PropertyHandler,
     EventHandler,
     BaseHandler,
+    RWMultiplePropertiesHandler,
     StopHandler,
     ThingDescriptionHandler,
     RPCHandler,
@@ -475,8 +476,6 @@ class HTTPServer(Parameterized):
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         http_methods = _comply_http_method(http_method)
-        if len(http_methods) != 1:
-            raise ValueError("http_method should be a single HTTP method")
         if isinstance(action, Action):
             action = action.to_affordance()  # type: ActionAffordance
         kwargs["resource"] = action
@@ -741,6 +740,7 @@ class ApplicationRouter:
                 path = f"/{pep8_to_dashed_name(event.name)}"
             self.server.add_event(URL_path=path, event=event, handler=self.server.event_handler)
 
+        # thing description handler
         get_thing_model_action = next((action for action in actions if action.name == "get_thing_model"), None)
         get_thing_description_action = deepcopy(get_thing_model_action)
         get_thing_description_action.override_defaults(name="get_thing_description")
@@ -750,6 +750,21 @@ class ApplicationRouter:
             http_method=("GET",),
             handler=ThingDescriptionHandler,
         )
+
+        # RW multiple properties handler
+        read_properties = Thing._get_properties.to_affordance(Thing)
+        write_properties = Thing._set_properties.to_affordance(Thing)
+        read_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
+        write_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
+        self.server.add_action(
+            URL_path=f"/{thing_id}/properties" if thing_id else "/properties",
+            action=read_properties,
+            http_method=("GET", "PUT", "PATCH"),
+            handler=RWMultiplePropertiesHandler,
+            read_properties_resource=read_properties,
+            write_properties_resource=write_properties,
+        )
+
         self.server.logger.debug(
             f"added thing description action for thing id {thing_id if thing_id else 'unknown'} at path "
             + f"{f'/{thing_id}/resources/wot-td' if thing_id else '/resources/wot-td'}"
