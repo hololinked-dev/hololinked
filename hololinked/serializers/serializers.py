@@ -181,10 +181,12 @@ class PythonBuiltinJSONSerializer(JSONSerializer):
         data = pythonjson.dumps(data, ensure_ascii=False, allow_nan=True, default=self.default)
         return data.encode("utf-8")
 
-    def dump(self, data: typing.Dict[str, typing.Any], file_desc) -> None:
+    @classmethod
+    def dump(cls, data: typing.Dict[str, typing.Any], file_desc) -> None:
         "write JSON to file"
-        pythonjson.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=self.default)
+        pythonjson.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=cls.default)
 
+    @classmethod
     def load(cls, file_desc) -> JSONSerializable:
         "load JSON from file"
         return pythonjson.load(file_desc)
