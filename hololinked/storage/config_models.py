@@ -28,10 +28,10 @@ class SQLDBConfig(BaseModel):
     @property
     def URL(self) -> str:
         if self.uri:
-            return self.uri
+            return self.uri.get_secret_value()
         if self.provider == "postgresql":
-            return f"postgresql{'+' + self.dialect if self.dialect else ''}://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
-        return f"mysql{'+' + self.dialect if self.dialect else ''}://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+            return f"postgresql{'+' + self.dialect if self.dialect else ''}://{self.user}:{self.password.get_secret_value()}@{self.host}:{self.port}/{self.database}"
+        return f"mysql{'+' + self.dialect if self.dialect else ''}://{self.user}:{self.password.get_secret_value()}@{self.host}:{self.port}/{self.database}"
 
     @model_validator(mode="after")
     def _at_least_one(self):
@@ -45,7 +45,7 @@ class SQLiteConfig(BaseModel):
 
     provider: Literal["sqlite"] = "sqlite"
     """Database provider, only sqlite is supported"""
-    dialect: Literal["aiosqlite", "sqlite"] = "sqlite"
+    dialect: SecretStr = "pysqlite"
     """dialect to use, aiosqlite for async, pysqlite for sync"""
     file: str = ""
     """SQLite database file, default is empty string, which leads to an DB with name of thing ID"""
@@ -57,9 +57,9 @@ class SQLiteConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @property
-    def sqlite_url(self) -> str:
+    def URL(self) -> str:
         if self.uri:
-            return self.uri
+            return self.uri.get_secret_value()
         if self.in_memory:
             return f"sqlite+{self.dialect}:///:memory:"
         return f"sqlite+{self.dialect}:///{self.file}"
@@ -70,7 +70,7 @@ class MongoDBConfig(BaseModel):
 
     provider: Literal["mongo"] = "mongo"
     """Database provider, only mongo is supported"""
-    host: SecretStr = "localhost"
+    host: StrictStr = "localhost"
     """MongoDB server host"""
     port: StrictInt = 27017
     """server port, default 27017"""
@@ -90,15 +90,15 @@ class MongoDBConfig(BaseModel):
     @property
     def URL(self) -> str:
         if self.uri:
-            return self.uri
+            return self.uri.get_secret_value()
         if self.user and self.password:
             if self.authSource:
-                return f"mongodb://{self.user}:{self.password}@{self.host}:{self.port}/?authSource={self.authSource}"
-            return f"mongodb://{self.user}:{self.password}@{self.host}:{self.port}/"
+                return f"mongodb://{self.user}:{self.password.get_secret_value()}@{self.host}:{self.port}/?authSource={self.authSource}"
+            return f"mongodb://{self.user}:{self.password.get_secret_value()}@{self.host}:{self.port}/"
         return f"mongodb://{self.host}:{self.port}/"
 
     @model_validator(mode="after")
     def _at_least_one(self):
-        if not self.uri and (not self.host or not self.port or not self.database):
-            raise ValueError("Provide either database URI or all of 'host', 'port', and 'database'")
+        if not self.uri and (not self.host or not self.port or not self.database or not self.user or not self.password):
+            raise ValueError("Provide either database URI or all of 'host', 'port', 'database', 'user', and 'password'")
         return self

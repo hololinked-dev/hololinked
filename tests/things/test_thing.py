@@ -173,7 +173,7 @@ class TestThing(Thing):
     )
 
     db_init_int_prop = Integer(
-        default=1,
+        default=25,
         db_init=True,
         doc="An integer property to check initialization from db",
     )
