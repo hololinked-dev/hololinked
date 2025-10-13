@@ -1,4 +1,3 @@
-
 """
 adopted from pyro - https://github.com/irmen/Pyro5 - see following license
 
@@ -60,15 +59,40 @@ from ..utils import MappableSingleton, format_exception_as_json, issubklass
 
 
 class BaseSerializer(object):
-    @staticmethod
-    def convert_to_bytes(data):
+    """
+    Base class for (de)serializer implementations. All serializers must inherit this class
+    and overload dumps() and loads() to be usable by the ZMQ message brokers. Any serializer
+    that returns bytes when serialized and a python object on deserialization will be accepted.
+    Serialization and deserialization errors will be passed as invalid message type
+    (see ZMQ messaging contract) from server side and a exception will be raised on the client.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.type = None
+
+    def loads(self, data) -> typing.Any:
+        "method called by ZMQ message brokers to deserialize data"
+        raise NotImplementedError("implement loads()/deserialization in subclass")
+
+    def dumps(self, data) -> bytes:
+        "method called by ZMQ message brokers to serialize data"
+        raise NotImplementedError("implement dumps()/serialization in subclass")
+
+    def convert_to_bytes(self, data) -> bytes:
         if isinstance(data, bytes):
             return data
-        if isinstance(data, (bytearray, memoryview)):
+        if isinstance(data, bytearray):
             return bytes(data)
-        if isinstance(data, str):
-            return data.encode("utf-8")
-        raise TypeError(f"Cannot convert type {type(data)} to bytes")
+        if isinstance(data, memoryview):
+            return data.tobytes()
+        raise TypeError(
+            "serializer convert_to_bytes accepts only bytes, bytearray or memoryview, not type {}".format(type(data))
+        )
+
+    @property
+    def content_type(self) -> str:
+        raise NotImplementedError("serializer must implement a content type")
 
 
 dict_keys = type(dict().keys())

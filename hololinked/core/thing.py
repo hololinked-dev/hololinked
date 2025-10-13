@@ -76,7 +76,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         id: str,
         logger: typing.Optional[logging.Logger] = None,
         serializer: typing.Optional[BaseSerializer | JSONSerializer] = None,
-        use_default_db: bool = False,
         **kwargs: typing.Dict[str, typing.Any],
     ) -> None:
         """
@@ -135,11 +134,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             ),
         )
         prepare_object_FSM(self)
-        # Explicit auto-setup for default DB
-        if use_default_db:
-            prepare_object_storage(self, use_default_db=True, **kwargs)
-        else:
-            prepare_object_storage(self, **kwargs)  # use_default_db, db_config_file, use_json_file, json_filename
+        prepare_object_storage(self, **kwargs)  # use_default_db, db_config_file, use_json_file, json_filename
 
         self._qualified_id = self.id  # filler for now - TODO
         # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
