@@ -11,10 +11,6 @@ except ImportError:
 
 
 class TestProperty(TestCase):
-    @classmethod
-    def setUpClass(self):
-        super().setUpClass()
-        print(f"test property with {self.__name__}")
 
     def test_01_simple_class_property(self):
         """Test basic class property functionality"""
