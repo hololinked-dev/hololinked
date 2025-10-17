@@ -117,5 +117,5 @@ try:
         def __set_state__(self, schema):
             return FastJsonSchemaValidator(schema)
 
-except ImportError as ex:
+except ImportError:
     pass

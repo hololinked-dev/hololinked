@@ -17,7 +17,6 @@ from ...constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS, get_socket_type_name
 from ...serializers.serializers import Serializers
 from ...exceptions import BreakLoop
 from .message import (
-    EMPTY_BYTE,
     ERROR,
     EXIT,
     HANDSHAKE,
@@ -895,7 +894,7 @@ class BaseZMQClient(BaseZMQ):
                 # print("poller exception did not occur 2")
                 self.poller.unregister(self._monitor_socket)
                 # print("poller exception did not occur 3")
-        except Exception as ex:
+        except Exception as ex:  # noqa
             # raises a weird key error for some reason
             # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e5028830> - KeyError
             # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e502a350> - KeyError
@@ -1091,7 +1090,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             finally:
                 try:
                     self._poller_lock.release()
-                except Exception as ex:
+                except Exception as ex:  # noqa
+                    # TODO log exception message
                     # 1. no need to release an unacquired lock, which can happen if another thread polling
                     # put the expected message in response message cache
                     # 2. also release the lock in every iteration because a message may be added in response cache
@@ -1706,7 +1706,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
     def assert_client_ready(self, client: AsyncZMQClient):
         if not client._handshake_event.is_set():
             raise ConnectionAbortedError(f"{client.id} is currently not alive")
-        if not client.socket in self.poller._map:
+        if client.socket not in self.poller._map:
             raise ConnectionError(
                 "handshake complete, server is alive but client socket not yet ready to be polled."
                 + "Application using MessageMappedClientPool should register the socket manually for polling."
@@ -2236,7 +2236,7 @@ class BaseEventConsumer(BaseZMQClient):
             BaseZMQ.exit(self)
             self.poller.unregister(self.socket)
             self.poller.unregister(self.interruptor)
-        except Exception as ex:
+        except Exception as ex:  # noqa
             # self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message: {}".format(
             #     self.socket_address, str(E)))
             # above line prints too many warnings

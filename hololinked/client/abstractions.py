@@ -28,7 +28,6 @@ import threading
 import typing
 import builtins
 import logging
-from types import FunctionType, MethodType
 from dataclasses import dataclass
 
 from ..td import PropertyAffordance, ActionAffordance, EventAffordance

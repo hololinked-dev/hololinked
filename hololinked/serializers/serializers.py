@@ -547,7 +547,7 @@ class Serializers(metaclass=MappableSingleton):
         content_type: str
             the content type to be used
         """
-        if not content_type in cls.content_types:
+        if content_type not in cls.content_types:
             raise ValueError("content type {} unsupported".format(content_type))
         from ..core import Property, Action, Event
 

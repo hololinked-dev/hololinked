@@ -372,7 +372,7 @@ class ThingDB(BaseSyncDB):
             for obj, value in properties.items():
                 name = obj if isinstance(obj, str) else obj.name
                 db_prop = list(filter(lambda db_prop: db_prop.name == name, db_props))  # type: typing.List[SerializedProperty]
-                if len(prop) > 1:
+                if len(db_prop) > 1:
                     raise DatabaseError("multiple properties with same name found")  # Impossible actually
                 serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
                 if len(db_prop) == 1:
@@ -460,7 +460,9 @@ class batch_db_commit:
             try:
                 self.db_engine.set_property(name, value)
             except Exception as ex:
-                pass
+                self.db_engine.thing_instance.logger.error(
+                    f"failed to set property {name} to value {value} during batch commit due to exception {ex}"
+                )
 
 class MongoThingDB:
     """
