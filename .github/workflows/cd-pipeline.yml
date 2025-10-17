@@ -5,26 +5,26 @@ on:
 
 jobs:
   test_publish_package:
-    name: Publish package to Test PyPI
+    name: publish package to test pypi
     runs-on: ubuntu-latest
     permissions:
       id-token: write # IMPORTANT: mandatory for trusted publishing
     steps:
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: set up python
         uses: actions/setup-python@v3
         with:
           python-version: 3.11
 
-      - name: Install uv
+      - name: install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      - name: Build package
+      - name: build package
         run: uv build
 
-      - name: Publish package
+      - name: publish package
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
@@ -32,39 +32,39 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
   publish:
-    name: Publish package to PyPI
+    name: publish package to pypi
     runs-on: ubuntu-latest
     permissions:
       id-token: write # IMPORTANT: mandatory for trusted publishing
     steps:
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: set up python
         uses: actions/setup-python@v3
         with:
           python-version: 3.11
 
-      - name: Install uv
+      - name: install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       # - name: Add uv to PATH
       #   run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Build package
+      - name: build
         run: uv build
 
-      - name: Publish package
+      - name: publish
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
 
   publish_docs:
-    name: Trigger docs pipeline
+    name: trigger docs pipeline
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger downstream workflow
+      - name: trigger downstream workflow
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

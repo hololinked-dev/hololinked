@@ -10,6 +10,26 @@ on:
       - main
 
 jobs:
+  codestyle:
+    name: ruff codestyle check/linting
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: set up python 3.11
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.11
+
+      - name: install ruff
+        run: pip install ruff
+
+      - name: run ruff linter
+        run: ruff check hololinked
+
   test:
     strategy:
       matrix:
@@ -32,57 +52,57 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: set up python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install uv (Linux/macOS)
+      - name: install uv (linux/macOS)
         if: runner.os != 'Windows'
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      - name: Install uv (Windows)
+      - name: install uv (windows)
         if: runner.os == 'Windows'
         run: |
           python -m pip install uv
 
-      - name: Install dependencies (Linux/macOS)
+      - name: install dependencies (linux/macOS)
         if: runner.os != 'Windows'
         run: |
           uv venv .venv
           source .venv/bin/activate
           uv sync --no-install-project --group test --group dev
 
-      - name: Install dependencies (Windows)
+      - name: install dependencies (windows)
         if: runner.os == 'Windows'
         run: |
           uv venv .venv
           .venv\Scripts\activate
           uv sync --no-install-project --group test --group dev
 
-      - name: Run unit tests (Linux/macOS)
+      - name: run unit tests (linux/macOS)
         if: runner.os != 'Windows' && matrix.python-version != 3.13
         run: |
           source .venv/bin/activate
           uv run coverage run -m unittest discover -s tests -p 'test_*.py'
 
-      - name: Run unit tests and generate coverage report (Linux/macOS python 3.13)
+      - name: run unit tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .venv\Scripts\activate
+          uv run coverage run -m unittest discover -s tests -p "test_*.py"
+
+      - name: run unit tests and generate coverage report (linux/macOS python 3.13)
         if: runner.os != 'Windows' && matrix.python-version == 3.13
         run: |
           source .venv/bin/activate
           uv run coverage run -m unittest discover -s tests -p 'test_*.py'
           uv run coverage xml -o coverage.xml
 
-      - name: Run unit tests (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          .venv\Scripts\activate
-          uv run coverage run -m unittest discover -s tests -p "test_*.py"
-
-      - name: Upload coverage report as artifact
+      - name: upload coverage report as artifact
         uses: actions/upload-artifact@v4
         if: runner.os != 'Windows' && matrix.python-version == 3.13
         with:
@@ -91,15 +111,15 @@ jobs:
           if-no-files-found: warn
 
   publish_coverage:
-    name: Publish coverage (Ubuntu Python 3.13)
+    name: publish coverage
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@v4
 
-      - name: Download Ubuntu 3.13 coverage artifact
+      - name: download coverage artifact
         id: dl
         uses: actions/download-artifact@v4
         with:
@@ -107,7 +127,7 @@ jobs:
           path: .
         continue-on-error: true
 
-      - name: Upload coverage to Codecov
+      - name: upload coverage to codecov
         if: steps.dl.outcome == 'success'
         uses: codecov/codecov-action@v4
         env:
@@ -118,6 +138,6 @@ jobs:
           fail_ci_if_error: true
           slug: hololinked-dev/hololinked
 
-      - name: Skip note (no Ubuntu 3.13 artifact found)
+      - name: skip note (no artifact found)
         if: steps.dl.outcome != 'success'
-        run: echo "No Ubuntu 3.13 coverage artifact present; skipping Codecov upload."
+        run: echo "No coverage artifact present; skipping codecov upload."
