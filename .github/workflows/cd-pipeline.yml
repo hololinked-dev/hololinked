@@ -34,6 +34,7 @@ jobs:
   publish:
     name: publish package to pypi
     runs-on: ubuntu-latest
+    needs: test_publish_package
     permissions:
       id-token: write # IMPORTANT: mandatory for trusted publishing
     steps:
@@ -63,6 +64,7 @@ jobs:
   publish_docs:
     name: trigger docs pipeline
     runs-on: ubuntu-latest
+    needs: publish
     steps:
       - name: trigger downstream workflow
         uses: peter-evans/repository-dispatch@v3

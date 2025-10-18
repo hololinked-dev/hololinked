@@ -1,3 +1,4 @@
+from typing import Any
 import logging
 import uuid
 import aiomqtt
@@ -6,7 +7,7 @@ from ..utils import get_current_async_loop
 from .utils import connect_over_zmq_and_fetch_td, create_event_consumer
 from ..td.interaction_affordance import EventAffordance
 from ..config import global_config
-from ..param.parameters import Selector, String, Integer, ClassSelector, Tuple
+from ..param.parameters import Selector, String, Integer, ClassSelector, Tuple, List
 
 
 class MQTTPublisher:
@@ -30,7 +31,7 @@ class MQTTPublisher:
     logger = ClassSelector(class_=logging.Logger, default=global_config.logger())  # type: logging.Logger
     """Logger instance"""
 
-    things = Tuple(item_type=str, length=3)  # type: list[tuple[str, str, str]]
+    things = List(default=None, allow_None=True, item_type=tuple)  # type: list[tuple[str, str, str]]
     """List of things to publish events from, each defined as a tuple of (server id, access point, thing id)"""
 
     def __init__(self, hostname: str, port: int, username: str, password: str, qos: int = 1, **kwargs):
@@ -50,11 +51,27 @@ class MQTTPublisher:
         self.port = port
         self.qos = qos
         self.logger = kwargs.get("logger", global_config.logger())
+        self.things = []
+        self.username = username
+        self.password = password
         self._stop_publishing = False
-        self.client = aiomqtt.Client(hostname=hostname, port=port, username=username, password=password)
 
     async def setup(self):
+        """
+        Sets up the MQTT client and starts publishing events from the configured things.
+        All events are dispatched to their own async tasks. This method returns when setup is complete.
+        """
         self._stop_publishing = False
+        self.client = aiomqtt.Client(
+            hostname=self.hostname,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+        )
+        try:
+            await self.client.__aenter__()
+        except aiomqtt.MqttReentrantError:
+            pass
         for server_id, thing_id, access_point in self.things:
             thing, td = await connect_over_zmq_and_fetch_td(
                 id=f"{self.hostname}:{self.port}|mqtt-publisher|{uuid.uuid4().hex[:8]}",
@@ -65,20 +82,40 @@ class MQTTPublisher:
                 context=global_config.zmq_context(),
             )
             eventloop = get_current_async_loop()
-            for event in td.get("events", {}).values():
-                eventloop.call_soon(lambda: self.publish(event))
+            for event_name in td.get("events", {}).keys():
+                event_affordance = EventAffordance.from_TD(event_name, td)
+                eventloop.create_task(self.publish(event_affordance))
+            eventloop.create_task(self.publish_thing_description(td))
 
     async def publish(self, resource: EventAffordance):
+        """
+        Publishes an event to the MQTT broker.
+
+        Parameters
+        ----------
+        resource: EventAffordance
+            The event affordance for which the events are to be published
+        """
         consumer = create_event_consumer(resource)
         consumer.subscribe()
+        topic = f"{resource.thing_id}/{resource.name}"
         while not self._stop_publishing:
             try:
-                payload = await consumer.receive()
-                await self.client.publish(consumer.event_unique_identifier, payload.body[0].value, qos=self.qos)
+                message = await consumer.receive()
+                if message is None:
+                    continue
+                payload = message.body[0] if message.body[0].value else message.body[1]
+                await self.client.publish(
+                    topic=topic,
+                    payload=payload.value,
+                    qos=self.qos,
+                    properties=dict(content_type=payload.content_type),
+                )
             except Exception as ex:
                 self.logger.error(f"Error publishing MQTT message: {ex}")
 
     def stop(self):
+        """stop publishing, the client is not closed automatically"""
         self._stop_publishing = True
 
     def start(self):
@@ -90,3 +127,29 @@ class MQTTPublisher:
         if access_point.upper() not in ["TCP", "IPC", "INPROC"]:
             raise ValueError("Access point must be 'TCP', 'IPC', or 'INPROC'")
         self.things.append((server_id, thing_id, access_point))
+
+    async def publish_thing_description(self, TD: dict[str, Any]) -> dict[str, Any]:
+        """Returns the Thing Description of the specified thing."""
+        TD.pop("actions", None)
+        for name in TD.get("properties", {}).keys():
+            if not any(form.get("op") == "observeproperty" for form in TD["properties"][name].get("forms", [])):
+                TD["properties"].pop(name)
+            forms = TD["properties"][name].pop("forms", [])
+            TD["properties"][name]["forms"] = []
+            for form in forms:
+                if form["op"] == "observeproperty":
+                    form["href"] = f"mqtt://{self.hostname}:{self.port}"
+                    TD["properties"][name]["forms"].append(form)
+        for name in TD.get("events", {}).keys():
+            forms = TD["events"][name].pop("forms", [])
+            TD["events"][name]["forms"] = []
+            for form in forms:
+                if form["op"] == "subscribeevent":
+                    form["href"] = f"mqtt://{self.hostname}:{self.port}"
+                    TD["events"][name]["forms"].append(form)
+        await self.client.publish(
+            topic=f"{TD['id']}/thing-description",
+            payload=str(TD).encode("utf-8"),
+            qos=self.qos,
+            retain=True,
+        )
