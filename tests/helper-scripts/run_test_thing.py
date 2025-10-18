@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"
 
 from hololinked.server.http import HTTPServer
 from hololinked.server.zmq import ZMQServer
+from hololinked.server.mqtt import MQTTPublisher
 from hololinked.serializers import Serializers
 from hololinked.config import global_config
 from things import TestThing
@@ -28,4 +29,11 @@ Serializers.register_for_object(TestThing.numpy_action, Serializers.msgpack)
 
 http_server = HTTPServer(port=9000)
 zmq_server = ZMQServer(id="example-test-server", things=[thing], access_points="IPC")
-thing.run(servers=[http_server, zmq_server])
+mqtt_publisher = MQTTPublisher(
+    hostname="localhost",
+    port=1883,
+    username=None,
+    password=None,
+    qos=1,
+)
+thing.run(servers=[http_server, zmq_server, mqtt_publisher])
