@@ -944,7 +944,7 @@ def _comply_http_method(http_methods: typing.Any):
     if not isinstance(http_methods, tuple):
         raise TypeError("http_method should be a tuple")
     for method in http_methods:
-        if method not in HTTP_METHODS.__members__.values() and not method is None:
+        if method not in HTTP_METHODS.__members__.values() and method is not None:
             raise ValueError(f"method {method} not supported")
     return http_methods
 

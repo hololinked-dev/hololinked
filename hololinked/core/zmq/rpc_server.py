@@ -10,7 +10,7 @@ import tracemalloc
 from collections import deque
 
 
-from ...exceptions import *
+from ...exceptions import BreakLoop, BreakInnerLoop
 from ...constants import ZMQ_TRANSPORTS, Operations
 from ...utils import (
     format_exception_as_json,
@@ -31,9 +31,9 @@ from .message import (
 )
 from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
 from ..thing import Thing
-from ..property import Property
+from ..property import Property  # noqa: F401
 from ..properties import TypedDict
-from ..actions import BoundAction
+from ..actions import BoundAction  # noqa: F401
 from ..logger import LogHistoryHandler
 
 

@@ -9,16 +9,14 @@ from sqlalchemy import Integer, String, JSON, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDataclass
 from sqlite3 import DatabaseError
 from pymongo import MongoClient, errors as mongo_errors
-from ..param import Parameterized
-from ..core.property import Property
 from dataclasses import dataclass
 
 from ..param import Parameterized
+from ..core.property import Property
 from ..constants import JSONSerializable
 from ..config import global_config
 from ..utils import pep8_to_dashed_name
 from ..serializers.serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer, Serializers
-from ..core.property import Property
 
 
 class ThingTableBase(DeclarativeBase):
@@ -372,7 +370,7 @@ class ThingDB(BaseSyncDB):
             for obj, value in properties.items():
                 name = obj if isinstance(obj, str) else obj.name
                 db_prop = list(filter(lambda db_prop: db_prop.name == name, db_props))  # type: typing.List[SerializedProperty]
-                if len(prop) > 1:
+                if len(db_prop) > 1:
                     raise DatabaseError("multiple properties with same name found")  # Impossible actually
                 serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
                 if len(db_prop) == 1:
@@ -460,20 +458,24 @@ class batch_db_commit:
             try:
                 self.db_engine.set_property(name, value)
             except Exception as ex:
-                pass
+                self.db_engine.thing_instance.logger.error(
+                    f"failed to set property {name} to value {value} during batch commit due to exception {ex}"
+                )
+
 
 class MongoThingDB:
     """
     MongoDB-backed database engine for Thing properties and info.
-    
+
     This class provides persistence for Thing properties using MongoDB.
     Properties are stored in the 'properties' collection, with fields:
     - id: Thing instance identifier
     - name: property name
     - serialized_value: serialized property value
-    
+
     Methods mirror the interface of ThingDB for compatibility.
     """
+
     def __init__(self, instance: Parameterized, config_file: typing.Union[str, None] = None) -> None:
         """
         Initialize MongoThingDB for a Thing instance.
@@ -530,12 +532,12 @@ class MongoThingDB:
         serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
         serialized_value = base64.b64encode(serializer.dumps(value)).decode("utf-8")
         self.properties.update_one(
-            {"id": self.id, "name": name},
-            {"$set": {"serialized_value": serialized_value}},
-            upsert=True
+            {"id": self.id, "name": name}, {"$set": {"serialized_value": serialized_value}}, upsert=True
         )
 
-    def get_properties(self, properties: typing.Dict[typing.Union[str, Property], typing.Any], deserialized: bool = True) -> typing.Dict[str, typing.Any]:
+    def get_properties(
+        self, properties: typing.Dict[typing.Union[str, Property], typing.Any], deserialized: bool = True
+    ) -> typing.Dict[str, typing.Any]:
         """
         Get multiple property values from MongoDB for this Thing.
         Returns a dict of property names to values.
@@ -545,7 +547,11 @@ class MongoThingDB:
         result = {}
         for doc in cursor:
             serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, doc["name"])
-            result[doc["name"]] = doc["serialized_value"] if not deserialized else serializer.loads(base64.b64decode(doc["serialized_value"]))
+            result[doc["name"]] = (
+                doc["serialized_value"]
+                if not deserialized
+                else serializer.loads(base64.b64decode(doc["serialized_value"]))
+            )
         return result
 
     def set_properties(self, properties: typing.Dict[typing.Union[str, Property], typing.Any]) -> None:
@@ -557,9 +563,7 @@ class MongoThingDB:
             serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
             serialized_value = base64.b64encode(serializer.dumps(value)).decode("utf-8")
             self.properties.update_one(
-                {"id": self.id, "name": name},
-                {"$set": {"serialized_value": serialized_value}},
-                upsert=True
+                {"id": self.id, "name": name}, {"$set": {"serialized_value": serialized_value}}, upsert=True
             )
 
     def get_all_properties(self, deserialized: bool = True) -> typing.Dict[str, typing.Any]:
@@ -567,19 +571,28 @@ class MongoThingDB:
         result = {}
         for doc in cursor:
             serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, doc["name"])
-            result[doc["name"]] = doc["serialized_value"] if not deserialized else serializer.loads(base64.b64decode(doc["serialized_value"]))
+            result[doc["name"]] = (
+                doc["serialized_value"]
+                if not deserialized
+                else serializer.loads(base64.b64decode(doc["serialized_value"]))
+            )
         return result
 
-    def create_missing_properties(self, properties: typing.Dict[str, Property], get_missing_property_names: bool = False) -> typing.Any:
+    def create_missing_properties(
+        self, properties: typing.Dict[str, Property], get_missing_property_names: bool = False
+    ) -> typing.Any:
         missing_props = []
         existing_props = self.get_all_properties()
         for name, new_prop in properties.items():
             if name not in existing_props:
                 serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, new_prop.name)
-                serialized_value = base64.b64encode(serializer.dumps(getattr(self.thing_instance, new_prop.name))).decode("utf-8")
+                serialized_value = base64.b64encode(
+                    serializer.dumps(getattr(self.thing_instance, new_prop.name))
+                ).decode("utf-8")
                 self.properties.insert_one({"id": self.id, "name": new_prop.name, "serialized_value": serialized_value})
                 missing_props.append(name)
         if get_missing_property_names:
             return missing_props
-        
+
+
 __all__ = [BaseAsyncDB.__name__, BaseSyncDB.__name__, ThingDB.__name__, batch_db_commit.__name__]

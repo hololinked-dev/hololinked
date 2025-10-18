@@ -8,7 +8,7 @@ import uuid
 
 from ...constants import Operations
 from ...serializers.payloads import SerializableData
-from ...core import Thing, Action
+from ...core import Thing, Action  # noqa: F401
 from ...td import PropertyAffordance, ActionAffordance, EventAffordance
 from ...td.forms import Form
 from ...core.zmq.message import ResponseMessage

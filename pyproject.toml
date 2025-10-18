@@ -109,3 +109,9 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::pytest.PytestCollectionWarning"
 ]
+
+[tool.ruff]
+exclude = [
+    "hololinked/core/properties.py",
+    "hololinked/param"
+]

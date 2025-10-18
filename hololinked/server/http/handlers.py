@@ -3,7 +3,7 @@ import typing
 import uuid
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
-
+from msgspec import DecodeError as MsgspecJSONDecodeError
 
 from ...utils import format_exception_as_json, run_callable_somehow
 from ...config import global_config
@@ -153,14 +153,14 @@ class BaseHandler(RequestHandler):
                 if len(value) == 1:
                     try:
                         arguments[key] = Serializers.json.loads(value[0])
-                    except:
+                    except MsgspecJSONDecodeError:
                         arguments[key] = value[0].decode("utf-8")
                 else:
                     final_value = []
                     for val in value:
                         try:
                             final_value.append(Serializers.json.loads(val))
-                        except:
+                        except MsgspecJSONDecodeError:
                             final_value.append(val.decode("utf-8"))
                     arguments[key] = final_value
             thing_execution_context = ThingExecutionContext(
