@@ -3,5 +3,10 @@
         80, 120
     ],
     "editor.formatOnSave": true,
-    "ruff.lineLength": 120
+    "ruff.lineLength": 120,
+    "[yaml]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "prettier.tabWidth": 2
+    }
 }
