@@ -18,9 +18,18 @@ All types of contributions are encouraged and valued.
 >
 > When contributing to this project, you must agree that you have authored 100% of the content or that you have the necessary rights to the content, and agree to release it under the license of the project.
 
-If you want to tackle any issues, un-existing features, please do have a look at [good-first-issues](https://github.com/hololinked-dev/hololinked/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). Issues are separated by (perceived-) level of difficulty (`beginner`, `intermediate`) and type of contribution (`bug`, `feature`, `documentation` etc.). If you wish to propose a feature or bugfix, we could discuss it on discord/email (links in README) before you start working on it.
+If you want to tackle any issues, un-existing features, please do have a look at [good-first-issues](https://github.com/hololinked-dev/hololinked/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). Issues are separated by perceived level of difficulty (`beginner`, `intermediate`) and type of contribution (`bug`, `feature`, `documentation` etc.). If you wish to propose a feature or bugfix, they are totally welcome and we could discuss it on discord/email (links in README) before you start working on it.
 
-Partial contributions are also taken if its easier to continue working on it. In this case, you can submit your fork to merge into a separate branch until it meets the required standards for release.
+Partial contributions are also taken if its easier to continue working on it. In this case, you can submit your fork to merge into a separate branch, where someone else can develop it until it meets the required standards for release.
+
+To start developing and complete the contribution, following steps may be followed:
+
+1. Fork the repository and clone it to your local machine.
+2. Setup python environment preferably using `uv`, instructions are in the [README](https://github.com/hololinked-dev/hololinked/blob/main/README.md#contributing).
+3. There are some test things under `tests/helper-scripts` directory or in the [examples repository](https://gitlab.com/hololinked/examples), especially the simulators (they may not be up to date, one could take what one needs). These can be used to test your changes.
+4. All code must follow [PEP 8](https://peps.python.org/pep-0008/) style guide. This is enforced by the CI pipeline. One needs to use ruff to check for style issues - `uvx ruff check hololinked`, otherwise the pipeline might fail.
+5. Unit/Integration tests are recommended to be added for any new feature or bug fix. These tests can be run with `python -m unittest` under the `tests` directory. Existing tests need to pass as well.
+6. Once you are done with your changes, make a pull request to the main repository. Your changes will be reviewed in detail. Any review comments added need to be resolved as well. When requirement are met, commits will be squashed and merged to the main branch.
 
 There are also other repositories which can use your skills:
 

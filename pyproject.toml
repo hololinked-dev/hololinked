@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hololinked"
-version = "0.3.5"
+version = "0.3.6"
 authors = [
     {name = "Vignesh Vaidyanathan", email = "info@hololinked.dev"},
 ]
@@ -12,7 +12,7 @@ description = "A ZMQ-based protocol-agnostic object oriented RPC toolkit primari
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-license-files = ["licenses/*"]
+license-files = ["licenses/*", "license.txt"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
