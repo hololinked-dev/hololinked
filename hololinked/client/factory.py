@@ -1,6 +1,7 @@
 import logging
 import uuid
 import base64
+import aiomqtt
 import httpx
 
 from ..core import Thing, Action
@@ -327,30 +328,88 @@ class ClientFactory:
         return object_proxy
 
     @classmethod
+    def mqtt(
+        self,
+        hostname: str,
+        port: int,
+        qos: int = 1,
+        username: str = None,
+        password: str = None,
+        **kwargs,
+    ) -> ObjectProxy:
+        """
+        Create an MQTT client for the specified broker.
+
+        Parameters
+        ----------
+        hostname: str
+            The hostname of the MQTT broker
+        port: int
+            The port of the MQTT broker
+        qos: int
+            The Quality of Service level for MQTT messages (0, 1, or 2)
+        username: str, optional
+            The username for MQTT authentication
+        password: str, optional
+            The password for MQTT authentication
+        kwargs:
+            Additional configuration options:
+
+            - `logger`: `logging.Logger`, optional.
+                 A custom logger instance to use for logging
+            - `log_level`: `int`, default `logging.INFO`.
+                The logging level to use for the client (e.g., logging.DEBUG, logging.INFO
+        """
+        id = f"mqtt-client|{hostname}:{port}|{uuid.uuid4().hex[:8]}"
+        logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
+
+        client = aiomqtt.Client(
+            hostname=hostname,
+            port=port,
+            username=username,
+            password=password,
+            logger=logger,
+        )
+
+        # create ObjectProxy
+        object_proxy = ObjectProxy(
+            id=id,
+            td={},
+            logger=logger,
+        )
+
+    @classmethod
     def add_action(self, client, action: ConsumedThingAction) -> None:
-        # if not func_info.top_owner:
-        #     return
-        #     raise RuntimeError("logic error")
-        # for dunder in ClientFactory.__wrapper_assignments__:
-        #     if dunder == '__qualname__':
-        #         info = '{}.{}'.format(client.__class__.__name__, func_info.get_dunder_attr(dunder).split('.')[1])
-        #     else:
-        #         info = func_info.get_dunder_attr(dunder)
-        #     setattr(action, dunder, info)
+        setattr(action, "__name__", action.resource.name)
+        setattr(action, "__qualname__", f"{client.__class__.__name__}.{action.resource.name}")
+        setattr(
+            action,
+            "__doc__",
+            action.resource.description or "Invokes the action {} on the remote Thing".format(action.resource.name),
+        )
         setattr(client, action.resource.name, action)
 
     @classmethod
     def add_property(self, client, property: ConsumedThingProperty) -> None:
-        # if not property_info.top_owner:
-        #     return
-        #     raise RuntimeError("logic error")
-        # for attr in ['__doc__', '__name__']:
-        #     # just to imitate _add_method logic
-        #     setattr(property, attr, property_info.get_dunder_attr(attr))
+        setattr(property, "__name__", property.resource.name)
+        setattr(property, "__qualname__", f"{client.__class__.__name__}.{property.resource.name}")
+        setattr(
+            property,
+            "__doc__",
+            property.resource.description
+            or "Represents the property {} on the remote Thing".format(property.resource.name),
+        )
         setattr(client, property.resource.name, property)
 
     @classmethod
     def add_event(cls, client, event: ConsumedThingEvent) -> None:
+        setattr(event, "__name__", event.resource.name)
+        setattr(event, "__qualname__", f"{client.__class__.__name__}.{event.resource.name}")
+        setattr(
+            event,
+            "__doc__",
+            event.resource.description or "Represents the event {} on the remote Thing".format(event.resource.name),
+        )
         if hasattr(event.resource, "observable") and event.resource.observable:
             setattr(client, f"{event.resource.name}_change_event", event)
         else:
