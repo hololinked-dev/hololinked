@@ -13,7 +13,6 @@ jobs:
   codestyle:
     name: ruff codestyle check/linting
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     steps:
       - name: checkout code
@@ -31,6 +30,9 @@ jobs:
         run: ruff check hololinked
 
   test:
+    name: unit-integration tests
+    needs: codestyle
+
     strategy:
       matrix:
         include:
