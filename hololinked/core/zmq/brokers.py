@@ -895,6 +895,7 @@ class BaseZMQClient(BaseZMQ):
                 self.poller.unregister(self._monitor_socket)
                 # print("poller exception did not occur 3")
         except Exception as ex:  # noqa
+            # TODO log message and undo noqa
             # raises a weird key error for some reason
             # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e5028830> - KeyError
             # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e502a350> - KeyError
@@ -1091,7 +1092,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                 try:
                     self._poller_lock.release()
                 except Exception as ex:  # noqa
-                    # TODO log exception message
+                    # TODO log exception message and undo noqa
                     # 1. no need to release an unacquired lock, which can happen if another thread polling
                     # put the expected message in response message cache
                     # 2. also release the lock in every iteration because a message may be added in response cache
@@ -2237,6 +2238,7 @@ class BaseEventConsumer(BaseZMQClient):
             self.poller.unregister(self.socket)
             self.poller.unregister(self.interruptor)
         except Exception as ex:  # noqa
+            # TODO - log message and undo noqa
             # self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message: {}".format(
             #     self.socket_address, str(E)))
             # above line prints too many warnings
