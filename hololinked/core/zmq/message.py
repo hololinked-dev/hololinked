@@ -418,7 +418,7 @@ class ResponseMessage:
         return self._header
 
     @property
-    def body(self) -> typing.Tuple[bytes, bytes, bytes, bytes, bytes]:
+    def body(self) -> typing.Tuple[SerializableData, PreserializedData]:
         """body of the message"""
         if self._body is None:
             self.parse_body()
