@@ -33,15 +33,26 @@ class MQTTConsumer(ConsumedThingEvent):
         topic = f"{self.resource.thing_id}/{self.resource.name}"
 
         def on_topic_message(client: PahoMQTTClient, userdata, message: MQTTMessage):
-            payload = message.payload
-            content_type = form.contentType or "application/json"
-            serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
-            if deserialize and content_type and serializer:
-                payload = serializer.loads(payload)
-            event_data = SSE()
-            event_data.data = payload
-            event_data.id = message.mid
-            self.schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
+            try:
+                payload = message.payload
+                # message.properties.readProperty("content_type") if message.properties else form.contentType
+                # TODO, fix this, make sure to that content_type is not empty after extracting
+                content_type = form.contentType or "application/json"
+                serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
+                if deserialize and content_type and serializer:
+                    try:
+                        payload = serializer.loads(payload)
+                    except Exception as ex:
+                        self.logger.error(
+                            f"Error deserializing MQTT message for topic {topic}, "
+                            + f"passing payload as it is. message: {ex}"
+                        )
+                event_data = SSE()
+                event_data.data = payload
+                event_data.id = message.mid
+                self.schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
+            except Exception as ex:
+                self.logger.error(f"Error handling MQTT message for topic {topic}: {ex}")
 
         self.sync_client.message_callback_add(topic, on_topic_message)
 
@@ -57,16 +68,26 @@ class MQTTConsumer(ConsumedThingEvent):
                 break
             if not message.topic.matches(topic):
                 continue
-            payload = message.payload
-            # message.properties.readProperty("content_type") if message.properties else form.contentType
-            content_type = form.contentType or "application/json"
-            serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
-            if deserialize and content_type and serializer:
-                payload = serializer.loads(payload)
-            event_data = SSE()
-            event_data.data = payload
-            event_data.id = message.mid
-            await self.async_schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
+            try:
+                payload = message.payload
+                # message.properties.readProperty("content_type") if message.properties else form.contentType
+                # TODO, fix this, make sure to that content_type is not empty after extracting
+                content_type = form.contentType or "application/json"
+                serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
+                if deserialize and content_type and serializer:
+                    try:
+                        payload = serializer.loads(payload)
+                    except Exception as ex:
+                        self.logger.error(
+                            f"Error deserializing MQTT message for topic {topic}, "
+                            + f"passing payload as it is. message: {ex}"
+                        )
+                event_data = SSE()
+                event_data.data = payload
+                event_data.id = message.mid
+                await self.async_schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
+            except Exception as ex:
+                self.logger.error(f"Error handling MQTT message for topic {topic}: {ex}")
         self.async_client.unsubscribe(topic)
 
     def unsubscribe(self) -> None:

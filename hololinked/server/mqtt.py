@@ -106,7 +106,10 @@ class MQTTPublisher:
                 message = await consumer.receive()
                 if message is None:
                     continue
-                payload = message.body[0] if message.body[0].value else message.body[1]
+                if message.body[1].value != b"":
+                    payload = message.body[1]
+                else:
+                    payload = message.body[0]
                 await self.client.publish(
                     topic=topic,
                     payload=payload.value,
