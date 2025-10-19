@@ -1,6 +1,7 @@
 import aiomqtt
-from typing import Any, Callable
 import logging
+from typing import Any, Callable
+from paho.mqtt.client import Client as PahoMQTTClient, MQTTMessage
 
 from ..abstractions import SSE, ConsumedThingEvent
 from ...td.interaction_affordance import EventAffordance
@@ -13,7 +14,8 @@ class MQTTConsumer(ConsumedThingEvent):
 
     def __init__(
         self,
-        client: aiomqtt.Client,
+        sync_client: PahoMQTTClient,
+        async_client: aiomqtt.Client,
         resource: EventAffordance,
         qos: int,
         logger: logging.Logger,
@@ -21,24 +23,52 @@ class MQTTConsumer(ConsumedThingEvent):
     ) -> None:
         super().__init__(resource=resource, logger=logger, owner_inst=owner_inst)
         self.qos = qos
-        self.client = client
+        self.sync_client = sync_client
+        self.async_client = async_client
         self.subscribed = True
 
-    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None: ...
-
-    async def async_listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:
+    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:
+        # This method is called from a different thread but also finishes quickly, we wont redo this way
+        # for the time being.
         topic = f"{self.resource.thing_id}/{self.resource.name}"
-        await self.client.subscribe(topic, qos=self.qos)
-        async for message in self.client.messages:
-            if not self._subscribed:
-                break
+
+        def on_topic_message(client: PahoMQTTClient, userdata, message: MQTTMessage):
             payload = message.payload
-            content_type = message.properties.get("content_type") if message.properties else form.contentType  #
+            content_type = form.contentType or "application/json"
             serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
             if deserialize and content_type and serializer:
                 payload = serializer.loads(payload)
-            event_data = SSE(data=payload, id=message.mid)
+            event_data = SSE()
+            event_data.data = payload
+            event_data.id = message.mid
+            self.schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
+
+        self.sync_client.message_callback_add(topic, on_topic_message)
+
+    async def async_listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:
+        topic = f"{self.resource.thing_id}/{self.resource.name}"
+        try:
+            await self.async_client.__aenter__()
+        except aiomqtt.MqttReentrantError:
+            pass
+        await self.async_client.subscribe(topic, qos=self.qos)
+        async for message in self.async_client.messages:
+            if not self.subscribed:
+                break
+            if not message.topic.matches(topic):
+                continue
+            payload = message.payload
+            # message.properties.readProperty("content_type") if message.properties else form.contentType
+            content_type = form.contentType or "application/json"
+            serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
+            if deserialize and content_type and serializer:
+                payload = serializer.loads(payload)
+            event_data = SSE()
+            event_data.data = payload
+            event_data.id = message.mid
             await self.async_schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
+        self.async_client.unsubscribe(topic)
 
     def unsubscribe(self) -> None:
-        self._subscribed = False
+        self.subscribed = False
+        self.sync_client.message_callback_remove(f"{self.resource.thing_id}/{self.resource.name}")

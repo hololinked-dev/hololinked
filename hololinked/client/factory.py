@@ -1,11 +1,11 @@
-import asyncio
 import logging
 import threading
 import uuid
 import base64
 import aiomqtt
 import httpx
-from paho.mqtt.client import Client as PahoMQTTClient, MQTTProtocolVersion, CallbackAPIVersion
+from paho.mqtt.client import Client as PahoMQTTClient, MQTTProtocolVersion, CallbackAPIVersion, MQTTMessage
+from typing import Any
 
 
 from ..core import Thing, Action
@@ -28,6 +28,7 @@ from .zmq.consumed_interactions import (
     WriteMultipleProperties,
     ReadMultipleProperties,
 )
+from .mqtt.consumed_interactions import MQTTConsumer  # only one type for now
 
 
 set_global_event_loop_policy()
@@ -369,32 +370,30 @@ class ClientFactory:
         id = f"mqtt-client|{hostname}:{port}|{uuid.uuid4().hex[:8]}"
         logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
 
-        # async def fetch_td():
-        #     client = aiomqtt.Client(
-        #         hostname=hostname,
-        #         port=port,
-        #         username=username,
-        #         password=password,
-        #     )
-        #     async with client as mqtt_client:
-        #         await mqtt_client.subscribe(f"{thing_id}/#", qos=2)  # TD topic is a persistent data
-        #         async for message in mqtt_client.messages:
-        #             return Serializers.json.loads(message.payload)
         td_received_event = threading.Event()
         TD = None
 
-        def fetch_td(client, userdata, message):
-            nonlocal TD
+        def fetch_td(client: PahoMQTTClient, userdata, message: MQTTMessage) -> None:
+            nonlocal TD, thing_id, logger
+            if message.topic != f"{thing_id}/thing-description":
+                return
             TD = Serializers.json.loads(message.payload)
             td_received_event.set()
 
-        def on_connect(client, userdata, flags, rc):
-            client.subscribe(f"{thing_id}/thing-description", qos=2)
+        def on_connect(
+            client: PahoMQTTClient,
+            userdata: Any,
+            flags: Any,
+            reason_code: list,
+            properties: dict[str, Any],
+        ) -> None:  # TODO fix signature
+            nonlocal qos
+            client.subscribe(f"{thing_id}/#", qos=qos)
 
         sync_client = PahoMQTTClient(
             callback_api_version=CallbackAPIVersion.VERSION2,
             client_id=id,
-            clean_session=True,
+            clean_session=True if not protocol_version == MQTTProtocolVersion.MQTTv5 else None,
             protocol=protocol_version,
         )
         sync_client.on_connect = on_connect
@@ -407,7 +406,40 @@ class ClientFactory:
         if not TD:
             raise TimeoutError("Timeout while fetching Thing Description (TD) over MQTT")
 
-        return TD
+        async_client = aiomqtt.Client(
+            hostname=hostname,
+            port=port,
+            username=username,
+            password=password,
+            protocol=protocol_version,
+        )
+
+        object_proxy = ObjectProxy(id=id, logger=logger, td=TD)
+
+        for name in TD.get("properties", []):
+            affordance = PropertyAffordance.from_TD(name, TD)
+            consumed_property = MQTTConsumer(
+                sync_client=sync_client,
+                async_client=async_client,
+                resource=affordance,
+                qos=qos,
+                logger=logger,
+                owner_inst=object_proxy,
+            )
+            self.add_property(object_proxy, consumed_property)
+        for name in TD.get("events", []):
+            affordance = EventAffordance.from_TD(name, TD)
+            consumed_event = MQTTConsumer(
+                sync_client=sync_client,
+                async_client=async_client,
+                resource=affordance,
+                qos=qos,
+                logger=logger,
+                owner_inst=object_proxy,
+            )
+            self.add_event(object_proxy, consumed_event)
+
+        return object_proxy
 
     @classmethod
     def add_action(self, client, action: ConsumedThingAction) -> None:
