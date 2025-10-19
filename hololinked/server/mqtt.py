@@ -2,12 +2,14 @@ from typing import Any
 import logging
 import uuid
 import aiomqtt
+import copy
 
 from ..utils import get_current_async_loop
 from .utils import connect_over_zmq_and_fetch_td, create_event_consumer
-from ..td.interaction_affordance import EventAffordance
 from ..config import global_config
-from ..param.parameters import Selector, String, Integer, ClassSelector, Tuple, List
+from ..serializers import Serializers
+from ..td.interaction_affordance import EventAffordance
+from ..param.parameters import Selector, String, Integer, ClassSelector, List
 
 
 class MQTTPublisher:
@@ -128,19 +130,24 @@ class MQTTPublisher:
             raise ValueError("Access point must be 'TCP', 'IPC', or 'INPROC'")
         self.things.append((server_id, thing_id, access_point))
 
-    async def publish_thing_description(self, TD: dict[str, Any]) -> dict[str, Any]:
+    async def publish_thing_description(self, ZMQ_TD: dict[str, Any]) -> dict[str, Any]:
         """Returns the Thing Description of the specified thing."""
+        TD = copy.deepcopy(ZMQ_TD)
+        # remove actions as they dont push events
         TD.pop("actions", None)
-        for name in TD.get("properties", {}).keys():
-            if not any(form.get("op") == "observeproperty" for form in TD["properties"][name].get("forms", [])):
+        # remove properties that are not observable
+        for name in ZMQ_TD.get("properties", {}).keys():
+            if not TD["properties"][name].get("observable", False):
                 TD["properties"].pop(name)
+                continue
             forms = TD["properties"][name].pop("forms", [])
             TD["properties"][name]["forms"] = []
             for form in forms:
                 if form["op"] == "observeproperty":
                     form["href"] = f"mqtt://{self.hostname}:{self.port}"
                     TD["properties"][name]["forms"].append(form)
-        for name in TD.get("events", {}).keys():
+        # repurpose event
+        for name in ZMQ_TD.get("events", {}).keys():
             forms = TD["events"][name].pop("forms", [])
             TD["events"][name]["forms"] = []
             for form in forms:
@@ -149,7 +156,8 @@ class MQTTPublisher:
                     TD["events"][name]["forms"].append(form)
         await self.client.publish(
             topic=f"{TD['id']}/thing-description",
-            payload=str(TD).encode("utf-8"),
-            qos=self.qos,
+            payload=Serializers.json.dumps(TD),
+            qos=2,
+            properties=dict(content_type="application/json"),
             retain=True,
         )
