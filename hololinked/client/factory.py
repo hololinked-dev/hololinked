@@ -399,6 +399,8 @@ class ClientFactory:
             clean_session=True if not protocol_version == MQTTProtocolVersion.MQTTv5 else None,
             protocol=protocol_version,
         )
+        if username and password:
+            sync_client.username_pw_set(username=username, password=password)
         if ssl_context is not None:
             sync_client.tls_set_context(ssl_context)
         elif kwargs.get("ca_certs", None):

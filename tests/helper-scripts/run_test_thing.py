@@ -43,8 +43,8 @@ mqtt_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
 mqtt_publisher = MQTTPublisher(
     hostname="localhost",
     port=8883,
-    username=None,
-    password=None,
+    username="sampleuser",
+    password="samplepass",
     qos=1,
     ssl_context=mqtt_ssl,
 )
