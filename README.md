@@ -6,7 +6,7 @@
 
 As a novice, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, and you want to show the data in a dashboard, provide a PyQt GUI or run automated scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 
-If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice. By conforming to [W3C Web of Things](https://www.w3.org/WoT/), one can expect a consistent API and flexible bidirectional message flow to interact with your devices, irrespective of the underlying protocol. Currently HTTP & ZMQ are supported. See [Use Cases Table](#use-cases-table).
+If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice. By conforming to [W3C Web of Things](https://www.w3.org/WoT/), one can expect a consistent API and flexible bidirectional message flow to interact with your devices, irrespective of the underlying protocol. Currently HTTP, MQTT & ZMQ are supported. See [Use Cases Table](#use-cases-table).
 
 This implementation is based on RPC, built ground-up in python keeping both the latest web technologies and python principles in mind.
 
@@ -631,11 +631,15 @@ Some other features that are currently supported:
   </tr>
   <tr>
     <td>ZMQ INPROC</td>
-    <td>High Speed Desktop Applications (again, not exposed on network), currently you will need some CPP magic or disable GIL to leverage it fully</td>
+    <td>
+        High Speed Desktop Applications (again, not exposed on network), currently you will need some CPP magic or disable GIL to leverage it fully
+    </td>
   </tr>
   <tr>
     <td>MQTT</td>
-    <td>Upcoming (October 2025)</td>
+    <td>
+        Reliable pub-sub & incorporating into existing systems that use MQTT for <br> lightweight messaging
+    </td>
     <td>
         <code>observeproperty</code>, 
         <code>unobserveproperty</code>, 
