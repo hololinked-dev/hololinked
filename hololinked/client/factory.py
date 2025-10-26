@@ -2,10 +2,12 @@ import logging
 import threading
 import uuid
 import base64
+import warnings
 import aiomqtt
 import httpx
-from paho.mqtt.client import Client as PahoMQTTClient, MQTTProtocolVersion, CallbackAPIVersion, MQTTMessage
+import ssl
 from typing import Any
+from paho.mqtt.client import Client as PahoMQTTClient, MQTTProtocolVersion, CallbackAPIVersion, MQTTMessage
 
 
 from ..core import Thing, Action
@@ -337,11 +339,12 @@ class ClientFactory:
         self,
         hostname: str,
         port: int,
-        thing_id: str = None,
+        thing_id: str,
         protocol_version: MQTTProtocolVersion = MQTTProtocolVersion.MQTTv5,
         qos: int = 1,
         username: str = None,
         password: str = None,
+        ssl_context: ssl.SSLContext = None,
         **kwargs,
     ) -> ObjectProxy:
         """
@@ -396,15 +399,25 @@ class ClientFactory:
             clean_session=True if not protocol_version == MQTTProtocolVersion.MQTTv5 else None,
             protocol=protocol_version,
         )
+        if ssl_context is not None:
+            sync_client.tls_set_context(ssl_context)
+        elif kwargs.get("ca_certs", None):
+            sync_client.tls_set(ca_certs=kwargs.get("ca_certs", None))
         sync_client.on_connect = on_connect
         sync_client.on_message = fetch_td
         sync_client.connect(hostname, port)
         sync_client.loop_start()
 
         td_received_event.wait(timeout=10)
-
         if not TD:
             raise TimeoutError("Timeout while fetching Thing Description (TD) over MQTT")
+
+        if not sync_client._ssl_context and port != 1883:
+            warnings.warn(
+                "MQTT used without TLS, if you intended to use TLS with a recognised CA & you saw this warning, considering "
+                + "opening an issue at https://github.com/hololinked-dev/hololinked. ",
+                category=RuntimeWarning,
+            )
 
         async_client = aiomqtt.Client(
             hostname=hostname,
@@ -412,6 +425,7 @@ class ClientFactory:
             username=username,
             password=password,
             protocol=protocol_version,
+            tls_context=sync_client._ssl_context,
         )
 
         object_proxy = ObjectProxy(id=id, logger=logger, td=TD)

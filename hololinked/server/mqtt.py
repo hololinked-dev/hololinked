@@ -3,6 +3,7 @@ import logging
 import uuid
 import aiomqtt
 import copy
+import ssl
 
 from ..utils import get_current_async_loop
 from .utils import connect_over_zmq_and_fetch_td, create_event_consumer
@@ -36,6 +37,8 @@ class MQTTPublisher:
     things = List(default=None, allow_None=True, item_type=tuple)  # type: list[tuple[str, str, str]]
     """List of things to publish events from, each defined as a tuple of (server id, access point, thing id)"""
 
+    ssl_context = ClassSelector(class_=ssl.SSLContext, allow_None=True, default=None)
+
     def __init__(self, hostname: str, port: int, username: str, password: str, qos: int = 1, **kwargs):
         """
         Parameters
@@ -48,14 +51,19 @@ class MQTTPublisher:
             The MQTT broker username
         password: str
             The MQTT broker password
+        qos: int
+            The MQTT QoS level to use for publishing messages
+        kwargs: dict
+            Additional keyword arguments
         """
         self.hostname = hostname
         self.port = port
         self.qos = qos
-        self.logger = kwargs.get("logger", global_config.logger())
         self.things = []
         self.username = username
         self.password = password
+        self.logger = kwargs.get("logger", global_config.logger())
+        self.ssl_context = kwargs.get("ssl_context", None)
         self._stop_publishing = False
 
     async def setup(self):
@@ -69,6 +77,7 @@ class MQTTPublisher:
             port=self.port,
             username=self.username,
             password=self.password,
+            tls_context=self.ssl_context,
         )
         try:
             await self.client.__aenter__()
