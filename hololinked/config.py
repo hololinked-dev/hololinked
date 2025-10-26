@@ -166,6 +166,12 @@ class Configuration:
         """
         return self.ZMQ_CONTEXT
 
+    def logger(self) -> typing.Any:
+        """Returns a global logger instance"""
+        from .utils import get_default_logger
+
+        return get_default_logger("hololinked")
+
     def set_default_server_execution_context(
         self,
         invokation_timeout: typing.Optional[int] = None,

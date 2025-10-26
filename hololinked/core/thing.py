@@ -344,6 +344,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         from ..server.http import HTTPServer
         from ..server.zmq import ZMQServer
+        from ..server.mqtt import MQTTPublisher
         from .zmq.rpc_server import RPCServer, prepare_rpc_server
 
         access_points = kwargs.get("access_points", None)  # type: dict[str, dict | int | str | list[str]]
@@ -395,6 +396,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                     server.listen()
 
                 threading.Thread(target=start_http_server, args=(server,)).start()
+            elif isinstance(server, MQTTPublisher):
+                server.add_thing(
+                    server_id=self.rpc_server.id,
+                    thing_id=self.id,
+                    access_point="INPROC",
+                )
+                server.start()
         self.rpc_server.run()
 
     @action()

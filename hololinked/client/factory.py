@@ -1,7 +1,14 @@
 import logging
+import threading
 import uuid
 import base64
+import warnings
+import aiomqtt
 import httpx
+import ssl
+from typing import Any
+from paho.mqtt.client import Client as PahoMQTTClient, MQTTProtocolVersion, CallbackAPIVersion, MQTTMessage
+
 
 from ..core import Thing, Action
 from ..core.zmq import SyncZMQClient, AsyncZMQClient
@@ -23,6 +30,7 @@ from .zmq.consumed_interactions import (
     WriteMultipleProperties,
     ReadMultipleProperties,
 )
+from .mqtt.consumed_interactions import MQTTConsumer  # only one type for now
 
 
 set_global_event_loop_policy()
@@ -327,30 +335,160 @@ class ClientFactory:
         return object_proxy
 
     @classmethod
+    def mqtt(
+        self,
+        hostname: str,
+        port: int,
+        thing_id: str,
+        protocol_version: MQTTProtocolVersion = MQTTProtocolVersion.MQTTv5,
+        qos: int = 1,
+        username: str = None,
+        password: str = None,
+        ssl_context: ssl.SSLContext = None,
+        **kwargs,
+    ) -> ObjectProxy:
+        """
+        Create an MQTT client for the specified broker.
+
+        Parameters
+        ----------
+        hostname: str
+            The hostname of the MQTT broker
+        port: int
+            The port of the MQTT broker
+        qos: int
+            The Quality of Service level for MQTT messages (0, 1, or 2)
+        username: str, optional
+            The username for MQTT authentication
+        password: str, optional
+            The password for MQTT authentication
+        kwargs:
+            Additional configuration options:
+
+            - `logger`: `logging.Logger`, optional.
+                 A custom logger instance to use for logging
+            - `log_level`: `int`, default `logging.INFO`.
+                The logging level to use for the client (e.g., logging.DEBUG, logging.INFO
+        """
+        id = f"mqtt-client|{hostname}:{port}|{uuid.uuid4().hex[:8]}"
+        logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
+
+        td_received_event = threading.Event()
+        TD = None
+
+        def fetch_td(client: PahoMQTTClient, userdata, message: MQTTMessage) -> None:
+            nonlocal TD, thing_id, logger
+            if message.topic != f"{thing_id}/thing-description":
+                return
+            TD = Serializers.json.loads(message.payload)
+            td_received_event.set()
+
+        def on_connect(
+            client: PahoMQTTClient,
+            userdata: Any,
+            flags: Any,
+            reason_code: list,
+            properties: dict[str, Any],
+        ) -> None:  # TODO fix signature
+            nonlocal qos
+            client.subscribe(f"{thing_id}/#", qos=qos)
+
+        sync_client = PahoMQTTClient(
+            callback_api_version=CallbackAPIVersion.VERSION2,
+            client_id=id,
+            clean_session=True if not protocol_version == MQTTProtocolVersion.MQTTv5 else None,
+            protocol=protocol_version,
+        )
+        if username and password:
+            sync_client.username_pw_set(username=username, password=password)
+        if ssl_context is not None:
+            sync_client.tls_set_context(ssl_context)
+        elif kwargs.get("ca_certs", None):
+            sync_client.tls_set(ca_certs=kwargs.get("ca_certs", None))
+        sync_client.on_connect = on_connect
+        sync_client.on_message = fetch_td
+        sync_client.connect(hostname, port)
+        sync_client.loop_start()
+
+        td_received_event.wait(timeout=10)
+        if not TD:
+            raise TimeoutError("Timeout while fetching Thing Description (TD) over MQTT")
+
+        if not sync_client._ssl_context and port != 1883:
+            warnings.warn(
+                "MQTT used without TLS, if you intended to use TLS with a recognised CA & you saw this warning, considering "
+                + "opening an issue at https://github.com/hololinked-dev/hololinked. ",
+                category=RuntimeWarning,
+            )
+
+        async_client = aiomqtt.Client(
+            hostname=hostname,
+            port=port,
+            username=username,
+            password=password,
+            protocol=protocol_version,
+            tls_context=sync_client._ssl_context,
+        )
+
+        object_proxy = ObjectProxy(id=id, logger=logger, td=TD)
+
+        for name in TD.get("properties", []):
+            affordance = PropertyAffordance.from_TD(name, TD)
+            consumed_property = MQTTConsumer(
+                sync_client=sync_client,
+                async_client=async_client,
+                resource=affordance,
+                qos=qos,
+                logger=logger,
+                owner_inst=object_proxy,
+            )
+            self.add_property(object_proxy, consumed_property)
+        for name in TD.get("events", []):
+            affordance = EventAffordance.from_TD(name, TD)
+            consumed_event = MQTTConsumer(
+                sync_client=sync_client,
+                async_client=async_client,
+                resource=affordance,
+                qos=qos,
+                logger=logger,
+                owner_inst=object_proxy,
+            )
+            self.add_event(object_proxy, consumed_event)
+
+        return object_proxy
+
+    @classmethod
     def add_action(self, client, action: ConsumedThingAction) -> None:
-        # if not func_info.top_owner:
-        #     return
-        #     raise RuntimeError("logic error")
-        # for dunder in ClientFactory.__wrapper_assignments__:
-        #     if dunder == '__qualname__':
-        #         info = '{}.{}'.format(client.__class__.__name__, func_info.get_dunder_attr(dunder).split('.')[1])
-        #     else:
-        #         info = func_info.get_dunder_attr(dunder)
-        #     setattr(action, dunder, info)
+        setattr(action, "__name__", action.resource.name)
+        setattr(action, "__qualname__", f"{client.__class__.__name__}.{action.resource.name}")
+        setattr(
+            action,
+            "__doc__",
+            action.resource.description or "Invokes the action {} on the remote Thing".format(action.resource.name),
+        )
         setattr(client, action.resource.name, action)
 
     @classmethod
     def add_property(self, client, property: ConsumedThingProperty) -> None:
-        # if not property_info.top_owner:
-        #     return
-        #     raise RuntimeError("logic error")
-        # for attr in ['__doc__', '__name__']:
-        #     # just to imitate _add_method logic
-        #     setattr(property, attr, property_info.get_dunder_attr(attr))
+        setattr(property, "__name__", property.resource.name)
+        setattr(property, "__qualname__", f"{client.__class__.__name__}.{property.resource.name}")
+        setattr(
+            property,
+            "__doc__",
+            property.resource.description
+            or "Represents the property {} on the remote Thing".format(property.resource.name),
+        )
         setattr(client, property.resource.name, property)
 
     @classmethod
     def add_event(cls, client, event: ConsumedThingEvent) -> None:
+        setattr(event, "__name__", event.resource.name)
+        setattr(event, "__qualname__", f"{client.__class__.__name__}.{event.resource.name}")
+        setattr(
+            event,
+            "__doc__",
+            event.resource.description or "Represents the event {} on the remote Thing".format(event.resource.name),
+        )
         if hasattr(event.resource, "observable") and event.resource.observable:
             setattr(client, f"{event.resource.name}_change_event", event)
         else:

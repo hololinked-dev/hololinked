@@ -557,7 +557,7 @@ class EventHandler(BaseHandler):
             event_consumer = AsyncEventConsumer(
                 id=f"{self.resource.name}|HTTPEventTunnel|{uuid.uuid4().hex[:8]}",
                 event_unique_identifier=f"{self.resource.thing_id}/{self.resource.name}",
-                access_point=form.href,  # no not acceptable, TODO
+                access_point=form.href,
                 context=global_config.zmq_context(),
                 logger=self.logger,
             )
