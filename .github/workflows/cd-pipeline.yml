@@ -60,15 +60,3 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
-
-  publish_docs:
-    name: trigger docs pipeline
-    runs-on: ubuntu-latest
-    needs: publish
-    steps:
-      - name: trigger downstream workflow
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.PUBLISH_DOCS_TOKEN }}
-          repository: hololinked-dev/docs
-          event-type: trigger-downstream

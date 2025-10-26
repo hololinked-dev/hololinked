@@ -647,4 +647,16 @@ Some other features that are currently supported:
         <code>unsubscribeevent</code>
     </td>
   </tr>
+  <tr>
+    <td>MQTT with websockets</td>
+    <td>
+        Reliable pub-sub for web applications, planned for November 2025 release.
+    </td>
+    <td>
+        <code>observeproperty</code>, 
+        <code>unobserveproperty</code>, 
+        <code>subscribeevent</code>, 
+        <code>unsubscribeevent</code>
+    </td>
+  </tr>
 </table>
