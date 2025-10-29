@@ -4,6 +4,7 @@ import logging
 import socket
 import ssl
 import typing
+import msgspec
 from copy import deepcopy
 from tornado import ioloop
 from tornado.web import Application
@@ -11,27 +12,18 @@ from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 # from tornado_http2.server import Server as TornadoHTTP2Server
 
 from ...param import Parameterized
-from ...param.parameters import (
-    Integer,
-    IPAddress,
-    ClassSelector,
-    Selector,
-    TypedList,
-    String,
-    TypedDict,
-)
+from ...param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList
 from ...constants import HTTP_METHODS
 from ...utils import (
     complete_pending_tasks_in_current_loop,
     forkable,
-    get_IP_from_interface,
     get_current_async_loop,
     issubklass,
     pep8_to_dashed_name,
     get_default_logger,
     run_callable_somehow,
 )
-from ...schema_validators import BaseSchemaValidator, JSONSchemaValidator
+from ...config import global_config
 from ...core.property import Property
 from ...core.actions import Action
 from ...core.events import Event
@@ -54,6 +46,15 @@ from .handlers import (
 )
 
 
+class RuntimeConfig(msgspec.Struct):
+    """Runtime configuration for HTTP server and handlers."""
+
+    cors: bool = False
+    """Set CORS headers for the HTTP server. If set to False, CORS headers are not set.
+    This is useful when the server is used in a controlled environment where CORS is not needed.
+    """
+
+
 class HTTPServer(Parameterized):
     """
     HTTP(s) server to expose `Thing` over HTTP protocol. Supports HTTP 1.1.
@@ -64,22 +65,20 @@ class HTTPServer(Parameterized):
         item_type=(str, Thing),
         default=None,
         allow_None=True,
-        doc="id(s) of the things to be served by the HTTP server.",
     )  # type: typing.List[str]
+    """id(s) of the things to be served by the HTTP server."""
 
     port = Integer(
         default=8080,
         bounds=(1, 65535),
-        doc="the port at which the server should be run",
     )  # type: int
+    """the port at which the server should be run"""
 
     address = IPAddress(default="0.0.0.0", doc="IP address")  # type: str
+    """IP address, especially to bind to all interfaces or not"""
 
-    # protocol_version = Selector(objects=[1, 1.1, 2], default=2,
-    #                 doc="for HTTP 2, SSL is mandatory. HTTP2 is recommended. \
-    #                 When no SSL configurations are provided, defaults to 1.1" ) # type: float
-
-    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, doc="logging.Logger")  # type: logging.Logger
+    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True)  # type: logging.Logger
+    """logging.Logger instance"""
 
     log_level = Selector(
         objects=[
@@ -91,77 +90,67 @@ class HTTPServer(Parameterized):
             logging.ERROR,
         ],
         default=logging.INFO,
-        doc="""alternative to logger, this creates an internal logger with the specified log level 
-                    along with a IO stream handler.""",
     )  # type: int
+    """
+    alternative to logger, this creates an internal logger with the specified log level 
+    along with a IO stream handler.
+    """
 
     ssl_context = ClassSelector(
         class_=ssl.SSLContext,
         default=None,
         allow_None=True,
-        doc="SSL context to provide encrypted communication",
     )  # type: typing.Optional[ssl.SSLContext]
+    """SSL context to provide encrypted communication"""
 
-    allowed_clients = TypedList(
-        item_type=str,
-        doc="""Serves request and sets CORS only from these clients, other clients are rejected with 403. 
-            Unlike pure CORS, the server resource is not even executed if the client is not 
-            an allowed client. if None any client is served.""",
-    )
-
-    host = String(
-        default=None,
-        allow_None=True,
-        doc="Host Server to subscribe to coordinate starting sequence of remote objects & web GUI",
-    )  # type: str
-
-    # network_interface = String(default='Ethernet',
-    #                         doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
-    #                         therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
-    #                         you may leave this field" ) # type: str
+    allowed_clients = TypedList(item_type=str)
+    """
+    Serves request and sets CORS only from these clients, other clients are rejected with 401. 
+    Unlike pure CORS, the server resource is not even executed if the client is not 
+    an allowed client. if None, any client is served. Not inherently a safety feature in public networks, 
+    and more useful in private networks when the remote origin is known.
+    """
 
     property_handler = ClassSelector(
         default=PropertyHandler,
         class_=(PropertyHandler, RPCHandler),
         isinstance=False,
-        doc="custom web request handler for property read-write",
     )  # type: typing.Union[RPCHandler, PropertyHandler]
+    """custom web request handler for property read-write"""
 
     action_handler = ClassSelector(
         default=ActionHandler,
         class_=(ActionHandler, RPCHandler),
         isinstance=False,
-        doc="custom web request handler for actions",
     )  # type: typing.Union[RPCHandler, ActionHandler]
+    """custom web request handler for actions"""
 
     event_handler = ClassSelector(
         default=EventHandler,
         class_=(EventHandler, RPCHandler),
         isinstance=False,
-        doc="custom event handler for sending HTTP SSE",
     )  # type: typing.Union[RPCHandler, EventHandler]
-
-    schema_validator = ClassSelector(
-        class_=BaseSchemaValidator,
-        default=JSONSchemaValidator,
-        allow_None=True,
-        isinstance=False,
-        doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""",
-    )  # type: BaseSchemaValidator
+    """custom event handler for sending HTTP SSE"""
 
     security_schemes = TypedList(
         default=None,
         allow_None=True,
         item_type=Security,
-        doc="List of security schemes to be used by the server",
     )  # type: typing.Optional[typing.List[Security]]
+    """
+    List of security schemes to be used by the server, 
+    it is sufficient that one scheme passes for a request to be authorized.
+    """
 
-    config = TypedDict(
+    config = ClassSelector(
+        class_=RuntimeConfig,
         default=None,
         allow_None=True,
-        doc="""Set CORS headers for the HTTP server. If set to False, CORS headers are not set. 
-            This is useful when the server is used in a controlled environment where CORS is not needed.""",
-    )  # type: bool
+    )  # type: RuntimeConfig
+    """
+    Set CORS headers for the HTTP server. If set to False, CORS headers are not set. 
+    This is useful when the server is used in a controlled environment where CORS is not needed
+    """
 
     def __init__(
         self,
@@ -173,7 +162,6 @@ class HTTPServer(Parameterized):
         log_level: int = logging.INFO,
         ssl_context: typing.Optional[ssl.SSLContext] = None,
         security_schemes: typing.Optional[typing.List[Security]] = None,
-        # schema_validator: typing.Optional[BaseSchemaValidator] = JSONSchemaValidator,
         # protocol_version : int = 1, network_interface : str = 'Ethernet',
         allowed_clients: typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,
         config: typing.Optional[dict[str, typing.Any]] = None,
@@ -205,17 +193,15 @@ class HTTPServer(Parameterized):
             - `event_handler`: `EventHandler` | `BaseHandler`, optional.
                 custom event handler for sending HTTP SSE
         """
+        config = RuntimeConfig(**(config or dict(cors=global_config.ALLOW_CORS)))
+        # need to be extended when more options are added
         super().__init__(
             port=port,
             address=address,
-            # host=host,
             logger=logger,
             log_level=log_level,
-            # protocol_version=1,
-            # schema_validator=schema_validator,
             security_schemes=security_schemes,
             ssl_context=ssl_context,
-            # network_interface='Ethernet',# network_interface,
             property_handler=kwargs.get("property_handler", PropertyHandler),
             action_handler=kwargs.get("action_handler", ActionHandler),
             event_handler=kwargs.get("event_handler", EventHandler),

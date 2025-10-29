@@ -1,6 +1,7 @@
 import os
 import sys
 
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
 from hololinked.server.http import HTTPServer
@@ -8,13 +9,15 @@ from hololinked.server.zmq import ZMQServer
 from hololinked.server.mqtt import MQTTPublisher
 from hololinked.serializers import Serializers
 from hololinked.config import global_config
-from things import TestThing
+from things import TestThing, OceanOpticsSpectrometer
 
 import ssl
 
 global_config.DEBUG = True
 
-thing = TestThing(id="example-test")
+# thing = TestThing(id="example-test")
+thing = OceanOpticsSpectrometer(id="example-test", serial_number="simulation")
+
 
 Serializers.register_for_object(TestThing.db_init_int_prop, Serializers.pickle)
 Serializers.register_for_object(TestThing.set_non_remote_number_prop, Serializers.msgpack)

@@ -1516,6 +1516,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self.poll_timeout = poll_timeout
         self.stop_poll = False
         self._thing_to_client_map = dict()  # type: typing.Dict[str, AsyncZMQClient]
+        self._client_to_thing_map = dict()  # type: typing.Dict[str, str]
 
     def create_new(self, id: str, server_id: str, access_point: str = ZMQ_TRANSPORTS.IPC) -> None:
         """
@@ -1573,6 +1574,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             )
         if thing_id:
             self._thing_to_client_map[thing_id] = client.id
+            self._client_to_thing_map[client.id] = thing_id
 
     def get_client_id_from_thing_id(self, thing_id: str) -> str:
         """
@@ -1586,6 +1588,19 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         if thing_id not in self._thing_to_client_map:
             raise ValueError(f"client for thing_id '{thing_id}' not present in pool")
         return self._thing_to_client_map.get(thing_id, None)
+
+    def get_thing_id_from_client_id(self, client_id: str) -> str:
+        """
+        Retrieve `thing_id` mapped to a client. The value must have been previously set using `register` method.
+
+        Parameters
+        ----------
+        client_id: str
+            the client id for which the `thing_id` is to be retrieved
+        """
+        if client_id not in self._client_to_thing_map:
+            raise ValueError(f"thing_id for client_id '{client_id}' not present in pool")
+        return self._client_to_thing_map.get(client_id, None)
 
     @property
     def poll_timeout(self) -> int:
@@ -1889,20 +1904,18 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        ids: typing.Optional[typing.List[str]] = None,
+        thing_ids: typing.Optional[typing.List[str]] = None,
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> typing.Dict[str, ResponseMessage]:
-        if not ids:
-            ids = self.pool.keys()
-        # Invert the _thing_to_client_map dictionary
-        self._client_to_thing_map = {v: k for k, v in self._thing_to_client_map.items()}
+        if not thing_ids:
+            thing_ids = self._client_to_thing_map.values()
 
         gathered_replies = await asyncio.gather(
             *[
                 self.async_execute(
-                    client_id=id,
-                    thing_id=self._client_to_thing_map[id],
+                    client_id=self.get_client_id_from_thing_id(id),
+                    thing_id=id,
                     objekt=objekt,
                     operation=operation,
                     payload=payload,
@@ -1910,11 +1923,11 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                     server_execution_context=server_execution_context,
                     thing_execution_context=thing_execution_context,
                 )
-                for id in ids
+                for id in thing_ids
             ]
         )
         replies = dict()
-        for id, response in zip(ids, gathered_replies):
+        for id, response in zip(thing_ids, gathered_replies):
             replies[id] = response
         return replies
 

@@ -3,6 +3,7 @@ import typing
 import uuid
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
+import msgspec
 from msgspec import DecodeError as MsgspecJSONDecodeError
 
 from ...utils import format_exception_as_json, run_callable_somehow
@@ -16,6 +17,7 @@ from ...core.zmq.message import (
     ThingExecutionContext,
     ServerExecutionContext,
 )
+from ...core.zmq.message import SerializableNone
 from ...constants import JSONSerializable, Operations
 from ...schema_validators import BaseSchemaValidator
 from ...serializers.payloads import PreserializedData, SerializableData
@@ -37,6 +39,11 @@ try:
     from ..security import Argon2BasicSecurity
 except ImportError:
     Argon2BasicSecurity = None  # type: ignore
+
+
+class LocalExecutionContext(msgspec.Struct):
+    noblock: typing.Optional[bool] = None
+    messageID: typing.Optional[str] = None
 
 
 class BaseHandler(RequestHandler):
@@ -96,25 +103,26 @@ class BaseHandler(RequestHandler):
         # Then check an authentication scheme either if the client is allowed or if there is no such list of allowed clients
         if not self.security_schemes:
             authenticated = True
-        try:
-            authorization_header = self.request.headers.get("Authorization", None)  # type: str
-            # will simply pass through if no such header is present
-            if authorization_header and "basic " in authorization_header.lower():
-                for security_scheme in self.security_schemes:
-                    if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
-                        authenticated = (
-                            security_scheme.validate_base64(authorization_header.split()[1])
-                            if security_scheme.expect_base64
-                            else security_scheme.validate(
-                                username=authorization_header.split()[1].split(":", 1)[0],
-                                password=authorization_header.split()[1].split(":", 1)[1],
+        else:
+            try:
+                authorization_header = self.request.headers.get("Authorization", None)  # type: str
+                # will simply pass through if no such header is present
+                if authorization_header and "basic " in authorization_header.lower():
+                    for security_scheme in self.security_schemes:
+                        if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
+                            authenticated = (
+                                security_scheme.validate_base64(authorization_header.split()[1])
+                                if security_scheme.expect_base64
+                                else security_scheme.validate(
+                                    username=authorization_header.split()[1].split(":", 1)[0],
+                                    password=authorization_header.split()[1].split(":", 1)[1],
+                                )
                             )
-                        )
-                        break
-        except Exception as ex:
-            self.set_status(500, "Authentication error")
-            self.logger.error(f"error while authenticating client - {str(ex)}")
-            return False
+                            break
+            except Exception as ex:
+                self.set_status(500, "Authentication error")
+                self.logger.error(f"error while authenticating client - {str(ex)}")
+                return False
         if authenticated:
             return True
         self.set_status(401, "Unauthorized")
@@ -142,10 +150,10 @@ class BaseHandler(RequestHandler):
 
     def get_execution_parameters(
         self,
-    ) -> typing.Tuple[ServerExecutionContext, ThingExecutionContext, dict[str, typing.Any]]:
+    ) -> typing.Tuple[ServerExecutionContext, ThingExecutionContext, LocalExecutionContext, SerializableData]:
         """
         merges all arguments to a single JSON body and retrieves execution context (like oneway calls, fetching executing
-        logs) and timeouts
+        logs) and timeouts, payloads in URL query parameters etc.
         """
         arguments = dict()
         if len(self.request.query_arguments) >= 1:
@@ -173,19 +181,25 @@ class BaseHandler(RequestHandler):
                 executionTimeout=arguments.pop("executionTimeout", default_server_execution_context.executionTimeout),
                 oneway=arguments.pop("oneway", default_server_execution_context.oneway),
             )
-            additional_execution_context = dict(
-                noblock=arguments.pop("noblock", None), messageID=arguments.pop("messageID", None), **arguments
+            local_execution_context = LocalExecutionContext(
+                noblock=arguments.pop("noblock", None),
+                messageID=arguments.pop("messageID", None),
             )
+            if not arguments:
+                additional_payload = SerializableNone
+            else:
+                additional_payload = SerializableData(arguments, content_type="application/json")
             # if timeout is not None and timeout < 0:
             #     timeout = None # reinstate logic soon
             # if self.resource.request_as_argument:
             #     arguments['request'] = self.request # find some way to pass the request object to the thing
-            return (
-                server_execution_context,
-                thing_execution_context,
-                additional_execution_context,
-            )
-        return default_server_execution_context, default_thing_execution_context, dict()
+            return server_execution_context, thing_execution_context, local_execution_context, additional_payload
+        return (
+            default_server_execution_context,
+            default_thing_execution_context,
+            LocalExecutionContext(),
+            SerializableNone,
+        )
 
     @property
     def message_id(self) -> str:
@@ -195,8 +209,8 @@ class BaseHandler(RequestHandler):
         except AttributeError:
             message_id = self.request.headers.get("X-Message-ID", None)
             if not message_id:
-                _, _, additional_execution_context = self.get_execution_parameters()
-                message_id = additional_execution_context.get("messageID", None)
+                _, _, local_execution_context, _ = self.get_execution_parameters()
+                message_id = local_execution_context.messageID
             self._message_id = message_id
             return message_id
 
@@ -278,14 +292,14 @@ class RPCHandler(BaseHandler):
         """
         sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
 
-        .. code-block:: yaml
-
-            Content-Type: application/json
-            Access-Control-Allow-Credentials: true
-            Access-Control-Allow-Origin: <client>
+        ```yaml
+        Content-Type: application/json
+        Access-Control-Allow-Credentials: true
+        Access-Control-Allow-Origin: <client>
+        ```
         """
         self.set_header("Access-Control-Allow-Credentials", "true")
-        if global_config.ALLOW_CORS or self.server.config.get("allow_cors", False):
+        if self.server.config.cors:
             # For credential login, access control allow origin cannot be '*',
             # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
             self.set_header("Access-Control-Allow-Origin", "*")
@@ -313,10 +327,11 @@ class RPCHandler(BaseHandler):
             `writeproperty`, `invokeaction`, `deleteproperty`
         """
         try:
-            server_execution_context, thing_execution_context, additional_execution_context = (
+            server_execution_context, thing_execution_context, local_execution_context, additional_payload = (
                 self.get_execution_parameters()
             )
             payload, preserialized_payload = self.get_request_payload()
+            payload = payload if payload.value else additional_payload
         except Exception as ex:
             self.set_status(400, f"error while decoding request - {str(ex)}")
             self.set_custom_default_headers()
@@ -325,7 +340,7 @@ class RPCHandler(BaseHandler):
             # TODO - add schema validation here, we are anyway validating at some point within the ZMQ server
             # if self.schema_validator is not None and global_config.VALIDATE_SCHEMA_ON_CLIENT:
             #     self.schema_validator.validate(payload)
-            if server_execution_context.oneway or additional_execution_context.get("noblock", False):
+            if server_execution_context.oneway or local_execution_context.noblock:
                 # if oneway, we do not expect a response, so we just return None
                 message_id = await self.zmq_client_pool.async_send_request(
                     client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
@@ -339,7 +354,7 @@ class RPCHandler(BaseHandler):
                 )
                 response_payload = SerializableData(value=None)
                 self.set_status(204, "ok")
-                if additional_execution_context.get("noblock", False):
+                if local_execution_context.noblock:
                     self.set_header("X-Message-ID", message_id)
             else:
                 response_message = await self.zmq_client_pool.async_execute(
@@ -727,7 +742,7 @@ class ThingDescriptionHandler(BaseHandler):
 
     def set_custom_default_headers(self):
         self.set_header("Access-Control-Allow-Credentials", "true")
-        if global_config.ALLOW_CORS or self.server.config.get("allow_cors", False):
+        if self.server.config.cors:
             # For credential login, access control allow origin cannot be '*',
             # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
             self.set_header("Access-Control-Allow-Origin", "*")
@@ -735,7 +750,10 @@ class ThingDescriptionHandler(BaseHandler):
     async def get(self):
         if self.has_access_control:
             try:
-                _, _, body = self.get_execution_parameters()
+                _, _, _, body = self.get_execution_parameters()
+                body = body.deserialize() or dict()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
 
                 response_message = await self.zmq_client_pool.async_execute(
                     client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
@@ -779,7 +797,6 @@ class ThingDescriptionHandler(BaseHandler):
         self.add_actions(TD, TM, authority=authority, use_localhost=use_localhost)
         self.add_events(TD, TM, authority=authority, use_localhost=use_localhost)
         self.add_top_level_forms(TD, authority=authority, use_localhost=use_localhost)
-
         self.add_security_definitions(TD)
         return TD
 
