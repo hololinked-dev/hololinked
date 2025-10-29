@@ -380,6 +380,8 @@ class TestMessageMappedClientPool(TestBrokerMixin):
             logger=cls.logger,
             handshake=False,
         )
+        cls.client._client_to_thing_map[cls.client_id] = cls.thing_id
+        cls.client._thing_to_client_map[cls.thing_id] = cls.client_id
 
     def test_1_handshake_complete(self):
         """
@@ -435,13 +437,13 @@ class TestMessageMappedClientPool(TestBrokerMixin):
 
             self.client.events_map[request_message.id] = self.client.event_pool.pop()
             await self.server._handle_timeout(request_message, timeout_type="invokation")  # 5
-            msg = await self.client.async_recv_response(self.client_id, request_message.id)
+            msg = await self.client.async_recv_response(self.thing_id, request_message.id)
             self.assertEqual(msg.type, TIMEOUT)
             self.validate_response_message(msg)
 
             self.client.events_map[request_message.id] = self.client.event_pool.pop()
             await self.server._handle_invalid_message(request_message, SerializableData(Exception("test")))
-            msg = await self.client.async_recv_response(self.client_id, request_message.id)
+            msg = await self.client.async_recv_response(self.thing_id, request_message.id)
             self.assertEqual(msg.type, INVALID_MESSAGE)
             self.validate_response_message(msg)
 
@@ -454,7 +456,7 @@ class TestMessageMappedClientPool(TestBrokerMixin):
 
             self.client.events_map[request_message.id] = self.client.event_pool.pop()
             await self.server.async_send_response(request_message)
-            msg = await self.client.async_recv_response(self.client_id, request_message.id)
+            msg = await self.client.async_recv_response(self.thing_id, request_message.id)
             self.assertEqual(msg.type, REPLY)
             self.validate_response_message(msg)
 
@@ -462,7 +464,7 @@ class TestMessageMappedClientPool(TestBrokerMixin):
             await self.server.async_send_response_with_message_type(
                 request_message, ERROR, SerializableData(Exception("test"))
             )
-            msg = await self.client.async_recv_response(self.client_id, request_message.id)
+            msg = await self.client.async_recv_response(self.thing_id, request_message.id)
             self.assertEqual(msg.type, ERROR)
             self.validate_response_message(msg)
 

@@ -6,7 +6,7 @@ import copy
 import ssl
 
 from ..utils import get_current_async_loop
-from .utils import connect_over_zmq_and_fetch_td, create_event_consumer
+from .utils import consume_broker_queue, consume_broker_pubsub_per_event
 from ..config import global_config
 from ..serializers import Serializers
 from ..td.interaction_affordance import EventAffordance
@@ -84,7 +84,7 @@ class MQTTPublisher:
         except aiomqtt.MqttReentrantError:
             pass
         for server_id, thing_id, access_point in self.things:
-            thing, td = await connect_over_zmq_and_fetch_td(
+            thing, td = await consume_broker_queue(
                 id=f"{self.hostname}:{self.port}|mqtt-publisher|{uuid.uuid4().hex[:8]}",
                 server_id=server_id,
                 thing_id=thing_id,
@@ -107,7 +107,7 @@ class MQTTPublisher:
         resource: EventAffordance
             The event affordance for which the events are to be published
         """
-        consumer = create_event_consumer(resource)
+        consumer = consume_broker_pubsub_per_event(resource)
         consumer.subscribe()
         topic = f"{resource.thing_id}/{resource.name}"
         while not self._stop_publishing:

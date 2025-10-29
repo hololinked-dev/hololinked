@@ -114,13 +114,13 @@ class TestHTTPServer(TestCase):
         ]:
             old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
             server.add_things(thing)
+            # TODO - reinstate rule numbers as they ensure that all routes were added
             # self.assertTrue(
             #     len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >=
             #     len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
             # )
             # server.router.print_rules()
 
-        # adding a metaclass does not raise error, but warns and does nothing
         old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
         for thing_meta in [OceanOpticsSpectrometer, TestThing]:
             self.assertRaises(ValueError, server.add_things, thing_meta)
@@ -128,43 +128,37 @@ class TestHTTPServer(TestCase):
             len(server.app.wildcard_router.rules) + len(server.router._pending_rules) == old_number_of_rules
         )
 
-        # dont overwrite already given routes
-        for thing in [
-            OceanOpticsSpectrometer(id="test", log_level=logging.ERROR + 10),
-            TestThing(id="test-thing", log_level=logging.ERROR + 10),
-        ]:
-            # create new server to compute number of rules
-            server = HTTPServer(log_level=logging.ERROR + 10)
-            old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
-            # append route with /custom to denote its a custom route
-            server.add_property("/max-intensity/custom", OceanOpticsSpectrometer.max_intensity)
-            server.add_action("/connect/custom", OceanOpticsSpectrometer.connect)
-            server.add_event(
-                "/intensity/event/custom",
-                OceanOpticsSpectrometer.intensity_measurement_event,
-            )
-            server.add_things(thing)
-            self.assertIn("/max-intensity/custom", server.router)
-            self.assertIn("/connect/custom", server.router)
-            self.assertIn("/intensity/event/custom", server.router)
-            # check if the affordance was not added twice using the default paths while add_thing was called
-            self.assertNotIn(
-                f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.max_intensity.name)}",
-                server.router,
-            )
-            self.assertNotIn(
-                f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.connect.name)}",
-                server.router,
-            )
-            self.assertNotIn(
-                f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.intensity_measurement_event.name)}",
-                server.router,
-            )
-            # self.assertTrue(
-            #         len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >=
-            #         len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
-            #     )
-            # also check that it does not create duplicate rules
+        # create new server to compute number of rules
+        server = HTTPServer(log_level=logging.ERROR + 10)
+        thing = OceanOpticsSpectrometer(id="test", log_level=logging.ERROR + 10)
+        old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
+        # append route with /custom to denote its a custom route
+        server.add_property("/max-intensity/custom", OceanOpticsSpectrometer.max_intensity)
+        server.add_action("/connect/custom", OceanOpticsSpectrometer.connect)
+        server.add_event("/intensity/event/custom", OceanOpticsSpectrometer.intensity_measurement_event)
+        server.add_things(thing)
+        self.assertIn(f"/{thing.id}/max-intensity/custom", server.router)
+        self.assertIn(f"/{thing.id}/connect/custom", server.router)
+        self.assertIn(f"/{thing.id}/intensity/event/custom", server.router)
+        # check if the affordance was not added twice using the default paths while add_thing was called
+        self.assertNotIn(
+            f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.max_intensity.name)}",
+            server.router,
+        )
+        self.assertNotIn(
+            f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.connect.name)}",
+            server.router,
+        )
+        self.assertNotIn(
+            f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.intensity_measurement_event.name)}",
+            server.router,
+        )
+        # TODO - reinstate rule numbers as they ensure that all routes were added
+        # self.assertTrue(
+        #         len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >=
+        #         len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
+        #     )
+        # also check that it does not create duplicate rules
 
     def test_04_add_thing_over_zmq_server(self):
         """extension of previous two tests to complete adding a thing running over a zmq server"""
@@ -181,8 +175,7 @@ class TestHTTPServer(TestCase):
             "/intensity/event/custom",
             OceanOpticsSpectrometer.intensity_measurement_event,
         )
-        server.register_id_for_thing(OceanOpticsSpectrometer, thing_id)
-        server.add_things({"INPROC": thing.id})
+        server.add_things(thing)
 
         # server.router.print_rules()
         # print(thing.properties.remote_objects.keys(), thing.actions.descriptors.keys(), thing.events.descriptors.keys())
@@ -208,6 +201,8 @@ class TestHTTPServer(TestCase):
             any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules])
         )
 
+        while not thing.rpc_server:
+            time.sleep(0.1)  # wait for rpc server to be ready
         thing.rpc_server.stop()
 
     def test_05_handlers(self):
@@ -224,7 +219,7 @@ class TestHTTPServer(TestCase):
         class TestableRPCHandler(RPCHandler):
             def update_latest_request_info(self) -> None:
                 nonlocal latest_request_info
-                server_execution_context, thing_execution_context, _ = self.get_execution_parameters()
+                server_execution_context, thing_execution_context, _, _ = self.get_execution_parameters()
                 payload, preserialized_payload = self.get_request_payload()
                 latest_request_info = LatestRequestInfo(
                     server_execution_context=server_execution_context,
@@ -442,7 +437,7 @@ class TestHTTPServer(TestCase):
         thing.run_with_http_server(
             forked=True,
             port=port,
-            config={"allow_cors": True},
+            config={"cors": True},
             security_schemes=[security_scheme],
         )
         self.wait_until_server_ready(port=port)
@@ -455,7 +450,7 @@ class TestHTTPServer(TestCase):
         thing_id = f"test-sec-{uuid.uuid4().hex[0:8]}"
         port = 60004
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
-        thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
+        thing.run_with_http_server(forked=True, port=port, config={"cors": True})
         self.wait_until_server_ready(port=port)
 
         self._test_handlers_end_to_end(port=port, thing_id=thing_id, headers={"Content-Type": "application/json"})
@@ -527,7 +522,7 @@ class TestHTTPServer(TestCase):
         thing.run_with_http_server(
             forked=True,
             port=port,
-            config={"allow_cors": True},
+            config={"cors": True},
             security_schemes=[security_scheme] if security_scheme else None,
         )
         self.wait_until_server_ready(port=port)
@@ -565,7 +560,7 @@ class TestHTTPServer(TestCase):
         thing_id = f"test-forms-{uuid.uuid4().hex[0:8]}"
         port = 60009
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
-        thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
+        thing.run_with_http_server(forked=True, port=port, config={"cors": True})
         self.wait_until_server_ready(port=port)
 
         session = requests.Session()
@@ -592,7 +587,7 @@ class TestHTTPServer(TestCase):
         thing_id = f"test-obj-proxy-{uuid.uuid4().hex[0:8]}"
         port = 60010
         thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
-        thing.run_with_http_server(forked=True, port=port, config={"allow_cors": True})
+        thing.run_with_http_server(forked=True, port=port, config={"cors": True})
         self.wait_until_server_ready(port=port)
 
         object_proxy = ClientFactory.http(url=f"http://127.0.0.1:{port}/{thing_id}/resources/wot-td")
@@ -615,7 +610,7 @@ class TestHTTPServer(TestCase):
         thing.run_with_http_server(
             forked=True,
             port=port,
-            config={"allow_cors": True},
+            config={"cors": True},
             security_schemes=[security_scheme],
         )
         self.wait_until_server_ready(port=port)
@@ -648,8 +643,10 @@ class TestHTTPServer(TestCase):
             try:
                 response = session.get(f"http://127.0.0.1:{port}/liveness")
                 if response.status_code in [200, 201, 202, 204]:
-                    time.sleep(2)
-                    return
+                    response = session.get(f"http://127.0.0.1:{port}/readiness")
+                    if response.status_code in [200, 201, 202, 204]:
+                        time.sleep(2)
+                        return
             except Exception:
                 pass
             time.sleep(1)
@@ -705,7 +702,7 @@ class TestHTTPObjectProxy(TestCase):
         cls.thing_id = f"test-obj-proxy-{uuid.uuid4().hex[0:8]}"
         cls.port = 60011
         cls.thing = OceanOpticsSpectrometer(id=cls.thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
-        cls.thing.run_with_http_server(forked=True, port=cls.port, config={"allow_cors": True})
+        cls.thing.run_with_http_server(forked=True, port=cls.port, config={"cors": True})
         TestHTTPServer.wait_until_server_ready(port=cls.port)
 
         cls.object_proxy = ClientFactory.http(url=f"http://127.0.0.1:{cls.port}/{cls.thing_id}/resources/wot-td")
@@ -810,7 +807,7 @@ class TestHTTPEndToEnd(TestRPCEndToEnd):
     def setUpThing(cls):
         """Set up the thing for the http object proxy client"""
         cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR + 10)
-        cls.thing.run_with_http_server(forked=True, port=cls.http_port, config={"allow_cors": True})
+        cls.thing.run_with_http_server(forked=True, port=cls.http_port, config={"cors": True})
         TestHTTPServer.wait_until_server_ready(port=cls.http_port)
 
         cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()

@@ -390,8 +390,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             if isinstance(server, HTTPServer):
 
                 def start_http_server(server: HTTPServer) -> None:
-                    server.router.add_zmq_thing_instance(
-                        server_id=self.rpc_server.id, thing_id=self.id, access_point="INPROC"
+                    server.router.add_thing_instance_through_broker(
+                        server_id=self.rpc_server.id,
+                        thing_id=self.id,
+                        access_point="INPROC",
                     )
                     server.listen()
 

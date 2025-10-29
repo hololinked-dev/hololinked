@@ -1516,6 +1516,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self.poll_timeout = poll_timeout
         self.stop_poll = False
         self._thing_to_client_map = dict()  # type: typing.Dict[str, AsyncZMQClient]
+        self._client_to_thing_map = dict()  # type: typing.Dict[str, str]
 
     def create_new(self, id: str, server_id: str, access_point: str = ZMQ_TRANSPORTS.IPC) -> None:
         """
@@ -1573,6 +1574,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             )
         if thing_id:
             self._thing_to_client_map[thing_id] = client.id
+            self._client_to_thing_map[client.id] = thing_id
 
     def get_client_id_from_thing_id(self, thing_id: str) -> str:
         """
@@ -1586,6 +1588,33 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         if thing_id not in self._thing_to_client_map:
             raise ValueError(f"client for thing_id '{thing_id}' not present in pool")
         return self._thing_to_client_map.get(thing_id, None)
+
+    def get_thing_id_from_client_id(self, client_id: str) -> str:
+        """
+        Retrieve `thing_id` mapped to a client. The value must have been previously set using `register` method.
+
+        Parameters
+        ----------
+        client_id: str
+            the client id for which the `thing_id` is to be retrieved
+        """
+        if client_id not in self._client_to_thing_map:
+            raise ValueError(f"thing_id for client_id '{client_id}' not present in pool")
+        return self._client_to_thing_map.get(client_id, None)
+
+    def get_client_protocol(self, thing_id: str) -> str:
+        """
+        Retrieve protocol used by a client in the pool.
+
+        Parameters
+        ----------
+        client_id: str
+            the client id for which the protocol is to be retrieved
+        """
+        if thing_id not in self._thing_to_client_map:
+            raise ValueError(f"client_id '{thing_id}' not present in pool")
+        client_id = self._thing_to_client_map[thing_id]
+        return self.pool[client_id].socket_address.split("://")[0].upper()
 
     @property
     def poll_timeout(self) -> int:
@@ -1717,7 +1746,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def async_send_request(
         self,
-        client_id: str,
         thing_id: str,
         objekt: str,
         operation: str,
@@ -1753,6 +1781,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         bytes
             a message id in bytes
         """
+        client_id = self.get_client_id_from_thing_id(thing_id)
         self.assert_client_ready(self.pool[client_id])
         message_id = await self.pool[client_id].async_send_request(
             thing_id=thing_id,
@@ -1768,7 +1797,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         return message_id
 
     async def async_recv_response(
-        self, client_id: str, message_id: bytes, timeout: float | int | None = None
+        self, thing_id: str, message_id: bytes, timeout: float | int | None = None
     ) -> ResponseMessage:
         """
         Receive response for specified message ID.
@@ -1798,6 +1827,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             if timeout is not None and response did not arrive
         """
         try:
+            client_id = self.get_client_id_from_thing_id(thing_id)
             event = self.events_map[message_id]
         except KeyError:
             raise KeyError(f"message id {message_id} unknown.") from None
@@ -1819,7 +1849,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def async_execute(
         self,
-        client_id: str,
         thing_id: str,
         objekt: str,
         operation: str,
@@ -1856,7 +1885,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             response message from server after completing the operation
         """
         message_id = await self.async_send_request(
-            client_id=client_id,
             thing_id=thing_id,
             objekt=objekt,
             operation=operation,
@@ -1866,7 +1894,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             thing_execution_context=thing_execution_context,
         )
         return await self.async_recv_response(
-            client_id=client_id,
+            thing_id=thing_id,
             message_id=message_id,
         )
 
@@ -1889,16 +1917,17 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        ids: typing.Optional[typing.List[str]] = None,
+        thing_ids: typing.Optional[typing.List[str]] = None,
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
-    ) -> typing.Dict[str, typing.Any]:
-        if not ids:
-            ids = self.pool.keys()
+    ) -> typing.Dict[str, ResponseMessage]:
+        if not thing_ids:
+            thing_ids = self._client_to_thing_map.values()
+
         gathered_replies = await asyncio.gather(
             *[
                 self.async_execute(
-                    id=id,
+                    thing_id=id,
                     objekt=objekt,
                     operation=operation,
                     payload=payload,
@@ -1906,11 +1935,11 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                     server_execution_context=server_execution_context,
                     thing_execution_context=thing_execution_context,
                 )
-                for id in ids
+                for id in thing_ids
             ]
         )
         replies = dict()
-        for id, response in zip(ids, gathered_replies):
+        for id, response in zip(thing_ids, gathered_replies):
             replies[id] = response
         return replies
 
@@ -1922,14 +1951,13 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> typing.Dict[str, ResponseMessage]:
         """execute the same operation in all `Thing`s"""
         return await self.async_execute_in_all(
             objekt=objekt,
             operation=operation,
             payload=payload,
             preserialized_payload=preserialized_payload,
-            ids=[id for id, client in self.pool.items()],
             server_execution_context=server_execution_context,
             thing_execution_context=thing_execution_context,
         )
