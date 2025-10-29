@@ -45,6 +45,7 @@ from ..security import Security
 from .handlers import (
     ActionHandler,
     LivenessProbeHandler,
+    ReadinessProbeHandler,
     PropertyHandler,
     EventHandler,
     BaseHandler,
@@ -236,6 +237,7 @@ class HTTPServer(Parameterized):
             handlers=[
                 (r"/stop", StopHandler, dict(owner_inst=self)),
                 (r"/liveness", LivenessProbeHandler, dict(owner_inst=self)),
+                (r"/readiness", ReadinessProbeHandler, dict(owner_inst=self)),
             ]
         )
         self.router = ApplicationRouter(self.app, self)

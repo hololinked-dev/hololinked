@@ -1892,13 +1892,17 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         ids: typing.Optional[typing.List[str]] = None,
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> typing.Dict[str, ResponseMessage]:
         if not ids:
             ids = self.pool.keys()
+        # Invert the _thing_to_client_map dictionary
+        self._client_to_thing_map = {v: k for k, v in self._thing_to_client_map.items()}
+
         gathered_replies = await asyncio.gather(
             *[
                 self.async_execute(
-                    id=id,
+                    client_id=id,
+                    thing_id=self._client_to_thing_map[id],
                     objekt=objekt,
                     operation=operation,
                     payload=payload,
@@ -1922,14 +1926,13 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> typing.Dict[str, ResponseMessage]:
         """execute the same operation in all `Thing`s"""
         return await self.async_execute_in_all(
             objekt=objekt,
             operation=operation,
             payload=payload,
             preserialized_payload=preserialized_payload,
-            ids=[id for id, client in self.pool.items()],
             server_execution_context=server_execution_context,
             thing_execution_context=thing_execution_context,
         )

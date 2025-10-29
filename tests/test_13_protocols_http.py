@@ -646,7 +646,7 @@ class TestHTTPServer(TestCase):
         session = requests.Session()
         for i in range(tries):
             try:
-                response = session.get(f"http://127.0.0.1:{port}/liveness")
+                response = session.get(f"http://127.0.0.1:{port}/readiness")
                 if response.status_code in [200, 201, 202, 204]:
                     time.sleep(2)
                     return

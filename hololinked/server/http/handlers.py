@@ -698,6 +698,30 @@ class LivenessProbeHandler(BaseHandler):
         self.finish()
 
 
+class ReadinessProbeHandler(BaseHandler):
+    def initialize(self, owner_inst=None) -> None:
+        from . import HTTPServer
+
+        assert isinstance(owner_inst, HTTPServer)
+        self.server = owner_inst
+
+    async def get(self):
+        try:
+            replies = await self.server.zmq_client_pool.async_execute_in_all_things(
+                objekt="ping", operation="invokeaction"
+            )
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        else:
+            if not all(reply.body[0].deserialize() is None for thing_id, reply in replies.items()):
+                self.set_status(500, "not all things are ready")
+            else:
+                self.set_status(200, "ok")
+                self.write({id: "ready" for id in replies.keys()})
+            self.set_header("Access-Control-Allow-Credentials", "true")
+        self.finish()
+
+
 class ThingDescriptionHandler(BaseHandler):
     """Thing Description generation handler"""
 
