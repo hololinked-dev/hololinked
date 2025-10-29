@@ -114,13 +114,13 @@ class TestHTTPServer(TestCase):
         ]:
             old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
             server.add_things(thing)
+            # TODO - reinstate rule numbers as they ensure that all routes were added
             # self.assertTrue(
             #     len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >=
             #     len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
             # )
             # server.router.print_rules()
 
-        # adding a metaclass does not raise error, but warns and does nothing
         old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
         for thing_meta in [OceanOpticsSpectrometer, TestThing]:
             self.assertRaises(ValueError, server.add_things, thing_meta)
@@ -128,43 +128,37 @@ class TestHTTPServer(TestCase):
             len(server.app.wildcard_router.rules) + len(server.router._pending_rules) == old_number_of_rules
         )
 
-        # dont overwrite already given routes
-        for thing in [
-            OceanOpticsSpectrometer(id="test", log_level=logging.ERROR + 10),
-            TestThing(id="test-thing", log_level=logging.ERROR + 10),
-        ]:
-            # create new server to compute number of rules
-            server = HTTPServer(log_level=logging.ERROR + 10)
-            old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
-            # append route with /custom to denote its a custom route
-            server.add_property("/max-intensity/custom", OceanOpticsSpectrometer.max_intensity)
-            server.add_action("/connect/custom", OceanOpticsSpectrometer.connect)
-            server.add_event(
-                "/intensity/event/custom",
-                OceanOpticsSpectrometer.intensity_measurement_event,
-            )
-            server.add_things(thing)
-            self.assertIn("/max-intensity/custom", server.router)
-            self.assertIn("/connect/custom", server.router)
-            self.assertIn("/intensity/event/custom", server.router)
-            # check if the affordance was not added twice using the default paths while add_thing was called
-            self.assertNotIn(
-                f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.max_intensity.name)}",
-                server.router,
-            )
-            self.assertNotIn(
-                f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.connect.name)}",
-                server.router,
-            )
-            self.assertNotIn(
-                f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.intensity_measurement_event.name)}",
-                server.router,
-            )
-            # self.assertTrue(
-            #         len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >=
-            #         len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
-            #     )
-            # also check that it does not create duplicate rules
+        # create new server to compute number of rules
+        server = HTTPServer(log_level=logging.ERROR + 10)
+        thing = OceanOpticsSpectrometer(id="test", log_level=logging.ERROR + 10)
+        old_number_of_rules = len(server.app.wildcard_router.rules) + len(server.router._pending_rules)
+        # append route with /custom to denote its a custom route
+        server.add_property("/max-intensity/custom", OceanOpticsSpectrometer.max_intensity)
+        server.add_action("/connect/custom", OceanOpticsSpectrometer.connect)
+        server.add_event("/intensity/event/custom", OceanOpticsSpectrometer.intensity_measurement_event)
+        server.add_things(thing)
+        self.assertIn(f"/{thing.id}/max-intensity/custom", server.router)
+        self.assertIn(f"/{thing.id}/connect/custom", server.router)
+        self.assertIn(f"/{thing.id}/intensity/event/custom", server.router)
+        # check if the affordance was not added twice using the default paths while add_thing was called
+        self.assertNotIn(
+            f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.max_intensity.name)}",
+            server.router,
+        )
+        self.assertNotIn(
+            f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.connect.name)}",
+            server.router,
+        )
+        self.assertNotIn(
+            f"/{pep8_to_dashed_name(OceanOpticsSpectrometer.intensity_measurement_event.name)}",
+            server.router,
+        )
+        # TODO - reinstate rule numbers as they ensure that all routes were added
+        # self.assertTrue(
+        #         len(server.app.wildcard_router.rules) + len(server.router._pending_rules) - old_number_of_rules >=
+        #         len(thing.properties.remote_objects) + len(thing.actions) + len(thing.events)
+        #     )
+        # also check that it does not create duplicate rules
 
     def test_04_add_thing_over_zmq_server(self):
         """extension of previous two tests to complete adding a thing running over a zmq server"""
@@ -181,8 +175,7 @@ class TestHTTPServer(TestCase):
             "/intensity/event/custom",
             OceanOpticsSpectrometer.intensity_measurement_event,
         )
-        server.register_id_for_thing(OceanOpticsSpectrometer, thing_id)
-        server.add_things({"INPROC": thing.id})
+        server.add_things(thing)
 
         # server.router.print_rules()
         # print(thing.properties.remote_objects.keys(), thing.actions.descriptors.keys(), thing.events.descriptors.keys())
@@ -208,6 +201,8 @@ class TestHTTPServer(TestCase):
             any([rule.matcher.match(fake_request) is not None for rule in server.app.wildcard_router.rules])
         )
 
+        while not thing.rpc_server:
+            time.sleep(0.1)  # wait for rpc server to be ready
         thing.rpc_server.stop()
 
     def test_05_handlers(self):

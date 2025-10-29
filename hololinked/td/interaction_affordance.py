@@ -67,6 +67,8 @@ class InteractionAffordance(Schema):
         if isinstance(value, Thing):
             self._thing_cls = value.__class__
             self._thing_id = value.id
+        elif isinstance(value, ThingMeta):
+            self._thing_cls = value
 
     @property
     def objekt(self) -> Property | Action | Event:
@@ -250,6 +252,7 @@ class InteractionAffordance(Schema):
     def override_defaults(self, **kwargs):
         """
         Override default values with provided keyword arguments, especially thing_id, owner name, object name etc.
+        Any logic to trigger side effects while setting those values should be handled here.
         """
         for key, value in kwargs.items():
             if key == "name":
@@ -281,7 +284,7 @@ class InteractionAffordance(Schema):
             # basically you need to have an owner for the interaction affordance
             # and a name to determine its equality. We should never check the owner
             # by the name, but by the object, otherwise the equality cannot be gauranteed
-            if self.owner == value.owner and self.name == value.name:
+            if (self.owner == value.owner or self.thing_cls == value.thing_cls) and self.name == value.name:
                 return True
             return False
         return self.thing_id == value.thing_id and self.name == value.name

@@ -10,24 +10,39 @@ from ..core.zmq import AsyncZMQClient, AsyncEventConsumer
 from ..td.interaction_affordance import EventAffordance
 
 
-async def connect_over_zmq_and_fetch_td(
+async def consume_broker_queue(
     id: str,
     server_id: str,
     thing_id: str,
     access_point: str,
-    logger: Optional[logging.Logger] = None,
     context: Optional[zmq.asyncio.Context] = None,
+    logger: Optional[logging.Logger] = None,
     poll_timeout: int = 1000,
 ) -> tuple[AsyncZMQClient, dict[str, Any]]:
-    """Connect over ZMQ to a Hololinked server and fetch the Thing Description.
+    """
+    Connect to a running Thing via ZMQ INPROC and fetch its Thing Description.
 
-    Args:
-        server_id (str): The server ID to connect to.
-        access_point (str): The access point (e.g., "TCP", "WS", or specific address).
-        thing_id (str): The Thing ID whose TD to fetch.
+    Parameters
+    ----------
+    id : str
+        Unique identifier for the client.
+    server_id : str
+        The server ID to connect to.
+    thing_id : str
+        The Thing ID whose Thing Description (TD) is to be fetched.
+    access_point : str
+        The access point (e.g., "TCP", "WS", or a specific address).
+    context : Optional[zmq.asyncio.Context], optional
+        ZMQ context to use for the connection. If None, uses the global context.
+    logger : Optional[logging.Logger], optional
+        Logger instance for logging events. If None, no logging is performed.
+    poll_timeout : int, optional
+        Poll timeout in milliseconds (default is 1000).
 
-    Returns:
-        typing.Dict[str, typing.Any]: The fetched Thing Description as a dictionary.
+    Returns
+    -------
+    tuple[AsyncZMQClient, dict[str, Any]]
+        A tuple containing the connected AsyncZMQClient and the fetched Thing Description as a dictionary.
     """
     from ..client.zmq.consumed_interactions import ZMQAction
 
@@ -37,9 +52,9 @@ async def connect_over_zmq_and_fetch_td(
         server_id=server_id,
         access_point=access_point,
         context=context or global_config.zmq_context(),
-        poll_timeout=poll_timeout,
         handshake=False,
         logger=logger,
+        poll_timeout=poll_timeout,
     )
     # connect client
     client.handshake(10000)
@@ -64,7 +79,7 @@ async def connect_over_zmq_and_fetch_td(
     return client, TD
 
 
-def create_event_consumer(resource: EventAffordance) -> AsyncEventConsumer:
+def consume_broker_pubsub_per_event(resource: EventAffordance) -> AsyncEventConsumer:
     if isinstance(resource, EventAffordance):
         form = resource.retrieve_form(Operations.subscribeevent)
     else:

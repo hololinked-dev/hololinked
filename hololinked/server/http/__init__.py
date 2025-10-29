@@ -8,8 +8,6 @@ from copy import deepcopy
 from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest
-
 # from tornado_http2.server import Server as TornadoHTTP2Server
 
 from ...param import Parameterized
@@ -33,15 +31,15 @@ from ...utils import (
     get_default_logger,
     run_callable_somehow,
 )
-from ...serializers import Serializers
 from ...schema_validators import BaseSchemaValidator, JSONSchemaValidator
 from ...core.property import Property
 from ...core.actions import Action
 from ...core.events import Event
 from ...core.thing import Thing, ThingMeta
+from ...core.zmq.brokers import MessageMappedZMQClientPool
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
-from ...core.zmq.brokers import AsyncZMQClient, MessageMappedZMQClientPool
 from ..security import Security
+from ..utils import consume_broker_queue
 from .handlers import (
     ActionHandler,
     LivenessProbeHandler,
@@ -251,7 +249,6 @@ class HTTPServer(Parameterized):
             logger=self.logger,
         )
         self._disconnected_things = dict()
-        self._registered_things = dict()  # type: typing.Dict[typing.Type[ThingMeta], typing.List[str]]
 
     @property
     def all_ok(self) -> bool:
@@ -262,7 +259,6 @@ class HTTPServer(Parameterized):
         # event loop is buggy, so we remove it.
         event_loop = get_current_async_loop()  # sets async loop for a non-possessing thread as well
         # event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
-        event_loop.call_soon(lambda: asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda: asyncio.create_task(self.zmq_client_pool.poll_responses()))
         # self.zmq_client_pool.handshake(), NOTE - handshake better done upfront as we already poll_responses here
         # which will prevent handshake function to succeed (although handshake will be done)
@@ -355,19 +351,20 @@ class HTTPServer(Parameterized):
             elif isinstance(thing, (dict, str)):
                 if isinstance(thing, str):
                     # if protocol not given, try INPROC first
-                    self.router.add_zmq_thing_instance(thing, thing, access_point="INPROC")
+                    self.router.add_thing_instance_through_broker(thing, thing, access_point="INPROC")
                     if not self.zmq_client_pool.get_client_id_from_thing_id(thing):
-                        self.router.add_zmq_thing_instance(thing, thing, access_point="IPC")
-                    self.router._resolve_rules_per_thing_id(thing)
+                        self.router.add_thing_instance_through_broker(thing, thing, access_point="IPC")
                 else:
                     for address, thing_id in thing.items():
-                        self.router.add_zmq_thing_instance(server_id=thing_id, thing_id=thing_id, access_point=address)
+                        self.router.add_thing_instance_through_broker(
+                            server_id=thing_id, thing_id=thing_id, access_point=address
+                        )
             elif issubklass(thing, ThingMeta):
                 raise TypeError("thing should be of type Thing, not ThingMeta")
             else:
                 raise TypeError(f"thing should be of type Thing, unknown type given - {type(thing)}")
 
-    def add_thing(self, server_id: str, thing: Thing | str, access_point: str) -> None:
+    def add_thing(self, server_id: str, thing_id: str, access_point: str) -> None:
         """
         Add thing to be served by the HTTP server
 
@@ -378,26 +375,9 @@ class HTTPServer(Parameterized):
         """
         self.router.add_zmq_thing_instance(
             server_id=server_id,
-            thing_id=thing if isinstance(thing, str) else thing.id,
+            thing_id=thing_id,
             access_point=access_point,
         )
-
-    def register_id_for_thing(self, thing_cls: typing.Type[ThingMeta], thing_id: str) -> None:
-        """register an expected thing id for a thing class"""
-        assert isinstance(thing_id, str), f"thing_id should be a string, given {type(thing_id)}"
-        if not self._registered_things.get(thing_cls, None):
-            self._registered_things[thing_cls] = []
-        if isinstance(thing_id, list):
-            self._registered_things[thing_cls].extend(thing_id)
-        else:
-            self._registered_things[thing_cls].append(thing_id)
-
-    def get_thing_from_id(self, id: str) -> typing.Type[ThingMeta] | None:
-        """get the thing id for a thing class"""
-        for thing_cls, thing_ids in self._registered_things.items():
-            if id in thing_ids:
-                return thing_cls
-        return None
 
     def add_property(
         self,
@@ -431,7 +411,7 @@ class HTTPServer(Parameterized):
         if isinstance(property, Property):
             property = property.to_affordance()
         read_http_method = write_http_method = delete_http_method = None
-        http_methods = _comply_http_method(http_methods)
+        http_methods = self.router.adapt_http_methods(http_methods)
         if len(http_methods) == 1:
             read_http_method = http_methods[0]
         elif len(http_methods) == 2:
@@ -477,7 +457,7 @@ class HTTPServer(Parameterized):
             raise TypeError(f"Given action should be of type Action or ActionAffordance, given type {type(action)}")
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
-        http_methods = _comply_http_method(http_method)
+        http_methods = self.router.adapt_http_methods(http_method)
         if isinstance(action, Action):
             action = action.to_affordance()  # type: ActionAffordance
         kwargs["resource"] = action
@@ -518,47 +498,6 @@ class HTTPServer(Parameterized):
         kwargs["owner_inst"] = self
         self.router.add_rule(affordance=event, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
-    async def subscribe_to_host(self):
-        if self.host is None:
-            return
-        client = AsyncHTTPClient()
-        for i in range(300):  # try for five minutes
-            try:
-                res = await client.fetch(
-                    HTTPRequest(
-                        url=f"{self.host}/subscribers",
-                        method="POST",
-                        body=Serializers.json.dumps(
-                            dict(
-                                hostname=socket.gethostname(),
-                                IPAddress=get_IP_from_interface(self.network_interface),
-                                port=self.port,
-                                type=self._type,
-                                https=self.ssl_context is not None,
-                            )
-                        ),
-                        validate_cert=False,
-                        headers={"content-type": "application/json"},
-                    )
-                )
-            except Exception as ex:
-                self.logger.error(
-                    f"Could not subscribe to host {self.host}. error : {str(ex)}, error type : {type(ex)}."
-                )
-                if i >= 299:
-                    raise ex from None
-            else:
-                if res.code in [200, 201]:
-                    self.logger.info(f"subsribed successfully to host {self.host}")
-                    break
-                elif i >= 299:
-                    raise RuntimeError(
-                        f"could not subsribe to host {self.host}. response {Serializers.json.loads(res.body)}"
-                    )
-            await asyncio.sleep(1)
-        # we lose the client anyway so we close it. if we decide to reuse the client, changes needed
-        client.close()
-
     def __hash__(self):
         return hash(self._IP)
 
@@ -583,6 +522,7 @@ class ApplicationRouter:
         self.server = server
         self._pending_rules = []
 
+    # can add a single property, action or event rule
     def add_rule(
         self,
         affordance: PropertyAffordance | ActionAffordance | EventAffordance,
@@ -618,8 +558,10 @@ class ApplicationRouter:
                 )
                 URL_path = f"/{affordance.thing_id}{URL_path}"
             self.app.wildcard_router.add_rules([(URL_path, handler, kwargs)])
-        else:
+        elif affordance.thing_cls is not None:
             self._pending_rules.append((URL_path, handler, kwargs))
+        else:
+            raise RuntimeError("object has no thing id or thing class associated with it, cannot add rule")
         """
         for handler based tornado rule matcher, the Rule object has following
         signature
@@ -647,49 +589,7 @@ class ApplicationRouter:
         resource goes into target kwargs which is needed for the handler to work correctly
         """
 
-    def _resolve_rules_per_thing_id(self, id: str) -> None:
-        """
-        Process the pending rules and add them to the application router.
-        """
-        thing_cls = self.server.get_thing_from_id(id)
-        pending_rules = []
-        for rule in self._pending_rules:
-            if rule[2]["resource"].owner != thing_cls:
-                pending_rules.append(rule)
-                continue
-            URL_path, handler, kwargs = rule
-            URL_path = f"/{id}{URL_path}"
-            rule = (URL_path, handler, kwargs)
-            self.app.wildcard_router.add_rules([rule])
-        self._pending_rules = pending_rules
-
-    def __contains__(
-        self,
-        item: str | Property | Action | Event | PropertyAffordance | ActionAffordance | EventAffordance,
-    ) -> bool:
-        """
-        Check if the item is in the application router.
-        Not exact for torando's rules when a string is provided for the URL path,
-        as you need to provide the Matcher object
-        """
-        if isinstance(item, str):
-            for rule in self.app.wildcard_router.rules:
-                if rule.matcher == item:
-                    return True
-            for rule in self._pending_rules:
-                if rule[0] == item:
-                    return True
-        elif isinstance(item, (Property, Action, Event)):
-            item = item.to_affordance()
-        if isinstance(item, (PropertyAffordance, ActionAffordance, EventAffordance)):
-            for rule in self.app.wildcard_router.rules:
-                if rule.target_kwargs.get("resource", None) == item:
-                    return True
-            for rule in self._pending_rules:
-                if rule[2].get("resource", None) == item:
-                    return True
-        return False
-
+    # can add multiple properties, actions and events at once
     def add_interaction_affordances(
         self,
         properties: typing.Iterable[PropertyAffordance],
@@ -700,11 +600,9 @@ class ApplicationRouter:
         for property in properties:
             if property in self:
                 continue
-            self.server.logger.debug(f"adding property {property.name} for thing id {property.thing_id}")
+            route = self.adapt_route(property.name)
             if property.thing_id is not None:
-                path = f"/{property.thing_id}/{pep8_to_dashed_name(property.name)}"
-            else:
-                path = f"/{pep8_to_dashed_name(property.name)}"
+                path = f"/{property.thing_id}{route}"
             self.server.add_property(
                 URL_path=path,
                 property=property,
@@ -725,21 +623,16 @@ class ApplicationRouter:
         for action in actions:
             if action in self:
                 continue
-            self.server.logger.debug(f"adding action {action.name} for thing id {action.thing_id}")
-            name = get_alternate_name(action.name)
+            route = self.adapt_route(action.name)
             if action.thing_id is not None:
-                path = f"/{action.thing_id}/{pep8_to_dashed_name(name)}"
-            else:
-                path = f"/{pep8_to_dashed_name(name)}"
+                path = f"/{action.thing_id}{route}"
             self.server.add_action(URL_path=path, action=action, handler=self.server.action_handler)
         for event in events:
             if event in self:
                 continue
-            self.server.logger.debug(f"adding event {event.name} for thing id {event.thing_id}")
+            route = self.adapt_route(event.name)
             if event.thing_id is not None:
-                path = f"/{event.thing_id}/{pep8_to_dashed_name(event.name)}"
-            else:
-                path = f"/{pep8_to_dashed_name(event.name)}"
+                path = f"/{event.thing_id}{route}"
             self.server.add_event(URL_path=path, event=event, handler=self.server.event_handler)
 
         # thing description handler
@@ -767,11 +660,7 @@ class ApplicationRouter:
             write_properties_resource=write_properties,
         )
 
-        self.server.logger.debug(
-            f"added thing description action for thing id {thing_id if thing_id else 'unknown'} at path "
-            + f"{f'/{thing_id}/resources/wot-td' if thing_id else '/resources/wot-td'}"
-        )
-
+    # can add an entire thing instance at once
     def add_thing_instance(self, thing: Thing) -> None:
         """
         internal method to add a thing instance to be served by the HTTP server. Iterates through the
@@ -793,61 +682,39 @@ class ApplicationRouter:
                         f"Failed to convert {affordance_type} {getattr(obj, 'name', obj)} to affordance: {ex}"
                     )
 
+        self._resolve_rules(thing.id, thing.__class__)
         self.add_interaction_affordances(
             properties,
             actions,
             events,
-            thing_id=thing.id if isinstance(thing.id, str) else None,
+            thing_id=thing.id,
         )
 
-    def add_zmq_thing_instance(self, server_id: str, thing_id: str, access_point: str) -> None:
+    # can add an entire thing instance at once over ZMQ
+    def add_thing_instance_through_broker(self, server_id: str, thing_id: str, access_point: str) -> None:
         """
         Add a thing served by ZMQ server to the HTTP server. Mostly useful for INPROC transport which behaves like a local object.
         Iterates through the interaction affordances and adds a route for each property, action and event.
         """
         run_callable_somehow(
-            self.async_add_zmq_thing_instance(thing_id=thing_id, server_id=server_id, access_point=access_point)
+            self.async_add_thing_instance_through_broker(
+                thing_id=thing_id, server_id=server_id, access_point=access_point
+            )
         )
 
-    async def async_add_zmq_thing_instance(
+    async def async_add_thing_instance_through_broker(
         self,
         server_id: str,
         thing_id: str,
         access_point: str = None,
     ) -> None:
         try:
-            from ...client.zmq.consumed_interactions import ZMQAction
-            from ...core import Thing
-
-            # create client
-            client = AsyncZMQClient(
+            client, TD = await consume_broker_queue(
                 id=self.server._IP,
                 server_id=server_id,
+                thing_id=thing_id,
                 access_point=access_point,
-                context=self.server.zmq_client_pool.context,
-                poll_timeout=self.server.zmq_client_pool.poll_timeout,
-                handshake=False,
-                logger=self.server.logger,
             )
-            # connect client
-            client.handshake(10000)
-            await client.handshake_complete(10000)
-            # fetch TD
-            assert isinstance(Thing.get_thing_model, Action)  # type definition
-            FetchTMAffordance = Thing.get_thing_model.to_affordance()
-            FetchTMAffordance.override_defaults(thing_id=thing_id, name="get_thing_description")
-            fetch_td = ZMQAction(
-                resource=FetchTMAffordance,
-                sync_client=None,
-                async_client=client,
-                logger=self.server.logger,
-                owner_inst=None,
-            )
-            if isinstance(access_point, str) and len(access_point) in [3, 6]:
-                access_point = access_point.upper()
-            elif access_point.lower().startswith("tcp://"):
-                access_point = "TCP"
-            TD = await fetch_td.async_call(ignore_errors=True, protocol=access_point)  # type: typing.Dict[str, typing.Any]
             # Add to server
             self.add_interaction_affordances(
                 [PropertyAffordance.from_TD(name, TD) for name in TD["properties"].keys()],
@@ -856,7 +723,6 @@ class ApplicationRouter:
                 thing_id=thing_id,
             )
             # Resolve any rules that could have been locally added
-            self._resolve_rules_per_thing_id(thing_id)
             self.server.zmq_client_pool.register(client, thing_id)
         except ConnectionError:
             self.server.logger.warning(
@@ -866,6 +732,51 @@ class ApplicationRouter:
             self.server.logger.error(
                 f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}. error: {str(ex)}"
             )
+
+    def _resolve_rules(self, thing_id: str, thing_cls: ThingMeta) -> None:
+        """
+        Process the pending rules and add them to the application router.
+        """
+        pending_rules = []
+        for rule in self._pending_rules:
+            affordance = rule[2].get("resource", None)  # type: PropertyAffordance | ActionAffordance | EventAffordance
+            if not affordance or affordance.owner != thing_cls:
+                pending_rules.append(rule)
+                continue
+            URL_path, handler, kwargs = rule
+            URL_path = f"/{thing_id}{URL_path}"
+            rule = (URL_path, handler, kwargs)
+            self.app.wildcard_router.add_rules([rule])
+        self._pending_rules = pending_rules
+
+    def __contains__(
+        self,
+        item: str | Property | Action | Event | PropertyAffordance | ActionAffordance | EventAffordance,
+    ) -> bool:
+        """
+        Check if the item is in the application router.
+        Not exact for torando's rules when a string is provided for the URL path,
+        as you need to provide the Matcher object
+        """
+        if isinstance(item, str):
+            for rule in self.app.wildcard_router.rules:
+                if rule.matcher == item:
+                    return True
+                if hasattr(rule.matcher, "regex") and rule.matcher.regex.match(item):
+                    return True
+            for rule in self._pending_rules:
+                if rule[0] == item:
+                    return True
+        elif isinstance(item, (Property, Action, Event)):
+            item = item.to_affordance()
+        if isinstance(item, (PropertyAffordance, ActionAffordance, EventAffordance)):
+            for rule in self.app.wildcard_router.rules:
+                if rule.target_kwargs.get("resource", None) == item:
+                    return True
+            for rule in self._pending_rules:
+                if rule[2].get("resource", None) == item:
+                    return True
+        return False
 
     def get_href_for_affordance(self, affordance, authority: str = None, use_localhost: bool = False) -> str:
         if affordance not in self:
@@ -904,9 +815,26 @@ class ApplicationRouter:
                 return rule[2]
         raise ValueError(f"affordance {affordance} not found in the application router rules")
 
+    def adapt_route(self, interaction_affordance_name: str) -> str:
+        if interaction_affordance_name == "get_thing_model":
+            return "/resources/wot-tm"
+        return f"/{pep8_to_dashed_name(interaction_affordance_name)}"
+
+    def adapt_http_methods(self, http_methods: typing.Any):
+        """comply the supplied HTTP method to the router to a tuple and check if the method is supported"""
+        if isinstance(http_methods, str):
+            http_methods = (http_methods,)
+        if not isinstance(http_methods, tuple):
+            raise TypeError("http_method should be a tuple")
+        for method in http_methods:
+            if method not in HTTP_METHODS.__members__.values() and method is not None:
+                raise ValueError(f"method {method} not supported")
+        return http_methods
+
     def print_rules(self) -> None:
         """
         Print the rules in the application router.
+        prettytable is used if available, otherwise a simple print is done.
         """
         try:
             from prettytable import PrettyTable
@@ -931,24 +859,6 @@ class ApplicationRouter:
                 print(rule)
             for rule in self._pending_rules:
                 print(rule[0], rule[2]["resource"].name)
-
-
-def get_alternate_name(interaction_affordance_name: str) -> str:
-    if interaction_affordance_name == "get_thing_model":
-        return "resources/wot-tm"
-    return interaction_affordance_name
-
-
-def _comply_http_method(http_methods: typing.Any):
-    """comply the supplied HTTP method to the router to a tuple and check if the method is supported"""
-    if isinstance(http_methods, str):
-        http_methods = (http_methods,)
-    if not isinstance(http_methods, tuple):
-        raise TypeError("http_method should be a tuple")
-    for method in http_methods:
-        if method not in HTTP_METHODS.__members__.values() and method is not None:
-            raise ValueError(f"method {method} not supported")
-    return http_methods
 
 
 __all__ = [HTTPServer.__name__]
