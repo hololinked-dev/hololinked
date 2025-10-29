@@ -1602,6 +1602,20 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             raise ValueError(f"thing_id for client_id '{client_id}' not present in pool")
         return self._client_to_thing_map.get(client_id, None)
 
+    def get_client_protocol(self, thing_id: str) -> str:
+        """
+        Retrieve protocol used by a client in the pool.
+
+        Parameters
+        ----------
+        client_id: str
+            the client id for which the protocol is to be retrieved
+        """
+        if thing_id not in self._thing_to_client_map:
+            raise ValueError(f"client_id '{thing_id}' not present in pool")
+        client_id = self._thing_to_client_map[thing_id]
+        return self.pool[client_id].socket_address.split("://")[0].upper()
+
     @property
     def poll_timeout(self) -> int:
         """socket polling timeout in milliseconds greater than 0"""
@@ -1732,7 +1746,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def async_send_request(
         self,
-        client_id: str,
         thing_id: str,
         objekt: str,
         operation: str,
@@ -1768,6 +1781,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         bytes
             a message id in bytes
         """
+        client_id = self.get_client_id_from_thing_id(thing_id)
         self.assert_client_ready(self.pool[client_id])
         message_id = await self.pool[client_id].async_send_request(
             thing_id=thing_id,
@@ -1783,7 +1797,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         return message_id
 
     async def async_recv_response(
-        self, client_id: str, message_id: bytes, timeout: float | int | None = None
+        self, thing_id: str, message_id: bytes, timeout: float | int | None = None
     ) -> ResponseMessage:
         """
         Receive response for specified message ID.
@@ -1813,6 +1827,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             if timeout is not None and response did not arrive
         """
         try:
+            client_id = self.get_client_id_from_thing_id(thing_id)
             event = self.events_map[message_id]
         except KeyError:
             raise KeyError(f"message id {message_id} unknown.") from None
@@ -1834,7 +1849,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def async_execute(
         self,
-        client_id: str,
         thing_id: str,
         objekt: str,
         operation: str,
@@ -1871,7 +1885,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             response message from server after completing the operation
         """
         message_id = await self.async_send_request(
-            client_id=client_id,
             thing_id=thing_id,
             objekt=objekt,
             operation=operation,
@@ -1881,7 +1894,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             thing_execution_context=thing_execution_context,
         )
         return await self.async_recv_response(
-            client_id=client_id,
+            thing_id=thing_id,
             message_id=message_id,
         )
 
@@ -1914,7 +1927,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         gathered_replies = await asyncio.gather(
             *[
                 self.async_execute(
-                    client_id=self.get_client_id_from_thing_id(id),
                     thing_id=id,
                     objekt=objekt,
                     operation=operation,

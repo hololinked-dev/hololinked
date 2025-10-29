@@ -11,6 +11,9 @@ from ...config import global_config
 from ...core.zmq.brokers import AsyncEventConsumer, EventConsumer
 from ...core.zmq.message import (
     EMPTY_BYTE,
+    TIMEOUT,
+    ERROR,
+    INVALID_MESSAGE,
     ResponseMessage,
     default_server_execution_context,
     default_thing_execution_context,
@@ -39,6 +42,8 @@ try:
     from ..security import Argon2BasicSecurity
 except ImportError:
     Argon2BasicSecurity = None  # type: ignore
+
+__error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
 
 class LocalExecutionContext(msgspec.Struct):
@@ -189,8 +194,6 @@ class BaseHandler(RequestHandler):
                 additional_payload = SerializableNone
             else:
                 additional_payload = SerializableData(arguments, content_type="application/json")
-            # if timeout is not None and timeout < 0:
-            #     timeout = None # reinstate logic soon
             # if self.resource.request_as_argument:
             #     arguments['request'] = self.request # find some way to pass the request object to the thing
             return server_execution_context, thing_execution_context, local_execution_context, additional_payload
@@ -343,7 +346,6 @@ class RPCHandler(BaseHandler):
             if server_execution_context.oneway or local_execution_context.noblock:
                 # if oneway, we do not expect a response, so we just return None
                 message_id = await self.zmq_client_pool.async_send_request(
-                    client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
                     thing_id=self.resource.thing_id,
                     objekt=self.resource.name,
                     operation=operation,
@@ -358,7 +360,6 @@ class RPCHandler(BaseHandler):
                     self.set_header("X-Message-ID", message_id)
             else:
                 response_message = await self.zmq_client_pool.async_execute(
-                    client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
                     thing_id=self.resource.thing_id,
                     objekt=self.resource.name,
                     operation=operation,
@@ -371,18 +372,12 @@ class RPCHandler(BaseHandler):
                 self.set_status(200, "ok")
                 self.set_header("Content-Type", response_payload.content_type or "application/json")
         except ConnectionAbortedError as ex:
-            self.set_status(503, str(ex))
-            # event_loop = asyncio.get_event_loop()
-            # event_loop.call_soon(lambda : asyncio.create_task(self.server.update_router_with_thing(
-            #                                                     self.zmq_client_pool[self.resource.instance_name])))
-        # except ConnectionError as ex:
-        #     await self.server.update_router_with_thing(self.zmq_client_pool[self.resource.instance_name])
-        #     await self.handle_through_thing(operation) # reschedule
-        #     return
+            self.set_status(503, f"lost connection to thing - {str(ex)}")
+            # TODO handle reconnection
         except Exception as ex:
             self.logger.error(f"error while scheduling RPC call - {str(ex)}")
             self.logger.debug(f"traceback - {ex.__traceback__}")
-            self.set_status(500, "error while scheduling RPC call")
+            self.set_status(500, f"error while scheduling RPC call - {str(ex)}")
             response_payload = SerializableData(
                 value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
                 content_type="application/json",
@@ -396,7 +391,7 @@ class RPCHandler(BaseHandler):
         """handles the no-block response for the noblock calls"""
         try:
             response_message = await self.zmq_client_pool.async_recv_response(
-                client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
+                thing_id=self.resource.thing_id,
                 message_id=self.message_id,
                 timeout=default_server_execution_context.invokationTimeout
                 + default_server_execution_context.executionTimeout,
@@ -639,40 +634,6 @@ class FileHandler(StaticFileHandler):
         return root + path
 
 
-class ThingsHandler(BaseHandler):
-    """add or remove things from the server"""
-
-    # not working or untested
-
-    async def get(self):
-        self.set_status(404)
-        self.finish()
-
-    async def post(self):
-        if not self.has_access_control:
-            self.set_status(401, "forbidden")
-        else:
-            try:
-                instance_name = ""
-                await self.zmq_client_pool.create_new(server_instance_name=instance_name)
-                await self.server.update_router_with_thing(self.zmq_client_pool[instance_name])
-                self.set_status(204, "ok")
-            except Exception as ex:
-                self.set_status(500, str(ex))
-            self.set_custom_default_headers()
-        self.finish()
-
-    async def options(self):
-        if self.has_access_control:
-            self.set_status(204)
-            self.set_custom_default_headers()
-            self.set_access_control_allow_headers()
-            self.set_header("Access-Control-Allow-Methods", "GET, POST")
-        else:
-            self.set_status(401, "forbidden")
-        self.finish()
-
-
 class StopHandler(BaseHandler):
     """Stops the tornado HTTP server"""
 
@@ -723,7 +684,8 @@ class ReadinessProbeHandler(BaseHandler):
     async def get(self):
         try:
             replies = await self.server.zmq_client_pool.async_execute_in_all_things(
-                objekt="ping", operation="invokeaction"
+                objekt="ping",
+                operation="invokeaction",
             )
         except Exception as ex:
             self.set_status(500, str(ex))
@@ -756,7 +718,6 @@ class ThingDescriptionHandler(BaseHandler):
                     raise ValueError("request body must be a JSON object")
 
                 response_message = await self.zmq_client_pool.async_execute(
-                    client_id=self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id),
                     thing_id=self.resource.thing_id,
                     objekt=self.resource.name,
                     operation=Operations.invokeaction,
@@ -764,19 +725,26 @@ class ThingDescriptionHandler(BaseHandler):
                         value=dict(
                             ignore_errors=body.get("ignore_errors", False),
                             skip_names=body.get("skip_names", []),
-                            protocol=self.zmq_client_pool[
-                                self.zmq_client_pool.get_client_id_from_thing_id(self.resource.thing_id)
-                            ]
-                            .socket_address.split("://")[0]
-                            .upper(),
+                            protocol="INPROC",  # does not matter here
                         ),
                     ),
                 )
+                if response_message.type in __error_message_types__:
+                    raise RuntimeError(f"error while fetching TD from thing - got {response_message.type} response")
 
                 payload = self.get_response_payload(response_message)
-                TM = payload.deserialize()
+                if not isinstance(payload, SerializableData):
+                    raise ValueError("invalid payload received from thing")
+
+                payload = payload.deserialize()
+                if not isinstance(payload, dict):
+                    raise ValueError("invalid payload received from thing")
+
+                TM = payload
                 TD = self.generate_td(
-                    TM, authority=body.get("authority", None), use_localhost=body.get("use_localhost", False)
+                    TM,
+                    authority=body.get("authority", None),
+                    use_localhost=body.get("use_localhost", False),
                 )
 
                 self.set_status(200, "ok")
@@ -798,6 +766,7 @@ class ThingDescriptionHandler(BaseHandler):
         self.add_events(TD, TM, authority=authority, use_localhost=use_localhost)
         self.add_top_level_forms(TD, authority=authority, use_localhost=use_localhost)
         self.add_security_definitions(TD)
+
         return TD
 
     def add_properties(
