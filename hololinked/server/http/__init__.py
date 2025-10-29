@@ -234,7 +234,7 @@ class HTTPServer(Parameterized):
             poll_timeout=100,
             logger=self.logger,
         )
-        self._disconnected_things = dict()
+        self._disconnected_things = list()  # type: list[tuple[str, str, str]]
 
     @property
     def all_ok(self) -> bool:
@@ -695,21 +695,23 @@ class ApplicationRouter:
         access_point: str = None,
     ) -> None:
         try:
+            self.server._disconnected_things.append((server_id, thing_id, access_point))
             client, TD = await consume_broker_queue(
                 id=self.server._IP,
                 server_id=server_id,
                 thing_id=thing_id,
                 access_point=access_point,
             )
-            # Add to server
+            # Add routes to server
             self.add_interaction_affordances(
                 [PropertyAffordance.from_TD(name, TD) for name in TD["properties"].keys()],
                 [ActionAffordance.from_TD(name, TD) for name in TD["actions"].keys()],
                 [EventAffordance.from_TD(name, TD) for name in TD["events"].keys()],
                 thing_id=thing_id,
             )
-            # Resolve any rules that could have been locally added
+            # add client to pool
             self.server.zmq_client_pool.register(client, thing_id)
+            self.server._disconnected_things.remove((server_id, thing_id, access_point))
         except ConnectionError:
             self.server.logger.warning(
                 f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}"

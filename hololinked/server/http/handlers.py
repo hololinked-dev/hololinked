@@ -683,6 +683,8 @@ class ReadinessProbeHandler(BaseHandler):
 
     async def get(self):
         try:
+            if len(self.server._disconnected_things) > 0:
+                raise RuntimeError("some things are disconnected, retry later")
             replies = await self.server.zmq_client_pool.async_execute_in_all_things(
                 objekt="ping",
                 operation="invokeaction",
