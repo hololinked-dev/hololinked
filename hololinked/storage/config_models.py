@@ -62,7 +62,9 @@ class SQLiteConfig(BaseModel):
             return self.uri.get_secret_value()
         if self.in_memory:
             return f"sqlite+{self.dialect}:///:memory:"
-        return f"sqlite+{self.dialect}:///{self.file}"
+        elif self.file:
+            return f"sqlite+{self.dialect}:///{self.file}"
+        raise NotImplementedError("Either 'uri' or 'file' or 'in_memory' must be provided for SQLiteConfig")
 
 
 class MongoDBConfig(BaseModel):

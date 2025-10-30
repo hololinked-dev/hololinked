@@ -75,17 +75,21 @@ class BaseDB:
 
     def __init__(self, instance: Parameterized, config_file: typing.Union[str, None] = None) -> None:
         self.thing_instance = instance
-        self.conf = BaseDB.load_conf(config_file)
+        self.conf = BaseDB.load_conf(config_file, default_file_path=f"{instance.id}.db")
         self.URL = self.conf.URL
         self._batch_call_context = {}
 
     @classmethod
-    def load_conf(cls, config_file: str) -> typing.Union[SQLDBConfig, SQLiteConfig, MongoDBConfig]:
+    def load_conf(
+        cls,
+        config_file: str,
+        default_file_path: str = "",
+    ) -> typing.Union[SQLDBConfig, SQLiteConfig, MongoDBConfig]:
         """
         load configuration file using JSON serializer
         """
         if not config_file:
-            return {}
+            return SQLiteConfig(file=default_file_path)
         elif config_file.endswith(".json"):
             file = open(config_file, "r")
             conf = JSONSerializer.load(file)
@@ -423,7 +427,9 @@ class ThingDB(BaseSyncDB):
             existing_props = self.get_all_properties()
             for prop in properties.values():
                 if prop.name not in existing_props:
-                    serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, prop.name)
+                    serializer = Serializers.for_object(
+                        self.thing_instance.id, self.thing_instance.__class__.__name__, prop.name
+                    )
                     now = datetime.now().isoformat()
                     prop = SerializedProperty(
                         id=None,

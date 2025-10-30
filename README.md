@@ -533,7 +533,6 @@ In React, the Thing Description may be fetched inside `useEffect` hook, the clie
 - [examples repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
 - [infrastructure components](https://github.com/hololinked-dev/daq-system-infrastructure) - docker compose files to setup postgres or mongo databases with admin interfaces, Identity and Access Management system among other components.
 - [helper GUI](https://github.com/hololinked-dev/thing-control-panel) - view & interact with your object's actions, properties and events.
-- [infrastructure components](https://github.com/hololinked-dev/daq-system-infrastructure) - docker compose files to setup postgres or mongo databases with admin interfaces, Identity and Access Management system, MQTT broker among other components.
 - [live demo](https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td) - an example of an oscilloscope available for live test
 
 > You may use a script deployment/automation tool to remote stop and start servers, in an attempt to remotely control your hardware scripts.

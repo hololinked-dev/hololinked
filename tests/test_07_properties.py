@@ -19,8 +19,7 @@ except ImportError:
 
 
 class TestProperty(TestCase):
-
-    def notest_01_simple_class_property(self):
+    def test_01_simple_class_property(self):
         """Test basic class property functionality"""
         # Test class-level access
         self.assertEqual(TestThing.simple_class_prop, 42)
@@ -38,7 +37,7 @@ class TestProperty(TestCase):
         self.assertEqual(TestThing.simple_class_prop, 200)
         self.assertEqual(instance2.simple_class_prop, 200)
 
-    def notest_02_managed_class_property(self):
+    def test_02_managed_class_property(self):
         """Test class property with custom getter/setter"""
         # Test initial value
         self.assertEqual(TestThing.managed_class_prop, 0)
@@ -61,7 +60,7 @@ class TestProperty(TestCase):
         self.assertEqual(TestThing.managed_class_prop, 100)
         self.assertEqual(instance.managed_class_prop, 100)
 
-    def notest_03_readonly_class_property(self):
+    def test_03_readonly_class_property(self):
         """Test read-only class property behavior"""
         # Test reading the value
         self.assertEqual(TestThing.readonly_class_prop, "read-only-value")
@@ -79,7 +78,7 @@ class TestProperty(TestCase):
         self.assertEqual(TestThing.readonly_class_prop, "read-only-value")
         self.assertEqual(instance.readonly_class_prop, "read-only-value")
 
-    def notest_04_deletable_class_property(self):
+    def test_04_deletable_class_property(self):
         """Test class property deletion"""
         # Test initial value
         self.assertEqual(TestThing.deletable_class_prop, 100)
@@ -100,7 +99,7 @@ class TestProperty(TestCase):
         del instance.deletable_class_prop
         self.assertEqual(TestThing.deletable_class_prop, 100)  # Should return to default
 
-    def notest_05_descriptor_access(self):
+    def test_05_descriptor_access(self):
         """Test descriptor access for class properties"""
         # Test direct access through descriptor
         instance = TestThing(id="test6", log_level=logging.WARN)
@@ -135,7 +134,7 @@ class TestProperty(TestCase):
             self.assertEqual(thing.db_engine.get_property("db_persist_selector_prop"), "c")
 
             # test db init property
-            self.assertEqual(thing.db_init_int_prop, 1)
+            self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
             thing.db_init_int_prop = 50
             self.assertEqual(thing.db_init_int_prop, 50)
             self.assertNotEqual(thing.db_engine.get_property("db_init_int_prop"), 50)
@@ -154,10 +153,10 @@ class TestProperty(TestCase):
 
         return test_prekill, test_postkill
 
-    def _test_06_sqlalchemy_db_operations(self):
+    def test_06_sqlalchemy_db_operations(self):
         """Test SQLAlchemy database operations"""
         thing_id = "test-db-operations"
-        file_path = f"{BaseDB.get_temp_dir_for_class_name(TestThing.__name__)}/{thing_id}.db"
+        file_path = f"{thing_id}.db"
         try:
             os.remove(file_path)
         except (OSError, FileNotFoundError):
@@ -172,7 +171,7 @@ class TestProperty(TestCase):
         thing = TestThing(id=thing_id, use_default_db=True, log_level=logging.WARN)
         test_postkill(thing)
 
-    def _test_07_json_db_operations(self):
+    def test_07_json_db_operations(self):
         with tempfile.NamedTemporaryFile(delete=False) as tf:
             filename = tf.name
 
@@ -262,7 +261,7 @@ class TestProperty(TestCase):
             PythonBuiltinJSONSerializer.dump(mongo_db_config, f)
 
         # correct config
-        BaseDB.load_conf("test_mongo_config.json")
+        BaseDB().load_conf("test_mongo_config.json")
         # foreign field
         mongo_db_config_2 = copy.deepcopy(mongo_db_config)
         mongo_db_config_2["passworda"] = "mongononadminpassword"
