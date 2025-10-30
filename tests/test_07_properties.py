@@ -261,7 +261,7 @@ class TestProperty(TestCase):
             PythonBuiltinJSONSerializer.dump(mongo_db_config, f)
 
         # correct config
-        BaseDB().load_conf("test_mongo_config.json")
+        BaseDB.load_conf("test_mongo_config.json")
         # foreign field
         mongo_db_config_2 = copy.deepcopy(mongo_db_config)
         mongo_db_config_2["passworda"] = "mongononadminpassword"
