@@ -8,7 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ✓ means ready to try
 
-## [v0.3.5] - 2025-10-18
+## [v0.3.7] - 2025-10-30
+
+- supports MQTT
+
+## [v0.3.6] - 2025-10-18
 
 - supports MongoDB as a database for property persistence (see infrastructure project in README to quick-setup)
 - adds HTTP handlers for reading/writing multiple properties at once (which used to be supported <0.2.11 but removed later until now by mistake)

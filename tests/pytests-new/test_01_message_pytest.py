@@ -2,6 +2,7 @@
 Pytest tests for message validation and messaging contract.
 Converted from unittest to pytest format.
 """
+
 import pytest
 from uuid import UUID, uuid4
 
@@ -210,3 +211,143 @@ class TestMessagingContract(MessageValidatorMixin):
         self.validate_event_message(event_message)
 
 
+# def validate_request_message(request_message, server_id, client_id):
+#     """Validate request message contract."""
+#     assert isinstance(request_message.id, UUID) or isinstance(UUID(request_message.id, version=4), UUID)
+#     assert len(request_message.byte_array) == request_message.length
+#     assert request_message.receiver_id == server_id
+#     assert request_message.sender_id == client_id
+#     for obj in request_message.byte_array:
+#         assert isinstance(obj, bytes)
+#     assert isinstance(request_message.header, RequestHeader)
+#     assert isinstance(request_message.body, list)
+#     assert len(request_message.body) == 2
+#     assert isinstance(request_message.body[0], SerializableData)
+#     assert isinstance(request_message.body[1], PreserializedData)
+
+# def validate_response_message(response_message, server_id, client_id):
+#     """Validate response message contract."""
+#     assert isinstance(response_message.id, UUID) or isinstance(UUID(response_message.id, version=4), UUID)
+#     assert len(response_message.byte_array) == response_message.length
+#     assert response_message.receiver_id == client_id
+#     assert response_message.sender_id == server_id
+#     for obj in response_message.byte_array:
+#         assert isinstance(obj, bytes)
+#     assert isinstance(response_message.header, ResponseHeader)
+#     assert isinstance(response_message.body, list)
+#     assert len(response_message.body) == 2
+#     assert isinstance(response_message.body[0], SerializableData)
+#     assert isinstance(response_message.body[1], PreserializedData)
+
+# def validate_event_message(event_message, server_id):
+#     """Validate event message contract."""
+#     assert isinstance(event_message.id, UUID) or isinstance(UUID(event_message.id, version=4), UUID)
+#     assert len(event_message.byte_array) == event_message.length
+#     assert isinstance(event_message.event_id, str)
+#     assert event_message.sender_id == server_id
+#     for obj in event_message.byte_array:
+#         assert isinstance(obj, bytes)
+#     assert isinstance(event_message.header, EventHeader)
+#     assert isinstance(event_message.body, list)
+#     assert len(event_message.body) == 2
+#     assert isinstance(event_message.body[0], SerializableData)
+#     assert isinstance(event_message.body[1], PreserializedData)
+
+# @pytest.fixture(scope="module")
+# def test_ids():
+#     return {
+#         "server_id": "server-uuid",
+#         "client_id": "client-uuid",
+#         "thing_id": "thing-uuid",
+#     }
+
+# @pytest.mark.order(1)
+# class TestMessagingContract:
+#     """Tests request and response messages"""
+
+#     def test_1_request_message(self, test_ids):
+#         request_message = RequestMessage.craft_from_arguments(
+#             receiver_id=test_ids["server_id"],
+#             sender_id=test_ids["client_id"],
+#             thing_id=test_ids["thing_id"],
+#             objekt="some_prop",
+#             operation="readproperty",
+#         )
+#         validate_request_message(request_message, test_ids["server_id"], test_ids["client_id"])
+#         assert request_message.type == OPERATION
+
+#         request_message = RequestMessage.craft_with_message_type(
+#             receiver_id=test_ids["server_id"], sender_id=test_ids["client_id"], message_type=HANDSHAKE
+#         )
+#         validate_request_message(request_message, test_ids["server_id"], test_ids["client_id"])
+#         assert request_message.type == HANDSHAKE
+
+#         request_message = RequestMessage.craft_with_message_type(
+#             receiver_id=test_ids["server_id"], sender_id=test_ids["client_id"], message_type=EXIT
+#         )
+#         validate_request_message(request_message, test_ids["server_id"], test_ids["client_id"])
+#         assert request_message.type == EXIT
+
+#     def test_2_response_message(self, test_ids):
+#         response_message = ResponseMessage.craft_from_arguments(
+#             receiver_id=test_ids["client_id"],
+#             sender_id=test_ids["server_id"],
+#             message_type=HANDSHAKE,
+#             message_id=uuid4(),
+#         )
+#         validate_response_message(response_message, test_ids["server_id"], test_ids["client_id"])
+#         assert response_message.type == HANDSHAKE
+
+#         response_message = ResponseMessage.craft_from_arguments(
+#             receiver_id=test_ids["client_id"],
+#             sender_id=test_ids["server_id"],
+#             message_type=TIMEOUT,
+#             message_id=uuid4(),
+#         )
+#         validate_response_message(response_message, test_ids["server_id"], test_ids["client_id"])
+#         assert response_message.type == TIMEOUT
+
+#         response_message = ResponseMessage.craft_from_arguments(
+#             receiver_id=test_ids["client_id"],
+#             sender_id=test_ids["server_id"],
+#             message_type=INVALID_MESSAGE,
+#             message_id=uuid4(),
+#         )
+#         validate_response_message(response_message, test_ids["server_id"], test_ids["client_id"])
+#         assert response_message.type == INVALID_MESSAGE
+
+#         response_message = ResponseMessage.craft_from_arguments(
+#             receiver_id=test_ids["client_id"],
+#             sender_id=test_ids["server_id"],
+#             message_type=ERROR,
+#             message_id=uuid4(),
+#             payload=SerializableData(Exception("test")),
+#         )
+#         validate_response_message(response_message, test_ids["server_id"], test_ids["client_id"])
+#         assert response_message.type == ERROR
+#         assert isinstance(Serializers.json.loads(response_message._bytes[2]), dict)
+
+#         request_message = RequestMessage.craft_from_arguments(
+#             sender_id=test_ids["client_id"],
+#             receiver_id=test_ids["server_id"],
+#             thing_id=test_ids["thing_id"],
+#             objekt="some_prop",
+#             operation="readProperty",
+#         )
+#         request_message._sender_id = test_ids["client_id"]
+#         response_message = ResponseMessage.craft_reply_from_request(
+#             request_message=request_message,
+#         )
+#         validate_response_message(response_message, test_ids["server_id"], test_ids["client_id"])
+#         assert response_message.type == REPLY
+#         assert Serializers.json.loads(response_message._bytes[3]) is None
+#         assert request_message.id == response_message.id
+
+#     def test_3_event_message(self, test_ids):
+#         event_message = EventMessage.craft_from_arguments(
+#             event_id="test-event",
+#             sender_id=test_ids["server_id"],
+#             payload=SerializableData("test"),
+#             preserialized_payload=PreserializedData(b"test"),
+#         )
+#         validate_event_message(event_message, test_ids["server_id"])

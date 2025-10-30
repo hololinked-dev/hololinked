@@ -15,9 +15,9 @@ This implementation is based on RPC, built ground-up in python keeping both the 
 ## To Install
 
 From pip - `pip install hololinked` <br>
-From conda - `conda install -c conda-forge hololinked`
+From conda - `conda install -c conda-forge hololinked` (not recommended, only upto v0.2.11 which do not have docs anymore, to be fixed in future) <br>
 
-Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env `hololinked.yml` or [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
+Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
 
 ## Usage/Quickstart
 
@@ -531,8 +531,8 @@ In React, the Thing Description may be fetched inside `useEffect` hook, the clie
 ## Resources
 
 - [examples repository](https://github.com/hololinked-dev/examples) - detailed examples for both clients and servers
+- [infrastructure components](https://github.com/hololinked-dev/daq-system-infrastructure) - docker compose files to setup postgres or mongo databases with admin interfaces, Identity and Access Management system among other components.
 - [helper GUI](https://github.com/hololinked-dev/thing-control-panel) - view & interact with your object's actions, properties and events.
-- [infrastructure components](https://github.com/hololinked-dev/daq-system-infrastructure) - docker compose files to setup postgres or mongo databases with admin interfaces, Identity and Access Management system, MQTT broker among other components.
 - [live demo](https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td) - an example of an oscilloscope available for live test
 
 > You may use a script deployment/automation tool to remote stop and start servers, in an attempt to remotely control your hardware scripts.

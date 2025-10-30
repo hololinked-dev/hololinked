@@ -1,6 +1,14 @@
-import logging, unittest, tempfile, os
+import logging
+import unittest
+import tempfile
+import os
+import json
+import copy
+import pydantic
+
 from hololinked.core.properties import Number
-from hololinked.storage.database import BaseDB
+from hololinked.storage.database import BaseDB, ThingDB
+from hololinked.serializers import PythonBuiltinJSONSerializer
 
 try:
     from .utils import TestCase, TestRunner
@@ -11,7 +19,6 @@ except ImportError:
 
 
 class TestProperty(TestCase):
-
     def test_01_simple_class_property(self):
         """Test basic class property functionality"""
         # Test class-level access
@@ -127,7 +134,7 @@ class TestProperty(TestCase):
             self.assertEqual(thing.db_engine.get_property("db_persist_selector_prop"), "c")
 
             # test db init property
-            self.assertEqual(thing.db_init_int_prop, 1)
+            self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
             thing.db_init_int_prop = 50
             self.assertEqual(thing.db_init_int_prop, 50)
             self.assertNotEqual(thing.db_engine.get_property("db_init_int_prop"), 50)
@@ -149,7 +156,7 @@ class TestProperty(TestCase):
     def test_06_sqlalchemy_db_operations(self):
         """Test SQLAlchemy database operations"""
         thing_id = "test-db-operations"
-        file_path = f"{BaseDB.get_temp_dir_for_class_name(TestThing.__name__)}/{thing_id}.db"
+        file_path = f"{thing_id}.db"
         try:
             os.remove(file_path)
         except (OSError, FileNotFoundError):
@@ -188,6 +195,110 @@ class TestProperty(TestCase):
         test_postkill(thing)
 
         os.remove(filename)
+
+    def test_08_db_config(self):
+        """Test database configuration options"""
+        thing = TestThing(id="test-sql-config", log_level=logging.WARN)
+
+        # ----- SQL config tests -----
+        sql_db_config = {
+            "provider": "postgresql",
+            "host": "localhost",
+            "port": 5432,
+            "database": "hololinked",
+            "user": "hololinked",
+            "password": "postgresnonadminpassword",
+        }
+        with open("test_sql_config.json", "w") as f:
+            PythonBuiltinJSONSerializer.dump(sql_db_config, f)
+
+        # correct config
+        ThingDB(thing, config_file="test_sql_config.json")
+        # foreign field
+        sql_db_config_2 = copy.deepcopy(sql_db_config)
+        sql_db_config_2["passworda"] = "postgresnonadminpassword"
+        with open("test_sql_config.json", "w") as f:
+            PythonBuiltinJSONSerializer.dump(sql_db_config_2, f)
+        self.assertRaises(
+            pydantic.ValidationError,
+            ThingDB,
+            thing,
+            config_file="test_sql_config.json",
+        )
+        # missing field
+        sql_db_config_3 = copy.deepcopy(sql_db_config)
+        sql_db_config_3.pop("password")
+        with open("test_sql_config.json", "w") as f:
+            PythonBuiltinJSONSerializer.dump(sql_db_config_3, f)
+        self.assertRaises(
+            ValueError,
+            ThingDB,
+            thing,
+            config_file="test_sql_config.json",
+        )
+        # URI instead of other fields
+        sql_db_config = dict(
+            provider="postgresql",
+            uri="postgresql://hololinked:postgresnonadminpassword@localhost:5432/hololinked",
+        )
+        with open("test_sql_config.json", "w") as f:
+            PythonBuiltinJSONSerializer.dump(sql_db_config, f)
+        ThingDB(thing, config_file="test_sql_config.json")
+
+        os.remove("test_sql_config.json")
+
+        # ----- MongoDB config tests -----
+        mongo_db_config = {
+            "provider": "mongo",
+            "host": "localhost",
+            "port": 27017,
+            "database": "hololinked",
+            "user": "hololinked",
+            "password": "mongononadminpassword",
+            "authSource": "admin",
+        }
+        with open("test_mongo_config.json", "w") as f:
+            PythonBuiltinJSONSerializer.dump(mongo_db_config, f)
+
+        # correct config
+        BaseDB.load_conf("test_mongo_config.json")
+        # foreign field
+        mongo_db_config_2 = copy.deepcopy(mongo_db_config)
+        mongo_db_config_2["passworda"] = "mongononadminpassword"
+        with open("test_mongo_config.json", "w") as f:
+            PythonBuiltinJSONSerializer.dump(mongo_db_config_2, f)
+        self.assertRaises(pydantic.ValidationError, BaseDB.load_conf, "test_mongo_config.json")
+        # missing field
+        mongo_db_config_3 = copy.deepcopy(mongo_db_config)
+        mongo_db_config_3.pop("password")
+        with open("test_mongo_config.json", "w") as f:
+            PythonBuiltinJSONSerializer.dump(mongo_db_config_3, f)
+        self.assertRaises(ValueError, BaseDB.load_conf, "test_mongo_config.json")
+        # URI instead of other fields
+        mongo_db_config = dict(
+            provider="mongo",
+            uri="mongodb://hololinked:mongononadminpassword@localhost:27017/hololinked?authSource=admin",
+        )
+        with open("test_mongo_config.json", "w") as f:
+            PythonBuiltinJSONSerializer.dump(mongo_db_config, f)
+        # correct config
+        BaseDB.load_conf("test_mongo_config.json")
+
+        os.remove("test_mongo_config.json")
+
+        # ----- SQLite config tests -----
+
+        sqlite_db_config = {
+            "provider": "sqlite",
+            "file": "test_sqlite.db",
+        }
+        with open("test_sqlite_config.json", "w") as f:
+            PythonBuiltinJSONSerializer.dump(sqlite_db_config, f)
+
+        # correct config
+        ThingDB(thing, config_file="test_sqlite_config.json")
+
+        os.remove("test_sqlite_config.json")
 
 
 if __name__ == "__main__":

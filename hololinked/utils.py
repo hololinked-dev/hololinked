@@ -73,7 +73,7 @@ def pep8_to_dashed_name(word: str) -> str:
 def get_default_logger(
     name: str,
     log_level: int = logging.INFO,
-    log_file=None,
+    log_file: str = None,
     format: str = "%(levelname)-8s - %(asctime)s:%(msecs)03d - %(name)s - %(message)s",
 ) -> logging.Logger:
     """
