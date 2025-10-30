@@ -5,11 +5,13 @@ import aiomqtt
 import copy
 import ssl
 
+
 from ..utils import get_current_async_loop
 from .utils import consume_broker_queue, consume_broker_pubsub_per_event
 from ..config import global_config
+from ..constants import Operations
 from ..serializers import Serializers
-from ..td.interaction_affordance import EventAffordance
+from ..td.interaction_affordance import EventAffordance, PropertyAffordance
 from ..param.parameters import Selector, String, Integer, ClassSelector, List
 
 
@@ -149,23 +151,23 @@ class MQTTPublisher:
         TD.pop("actions", None)
         # remove properties that are not observable
         for name in ZMQ_TD.get("properties", {}).keys():
-            if not TD["properties"][name].get("observable", False):
+            affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
+            if not affordance.observable:
                 TD["properties"].pop(name)
                 continue
-            forms = TD["properties"][name].pop("forms", [])
             TD["properties"][name]["forms"] = []
-            for form in forms:
-                if form["op"] == "observeproperty":
-                    form["href"] = f"mqtt://{self.hostname}:{self.port}"
-                    TD["properties"][name]["forms"].append(form)
+            form = affordance.retrieve_form(Operations.observeproperty)
+            form.href = f"mqtt{'s' if self.ssl_context else ''}://{self.hostname}:{self.port}"
+            form.mqv_topic = f"{TD['id']}/{name}"
+            TD["properties"][name]["forms"].append(form.json())
         # repurpose event
         for name in ZMQ_TD.get("events", {}).keys():
-            forms = TD["events"][name].pop("forms", [])
+            affordance = EventAffordance.from_TD(name, ZMQ_TD)
             TD["events"][name]["forms"] = []
-            for form in forms:
-                if form["op"] == "subscribeevent":
-                    form["href"] = f"mqtt://{self.hostname}:{self.port}"
-                    TD["events"][name]["forms"].append(form)
+            form = affordance.retrieve_form(Operations.subscribeevent)
+            form.href = f"mqtt{'s' if self.ssl_context else ''}://{self.hostname}:{self.port}"
+            form.mqv_topic = f"{TD['id']}/{name}"
+            TD["events"][name]["forms"].append(form.json())
         await self.client.publish(
             topic=f"{TD['id']}/thing-description",
             payload=Serializers.json.dumps(TD),

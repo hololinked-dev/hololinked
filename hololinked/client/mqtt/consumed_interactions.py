@@ -30,7 +30,7 @@ class MQTTConsumer(ConsumedThingEvent):
     def listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:
         # This method is called from a different thread but also finishes quickly, we wont redo this way
         # for the time being.
-        topic = f"{self.resource.thing_id}/{self.resource.name}"
+        topic = form.mqv_topic or f"{self.resource.thing_id}/{self.resource.name}"
 
         def on_topic_message(client: PahoMQTTClient, userdata, message: MQTTMessage):
             try:
@@ -57,7 +57,7 @@ class MQTTConsumer(ConsumedThingEvent):
         self.sync_client.message_callback_add(topic, on_topic_message)
 
     async def async_listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:
-        topic = f"{self.resource.thing_id}/{self.resource.name}"
+        topic = form.mqv_topic or f"{self.resource.thing_id}/{self.resource.name}"
         try:
             await self.async_client.__aenter__()
         except aiomqtt.MqttReentrantError:

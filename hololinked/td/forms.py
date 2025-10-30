@@ -39,6 +39,7 @@ class Form(Schema):
     href: str = None
     op: str = None
     htv_methodName: str = Field(default=None, alias="htv:methodName")
+    mqv_topic: str = Field(default=None, alias="mqv:topic")
     contentType: typing.Optional[str] = "application/json"
     additionalResponses: typing.Optional[typing.List[AdditionalExpectedResponse]] = None
     contentEncoding: typing.Optional[str] = None
@@ -61,6 +62,8 @@ class Form(Schema):
         for field in cls.model_fields:
             if field == "htv_methodName" and "htv:methodName" in form_json:
                 setattr(form, field, form_json["htv:methodName"])
+            elif field == "mqv_topic" and "mqv:topic" in form_json:
+                setattr(form, field, form_json["mqv:topic"])
             elif field in form_json:
                 setattr(form, field, form_json[field])
         return form
