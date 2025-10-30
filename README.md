@@ -16,7 +16,9 @@ This implementation is based on RPC, built ground-up in python keeping both the 
 ## To Install
 
 From pip - `pip install hololinked` <br>
-From conda - `conda install -c conda-forge hololinked` (not recommended, only upto v0.2.11 which do not have docs anymore, to be fixed in future) <br>
+From conda - <br>
+`pip install aiomqtt` (need to be installed separately) <br>
+`conda install -c conda-forge hololinked` <br>
 
 Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
 
