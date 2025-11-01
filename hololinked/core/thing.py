@@ -9,7 +9,6 @@ from ..constants import ZMQ_TRANSPORTS
 from ..utils import *  # noqa: F403
 from ..exceptions import *  # noqa: F403
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
-from ..server.server import BaseProtocolServer  # noqa: F401
 from .properties import String, ClassSelector
 from .property import Property
 from .actions import BoundAction, action
@@ -342,6 +341,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             - `servers`: list[BaseProtocolServer]
                 list of instantiated servers to expose the object.
         """
+        from ..server.server import BaseProtocolServer  # noqa: F401
         from ..server.http import HTTPServer
         from ..server.zmq import ZMQServer
         from ..server.mqtt import MQTTPublisher
