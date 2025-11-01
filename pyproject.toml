@@ -98,7 +98,7 @@ linux = [
 minversion = "8.0"
 addopts = "-ra --strict-markers --strict-config --ignore=lib64"
 testpaths = ["tests/pytests-new"]
-python_files = ["test_*_pytest.py"]
+python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [

@@ -25,7 +25,7 @@ Partial contributions are also taken if its easier to continue working on it. In
 To start developing and complete the contribution, following steps may be followed:
 
 1. Fork the repository and clone it to your local machine.
-2. Setup python environment, preferably using `uv`, instructions are in the [README](https://github.com/hololinked-dev/hololinked/blob/main/README.md#contributing).
+2. Setup python environment, preferably using `uv`, instructions are in the [docs]([setup development environment](https://docs.hololinked.dev/introduction/contributing#setup-development-environment).
 3. There are some test things under `tests/helper-scripts` directory or in the [examples repository](https://gitlab.com/hololinked/examples), especially the simulators (they may not be up to date, one could take what one needs). These can be used to test your changes.
 4. All code must follow [PEP 8](https://peps.python.org/pep-0008/) style guide. One needs to use ruff to check for style issues - `uvx ruff check hololinked`.
 5. Unit/Integration tests are recommended to be added for any new feature or bug fix. These tests can be run with `python -m unittest` under the `tests` directory.

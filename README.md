@@ -6,11 +6,11 @@
 
 As a novice, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, and you want to show the data in a dashboard, provide a PyQt GUI or run automated scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 
-If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice. By conforming to [W3C Web of Things](https://www.w3.org/WoT/), one can expect a consistent API and flexible bidirectional message flow to interact with your devices, irrespective of the underlying protocol. Currently HTTP, MQTT & ZMQ are supported. See [Use Cases Table](#use-cases-table).
+If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice. By conforming to [W3C Web of Things](https://www.w3.org/WoT/), one can expect a consistent API and flexible bidirectional message flow to interact with your devices, irrespective of the underlying protocol. Currently HTTP, MQTT & ZMQ are supported. See [Use Cases Table](https://docs.hololinked.dev/introduction/use-cases).
 
 This implementation is based on RPC, built ground-up in python keeping both the latest web technologies and python principles in mind.
 
-[![Documentation Status](https://img.shields.io/github/actions/workflow/status/hololinked-dev/docs/ci.yaml?label=Build%20And%20Publish%20Docs)](https://github.com/hololinked-dev/docs) [![CI Pipeline](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml/badge.svg)](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml) ![Ruff](https://img.shields.io/badge/linter-ruff-blue?logo=ruff&logoColor=white) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/github/hololinked-dev/hololinked/graph/badge.svg?token=5DI4XJ2KX9)](https://codecov.io/github/hololinked-dev/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev) [![Feedback Form](https://img.shields.io/badge/feedback-form-green)](https://forms.gle/FB4XwkUDt1wV4GGPA)
+[![Documentation Status](https://img.shields.io/github/actions/workflow/status/hololinked-dev/docs/ci.yaml?label=Build%20And%20Publish%20Docs)](https://github.com/hololinked-dev/docs) [![CI Pipeline](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml/badge.svg)](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml) ![Ruff](https://img.shields.io/badge/linter-ruff-blue?logo=ruff&logoColor=white) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/github/hololinked-dev/hololinked/graph/badge.svg?token=5DI4XJ2KX9)](https://codecov.io/github/hololinked-dev/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev) [![Feedback Form](https://img.shields.io/badge/feedback%20%form-red)](https://forms.gle/FB4XwkUDt1wV4GGPA)
 
 ## To Install
 
@@ -544,121 +544,17 @@ In React, the Thing Description may be fetched inside `useEffect` hook, the clie
 See [organization info](https://github.com/hololinked-dev) for details regarding contributing to this package. There are:
 
 - [good first issues](https://github.com/hololinked-dev/hololinked/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
+- [setup development environment](https://docs.hololinked.dev/introduction/contributing#setup-development-environment)
 - [discord group](https://discord.com/invite/kEz87zqQXh)
 - [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and
 - [project planning](https://github.com/orgs/hololinked-dev/projects/4) to discuss activities around this repository.
-
-### Development with UV
-
-One can setup a development environment with [uv](https://docs.astral.sh/uv/) as follows:
-
-##### Setup Development Environment
-
-1. Install uv if you don't have it already: https://docs.astral.sh/uv/getting-started/installation/
-2. Create and activate a virtual environment:
-
-```bash
-uv venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install the package in development mode with all dependencies:
-
-```bash
-uv pip install -e .
-uv pip install -e ".[dev,test]"
-```
-
-##### Running Tests
-
-To run the tests with uv:
-
-In linux:
-
-```bash
-uv run --active coverage run -m unittest discover -s tests -p 'test_*.py'
-uv run --active coverage report -m
-```
-
-In windows:
-
-```bash
-python -m unittest
-```
 
 ## Currently Supported Features
 
 Some other features that are currently supported:
 
-- control method execution and property write with a custom finite state machine.
+- use a custom finite state machine.
 - database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties when the object dies and restarts.
 - auto-generate Thing Description for Web of Things applications.
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement
 - asyncio event loops on server side
-
-## Use Cases <a name="use-cases-table"></a>
-
-<table>
-  <tr>
-    <th>Protocol</th>
-    <th>Plausible Use Cases</th>
-    <th>Operations</th>
-  </tr>
-  <tr>
-    <td>HTTP</td>
-    <td>Web Apps</td>
-    <td rowspan="4">
-        <code>readproperty</code>, 
-        <code>writeproperty</code>, 
-        <code>observeproperty</code>, 
-        <code>unobserveproperty</code>, 
-        <code>invokeaction</code>, 
-        <code>subscribeevent</code>,
-        <code>unsubscribeevent</code>,
-        <code>readmultipleproperties</code>,
-        <code>writemultipleproperties</code>,
-        <code>readallproperties</code>,
-        <code>writeallproperties</code>
-        <br>
-        properties and actions can be operated in a oneway and no-block manner (issue and query later format) as well
-    </td>
-  </tr>
-  <tr>
-    <td>ZMQ TCP</td>
-    <td>Networked Control Systems, subnet protected containerized apps like in Kubernetes</td>
-  </tr>
-  <tr>
-    <td>ZMQ IPC</td>
-    <td>Desktop Applications, Python Dashboards without exposing device API directly on network</td>
-  </tr>
-  <tr>
-    <td>ZMQ INPROC</td>
-    <td>
-        High Speed Desktop Applications (again, not exposed on network), currently you will need some CPP magic or disable GIL to leverage it fully
-    </td>
-  </tr>
-  <tr>
-    <td>MQTT</td>
-    <td>
-        Reliable pub-sub & incorporating into existing systems that use MQTT for <br> lightweight messaging
-    </td>
-    <td>
-        <code>observeproperty</code>, 
-        <code>unobserveproperty</code>, 
-        <code>subscribeevent</code>, 
-        <code>unsubscribeevent</code>
-    </td>
-  </tr>
-  <tr>
-    <td>MQTT with websockets</td>
-    <td>
-        Reliable pub-sub for web applications, planned for November 2025 release.
-    </td>
-    <td>
-        <code>observeproperty</code>, 
-        <code>unobserveproperty</code>, 
-        <code>subscribeevent</code>, 
-        <code>unsubscribeevent</code>
-    </td>
-  </tr>
-</table>
