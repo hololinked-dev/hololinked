@@ -30,6 +30,7 @@ from ...core.events import Event
 from ...core.thing import Thing, ThingMeta
 from ...core.zmq.brokers import MessageMappedZMQClientPool
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
+from ..server import BaseProtocolServer
 from ..security import Security
 from ..utils import consume_broker_queue
 from .handlers import (
@@ -55,7 +56,7 @@ class RuntimeConfig(msgspec.Struct):
     """
 
 
-class HTTPServer(Parameterized):
+class HTTPServer(BaseProtocolServer):
     """
     HTTP(s) server to expose `Thing` over HTTP protocol. Supports HTTP 1.1.
     Use `add_thing` or `add_property` or `add_action` or `add_event` methods to add things to the server.

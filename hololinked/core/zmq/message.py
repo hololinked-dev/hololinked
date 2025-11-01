@@ -434,6 +434,18 @@ class ResponseMessage:
         """pre-encoded payload of the message"""
         return self.body[1]
 
+    @property
+    def oneof_valid_payload(self) -> SerializableData | PreserializedData:
+        """
+        checks if only one of payload or preserialized payload is valid (non-empty),
+        and returns that. To be used with non-multipart messages (multipart as in
+        containing multiple content types). This property can lead to loss of information
+        if any response contains both payload and preserialized payload.
+        """
+        if self._body[1].value != b"":
+            return self._body[1]
+        return self._body[0]
+
     def parse_header(self) -> None:
         """parse the header"""
         if isinstance(self._bytes[INDEX_HEADER], ResponseHeader):

@@ -79,6 +79,17 @@ async def consume_broker_queue(
     return client, TD
 
 
+def consumer_broker_pubsub(id: str = None, access_point: str = "INPROC") -> AsyncEventConsumer:
+    """Consume all events from ZMQ (usually INPROC) pubsub"""
+    return AsyncEventConsumer(
+        id=id or f"event-proxy-{uuid.uuid4().hex[:8]}",
+        event_unique_identifier="",
+        access_point=access_point,
+        context=global_config.zmq_context(),
+        logger=global_config.logger(),
+    )
+
+
 def consume_broker_pubsub_per_event(resource: EventAffordance) -> AsyncEventConsumer:
     if isinstance(resource, EventAffordance):
         form = resource.retrieve_form(Operations.subscribeevent)
