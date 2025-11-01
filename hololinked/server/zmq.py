@@ -8,9 +8,10 @@ from ..utils import get_current_async_loop
 from ..core.thing import Thing
 from ..core.zmq.brokers import AsyncEventConsumer, AsyncZMQServer, EventPublisher
 from ..core.zmq.rpc_server import RPCServer
+from .server import BaseProtocolServer
 
 
-class ZMQServer(RPCServer):
+class ZMQServer(RPCServer, BaseProtocolServer):
     """
     Server to expose `Thing` over `ZeroMQ` protocol. Extends `RPCServer` to support `IPC` & `TCP`.
     """
@@ -179,3 +180,12 @@ class ZMQServer(RPCServer):
         paths = "\n\t".join(parts)
         paths += "\n)"
         return paths
+
+    def start(self) -> None:
+        raise NotImplementedError("Use run() method to start the ZMQServer")
+
+    async def async_run(self) -> None:
+        raise NotImplementedError(
+            "Use run() method to start the ZMQServer, this server needs to occupy a thread completely"
+            + " for implementing certain functionalities"
+        )

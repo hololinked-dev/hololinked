@@ -5,7 +5,7 @@ import asyncio
 from ..config import global_config
 from ..utils import get_current_async_loop
 from ..core.zmq.rpc_server import RPCServer
-from .server import BaseProtocolServer, BrokerAccessibleThing
+from .server import BaseProtocolServer, BrokerThing
 from .zmq import ZMQServer
 
 
@@ -44,7 +44,7 @@ def run(*servers: BaseProtocolServer) -> None:
         server.things = []
         for thing in server_specific_things:
             server.things.append(
-                BrokerAccessibleThing(
+                BrokerThing(
                     server_id=rpc_server.id,
                     thing_id=thing.id,
                     access_point="INPROC",

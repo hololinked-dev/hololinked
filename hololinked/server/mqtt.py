@@ -11,7 +11,6 @@ from ..constants import Operations
 from ..serializers import Serializers
 from ..param.parameters import Selector, String, ClassSelector
 from ..core.zmq.message import EventMessage  # noqa: F401
-from ..core.thing import Thing
 from ..td.interaction_affordance import EventAffordance, PropertyAffordance
 from .server import BaseProtocolServer
 
@@ -94,23 +93,13 @@ class MQTTPublisher(BaseProtocolServer):
                 eventloop.create_task(self.publish(event_affordance))
             eventloop.create_task(self.publish_thing_description(td))
 
-    def stop(self):
-        """stop publishing, the client is not closed automatically"""
-        self._stop_publishing = True
-
-    def run(self):
+    def start(self):
         eventloop = get_current_async_loop()
         eventloop.create_task(self.async_run())
 
-    def add_thing(self, thing: Thing) -> None:
-        """Adds a thing to the list of things to publish events from."""
-        self.things.append(thing)
-
-    def add_thing_instance_through_broker(self, server_id: str, thing_id: str, access_point: str):
-        """Adds a thing to the list of things to publish events from."""
-        if access_point.upper() not in ["TCP", "IPC", "INPROC"]:
-            raise ValueError("Access point must be 'TCP', 'IPC', or 'INPROC'")
-        self.things.append((server_id, thing_id, access_point))
+    def stop(self):
+        """stop publishing, the client is not closed automatically"""
+        self._stop_publishing = True
 
     async def publish(self, resource: EventAffordance):
         """
