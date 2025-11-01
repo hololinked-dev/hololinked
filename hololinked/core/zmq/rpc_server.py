@@ -32,7 +32,7 @@ from .message import (
 from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
 from ..thing import Thing
 from ..property import Property  # noqa: F401
-from ..properties import TypedDict
+from ..properties import TypedList
 from ..actions import BoundAction  # noqa: F401
 from ..logger import LogHistoryHandler
 
@@ -76,15 +76,16 @@ class RPCServer(BaseZMQServer):
     [UML Diagram](http://docs.hololinked.dev/UML/PDF/RPCServer.pdf)
     """
 
-    things = TypedDict(
-        key_type=(str,),
+    things = TypedList(
         item_type=(Thing,),
         bounds=(0, 100),
         allow_None=True,
         default=None,
         doc="list of Things which are being executed",
         remote=False,
-    )  # type: typing.Dict[str, Thing]
+    )  # type: typing.List[Thing]
+
+    schedulers: typing.Dict[str, "QueuedScheduler"]
 
     def __init__(
         self,
@@ -108,9 +109,7 @@ class RPCServer(BaseZMQServer):
             transport layer to be used for the server, default is `INPROC`
         """
         super().__init__(id=id, **kwargs)
-        self.things = dict()
-        for thing in things:
-            self.things[thing.id] = thing
+        self.things = things
 
         if isinstance(access_point, str):
             access_point = access_point.upper()
@@ -141,7 +140,7 @@ class RPCServer(BaseZMQServer):
         self.schedulers = dict()
 
         # setup scheduling requirements
-        for instance in self.things.values():
+        for instance in self.things:
             all_things = get_all_sub_things_recusively(instance)
             for instance in all_things:
                 assert isinstance(instance, Thing), "instance must be of type Thing"
@@ -153,8 +152,6 @@ class RPCServer(BaseZMQServer):
                         self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = ThreadedScheduler
                     # else QueuedScheduler which is default
                 # properties need not dealt yet, but may be in future
-
-    schedulers: typing.Dict[str, "QueuedScheduler"]
 
     def __post_init__(self):
         super().__post_init__()
@@ -178,6 +175,7 @@ class RPCServer(BaseZMQServer):
         """
         self.logger.debug("started polling with server {} at socket {}".format(server.id, server.socket_address))
         eventloop = asyncio.get_event_loop()
+        things = {thing.id: thing for thing in self.things}
         while self._run:
             try:
                 request_messages = await server.poll_requests()
@@ -218,7 +216,7 @@ class RPCServer(BaseZMQServer):
                     )  # type: Scheduler.JobInvokationType
                     if request_message.qualified_operation in self.schedulers:
                         scheduler = self.schedulers[request_message.qualified_operation](
-                            self.things[request_message.thing_id], self
+                            things[request_message.thing_id], self
                         )
                     else:
                         scheduler = self.schedulers[request_message.thing_id]
@@ -595,10 +593,10 @@ class RPCServer(BaseZMQServer):
         """
         self._run = True
         self.logger.info(f"starting RPC server {self.id}")
-        for thing in self.things.values():
+        for thing in self.things:
             self.schedulers[thing.id] = QueuedScheduler(thing, self)
         threads = dict()  # type: typing.Dict[int, threading.Thread]
-        for thing in self.things.values():
+        for thing in self.things:
             thread = threading.Thread(target=self.run_things, args=([thing],))
             thread.start()
             threads[thread.ident] = thread

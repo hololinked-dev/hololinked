@@ -79,12 +79,12 @@ class MQTTPublisher(BaseProtocolServer):
             await self.client.__aenter__()
         except aiomqtt.MqttReentrantError:
             pass
-        for server_id, thing_id, access_point in self.things:
+        for thing in self.things:
             thing, td = await consume_broker_queue(
                 id=f"{self.hostname}:{self.port}|mqtt-publisher|{uuid.uuid4().hex[:8]}",
-                server_id=server_id,
-                thing_id=thing_id,
-                access_point=access_point,
+                server_id=thing.server_id,
+                thing_id=thing.thing_id,
+                access_point=thing.access_point,
                 logger=self.logger,
                 context=global_config.zmq_context(),
             )
@@ -102,7 +102,7 @@ class MQTTPublisher(BaseProtocolServer):
         eventloop = get_current_async_loop()
         eventloop.create_task(self.async_run())
 
-    def add_thing_instance(self, thing: Thing) -> None:
+    def add_thing(self, thing: Thing) -> None:
         """Adds a thing to the list of things to publish events from."""
         self.things.append(thing)
 

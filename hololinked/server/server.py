@@ -3,6 +3,13 @@ from ..config import global_config
 from ..param import Parameterized
 from ..core.properties import ClassSelector, Integer, TypedList
 from ..core.thing import Thing
+from pydantic import BaseModel
+
+
+class BrokerAccessibleThing(BaseModel):
+    server_id: str
+    thing_id: str
+    access_point: str
 
 
 class BaseProtocolServer(Parameterized):
@@ -14,11 +21,15 @@ class BaseProtocolServer(Parameterized):
     logger = ClassSelector(class_=logging.Logger, default=global_config.logger())  # type: logging.Logger
     """Logger instance"""
 
-    things = TypedList(default=None, allow_None=True, item_type=Thing)  # type: list[Thing]
+    things = TypedList(default=None, allow_None=True, item_type=(Thing, BrokerAccessibleThing))  # type: list[Thing | BrokerAccessibleThing]
     """List of things to serve"""
 
     def add_thing(self, thing):
         raise NotImplementedError("Not implemented for this protocol")
+
+    def add_things(self, *things):
+        for thing in things:
+            self.add_thing(thing)
 
     def add_thing_instance_through_broker(self, server_id: str, access_point: str, thing_id: str):
         raise NotImplementedError("Not implemented for this protocol")
