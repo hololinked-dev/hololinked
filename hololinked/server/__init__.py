@@ -1,16 +1,18 @@
+import asyncio
 import uuid
 import threading
-import asyncio
+import warnings
 
 from ..config import global_config
-from ..utils import get_current_async_loop
-from ..core.zmq.rpc_server import RPCServer
-from .server import BaseProtocolServer, BrokerThing
-from .zmq import ZMQServer
+from ..utils import get_current_async_loop, complete_pending_tasks_in_current_loop
+from ..core.zmq.rpc_server import RPCServer, ZMQ_TRANSPORTS
+from .server import BaseProtocolServer
 
 
 def run(*servers: BaseProtocolServer) -> None:
     """run servers and serve your things"""
+    from .zmq import ZMQServer
+
     loop = get_current_async_loop()  # initialize an event loop if it does not exist
 
     things = [thing for server in servers if server.things is not None for thing in server.things]
@@ -36,20 +38,64 @@ def run(*servers: BaseProtocolServer) -> None:
 
     threading.Thread(target=rpc_server.run).start()
 
+    loop = get_current_async_loop()
     futures = []
     for server in servers:
         if server == rpc_server:
             continue
-        server_specific_things = server.things
-        server.things = []
-        for thing in server_specific_things:
-            server.things.append(
-                BrokerThing(
-                    server_id=rpc_server.id,
-                    thing_id=thing.id,
-                    access_point="INPROC",
-                )
+        for thing in server.things:
+            server.add_thing_instance_through_broker(
+                server_id=rpc_server.id,
+                thing_id=thing.id,
+                access_point="INPROC",
             )
-        futures.append(server.async_run())
+        futures.append(server.start())
 
     loop.run_until_complete(asyncio.gather(*futures))
+    complete_pending_tasks_in_current_loop()
+
+
+def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list[str]]]) -> list[BaseProtocolServer]:
+    from .zmq import ZMQServer
+    from .http import HTTPServer
+    from .mqtt import MQTTPublisher
+
+    if access_points is not None and not isinstance(access_points, list):
+        raise TypeError("access_points must be provided as a list of tuples.")
+
+    servers = []
+    for protocol, params in access_points:
+        if protocol.upper() == "HTTP":
+            if isinstance(params, int):
+                params = dict(port=params)
+            if not isinstance(params, dict):
+                raise ValueError("HTTP server parameters must be supplied as a dict or just the port as an integer.")
+            http_server = HTTPServer(**params)
+            servers.append(http_server)
+        elif protocol.upper() == "ZMQ":
+            if isinstance(params, int):
+                params = dict(access_points=[f"tcp://*:{params}"])
+            elif isinstance(params, (str, ZMQ_TRANSPORTS)):
+                params = dict(access_points=[params])
+            elif isinstance(params, list):
+                params = dict(access_points=params)
+            if not isinstance(params.get("access_points", None), list):
+                params["access_points"] = [params["access_points"]]
+            if not any(isinstance(ap, str) and ap.upper().startswith("INPROC") for ap in params["access_points"]):
+                params["access_points"].append("INPROC")
+
+            if len(params["access_points"]) == 1 and params["access_points"][0] == "INPROC":
+                server = RPCServer(id=id, **params)
+            else:
+                server = ZMQServer(id=id, **params)
+            servers.append(server)
+        elif protocol.upper() == "MQTT":
+            if isinstance(params, str):
+                params = dict(hostname=params)
+            if not isinstance(params, dict):
+                raise ValueError("MQTT parameters must be supplied as a dictionary or the broker hostname as a string.")
+            mqtt_publisher = MQTTPublisher(**params)
+            servers.append(mqtt_publisher)
+        else:
+            warnings.warn(f"Unsupported protocol: {protocol}", category=UserWarning)
+    return servers

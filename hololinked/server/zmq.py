@@ -20,9 +20,9 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         self,
         *,
         id: str,
-        things: typing.List["Thing"],
-        context: zmq.asyncio.Context | None = None,
         access_points: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC,
+        things: typing.List["Thing"] = None,
+        context: zmq.asyncio.Context | None = None,
         **kwargs,
     ) -> None:
         """
@@ -46,6 +46,8 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         self.ipc_server = self.tcp_server = None
         self.ipc_event_publisher = self.tcp_event_publisher = self.inproc_events_proxy = None
         super().__init__(id=id, things=things, context=context, **kwargs)
+        # note for later refactoring - we dont use add_things method here, be careful if that method becomes overloaded
+        # at any point in future
 
         tcp_socket_address = None
 
@@ -181,11 +183,8 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         paths += "\n)"
         return paths
 
-    def start(self) -> None:
-        raise NotImplementedError("Use run() method to start the ZMQServer")
+    async def start(self) -> None:
+        raise NotImplementedError("Use the blocking run() method to start the ZMQServer")
 
-    async def async_run(self) -> None:
-        raise NotImplementedError(
-            "Use run() method to start the ZMQServer, this server needs to occupy a thread completely"
-            + " for implementing certain functionalities"
-        )
+    async def setup(self) -> None:
+        raise NotImplementedError("Use the blocking run() method to start the ZMQServer, no need to setup separately.")

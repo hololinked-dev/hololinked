@@ -2,7 +2,7 @@ import uuid
 import aiomqtt
 import copy
 import ssl
-from typing import Any
+from typing import Any, Optional
 
 from ..utils import get_current_async_loop
 from .utils import consume_broker_queue, consume_broker_pubsub_per_event
@@ -11,6 +11,7 @@ from ..constants import Operations
 from ..serializers import Serializers
 from ..param.parameters import Selector, String, ClassSelector
 from ..core.zmq.message import EventMessage  # noqa: F401
+from ..core import Thing
 from ..td.interaction_affordance import EventAffordance, PropertyAffordance
 from .server import BaseProtocolServer
 
@@ -33,7 +34,16 @@ class MQTTPublisher(BaseProtocolServer):
     ssl_context = ClassSelector(class_=ssl.SSLContext, allow_None=True, default=None)
     """The SSL context to use for secure connections, or None for no SSL"""
 
-    def __init__(self, hostname: str, port: int, username: str, password: str, qos: int = 1, **kwargs):
+    def __init__(
+        self,
+        hostname: str,
+        port: int,
+        username: str,
+        password: str,
+        things: Optional[list[Thing]] = None,
+        qos: int = 1,
+        **kwargs,
+    ):
         """
         Parameters
         ----------
@@ -53,14 +63,14 @@ class MQTTPublisher(BaseProtocolServer):
         self.hostname = hostname
         self.port = port
         self.qos = qos
-        self.things = []
         self.username = username
         self.password = password
+        self.add_things(*(things or []))
         self.logger = kwargs.get("logger", global_config.logger())
         self.ssl_context = kwargs.get("ssl_context", None)
         self._stop_publishing = False
 
-    async def async_run(self):
+    async def start(self):
         """
         Sets up the MQTT client and starts publishing events from the configured things.
         All events are dispatched to their own async tasks. This method returns and
@@ -78,7 +88,12 @@ class MQTTPublisher(BaseProtocolServer):
             await self.client.__aenter__()
         except aiomqtt.MqttReentrantError:
             pass
-        for thing in self.things:
+        # better to do later
+        await self.setup()
+
+    async def setup(self) -> None:
+        eventloop = get_current_async_loop()
+        for thing in self._broker_things:
             thing, td = await consume_broker_queue(
                 id=f"{self.hostname}:{self.port}|mqtt-publisher|{uuid.uuid4().hex[:8]}",
                 server_id=thing.server_id,
@@ -87,15 +102,10 @@ class MQTTPublisher(BaseProtocolServer):
                 logger=self.logger,
                 context=global_config.zmq_context(),
             )
-            eventloop = get_current_async_loop()
             for event_name in td.get("events", {}).keys():
                 event_affordance = EventAffordance.from_TD(event_name, td)
                 eventloop.create_task(self.publish(event_affordance))
             eventloop.create_task(self.publish_thing_description(td))
-
-    def start(self):
-        eventloop = get_current_async_loop()
-        eventloop.create_task(self.async_run())
 
     def stop(self):
         """stop publishing, the client is not closed automatically"""

@@ -5,14 +5,14 @@ import logging
 from hololinked.core.actions import BoundAction
 from hololinked.core.events import EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
+from hololinked.core.zmq.rpc_server import RPCServer
 from hololinked.core import Thing, ThingMeta, Action, Event, Property
 from hololinked.core.meta import (
-    DescriptorRegistry,
+    DescriptorRegistry,  # noqa: F401
     PropertiesRegistry,
     ActionsRegistry,
     EventsRegistry,
 )
-from hololinked.core.zmq.rpc_server import RPCServer, prepare_rpc_server
 from hololinked.core.properties import Parameter
 from hololinked.core.state_machine import BoundFSM
 from hololinked.utils import get_default_logger
@@ -140,11 +140,11 @@ class TestThingInit(TestCase):
     def test_5_servers_init(self):
         """Test if servers can be initialized/instantiated"""
         # req. 1. rpc_server and event_publisher must be None when not run()
-        thing = self.thing_cls(id="test_servers_init", log_level=logging.ERROR)
+        thing = self.thing_cls(id="test_servers_init", log_level=logging.ERROR + 10)
         self.assertIsNone(thing.rpc_server)
         self.assertIsNone(thing.event_publisher)
         # req. 2. rpc_server and event_publisher must be instances of their respective classes when run()
-        prepare_rpc_server(thing, "IPC")
+        RPCServer(id="test-rpc-server-init", things=[thing], logger=thing.logger)  # prepare server class
         self.assertIsInstance(thing.rpc_server, RPCServer)
         self.assertIsInstance(thing.event_publisher, EventPublisher)
         # exit to quit nicely

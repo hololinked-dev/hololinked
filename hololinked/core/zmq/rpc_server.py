@@ -91,7 +91,7 @@ class RPCServer(BaseZMQServer):
         self,
         *,
         id: str,
-        things: typing.List[Thing],
+        things: typing.Optional[typing.List[Thing]] = None,
         context: zmq.asyncio.Context | None = None,
         access_point: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.INPROC,
         **kwargs: typing.Dict[str, typing.Any],
@@ -109,7 +109,8 @@ class RPCServer(BaseZMQServer):
             transport layer to be used for the server, default is `INPROC`
         """
         super().__init__(id=id, **kwargs)
-        self.things = things
+        self.things = []
+        self.add_things(*(things or []))
 
         if isinstance(access_point, str):
             access_point = access_point.upper()
@@ -139,23 +140,32 @@ class RPCServer(BaseZMQServer):
         )
         self.schedulers = dict()
 
-        # setup scheduling requirements
-        for instance in self.things:
-            all_things = get_all_sub_things_recusively(instance)
-            for instance in all_things:
-                assert isinstance(instance, Thing), "instance must be of type Thing"
-                instance.rpc_server = self
-                for action in instance.actions.descriptors.values():
-                    if action.execution_info.iscoroutine and not action.execution_info.synchronous:
-                        self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = AsyncScheduler
-                    elif not action.execution_info.synchronous:
-                        self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = ThreadedScheduler
-                    # else QueuedScheduler which is default
-                # properties need not dealt yet, but may be in future
-
     def __post_init__(self):
         super().__post_init__()
         self.logger.info("Server with name '{}' can be started using run().".format(self.id))
+
+    def add_thing(self, thing: Thing) -> None:
+        """Adds a thing to the list of things to serve."""
+        # setup scheduling requirements
+        all_things = get_all_sub_things_recusively(thing)
+        for instance in all_things:
+            assert isinstance(instance, Thing), "instance must be of type Thing"
+            instance.rpc_server = self
+            for action in instance.actions.descriptors.values():
+                if action.execution_info.iscoroutine and not action.execution_info.synchronous:
+                    self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = AsyncScheduler
+                elif not action.execution_info.synchronous:
+                    self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = ThreadedScheduler
+                # else QueuedScheduler which is default
+            # properties need not dealt yet, but may be in future)
+        if self.things is None:
+            self.things = []
+        self.things.append(thing)
+
+    def add_things(self, *things: Thing) -> None:
+        """Adds multiple things to the list of things to serve."""
+        for thing in things:
+            self.add_thing(thing)
 
     @property
     def is_running(self) -> bool:
@@ -957,26 +967,7 @@ def prepare_rpc_server(
     context: zmq.asyncio.Context | None = None,
     **kwargs,
 ) -> None:
-    # expose_eventloop: bool, False
-    #     expose the associated Eventloop which executes the object. This is generally useful for remotely
-    #     adding more objects to the same event loop.
-    # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
-    if context is not None and not isinstance(context, zmq.asyncio.Context):
-        raise TypeError("context must be an instance of zmq.asyncio.Context")
-    context = context or global_config.zmq_context()
-
-    if access_points == "INPROC" or access_points == ZMQ_TRANSPORTS.INPROC:
-        RPCServer(id=instance.id, things=[instance], context=context, logger=instance.logger)
-    else:
-        from ...server.zmq import ZMQServer
-
-        ZMQServer(
-            id=instance.id,
-            things=[instance],
-            context=context,
-            access_points=access_points,
-            logger=instance.logger,
-        )
+    raise NotImplementedError("prepare_rpc_server function is deprecated, use RPCServer class directly.")
 
 
 __all__ = [RPCServer.__name__]
