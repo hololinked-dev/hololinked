@@ -1,15 +1,12 @@
 import logging
 import inspect
-import threading
 import ssl
 import typing
-import warnings
 
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import *  # noqa: F403
 from ..exceptions import *  # noqa: F403
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
-from ..server.server import BaseProtocolServer  # noqa: F401
 from .properties import String, ClassSelector
 from .property import Property
 from .actions import BoundAction, action
@@ -257,10 +254,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 ZMQ context object to be used for creating sockets. If not supplied, a global shared context is used.
                 For INPROC, either do not supply context or use the same context across all threads.
         """
-        from .zmq.rpc_server import prepare_rpc_server
+        from ..server import run, parse_params
 
-        prepare_rpc_server(instance=self, access_points=access_points, **kwargs)
-        self.rpc_server.run()
+        servers = parse_params(self.id, [("ZMQ", dict(access_points=access_points, logger=self.logger, **kwargs))])
+
+        for server in servers:
+            server.add_thing(self)
+        run(*servers)
 
     @forkable  # noqa: F405
     def run_with_http_server(
@@ -302,25 +302,19 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             - `event_handler`: `BaseHandler` | `EventHandler`,
                 custom event handler for handling events
         """
-        # network_interface: str
-        #     Currently there is no logic to detect the IP addresss (as externally visible) correctly, therefore please
-        #     send the network interface name to retrieve the IP. If a DNS server is present, you may leave this field
-        # host: str
-        #     Host Server to subscribe to coordinate starting sequence of things & web GUI
         from ..server.http import HTTPServer
+        from ..server import run
 
-        self.run_with_zmq_server(access_points=ZMQ_TRANSPORTS.INPROC, forked=True)
         http_server = HTTPServer(
             port=port,
             address=address,
             logger=self.logger,
             ssl_context=ssl_context,
             allowed_clients=allowed_clients,
-            # network_interface=network_interface,
             **kwargs,
         )
-        http_server.add_things(dict(INPROC=self.id))
-        http_server.listen()
+        http_server.add_thing(self)
+        run(http_server)
 
     @forkable  # noqa: F405
     def run(
@@ -342,10 +336,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             - `servers`: list[BaseProtocolServer]
                 list of instantiated servers to expose the object.
         """
-        from ..server.http import HTTPServer
-        from ..server.zmq import ZMQServer
-        from ..server.mqtt import MQTTPublisher
-        from .zmq.rpc_server import RPCServer, prepare_rpc_server
+        from ..server import run, parse_params
+        from ..server.server import BaseProtocolServer  # noqa: F401
 
         access_points = kwargs.get("access_points", None)  # type: dict[str, dict | int | str | list[str]]
         servers = kwargs.get("servers", [])  # type: typing.Optional[typing.List[BaseProtocolServer]]
@@ -356,56 +348,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             raise ValueError("Only one of access_points or servers can be provided.")
 
         if access_points is not None:
-            for protocol, params in access_points:
-                if protocol.upper() == "HTTP":
-                    if isinstance(params, int):
-                        params = dict(port=params)
-                    http_server = HTTPServer(**params)
-                    servers.append(http_server)
-                elif protocol.upper() == "ZMQ":
-                    if isinstance(params, int):
-                        params = dict(access_points=[f"tcp://*:{params}"])
-                    elif isinstance(params, str):
-                        params = dict(access_points=[params])
-                    elif isinstance(params, list):
-                        params = dict(access_points=params)
-                    if not any(
-                        isinstance(ap, str) and ap.upper().startswith("INPROC")
-                        for ap in params.get("access_points", [])
-                    ):
-                        params["access_points"].append("INPROC")
-                    prepare_rpc_server(self, **params)
-                    servers.append(self.rpc_server)
-                else:
-                    warnings.warn(f"Unsupported protocol: {protocol}", category=UserWarning)
-
-        if not any(isinstance(server, (RPCServer, ZMQServer)) for server in servers):
-            prepare_rpc_server(self, access_points=ZMQ_TRANSPORTS.INPROC)
+            servers = parse_params(self.id, access_points)
         for server in servers:
-            # this cannot be merged with the loop below because self.rpc_server needs to be set first
-            if isinstance(server, (RPCServer, ZMQServer)):
-                self.rpc_server = server
-
-        for server in servers:
-            if isinstance(server, HTTPServer):
-
-                def start_http_server(server: HTTPServer) -> None:
-                    server.router.add_thing_instance_through_broker(
-                        server_id=self.rpc_server.id,
-                        thing_id=self.id,
-                        access_point="INPROC",
-                    )
-                    server.listen()
-
-                threading.Thread(target=start_http_server, args=(server,)).start()
-            elif isinstance(server, MQTTPublisher):
-                server.add_thing(
-                    server_id=self.rpc_server.id,
-                    thing_id=self.id,
-                    access_point="INPROC",
-                )
-                server.start()
-        self.rpc_server.run()
+            server.add_thing(self)
+        run(*servers)
 
     @action()
     def exit(self) -> None:

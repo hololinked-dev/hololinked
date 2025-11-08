@@ -189,7 +189,7 @@ class InteractionAffordance(Schema):
         raise NotImplementedError("generate_schema must be implemented in subclass of InteractionAffordance")
 
     @classmethod
-    def from_TD(cls, name: str, TD: JSON) -> typing.Union["PropertyAffordance", "ActionAffordance", "EventAffordance"]:
+    def from_TD(cls, name: str, TD: JSON) -> "PropertyAffordance | ActionAffordance | EventAffordance":
         """
         populate the schema from the TD and return it as the container object
 

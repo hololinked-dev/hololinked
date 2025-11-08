@@ -1,21 +1,22 @@
-from typing import Any
-import logging
 import uuid
 import aiomqtt
 import copy
 import ssl
-
+from typing import Any, Optional
 
 from ..utils import get_current_async_loop
 from .utils import consume_broker_queue, consume_broker_pubsub_per_event
 from ..config import global_config
 from ..constants import Operations
 from ..serializers import Serializers
+from ..param.parameters import Selector, String, ClassSelector
+from ..core.zmq.message import EventMessage  # noqa: F401
+from ..core import Thing
 from ..td.interaction_affordance import EventAffordance, PropertyAffordance
-from ..param.parameters import Selector, String, Integer, ClassSelector, List
+from .server import BaseProtocolServer
 
 
-class MQTTPublisher:
+class MQTTPublisher(BaseProtocolServer):
     """
     MQTT Publisher for publishing messages to a specific topic.
     All events defined on the Thing will be published to MQTT topics with topic name "{thing id}/{event name}"
@@ -30,18 +31,19 @@ class MQTTPublisher:
     hostname = String(default="localhost")
     """The MQTT broker hostname"""
 
-    port = Integer(default=1883)
-    """The MQTT broker port"""
-
-    logger = ClassSelector(class_=logging.Logger, default=global_config.logger())  # type: logging.Logger
-    """Logger instance"""
-
-    things = List(default=None, allow_None=True, item_type=tuple)  # type: list[tuple[str, str, str]]
-    """List of things to publish events from, each defined as a tuple of (server id, access point, thing id)"""
-
     ssl_context = ClassSelector(class_=ssl.SSLContext, allow_None=True, default=None)
+    """The SSL context to use for secure connections, or None for no SSL"""
 
-    def __init__(self, hostname: str, port: int, username: str, password: str, qos: int = 1, **kwargs):
+    def __init__(
+        self,
+        hostname: str,
+        port: int,
+        username: str,
+        password: str,
+        things: Optional[list[Thing]] = None,
+        qos: int = 1,
+        **kwargs,
+    ):
         """
         Parameters
         ----------
@@ -61,17 +63,18 @@ class MQTTPublisher:
         self.hostname = hostname
         self.port = port
         self.qos = qos
-        self.things = []
         self.username = username
         self.password = password
+        self.add_things(*(things or []))
         self.logger = kwargs.get("logger", global_config.logger())
         self.ssl_context = kwargs.get("ssl_context", None)
         self._stop_publishing = False
 
-    async def setup(self):
+    async def start(self):
         """
         Sets up the MQTT client and starts publishing events from the configured things.
-        All events are dispatched to their own async tasks. This method returns when setup is complete.
+        All events are dispatched to their own async tasks. This method returns and
+        creates side-effects only.
         """
         self._stop_publishing = False
         self.client = aiomqtt.Client(
@@ -85,20 +88,36 @@ class MQTTPublisher:
             await self.client.__aenter__()
         except aiomqtt.MqttReentrantError:
             pass
-        for server_id, thing_id, access_point in self.things:
+        # better to do later
+        await self.setup()
+
+    async def setup(self) -> None:
+        eventloop = get_current_async_loop()
+        for thing in self.things or []:
+            if not thing.rpc_server:
+                raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
+            self.add_thing_instance_through_broker(
+                server_id=thing.rpc_server.id,
+                access_point="INPROC",
+                thing_id=thing.id,
+            )
+        for thing in self._broker_things:
             thing, td = await consume_broker_queue(
                 id=f"{self.hostname}:{self.port}|mqtt-publisher|{uuid.uuid4().hex[:8]}",
-                server_id=server_id,
-                thing_id=thing_id,
-                access_point=access_point,
+                server_id=thing.server_id,
+                thing_id=thing.thing_id,
+                access_point=thing.access_point,
                 logger=self.logger,
                 context=global_config.zmq_context(),
             )
-            eventloop = get_current_async_loop()
             for event_name in td.get("events", {}).keys():
                 event_affordance = EventAffordance.from_TD(event_name, td)
                 eventloop.create_task(self.publish(event_affordance))
             eventloop.create_task(self.publish_thing_description(td))
+
+    def stop(self):
+        """stop publishing, the client is not closed automatically"""
+        self._stop_publishing = True
 
     async def publish(self, resource: EventAffordance):
         """
@@ -114,13 +133,10 @@ class MQTTPublisher:
         topic = f"{resource.thing_id}/{resource.name}"
         while not self._stop_publishing:
             try:
-                message = await consumer.receive()
+                message = await consumer.receive()  # type: EventMessage | None
                 if message is None:
                     continue
-                if message.body[1].value != b"":
-                    payload = message.body[1]
-                else:
-                    payload = message.body[0]
+                payload = message.oneof_valid_payload
                 await self.client.publish(
                     topic=topic,
                     payload=payload.value,
@@ -129,20 +145,6 @@ class MQTTPublisher:
                 )
             except Exception as ex:
                 self.logger.error(f"Error publishing MQTT message: {ex}")
-
-    def stop(self):
-        """stop publishing, the client is not closed automatically"""
-        self._stop_publishing = True
-
-    def start(self):
-        eventloop = get_current_async_loop()
-        eventloop.create_task(self.setup())
-
-    def add_thing(self, server_id: str, thing_id: str, access_point: str):
-        """Adds a thing to the list of things to publish events from."""
-        if access_point.upper() not in ["TCP", "IPC", "INPROC"]:
-            raise ValueError("Access point must be 'TCP', 'IPC', or 'INPROC'")
-        self.things.append((server_id, thing_id, access_point))
 
     async def publish_thing_description(self, ZMQ_TD: dict[str, Any]) -> dict[str, Any]:
         """Returns the Thing Description of the specified thing."""

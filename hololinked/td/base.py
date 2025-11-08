@@ -36,17 +36,6 @@ class Schema(BaseModel):
     @classmethod
     def format_doc(cls, doc: str):
         """strip tabs, newlines, whitespaces etc. to format the docstring nicely"""
-        # doc_as_list = doc.split('\n')
-        # final_doc = []
-        # for index, line in enumerate(doc_as_list):
-        #     line = line.lstrip('\n').rstrip('\n')
-        #     line = line.lstrip('\t').rstrip('\t')
-        #     line = line.lstrip('\n').rstrip('\n')
-        #     line = line.lstrip().rstrip()
-        #     if index > 0:
-        #         line = ' ' + line # add space to left in case of new line
-        #     final_doc.append(line)
-        # final_doc = ''.join(final_doc)
         doc = inspect.cleandoc(doc)
         # Remove everything after "Parameters\n-----" if present (when using numpydoc)
         marker = "Parameters\n-----"

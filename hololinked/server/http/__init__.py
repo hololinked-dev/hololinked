@@ -1,22 +1,18 @@
-import asyncio
 import warnings
 import logging
 import socket
 import ssl
 import typing
-import msgspec
+from pydantic import BaseModel
 from copy import deepcopy
 from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 # from tornado_http2.server import Server as TornadoHTTP2Server
 
-from ...param import Parameterized
-from ...param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList
+from ...param.parameters import IPAddress, ClassSelector, TypedList
 from ...constants import HTTP_METHODS
 from ...utils import (
-    complete_pending_tasks_in_current_loop,
-    forkable,
     get_current_async_loop,
     issubklass,
     pep8_to_dashed_name,
@@ -30,6 +26,7 @@ from ...core.events import Event
 from ...core.thing import Thing, ThingMeta
 from ...core.zmq.brokers import MessageMappedZMQClientPool
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
+from ..server import BaseProtocolServer, BrokerThing
 from ..security import Security
 from ..utils import consume_broker_queue
 from .handlers import (
@@ -46,55 +43,24 @@ from .handlers import (
 )
 
 
-class RuntimeConfig(msgspec.Struct):
+class RuntimeConfig(BaseModel):
     """Runtime configuration for HTTP server and handlers."""
 
     cors: bool = False
-    """Set CORS headers for the HTTP server. If set to False, CORS headers are not set.
+    """
+    Set CORS headers for the HTTP server. If set to False, CORS headers are not set.
     This is useful when the server is used in a controlled environment where CORS is not needed.
     """
 
 
-class HTTPServer(Parameterized):
+class HTTPServer(BaseProtocolServer):
     """
     HTTP(s) server to expose `Thing` over HTTP protocol. Supports HTTP 1.1.
     Use `add_thing` or `add_property` or `add_action` or `add_event` methods to add things to the server.
     """
 
-    things = TypedList(
-        item_type=(str, Thing),
-        default=None,
-        allow_None=True,
-    )  # type: typing.List[str]
-    """id(s) of the things to be served by the HTTP server."""
-
-    port = Integer(
-        default=8080,
-        bounds=(1, 65535),
-    )  # type: int
-    """the port at which the server should be run"""
-
     address = IPAddress(default="0.0.0.0", doc="IP address")  # type: str
     """IP address, especially to bind to all interfaces or not"""
-
-    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True)  # type: logging.Logger
-    """logging.Logger instance"""
-
-    log_level = Selector(
-        objects=[
-            logging.DEBUG,
-            logging.INFO,
-            logging.ERROR,
-            logging.WARN,
-            logging.CRITICAL,
-            logging.ERROR,
-        ],
-        default=logging.INFO,
-    )  # type: int
-    """
-    alternative to logger, this creates an internal logger with the specified log level 
-    along with a IO stream handler.
-    """
 
     ssl_context = ClassSelector(
         class_=ssl.SSLContext,
@@ -157,6 +123,7 @@ class HTTPServer(Parameterized):
         *,
         port: int = 8080,
         address: str = "0.0.0.0",
+        things: typing.Optional[typing.List[Thing]] = None,
         # host: typing.Optional[str] = None,
         logger: typing.Optional[logging.Logger] = None,
         log_level: int = logging.INFO,
@@ -235,48 +202,54 @@ class HTTPServer(Parameterized):
             logger=self.logger,
         )
         self._disconnected_things = list()  # type: list[tuple[str, str, str]]
+        self.add_things(*(things or []))
 
-    @property
-    def all_ok(self) -> bool:
+    def setup(self) -> bool:
         """check if all the requirements are met before starting the server, auto invoked by listen()"""
         # Add only those code here that needs to be redone always before restarting the server.
         # One time creation attributes/activities must be in init
-        ioloop.IOLoop.clear_current()  # cleat the event in case any pending tasks exist, also restarting with same
+
+        # Comments are above the relevant lines, not below
+        # 1. clear the event loop in case any pending tasks exist, also restarting with same
         # event loop is buggy, so we remove it.
-        event_loop = get_current_async_loop()  # sets async loop for a non-possessing thread as well
+        ioloop.IOLoop.clear_current()
+        # 2. sets async loop for a non-possessing thread as well
         # event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
-        event_loop.call_soon(lambda: asyncio.create_task(self.zmq_client_pool.poll_responses()))
+        event_loop = get_current_async_loop()
+        # 3. schedule the ZMQ client pool polling
+        event_loop.create_task(self.zmq_client_pool.poll_responses())
         # self.zmq_client_pool.handshake(), NOTE - handshake better done upfront as we already poll_responses here
         # which will prevent handshake function to succeed (although handshake will be done)
-
+        # 4. Expose via broker
+        for thing in self.things:
+            if not thing.rpc_server:
+                raise ValueError(f"You need to expose thing {thing.id} via a RPCServer before trying to serve it")
+            self.router.add_thing(thing)
+            event_loop.create_task(
+                self.router.async_add_thing_instance_through_broker(
+                    thing.rpc_server.id,
+                    thing.id,
+                    "INPROC",
+                )
+            )
+        for thing in self._broker_things:
+            event_loop.create_task(
+                self.router.async_add_thing_instance_through_broker(
+                    thing.server_id,
+                    thing.thing_id,
+                    thing.access_point,
+                )
+            )
+        # 5. finally also get a reference of the same event loop from tornado
         self.tornado_event_loop = ioloop.IOLoop.current()
-        # set value based on what event loop we use, there is some difference
-        # between the asyncio event loop and the tornado event loop
 
         self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)  # type: TornadoHTTP1Server
         return True
 
-    @forkable
-    def listen(self, forked: bool = False) -> None:
-        """
-        Start the HTTP server. This method is blocking.
-        Async event loops intending to schedule the HTTP server should instead use
-        the inner tornado instance's (`HTTPServer.tornado_instance`) listen() method.
-
-        Parameters
-        ----------
-        forked: bool, default `False`
-            if `True`, the server is started in a separate thread and the method returns immediately.
-            If `False`, the method blocks until the server is stopped.
-        """
-        assert self.all_ok, (
-            "HTTPServer all is not ok before starting"
-        )  # Will always be True or cause some other exception
+    async def start(self) -> None:
+        self.setup()
         self.tornado_instance.listen(port=self.port, address=self.address)
         self.logger.info(f"started webserver at {self._IP}, ready to receive requests.")
-        self.tornado_event_loop.start()
-        if forked:
-            complete_pending_tasks_in_current_loop()  # will reach here only when the server is stopped, so complete pending tasks
 
     def stop(self, attempt_async_stop: bool = True) -> None:
         """
@@ -297,9 +270,6 @@ class HTTPServer(Parameterized):
             return
         self.tornado_instance.stop()
         run_callable_somehow(self.tornado_instance.close_all_connections())
-        if self.tornado_event_loop is not None:
-            self.tornado_event_loop.stop()
-        complete_pending_tasks_in_current_loop()
 
     async def async_stop(self) -> None:
         """
@@ -311,59 +281,6 @@ class HTTPServer(Parameterized):
             return
         self.tornado_instance.stop()
         await self.tornado_instance.close_all_connections()
-        if self.tornado_event_loop is not None:
-            self.tornado_event_loop.stop()
-            self.logger.info(f"stopped tornado event loop for server {self._IP}")
-
-    def add_things(self, *things: Thing | dict | str) -> None:
-        """
-        Add things to be served by the HTTP server
-
-        Parameters
-        ----------
-        *things: Thing | dict | str
-            the thing instance(s) or thing classe(s) to be served, or a map of address/ZMQ protocol to thing id,
-            for example - `{'tcp://my-pc:5555': 'my-thing-id', 'IPC' : 'my-thing-id-2'}`
-            The server ID needs to match the thing ID, otherwise this method would be unable to find the thing.
-        """
-        for thing in things:
-            if isinstance(thing, Thing):
-                self.router.add_thing_instance(thing)
-            elif isinstance(thing, ThingMeta):
-                raise ValueError(
-                    f"class {thing} is not a thing instance, no need to add it to the server."
-                    + " Just supply a thing instance to the server. skipping..."
-                )
-            elif isinstance(thing, (dict, str)):
-                if isinstance(thing, str):
-                    # if protocol not given, try INPROC first
-                    self.router.add_thing_instance_through_broker(thing, thing, access_point="INPROC")
-                    if not self.zmq_client_pool.get_client_id_from_thing_id(thing):
-                        self.router.add_thing_instance_through_broker(thing, thing, access_point="IPC")
-                else:
-                    for address, thing_id in thing.items():
-                        self.router.add_thing_instance_through_broker(
-                            server_id=thing_id, thing_id=thing_id, access_point=address
-                        )
-            elif issubklass(thing, ThingMeta):
-                raise TypeError("thing should be of type Thing, not ThingMeta")
-            else:
-                raise TypeError(f"thing should be of type Thing, unknown type given - {type(thing)}")
-
-    def add_thing(self, server_id: str, thing_id: str, access_point: str) -> None:
-        """
-        Add thing to be served by the HTTP server
-
-        Parameters
-        ----------
-        thing: str | Thing
-            id of the thing or the thing instance or thing class to be served
-        """
-        self.router.add_zmq_thing_instance(
-            server_id=server_id,
-            thing_id=thing_id,
-            access_point=access_point,
-        )
 
     def add_property(
         self,
@@ -507,6 +424,7 @@ class ApplicationRouter:
         self.app = app
         self.server = server
         self._pending_rules = []
+        self._rules = dict()  # type: dict[str, typing.Any]
 
     # can add a single property, action or event rule
     def add_rule(
@@ -535,7 +453,7 @@ class ApplicationRouter:
                     + f" replacing it for {affordance.what} {affordance.name}",
                     category=UserWarning,
                 )
-        if getattr(affordance, "thing_id", None) is not None:
+        if getattr(affordance, "thing_id", None) and getattr(affordance, "forms", None):
             if not URL_path.startswith(f"/{affordance.thing_id}"):
                 warnings.warn(
                     f"URL path {URL_path} does not start with the thing id {affordance.thing_id},"
@@ -647,45 +565,34 @@ class ApplicationRouter:
         )
 
     # can add an entire thing instance at once
-    def add_thing_instance(self, thing: Thing) -> None:
+    def add_thing(self, thing: Thing) -> None:
         """
         internal method to add a thing instance to be served by the HTTP server. Iterates through the
         interaction affordances and adds a route for each property, action and event.
         """
         # Prepare affordance lists with error handling (single loop)
+        if not isinstance(thing, Thing):
+            raise TypeError(f"thing should be of type Thing, unknown type given - {type(thing)}")
+        TD = thing.rpc_server.get_thing_description(thing, protocol="INPROC", ignore_errors=True)
         properties, actions, events = [], [], []
-        affordances = [
-            (thing.properties.remote_objects.values(), properties, "property"),
-            (thing.actions.descriptors.values(), actions, "action"),
-            (thing.events.descriptors.values(), events, "event"),
-        ]
-        for objs, target_list, affordance_type in affordances:
-            for obj in objs:
-                try:
-                    target_list.append(obj.to_affordance(thing))
-                except Exception as ex:
-                    self.server.logger.error(
-                        f"Failed to convert {affordance_type} {getattr(obj, 'name', obj)} to affordance: {ex}"
-                    )
-
+        for prop in TD.get("properties", dict()).keys():
+            affordance = PropertyAffordance.from_TD(prop, TD)
+            affordance.override_defaults(thing_id=thing.id, thing_cls=thing.__class__, owner=thing)
+            properties.append(affordance)
+        for action in TD.get("actions", dict()).keys():
+            affordance = ActionAffordance.from_TD(action, TD)
+            affordance.override_defaults(thing_id=thing.id, thing_cls=thing.__class__, owner=thing)
+            actions.append(affordance)
+        for event in TD.get("events", dict()).keys():
+            affordance = EventAffordance.from_TD(event, TD)
+            affordance.override_defaults(thing_id=thing.id, thing_cls=thing.__class__, owner=thing)
+            events.append(affordance)
         self._resolve_rules(thing.id, thing.__class__)
         self.add_interaction_affordances(
             properties,
             actions,
             events,
             thing_id=thing.id,
-        )
-
-    # can add an entire thing instance at once over ZMQ
-    def add_thing_instance_through_broker(self, server_id: str, thing_id: str, access_point: str) -> None:
-        """
-        Add a thing served by ZMQ server to the HTTP server. Mostly useful for INPROC transport which behaves like a local object.
-        Iterates through the interaction affordances and adds a route for each property, action and event.
-        """
-        run_callable_somehow(
-            self.async_add_thing_instance_through_broker(
-                thing_id=thing_id, server_id=server_id, access_point=access_point
-            )
         )
 
     async def async_add_thing_instance_through_broker(
@@ -695,23 +602,18 @@ class ApplicationRouter:
         access_point: str = None,
     ) -> None:
         try:
-            self.server._disconnected_things.append((server_id, thing_id, access_point))
-            client, TD = await consume_broker_queue(
+            broker_thing = BrokerThing(server_id=server_id, thing_id=thing_id, access_point=access_point)
+            self.server._disconnected_things.append(broker_thing)
+            client, _ = await consume_broker_queue(
                 id=self.server._IP,
                 server_id=server_id,
                 thing_id=thing_id,
                 access_point=access_point,
             )
-            # Add routes to server
-            self.add_interaction_affordances(
-                [PropertyAffordance.from_TD(name, TD) for name in TD["properties"].keys()],
-                [ActionAffordance.from_TD(name, TD) for name in TD["actions"].keys()],
-                [EventAffordance.from_TD(name, TD) for name in TD["events"].keys()],
-                thing_id=thing_id,
-            )
+
             # add client to pool
             self.server.zmq_client_pool.register(client, thing_id)
-            self.server._disconnected_things.remove((server_id, thing_id, access_point))
+            self.server._disconnected_things.remove(broker_thing)
         except ConnectionError:
             self.server.logger.warning(
                 f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}"
@@ -721,21 +623,26 @@ class ApplicationRouter:
                 f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}. error: {str(ex)}"
             )
 
-    def _resolve_rules(self, thing_id: str, thing_cls: ThingMeta) -> None:
+    def _resolve_rules(
+        self,
+        thing_id: str,
+        thing_cls: ThingMeta,
+    ) -> None:
         """
         Process the pending rules and add them to the application router.
         """
-        pending_rules = []
-        for rule in self._pending_rules:
+        pending_rules = self._pending_rules
+        self._pending_rules = []
+        for rule in pending_rules:
             affordance = rule[2].get("resource", None)  # type: PropertyAffordance | ActionAffordance | EventAffordance
             if not affordance or affordance.owner != thing_cls:
-                pending_rules.append(rule)
+                self._pending_rules.append(rule)
                 continue
+            affordance.override_defaults(thing_cls=thing_cls)
             URL_path, handler, kwargs = rule
             URL_path = f"/{thing_id}{URL_path}"
             rule = (URL_path, handler, kwargs)
-            self.app.wildcard_router.add_rules([rule])
-        self._pending_rules = pending_rules
+            self.add_rule(affordance=affordance, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def __contains__(
         self,
