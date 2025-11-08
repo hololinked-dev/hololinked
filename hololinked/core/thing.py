@@ -1,9 +1,7 @@
 import logging
 import inspect
-import threading
 import ssl
 import typing
-import warnings
 
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import *  # noqa: F403
