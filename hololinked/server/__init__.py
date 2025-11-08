@@ -19,22 +19,22 @@ def run(*servers: BaseProtocolServer) -> None:
     things = list(set(things))  # remove duplicates
 
     zmq_servers = [server for server in servers if isinstance(server, (ZMQServer, RPCServer))]
+    rpc_server = None
+
     if len(zmq_servers) > 1:
         raise ValueError(
             "Only one ZMQServer or RPCServer instance to be run at a time, "
             + "please add all your things to one instance"
         )
-
-    rpc_server = None
-    if not any(isinstance(server, (RPCServer, ZMQServer)) for server in servers):
+    elif len(zmq_servers) == 1:
+        rpc_server = zmq_servers[0]
+    else:
         rpc_server = RPCServer(
             id=f"rpc-broker-{uuid.uuid4().hex[:8]}",
             things=things,
             context=global_config.zmq_context(),
             logger=global_config.logger(),
         )
-    else:
-        rpc_server = zmq_servers[0]
 
     threading.Thread(target=rpc_server.run).start()
 
@@ -43,12 +43,6 @@ def run(*servers: BaseProtocolServer) -> None:
     for server in servers:
         if server == rpc_server:
             continue
-        for thing in server.things:
-            server.add_thing_instance_through_broker(
-                server_id=rpc_server.id,
-                thing_id=thing.id,
-                access_point="INPROC",
-            )
         futures.append(server.start())
 
     loop.run_until_complete(asyncio.gather(*futures))
