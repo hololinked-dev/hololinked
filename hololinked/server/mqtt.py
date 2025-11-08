@@ -93,6 +93,14 @@ class MQTTPublisher(BaseProtocolServer):
 
     async def setup(self) -> None:
         eventloop = get_current_async_loop()
+        for thing in self.things or []:
+            if not thing.rpc_server:
+                raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
+            self.add_thing_instance_through_broker(
+                server_id=thing.rpc_server.id,
+                access_point="INPROC",
+                thing_id=thing.id,
+            )
         for thing in self._broker_things:
             thing, td = await consume_broker_queue(
                 id=f"{self.hostname}:{self.port}|mqtt-publisher|{uuid.uuid4().hex[:8]}",
