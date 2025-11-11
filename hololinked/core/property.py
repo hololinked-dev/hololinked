@@ -168,6 +168,7 @@ class Property(Parameter):
         self._execution_info_validator = None
         self.execution_info = None  # typing.Optional[RemoteResource]
         if remote:
+            # TODO, this execution info validator can be refactored & removed later, adds an additional layer of info
             self._execution_info_validator = RemoteResourceInfoValidator(state=state, isproperty=True, obj=self)
             self.execution_info = self._execution_info_validator  # TODO: use dataclass or remove this attribute
         self.model = None

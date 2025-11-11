@@ -6,7 +6,7 @@ from tornado.iostream import StreamClosedError
 import msgspec
 from msgspec import DecodeError as MsgspecJSONDecodeError
 
-from ...utils import format_exception_as_json, run_callable_somehow
+from ...utils import format_exception_as_json, get_current_async_loop
 from ...config import global_config
 from ...core.zmq.brokers import AsyncEventConsumer, EventConsumer
 from ...core.zmq.message import (
@@ -80,7 +80,12 @@ class BaseHandler(RequestHandler):
         self.schema_validator = None  # self.server.schema_validator # not supported yet
         self.server = owner_inst
         self.zmq_client_pool = self.server.zmq_client_pool
-        self.logger = self.server.logger
+        self.logger = self.server.logger.bind(
+            resource=self.resource.name,
+            what=self.resource.what,
+            thing_id=self.resource.thing_id,
+            path=self.request.path,
+        )
         self.allowed_clients = self.server.allowed_clients
         self.security_schemes = self.server.security_schemes
         self.metadata = metadata or {}
@@ -107,6 +112,7 @@ class BaseHandler(RequestHandler):
             return False
         # Then check an authentication scheme either if the client is allowed or if there is no such list of allowed clients
         if not self.security_schemes:
+            self.logger.debug("no security schemes defined, allowing access")
             authenticated = True
         else:
             try:
@@ -115,6 +121,9 @@ class BaseHandler(RequestHandler):
                 if authorization_header and "basic " in authorization_header.lower():
                     for security_scheme in self.security_schemes:
                         if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
+                            self.logger.info(
+                                f"authenticating client from {origin} with {security_scheme.__class__.__name__}"
+                            )
                             authenticated = (
                                 security_scheme.validate_base64(authorization_header.split()[1])
                                 if security_scheme.expect_base64
@@ -127,10 +136,13 @@ class BaseHandler(RequestHandler):
             except Exception as ex:
                 self.set_status(500, "Authentication error")
                 self.logger.error(f"error while authenticating client - {str(ex)}")
+                self.logger.exception(ex)
                 return False
         if authenticated:
+            self.logger.info("client authenticated successfully")
             return True
         self.set_status(401, "Unauthorized")
+        self.logger.info("client authentication failed or is not authorized to proceed")
         return False  # keep False always at the end
 
     def set_access_control_allow_headers(self) -> None:
@@ -305,6 +317,7 @@ class RPCHandler(BaseHandler):
         if self.server.config.cors:
             # For credential login, access control allow origin cannot be '*',
             # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+            self.logger.debug("setting Access-Control-Allow-Origin")
             self.set_header("Access-Control-Allow-Origin", "*")
 
     async def options(self) -> None:
@@ -338,6 +351,8 @@ class RPCHandler(BaseHandler):
         except Exception as ex:
             self.set_status(400, f"error while decoding request - {str(ex)}")
             self.set_custom_default_headers()
+            self.logger.error(f"error while decoding request - {str(ex)}")
+            self.logger.exception(ex)
             return
         try:
             # TODO - add schema validation here, we are anyway validating at some point within the ZMQ server
@@ -376,7 +391,7 @@ class RPCHandler(BaseHandler):
             # TODO handle reconnection
         except Exception as ex:
             self.logger.error(f"error while scheduling RPC call - {str(ex)}")
-            self.logger.debug(f"traceback - {ex.__traceback__}")
+            self.logger.exception(ex)
             self.set_status(500, f"error while scheduling RPC call - {str(ex)}")
             response_payload = SerializableData(
                 value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
@@ -390,6 +405,7 @@ class RPCHandler(BaseHandler):
     async def handle_no_block_response(self) -> None:
         """handles the no-block response for the noblock calls"""
         try:
+            self.logger.info("waiting for no-block response", message_id=self.message_id)
             response_message = await self.zmq_client_pool.async_recv_response(
                 thing_id=self.resource.thing_id,
                 message_id=self.message_id,
@@ -404,13 +420,14 @@ class RPCHandler(BaseHandler):
                 self.write(response_payload.value)
         except KeyError as ex:
             # if the message id is not found, it means that the response was not received in time
-            self.logger.error(f"error while receiving no-block response - {str(ex)}")
+            self.logger.error(f"message ID not found for no-block response - {str(ex)}")
             self.set_status(404, "message id not found")
         except TimeoutError as ex:
-            self.logger.error(f"error while receiving no-block response - {str(ex)}")
+            self.logger.error(f"timeout while waiting for no-block response - {str(ex)}")
             self.set_status(408, "timeout while waiting for response")
         except Exception as ex:
             self.logger.error(f"error while receiving no-block response - {str(ex)}")
+            self.logger.exception(ex)
             self.set_status(500, f"error while receiving no-block response - {str(ex)}")
             response_payload = SerializableData(
                 value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
@@ -569,13 +586,13 @@ class EventHandler(BaseHandler):
                 event_unique_identifier=f"{self.resource.thing_id}/{self.resource.name}",
                 access_point=form.href,
                 context=global_config.zmq_context(),
-                logger=self.logger,
             )
             event_consumer.subscribe()
             self.set_status(200)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
-            self.set_status(500, "could not subscribe to event source from thing")
+            self.logger.exception(ex)
+            self.set_status(500, f"could not subscribe to event source from thing - {str(ex)}")
             self.write(Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
             return
 
@@ -593,6 +610,7 @@ class EventHandler(BaseHandler):
                 break
             except Exception as ex:
                 self.logger.error(f"error while pushing event - {str(ex)}")
+                self.logger.exception(ex)
                 self.write(self.data_header % Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
         event_consumer.exit()
 
@@ -650,12 +668,18 @@ class StopHandler(BaseHandler):
             return
         try:
             # Stop the Tornado server
-            run_callable_somehow(self.server.async_stop())  # creates a task in current loop
+            origin = self.request.headers.get("Origin")
+            eventloop = get_current_async_loop()
+            self.logger.info(f"stopping HTTP server as per client request from {origin}, scheduling a stop message...")
+            # create a task in current loop
+            eventloop.create_task(self.server.async_stop())
             # dont call it in sequence, its not clear whether its designed for that
             self.set_status(204, "ok")
             self.set_header("Access-Control-Allow-Credentials", "true")
         except Exception as ex:
-            self.set_status(500, str(ex))
+            self.logger.error(f"error while stopping HTTP server - {str(ex)}")
+            self.logger.exception(ex)
+            self.set_status(500, f"error while stopping HTTP server - {str(ex)}")
         self.finish()
 
 
@@ -690,7 +714,9 @@ class ReadinessProbeHandler(BaseHandler):
                 operation="invokeaction",
             )
         except Exception as ex:
-            self.set_status(500, str(ex))
+            self.logger.error(f"error while checking readiness - {str(ex)}")
+            self.logger.exception(ex)
+            self.set_status(500, f"error while checking readiness - {str(ex)}")
         else:
             if not all(reply.body[0].deserialize() is None for thing_id, reply in replies.items()):
                 self.set_status(500, "not all things are ready")

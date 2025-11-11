@@ -47,12 +47,14 @@ class MQTTConsumer(ConsumedThingEvent):
                             f"Error deserializing MQTT message for topic {topic}, "
                             + f"passing payload as it is. message: {ex}"
                         )
+                        self.logger.exception(ex)
                 event_data = SSE()
                 event_data.data = payload
                 event_data.id = message.mid
                 self.schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
             except Exception as ex:
                 self.logger.error(f"Error handling MQTT message for topic {topic}: {ex}")
+                self.logger.exception(ex)
 
         self.sync_client.message_callback_add(topic, on_topic_message)
 
@@ -82,12 +84,14 @@ class MQTTConsumer(ConsumedThingEvent):
                             f"Error deserializing MQTT message for topic {topic}, "
                             + f"passing payload as it is. message: {ex}"
                         )
+                        self.logger.exception(ex)
                 event_data = SSE()
                 event_data.data = payload
                 event_data.id = message.mid
                 await self.async_schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
             except Exception as ex:
                 self.logger.error(f"Error handling MQTT message for topic {topic}: {ex}")
+                self.logger.exception(ex)
         self.async_client.unsubscribe(topic)
 
     def unsubscribe(self) -> None:

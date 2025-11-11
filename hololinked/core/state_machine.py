@@ -285,6 +285,7 @@ class BoundFSM:
             previous_state = self.current_state
             next_state = self.descriptor._get_machine_compliant_state(value)
             self.owner._state_machine_state = next_state
+            self.owner.logger.info(f"state changed from {previous_state} to {next_state}")
             if push_event and self.push_state_change_event and hasattr(self.owner, "event_publisher"):
                 self.owner.state  # just acces to trigger the observable event
             if skip_callbacks:
@@ -364,4 +365,7 @@ def prepare_object_FSM(instance: Thing) -> None:
     cls = instance.__class__
     if cls.state_machine and isinstance(cls.state_machine, StateMachine):
         cls.state_machine.validate(instance)
-        instance.logger.debug("setup state machine")
+        instance.logger.info(
+            f"setup state machine, states={[state.name for state in cls.state_machine.states]}, "
+            + f"initial_state={cls.state_machine.initial_state}"
+        )

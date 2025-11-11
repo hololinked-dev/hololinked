@@ -29,9 +29,8 @@ import os
 import typing
 import warnings
 import zmq.asyncio
-
-
-from .serializers.serializers import PythonBuiltinJSONSerializer
+import json
+from .logger import structlog
 
 
 class Configuration:
@@ -137,7 +136,7 @@ class Configuration:
             warnings.warn("no environment file found although asked to load from one", UserWarning)
             return
         with open(file, "r") as file:
-            config = PythonBuiltinJSONSerializer.load(file)  # type: typing.Dict
+            config = json.load(file)  # type: typing.Dict
         for item, value in config.items():
             setattr(self, item, value)
 
@@ -165,12 +164,6 @@ class Configuration:
         a synchronous socket if necessary.
         """
         return self.ZMQ_CONTEXT
-
-    def logger(self) -> typing.Any:
-        """Returns a global logger instance"""
-        from .utils import get_default_logger
-
-        return get_default_logger("hololinked")
 
     def set_default_server_execution_context(
         self,

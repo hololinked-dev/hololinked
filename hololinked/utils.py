@@ -47,6 +47,15 @@ def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name=None) -
     raise ValueError(f"interface name {interface_name} not found in system interfaces.")
 
 
+def uuid_hex() -> str:
+    """
+    generate a random UUID hex string
+    """
+    from uuid import uuid4
+
+    return uuid4().hex[:8]
+
+
 def format_exception_as_json(exc: Exception) -> typing.Dict[str, typing.Any]:
     """
     return exception as a JSON serializable dictionary

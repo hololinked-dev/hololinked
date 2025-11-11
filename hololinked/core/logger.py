@@ -4,9 +4,9 @@ import datetime
 import threading
 import asyncio
 import time
+import structlog
 from collections import deque
 
-from ..utils import get_default_logger
 from .events import Event
 from .properties import List
 from .properties import Integer, Number
@@ -243,19 +243,32 @@ def prepare_object_logger(instance: RemoteObject, log_level: int, log_file: str,
         if True, a RemoteAccessHandler is attached to the logger.
     """
     if instance.logger is None:
-        instance.logger = get_default_logger(
-            instance.id, logging.INFO if not log_level else log_level, None if not log_file else log_file
+        instance.logger = structlog.get_logger().bind(
+            Thing=instance.__class__.__name__,
+            thing_id=instance.id,
         )
 
-    if remote_access and not any(isinstance(handler, RemoteAccessHandler) for handler in instance.logger.handlers):
+    if isinstance(instance.logger, structlog.stdlib.BoundLoggerBase):
+        stdlib_logger = instance.logger._logger
+    else:
+        stdlib_logger = instance.logger
+    if not isinstance(stdlib_logger, logging.Logger):
+        if remote_access:
+            instance.logger.warning(
+                "logger is not an instance of logging.Logger, cannot setup a RemoteAccessHandler "
+                + "although it has been requested"
+            )
+        return
+
+    if remote_access and not any(isinstance(handler, RemoteAccessHandler) for handler in stdlib_logger.handlers):
         instance._remote_access_loghandler = RemoteAccessHandler(
-            id="logger", maxlen=500, emit_interval=1, logger=instance.logger
+            id="logger", maxlen=500, emit_interval=1, logger=stdlib_logger
         )
         # we set logger=instance.logger because so that we dont recreate one for remote access handler
-        instance.logger.addHandler(instance._remote_access_loghandler)
+        stdlib_logger.addHandler(instance._remote_access_loghandler)
 
     if not isinstance(instance, RemoteAccessHandler):
-        for handler in instance.logger.handlers:
+        for handler in stdlib_logger.handlers:
             # if remote access is True or not, if such a handler is found, make it a sub thing
             if isinstance(handler, RemoteAccessHandler):
                 instance._remote_access_loghandler = handler

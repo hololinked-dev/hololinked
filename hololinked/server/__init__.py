@@ -33,7 +33,6 @@ def run(*servers: BaseProtocolServer) -> None:
             id=f"rpc-broker-{uuid.uuid4().hex[:8]}",
             things=things,
             context=global_config.zmq_context(),
-            logger=global_config.logger(),
         )
 
     threading.Thread(target=rpc_server.run).start()

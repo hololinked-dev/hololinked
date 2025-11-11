@@ -118,6 +118,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
     async def tunnel_events_from_inproc(self) -> None:
         if not self.inproc_events_proxy:
             return
+        self.logger.info("starting to tunnel events from inproc to external publishers")
         self.inproc_events_proxy.subscribe()
         while self._run:
             try:
@@ -134,6 +135,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 break
             except Exception as e:
                 self.logger.error(f"error in tunneling events from inproc: {e}")
+        self.logger.info("stopped tunneling events from inproc")
 
     def stop(self) -> None:
         if self.ipc_server is not None:

@@ -7,6 +7,7 @@ import typing
 import threading
 import logging
 import tracemalloc
+import structlog
 from collections import deque
 
 
@@ -16,7 +17,6 @@ from ...utils import (
     format_exception_as_json,
     get_all_sub_things_recusively,
     get_current_async_loop,
-    get_default_logger,
     set_global_event_loop_policy,
 )
 from ...config import global_config
@@ -116,10 +116,7 @@ class RPCServer(BaseZMQServer):
             access_point = access_point.upper()
 
         if self.logger is None:
-            self.logger = get_default_logger(
-                "{}|{}|{}|{}".format(self.__class__.__name__, "RPC", "MIXED", self.id),
-                kwargs.get("log_level", logging.INFO),
-            )
+            self.logger = structlog.get_logger().bind(impl=self.__class__.__name__, server_id=self.id)
             kwargs["logger"] = self.logger
 
         self._run = False  # flag to stop all the servers
@@ -141,8 +138,9 @@ class RPCServer(BaseZMQServer):
         self.schedulers = dict()
 
     def __post_init__(self):
+        # post init is not called, dont add logic here
         super().__post_init__()
-        self.logger.info("Server with name '{}' can be started using run().".format(self.id))
+        self.logger.info("Server can be started using run()")
 
     def add_thing(self, thing: Thing) -> None:
         """Adds a thing to the list of things to serve."""
@@ -183,7 +181,7 @@ class RPCServer(BaseZMQServer):
         server: AsyncZMQServer
             the server instance to poll for requests
         """
-        self.logger.debug("started polling with server {} at socket {}".format(server.id, server.socket_address))
+        self.logger.debug(f"started polling at socket {server.socket_address}")
         eventloop = asyncio.get_event_loop()
         things = {thing.id: thing for thing in self.things}
         while self._run:
@@ -193,7 +191,8 @@ class RPCServer(BaseZMQServer):
             except BreakLoop:
                 break
             except Exception as ex:
-                self.logger.error(f"exception occurred while polling for server '{server.id}' - {str(ex)}")
+                self.logger.error(f"exception occurred while polling for server - {str(ex)}")
+                self.logger.exception(ex)
                 continue
 
             for request_message in request_messages:
@@ -234,16 +233,19 @@ class RPCServer(BaseZMQServer):
 
                 except Exception as ex:
                     # handle invalid message
-                    self.logger.error(f"exception occurred for message id '{request_message.id}' - {str(ex)}")
-                    invalid_message_task = asyncio.create_task(
-                        server._handle_invalid_message(request_message=request_message, exception=ex)
+                    self.logger.error(
+                        f"exception occurred for message - {str(ex)}",
+                        sender_id=request_message.sender_id,
+                        msg_id=request_message.id,
                     )
-                    eventloop.call_soon(lambda: invalid_message_task)
+                    self.logger.exception(ex)
+                    eventloop.create_task(server._handle_invalid_message(request_message=request_message, exception=ex))
         self.stop()
-        self.logger.info(f"stopped polling for server '{server.id}' {server.socket_address.split(':')[0].upper()}")
+        self.logger.info(f"stopped polling at socket {server.socket_address.split(':')[0].upper()}")
 
     async def tunnel_message_to_things(self, scheduler: "Scheduler") -> None:
         """message tunneler/coordinator between external sockets listening thread and `Thing` object executor thread"""
+        self.logger.info("started schedulers")
         eventloop = get_current_async_loop()
         while self._run and scheduler.run:
             # wait for message first
@@ -322,7 +324,7 @@ class RPCServer(BaseZMQServer):
             )
 
         scheduler.cleanup()
-        self.logger.info("stopped tunneling messages to things")
+        self.logger.info("stopped schedulers")
 
     async def run_thing_instance(self, instance: Thing, scheduler: typing.Optional["Scheduler"] = None) -> None:
         """
@@ -335,14 +337,14 @@ class RPCServer(BaseZMQServer):
         scheduler: Optional[Scheduler]
             scheduler that schedules operations on the `Thing` instance, a default is always available.
         """
-        self.logger.info(
-            "starting to run operations on thing {} of class {}".format(instance.id, instance.__class__.__name__)
-        )
-        if self.logger.level >= logging.ERROR:
-            # sleep added to resolve some issue with logging related IO bound tasks in asyncio - not really clear what it is.
-            # This loop crashes for log levels above ERROR without the following statement
-            await asyncio.sleep(0.001)
-            # TODO - investigate and fix it
+        logger = self.logger.bind(cls=instance.__class__.__name__, thing_id=instance.id)
+        logger.info("starting to run operations on thing")
+        instance.logger.info("waiting to receive operations now")
+        # if logger.level >= logging.ERROR:
+        # sleep added to resolve some issue with logging related IO bound tasks in asyncio - not really clear what it is.
+        # This loop crashes for log levels above ERROR without the following statement
+        await asyncio.sleep(0.001)
+        # TODO - investigate and fix it
         scheduler = scheduler or self.schedulers[instance.id]
         eventloop = get_current_async_loop()
 
@@ -351,7 +353,7 @@ class RPCServer(BaseZMQServer):
             await scheduler.wait_for_operation(eventloop)
             # await scheduler.wait_for_operation()
             if scheduler.last_operation_request is Undefined:
-                instance.logger.warning("No operation request found in thing '{}'".format(instance.id))
+                logger.warning("No operation request found although an interruption to wait was made, continuing...")
                 continue
 
             try:
@@ -369,9 +371,7 @@ class RPCServer(BaseZMQServer):
                 # deserializing the payload required to execute the operation
                 payload = payload.deserialize()
                 preserialized_payload = preserialized_payload.value
-                instance.logger.debug(
-                    f"thing {instance.id} with {thing_id} starting execution of operation {operation} on {objekt}"
-                )
+                instance.logger.debug(f"starting execution of operation {operation} on {objekt}")
 
                 # start activities related to thing execution context
                 fetch_execution_logs = execution_context.pop("fetch_execution_logs", False)
@@ -400,9 +400,7 @@ class RPCServer(BaseZMQServer):
 
             except BreakInnerLoop:
                 # exit the loop and stop the thing
-                instance.logger.info(
-                    "Thing {} with id {} exiting event loop.".format(instance.__class__.__name__, instance.id)
-                )
+                instance.logger.info("exiting event loop")
 
                 # send a reply with None return value
                 rpayload, rpreserialized_payload = self.format_return_value(None, Serializers.json)
@@ -419,11 +417,8 @@ class RPCServer(BaseZMQServer):
 
             except Exception as ex:
                 # error occurred while executing the operation
-                instance.logger.error(
-                    "Thing {} with ID {} produced error : {} - {}.".format(
-                        instance.__class__.__name__, instance.id, type(ex), ex
-                    )
-                )
+                instance.logger.error(f"error while executing operation - {str(ex)}")
+                instance.logger.exception(ex)
 
                 # send a reply with error
                 rpayload, rpreserialized_payload = self.format_return_value(
@@ -441,12 +436,8 @@ class RPCServer(BaseZMQServer):
                 # cleanup
                 if fetch_execution_logs:
                     instance.logger.removeHandler(list_handler)
-                instance.logger.debug(
-                    "thing {} with id {} completed execution of operation {} on {}".format(
-                        instance.__class__.__name__, instance.id, operation, objekt
-                    )
-                )
-        self.logger.info("stopped running thing {}".format(instance.id))
+                instance.logger.debug(f"completed execution of operation {operation} on {objekt}")
+        logger.info("stopped running thing")
 
     async def execute_operation(
         self,
@@ -563,7 +554,6 @@ class RPCServer(BaseZMQServer):
         Runs ZMQ's socket polling in an async loop. This method is blocking and is automatically called by `run()`
         method. Please dont call this method when the async loop is already running.
         """
-        self.logger.info("starting external message listener thread")
         eventloop = get_current_async_loop()
         existing_tasks = asyncio.all_tasks(eventloop)
         eventloop.run_until_complete(
@@ -573,7 +563,6 @@ class RPCServer(BaseZMQServer):
                 *existing_tasks,
             )
         )
-        self.logger.info("exiting external listener event loop {}".format(self.id))
         eventloop.close()
 
     def run_things(self, things: typing.List[Thing]):
@@ -586,9 +575,7 @@ class RPCServer(BaseZMQServer):
             list of `Thing` instances to be executed
         """
         thing_executor_loop = get_current_async_loop()
-        self.logger.info(
-            f"starting thing executor loop in thread {threading.get_ident()} for {[obj.id for obj in things]}"
-        )
+        self.logger.info(f"starting thing in thread {threading.get_ident()} for {[obj.id for obj in things]}")
         thing_executor_loop.run_until_complete(
             asyncio.gather(*[self.run_thing_instance(instance) for instance in things])
         )
@@ -602,7 +589,7 @@ class RPCServer(BaseZMQServer):
         request polling loop. Call `stop()` (threadsafe) to stop the server.
         """
         self._run = True
-        self.logger.info(f"starting RPC server {self.id}")
+        self.logger.info("starting RPC server")
         for thing in self.things:
             self.schedulers[thing.id] = QueuedScheduler(thing, self)
         threads = dict()  # type: typing.Dict[int, threading.Thread]
@@ -613,7 +600,7 @@ class RPCServer(BaseZMQServer):
         self.run_zmq_request_listener()
         for thread in threads.values():
             thread.join()
-        self.logger.info(f"server stopped {self.id}")
+        self.logger.info("RPC server stopped")
 
     def stop(self):
         """Stop the server. This method is threadsafe."""
@@ -631,7 +618,7 @@ class RPCServer(BaseZMQServer):
             if self.event_publisher is not None:
                 self.event_publisher.exit()
         except Exception as ex:
-            self.logger.warning(f"Exception occurred while exiting the server - {str(ex)}")
+            self.logger.warning(f"Exception occurred while exiting the RPC server - {str(ex)}")
 
     def __hash__(self):
         return hash(str(self))

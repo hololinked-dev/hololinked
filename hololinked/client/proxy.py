@@ -1,9 +1,8 @@
 import typing
-import logging
+import structlog
 import base64
 
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
-from ..utils import get_default_logger
 
 
 class ObjectProxy:
@@ -58,7 +57,7 @@ class ObjectProxy:
         self._allow_foreign_attributes = kwargs.get("allow_foreign_attributes", False)
         self._noblock_messages = dict()  # type: typing.Dict[str, ConsumedThingAction | ConsumedThingProperty]
         self._schema_validator = kwargs.get("schema_validator", None)
-        self.logger = kwargs.pop("logger", get_default_logger(self.id, kwargs.get("log_level", logging.INFO)))
+        self.logger = kwargs.pop("logger", structlog.get_logger())
         self.td = kwargs.get("td", dict())  # type: typing.Dict[str, typing.Any]
 
         self._auth_header = None

@@ -3,6 +3,7 @@ import logging
 import socket
 import ssl
 import typing
+import structlog
 from pydantic import BaseModel
 from copy import deepcopy
 from tornado import ioloop
@@ -16,7 +17,6 @@ from ...utils import (
     get_current_async_loop,
     issubklass,
     pep8_to_dashed_name,
-    get_default_logger,
     run_callable_somehow,
 )
 from ...config import global_config
@@ -178,10 +178,7 @@ class HTTPServer(BaseProtocolServer):
 
         self._IP = f"{self.address}:{self.port}"
         if self.logger is None:
-            self.logger = get_default_logger(
-                "{}|{}".format(self.__class__.__name__, f"{self.address}:{self.port}"),
-                self.log_level,
-            )
+            self.logger = structlog.get_logger().bind(protocol="http", host=f"{self.address}:{self.port}")
 
         self.tornado_instance = None
         self.app = Application(
@@ -199,7 +196,6 @@ class HTTPServer(BaseProtocolServer):
             client_ids=[],
             handshake=False,
             poll_timeout=100,
-            logger=self.logger,
         )
         self._disconnected_things = list()  # type: list[tuple[str, str, str]]
         self.add_things(*(things or []))
@@ -249,7 +245,7 @@ class HTTPServer(BaseProtocolServer):
     async def start(self) -> None:
         self.setup()
         self.tornado_instance.listen(port=self.port, address=self.address)
-        self.logger.info(f"started webserver at {self._IP}, ready to receive requests.")
+        self.logger.info(f"started HTTP webserver at {self._IP}, ready to receive requests.")
 
     def stop(self, attempt_async_stop: bool = True) -> None:
         """
@@ -423,6 +419,7 @@ class ApplicationRouter:
     def __init__(self, app: Application, server: HTTPServer) -> None:
         self.app = app
         self.server = server
+        self.logger = server.logger.bind(component="http-router")
         self._pending_rules = []
         self._rules = dict()  # type: dict[str, typing.Any]
 
@@ -461,8 +458,16 @@ class ApplicationRouter:
                     + " This warning can be usually safely ignored."
                 )
                 URL_path = f"/{affordance.thing_id}{URL_path}"
+            self.logger.info(
+                f"adding rule for {affordance.what} {affordance.name} at path {URL_path}"
+                + f" for thing id {affordance.thing_id}"
+            )
             self.app.wildcard_router.add_rules([(URL_path, handler, kwargs)])
         elif affordance.thing_cls is not None:
+            self.logger.info(
+                f"adding pending rule for {affordance.what} {affordance.name} at path {URL_path}"
+                + f" for thing class {affordance.thing_cls.__name__}, probably no forms exist yet."
+            )
             self._pending_rules.append((URL_path, handler, kwargs))
         else:
             raise RuntimeError("object has no thing id or thing class associated with it, cannot add rule")
@@ -615,13 +620,12 @@ class ApplicationRouter:
             self.server.zmq_client_pool.register(client, thing_id)
             self.server._disconnected_things.remove(broker_thing)
         except ConnectionError:
-            self.server.logger.warning(
-                f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}"
+            self.logger.warning(
+                f"could not connect to {thing_id} on server {server_id} with access_point {access_point}"
             )
         except Exception as ex:
-            self.server.logger.error(
-                f"could not connect to {thing_id} using on server {server_id} with access_point {access_point}. error: {str(ex)}"
-            )
+            self.logger.error(f"could not connect to {thing_id} on server {server_id} with access_point {access_point}")
+            self.logger.exception(ex)
 
     def _resolve_rules(
         self,

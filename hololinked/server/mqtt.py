@@ -2,6 +2,7 @@ import uuid
 import aiomqtt
 import copy
 import ssl
+import structlog
 from typing import Any, Optional
 
 from ..utils import get_current_async_loop
@@ -66,7 +67,8 @@ class MQTTPublisher(BaseProtocolServer):
         self.username = username
         self.password = password
         self.add_things(*(things or []))
-        self.logger = kwargs.get("logger", global_config.logger())
+        endpoint = f"{self.hostname}{f':{self.port}' if self.port else ''}"
+        self.logger = kwargs.get("logger", structlog.get_logger().bind(protocol="mqtt", hostname=endpoint))
         self.ssl_context = kwargs.get("ssl_context", None)
         self._stop_publishing = False
 
@@ -86,6 +88,8 @@ class MQTTPublisher(BaseProtocolServer):
         )
         try:
             await self.client.__aenter__()
+            endpoint = f"{self.hostname}{f':{self.port}' if self.port else ''}"
+            self.logger.info(f"Connected to MQTT broker at {endpoint}")
         except aiomqtt.MqttReentrantError:
             pass
         # better to do later
@@ -107,12 +111,12 @@ class MQTTPublisher(BaseProtocolServer):
                 server_id=thing.server_id,
                 thing_id=thing.thing_id,
                 access_point=thing.access_point,
-                logger=self.logger,
                 context=global_config.zmq_context(),
             )
             for event_name in td.get("events", {}).keys():
                 event_affordance = EventAffordance.from_TD(event_name, td)
                 eventloop.create_task(self.publish(event_affordance))
+                self.logger.info(f"MQTT will publish events for {event_name} of thing {thing.id}")
             eventloop.create_task(self.publish_thing_description(td))
 
     def stop(self):
@@ -131,6 +135,7 @@ class MQTTPublisher(BaseProtocolServer):
         consumer = consume_broker_pubsub_per_event(resource)
         consumer.subscribe()
         topic = f"{resource.thing_id}/{resource.name}"
+        self.logger.info(f"Starting to publish events for {resource.name} to MQTT broker on topic {topic}")
         while not self._stop_publishing:
             try:
                 message = await consumer.receive()  # type: EventMessage | None
@@ -143,8 +148,10 @@ class MQTTPublisher(BaseProtocolServer):
                     qos=self.qos,
                     properties=dict(content_type=payload.content_type),
                 )
+                self.logger.debug(f"Published MQTT message for {resource.name} on topic {topic}")
             except Exception as ex:
-                self.logger.error(f"Error publishing MQTT message: {ex}")
+                self.logger.error(f"Error publishing MQTT message for {resource.name}: {ex}")
+        self.logger.info(f"Stopped publishing events for {resource.name} to MQTT broker on topic {topic}")
 
     async def publish_thing_description(self, ZMQ_TD: dict[str, Any]) -> dict[str, Any]:
         """Returns the Thing Description of the specified thing."""
@@ -170,10 +177,12 @@ class MQTTPublisher(BaseProtocolServer):
             form.href = f"mqtt{'s' if self.ssl_context else ''}://{self.hostname}:{self.port}"
             form.mqv_topic = f"{TD['id']}/{name}"
             TD["events"][name]["forms"].append(form.json())
+        topic = f"{TD['id']}/thing-description"
         await self.client.publish(
-            topic=f"{TD['id']}/thing-description",
+            topic=topic,
             payload=Serializers.json.dumps(TD),
             qos=2,
             properties=dict(content_type="application/json"),
             retain=True,
         )
+        self.logger.info(f"Published Thing Description for {TD['id']} to MQTT broker on topic {topic}")
