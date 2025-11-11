@@ -244,6 +244,7 @@ def prepare_object_logger(instance: RemoteObject, log_level: int, log_file: str,
     """
     if instance.logger is None:
         instance.logger = structlog.get_logger().bind(
+            component="thing",
             Thing=instance.__class__.__name__,
             thing_id=instance.id,
         )

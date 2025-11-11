@@ -178,7 +178,7 @@ class HTTPServer(BaseProtocolServer):
 
         self._IP = f"{self.address}:{self.port}"
         if self.logger is None:
-            self.logger = structlog.get_logger().bind(protocol="http", host=f"{self.address}:{self.port}")
+            self.logger = structlog.get_logger().bind(component="http-server", host=f"{self.address}:{self.port}")
 
         self.tornado_instance = None
         self.app = Application(

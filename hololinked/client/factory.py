@@ -93,6 +93,7 @@ class ClientFactory:
         invokation_timeout = kwargs.get("invokation_timeout", 5.0)
         execution_timeout = kwargs.get("execution_timeout", 5.0)
         logger = kwargs.get("logger", structlog.get_logger()).bind(
+            component="client",
             client_id=id,
             protocol="zmq",
             thing_id=thing_id,
@@ -287,6 +288,7 @@ class ClientFactory:
         TD = Serializers.json.loads(response.content)
         id = f"client|{TD['id']}|HTTP|{uuid.uuid4().hex[:8]}"
         logger = kwargs.get("logger", structlog.get_logger()).bind(
+            component="client",
             client_id=id,
             protocol="http",
             thing_id=TD["id"],
@@ -381,6 +383,7 @@ class ClientFactory:
         """
         id = f"mqtt-client|{hostname}:{port}|{uuid.uuid4().hex[:8]}"
         logger = kwargs.get("logger", structlog.get_logger()).bind(
+            component="client",
             client_id=id,
             protocol="mqtt",
             thing_id=thing_id,

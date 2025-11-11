@@ -68,7 +68,7 @@ class MQTTPublisher(BaseProtocolServer):
         self.password = password
         self.add_things(*(things or []))
         endpoint = f"{self.hostname}{f':{self.port}' if self.port else ''}"
-        self.logger = kwargs.get("logger", structlog.get_logger().bind(protocol="mqtt", hostname=endpoint))
+        self.logger = kwargs.get("logger", structlog.get_logger().bind(component="mqtt-publisher", hostname=endpoint))
         self.ssl_context = kwargs.get("ssl_context", None)
         self._stop_publishing = False
 

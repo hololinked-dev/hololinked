@@ -105,6 +105,7 @@ class StateMachine:
         self.initial_state = initial_state
         self.machine = machine
         self.push_state_change_event = push_state_change_event
+        self.logger = None
 
     def __set_name__(self, owner: ThingMeta, name: str) -> None:
         self.name = name
@@ -117,7 +118,6 @@ class StateMachine:
         # reason - metaclass __init__ is called after __set_name__ of descriptors, therefore the new "proper" desriptor
         # registries are available only after that. Until then only the inherited descriptor registries are available,
         # which do not correctly account the subclass's objects.
-
         if self.states is None and self.initial_state is None:
             self._valid = False
             return
@@ -184,6 +184,8 @@ class StateMachine:
             for obj in self.on_exit[state]:  # type: ignore
                 if not isinstance(obj, (FunctionType, MethodType)):
                     raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")
+
+        self.logger = owner.logger.bind(component="state-machine", thing_id=owner.id)
         self._valid = True
 
     def __get__(self, instance, owner) -> "BoundFSM":
@@ -248,6 +250,7 @@ class BoundFSM:
         self.descriptor = state_machine
         self.push_state_change_event = state_machine.push_state_change_event
         self.owner = owner
+        self.logger = state_machine.logger
 
     def get_state(self) -> typing.Union[str, StrEnum, None]:
         """
@@ -285,7 +288,7 @@ class BoundFSM:
             previous_state = self.current_state
             next_state = self.descriptor._get_machine_compliant_state(value)
             self.owner._state_machine_state = next_state
-            self.owner.logger.info(f"state changed from {previous_state} to {next_state}")
+            self.logger.info(f"state changed from {previous_state} to {next_state}")
             if push_event and self.push_state_change_event and hasattr(self.owner, "event_publisher"):
                 self.owner.state  # just acces to trigger the observable event
             if skip_callbacks:

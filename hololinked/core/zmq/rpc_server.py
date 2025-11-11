@@ -115,10 +115,6 @@ class RPCServer(BaseZMQServer):
         if isinstance(access_point, str):
             access_point = access_point.upper()
 
-        if self.logger is None:
-            self.logger = structlog.get_logger().bind(impl=self.__class__.__name__, server_id=self.id)
-            kwargs["logger"] = self.logger
-
         self._run = False  # flag to stop all the servers
         self.context = context or global_config.zmq_context()
 

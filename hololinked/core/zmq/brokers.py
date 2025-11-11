@@ -62,7 +62,7 @@ class BaseZMQ:
         automatically. Each subclass server/client should implement their version of exiting if necessary.
         """
         if not hasattr(self, "logger") or not self.logger:
-            self.logger = structlog.get_logger().bind(broker=self.__class__.__name__, broker_id=self.id)
+            self.logger = structlog.get_logger().bind(component="broker", impl=self.__class__.__name__, id=self.id)
 
     def __del__(self) -> None:
         self.exit()
@@ -285,7 +285,7 @@ class BaseZMQServer(BaseZMQ):
         super().__init__(id=id, **kwargs)
         if not logger:
             logger = structlog.get_logger()
-        self.logger = logger.bind(impl=self.__class__.__name__, server_id=self.id)
+        self.logger = logger.bind(component="broker", impl=self.__class__.__name__, id=self.id)
 
     def handshake(self, request_message: RequestMessage) -> None:
         """
@@ -902,7 +902,7 @@ class BaseZMQClient(BaseZMQ):
         super().__init__(id=id, **kwargs)
         if not logger:
             logger = structlog.get_logger()
-        self.logger = logger.bind(impl=self.__class__.__name__, client_id=id, server_id=server_id)
+        self.logger = logger.bind(component="broker", impl=self.__class__.__name__, id=id, server_id=server_id)
         self.server_id = server_id
         self.socket: zmq.Socket | zmq.asyncio.Socket
         self.poller: zmq.Poller | zmq.asyncio.Poller
@@ -2278,8 +2278,9 @@ class BaseEventConsumer(BaseZMQClient):
         logger = kwargs.get("logger", None)
         if not logger:
             logger = structlog.get_logger().bind(
+                component="broker",
                 impl=self.__class__.__name__,
-                client_id=id,
+                id=id,
                 event_id=event_unique_identifier,
             )
         self.logger = logger
