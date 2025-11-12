@@ -30,7 +30,7 @@ import typing
 import warnings
 import zmq.asyncio
 import json
-from .logger import structlog
+import logging
 
 
 class Configuration:
@@ -100,6 +100,9 @@ class Configuration:
         "ZMQ_CONTEXT",
         # make debugging easier
         "DEBUG",
+        # logging
+        "LOG_LEVEL",
+        "USE_STRUCTLOG",
         # serializers
         "ALLOW_PICKLE",
         "ALLOW_UNKNOWN_SERIALIZATION",
@@ -114,6 +117,8 @@ class Configuration:
         set default values & use the values from environment file.
         Set use_environment to False to not use environment file.
         """
+        # note that all variables have not been implemented yet,
+        # things just come and go as of now
         self.TEMP_DIR = f"{tempfile.gettempdir()}{os.sep}hololinked"
         self.TCP_SOCKET_SEARCH_START_PORT = 60000
         self.TCP_SOCKET_SEARCH_END_PORT = 65535
@@ -127,6 +132,8 @@ class Configuration:
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
         self.ALLOW_CORS = False
+        self.LOG_LEVEL = logging.DEBUG
+        self.USE_STRUCTLOG = True
 
         if not use_environment:
             return
@@ -146,6 +153,10 @@ class Configuration:
             os.mkdir(self.TEMP_DIR)
         except FileExistsError:
             pass
+        from .logger import setup_logging
+
+        if self.USE_STRUCTLOG:
+            setup_logging(log_level=self.LOG_LEVEL)
 
     def copy(self):
         "returns a copy of this config as another object"
