@@ -1,7 +1,9 @@
-import zmq
 import logging
 import typing
-from enum import StrEnum, IntEnum
+
+from enum import IntEnum, StrEnum
+
+import zmq
 
 
 # types
@@ -78,13 +80,6 @@ class ZMQ_TRANSPORTS(StrEnum):
     TCP = "TCP"
     IPC = "IPC"
     INPROC = "INPROC"
-
-
-class HTTPServerTypes(StrEnum):
-    "types of HTTP server"
-
-    SYSTEM_HOST = "SYSTEM_HOST"
-    THING_SERVER = "THING_SERVER"
 
 
 class ZMQSocketType(IntEnum):
