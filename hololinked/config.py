@@ -103,6 +103,7 @@ class Configuration:
         # logging
         "LOG_LEVEL",
         "USE_STRUCTLOG",
+        "COLORED_LOGS",
         # serializers
         "ALLOW_PICKLE",
         "ALLOW_UNKNOWN_SERIALIZATION",
@@ -132,8 +133,9 @@ class Configuration:
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
         self.ALLOW_CORS = False
-        self.LOG_LEVEL = logging.DEBUG
+        self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
         self.USE_STRUCTLOG = True
+        self.COLORED_LOGS = False
 
         if not use_environment:
             return
@@ -156,7 +158,7 @@ class Configuration:
         from .logger import setup_logging
 
         if self.USE_STRUCTLOG:
-            setup_logging(log_level=self.LOG_LEVEL)
+            setup_logging(log_level=self.LOG_LEVEL, colored_logs=self.COLORED_LOGS)
 
     def copy(self):
         "returns a copy of this config as another object"

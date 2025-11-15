@@ -20,7 +20,7 @@ def normalize_component_name(_, __, event_dict: dict[str, Any]) -> dict[str, Any
     return event_dict
 
 
-def setup_logging(log_level: int = logging.INFO) -> None:
+def setup_logging(log_level: int = logging.INFO, colored_logs: bool = False, log_file: str = None) -> None:
     """
     Setup structured logging for hololinked library
     Not a flexible setup, override the entire function if you want a different logging configuration or monkey patch
@@ -31,8 +31,9 @@ def setup_logging(log_level: int = logging.INFO) -> None:
     log_level : int
         The logging level to use
     """
+    logging.basicConfig(stream=sys.stdout, format="%(message)s", level=log_level)
     global default_label_formatter
-    console_renderer = structlog.dev.ConsoleRenderer()
+    console_renderer = structlog.dev.ConsoleRenderer(colors=colored_logs)
     for column in console_renderer.columns:
         if column.key == "logger_name" and isinstance(column.formatter, KeyValueColumnFormatter):
             default_label_formatter = copy.deepcopy(column.formatter)
@@ -54,7 +55,7 @@ def setup_logging(log_level: int = logging.INFO) -> None:
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
     )
 
-    import zmq.asyncio  # noqa: F401
+    import asyncio  # noqa: F401
 
     asyncio_log = structlog.get_logger().bind(component="library|asyncio")
     for name, module in sys.modules.items():
@@ -80,3 +81,14 @@ def setup_logging(log_level: int = logging.INFO) -> None:
         tornado.log.gen_log = tornado_log
     except ImportError:
         pass
+
+    # logger = structlog.get_logger().bind()
+
+    # if not any(isinstance(handler, logging.StreamHandler) for handler in logger._logger.handlers):
+    #     default_handler = logging.StreamHandler(sys.stdout)
+    #     default_handler.setFormatter(logging.Formatter("%(message)s"))
+    #     logger._logger.addHandler(default_handler)
+    # if log_file:
+    #     file_handler = logging.FileHandler(log_file)
+    #     file_handler.setFormatter(logging.Formatter("%(message)s"))
+    #     logger._logger.addHandler(file_handler)

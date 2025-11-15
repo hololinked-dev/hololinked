@@ -1,4 +1,3 @@
-import asyncio
 import typing
 import zmq
 import zmq.asyncio
