@@ -1,9 +1,10 @@
 import typing
+
 import jsonschema
 
-from ..param.parameterized import Parameterized, ParameterizedMetaclass
-from ..constants import JSON
 from ..config import global_config
+from ..constants import JSON
+from ..param.parameterized import Parameterized, ParameterizedMetaclass
 
 
 class Event:
@@ -147,6 +148,7 @@ class EventDispatcher:
 
 
 from .zmq.brokers import EventPublisher  # noqa: E402
+
 
 __all__ = [
     Event.__name__,

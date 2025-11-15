@@ -1,17 +1,18 @@
-import logging
-import typing
-import datetime
-import threading
 import asyncio
+import datetime
+import logging
+import threading
 import time
-import structlog
+import typing
+
 from collections import deque
 
-from .events import Event
-from .properties import List
-from .properties import Integer, Number
-from .thing import Thing as RemoteObject
+import structlog
+
 from .actions import action as remote_method
+from .events import Event
+from .properties import Integer, List, Number
+from .thing import Thing as RemoteObject
 
 
 log_message_schema = {

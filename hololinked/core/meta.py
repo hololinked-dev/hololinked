@@ -1,21 +1,18 @@
 import copy
 import inspect
-from types import FunctionType
 import typing
 
-from ..param.parameterized import (
-    EventResolver as ParamEventResolver,
-    EventDispatcher as ParamEventDispatcher,
-    Parameter,
-    Parameterized,
-    ParameterizedMetaclass,
-    edit_constant as edit_constant_parameters,
-)
-from ..utils import getattr_without_descriptor_read
+from types import FunctionType
+
 from ..constants import JSON, JSONSerializable
+from ..param.parameterized import EventDispatcher as ParamEventDispatcher
+from ..param.parameterized import EventResolver as ParamEventResolver
+from ..param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
+from ..param.parameterized import edit_constant as edit_constant_parameters
+from ..utils import getattr_without_descriptor_read
 from .actions import Action, BoundAction, action
+from .events import Event, EventDispatcher, EventPublisher
 from .property import Property
-from .events import Event, EventPublisher, EventDispatcher
 
 
 class ThingMeta(ParameterizedMetaclass):

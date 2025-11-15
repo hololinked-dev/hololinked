@@ -1,14 +1,15 @@
 import typing
+
+from enum import Enum, EnumMeta, StrEnum
 from types import FunctionType, MethodType
-from enum import EnumMeta, Enum, StrEnum
 
 from ..param import edit_constant
-from .exceptions import StateMachineError
-from .property import Property
-from .properties import ClassSelector, TypedDict, Boolean
-from .thing import Thing
-from .meta import ThingMeta
 from .actions import Action
+from .exceptions import StateMachineError
+from .meta import ThingMeta
+from .properties import Boolean, ClassSelector, TypedDict
+from .property import Property
+from .thing import Thing
 
 
 class StateMachine:

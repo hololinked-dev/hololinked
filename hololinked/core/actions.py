@@ -1,24 +1,27 @@
 import typing
 import warnings
-import jsonschema
+
 from enum import Enum
+from inspect import getfullargspec, iscoroutinefunction
 from types import FunctionType, MethodType
-from inspect import iscoroutinefunction, getfullargspec
+
+import jsonschema
+
 from pydantic import BaseModel, RootModel
 
-from ..param.parameterized import ParameterizedFunction
-from ..constants import JSON
 from ..config import global_config
+from ..constants import JSON
+from ..param.parameterized import ParameterizedFunction
+from ..schema_validators.validators import JSONSchemaValidator, PydanticSchemaValidator
 from ..utils import (
+    get_input_model_from_signature,
     get_return_type_from_signature,
     has_async_def,
-    get_input_model_from_signature,
-    issubklass,
     isclassmethod,
+    issubklass,
 )
-from .exceptions import StateMachineError
-from ..schema_validators.validators import JSONSchemaValidator, PydanticSchemaValidator
 from .dataklasses import ActionInfoValidator
+from .exceptions import StateMachineError
 
 
 class Action:
@@ -128,7 +131,7 @@ class BoundAction:
 
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
-        from .thing import ThingMeta, Thing
+        from .thing import Thing, ThingMeta
 
         # owner class and instance
         self.owner: ThingMeta
