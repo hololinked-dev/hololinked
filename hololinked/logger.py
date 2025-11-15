@@ -31,8 +31,6 @@ def setup_logging(log_level: int = logging.INFO) -> None:
     log_level : int
         The logging level to use
     """
-    logging.basicConfig(format="%(message)s", level=log_level)
-
     global default_label_formatter
     console_renderer = structlog.dev.ConsoleRenderer()
     for column in console_renderer.columns:
@@ -53,6 +51,7 @@ def setup_logging(log_level: int = logging.INFO) -> None:
         logger_factory=structlog.stdlib.LoggerFactory(),
         context_class=dict,
         cache_logger_on_first_use=True,
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
     )
 
     import zmq.asyncio  # noqa: F401
