@@ -1,12 +1,10 @@
-import asyncio
 import unittest
 import logging
-
 
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
 from hololinked.td.interaction_affordance import EventAffordance
-from hololinked.schema_validators import JSONSchemaValidator
+from hololinked.logger import setup_logging
 
 try:
     from .utils import TestCase, TestRunner
@@ -14,6 +12,9 @@ try:
 except ImportError:
     from utils import TestCase, TestRunner
     from things import TestThing
+
+
+setup_logging(log_level=logging.ERROR)
 
 
 class TestEvents(TestCase):
@@ -44,7 +45,7 @@ class TestEvents(TestCase):
         # self.assertFalse(TestThing.test_event._observable) # not an oberservable property
 
         # 2. Test instance-level access to event dispatcher which is returned by the descriptor
-        thing = TestThing(id="test-event", log_level=logging.WARN)
+        thing = TestThing(id="test-event")
         self._test_dispatcher(TestThing.test_event, thing.test_event, thing)  # test dispatcher returned by descriptor
 
         # 3. Event with JSON schema has schema variable set
@@ -73,7 +74,7 @@ class TestEvents(TestCase):
         )
 
         # 3. accessing those descriptors returns the event dispatcher
-        thing = TestThing(id="test-event", log_level=logging.WARN)
+        thing = TestThing(id="test-event")
         self._test_dispatcher(
             TestThing.observable_list_prop._observable_event_descriptor,
             getattr(
@@ -102,7 +103,7 @@ class TestEvents(TestCase):
         """Test event affordance generation"""
 
         # 1. Test event affordance generation
-        thing = TestThing(id="test-event", log_level=logging.WARN)
+        thing = TestThing(id="test-event")
         event = TestThing.test_event.to_affordance(thing)
         self.assertIsInstance(event, EventAffordance)
 

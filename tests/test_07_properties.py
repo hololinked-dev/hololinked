@@ -2,13 +2,13 @@ import logging
 import unittest
 import tempfile
 import os
-import json
 import copy
 import pydantic
 
 from hololinked.core.properties import Number
 from hololinked.storage.database import BaseDB, ThingDB
 from hololinked.serializers import PythonBuiltinJSONSerializer
+from hololinked.logger import setup_logging
 
 try:
     from .utils import TestCase, TestRunner
@@ -16,6 +16,9 @@ try:
 except ImportError:
     from utils import TestCase, TestRunner
     from things import TestThing
+
+
+setup_logging(log_level=logging.ERROR)
 
 
 class TestProperty(TestCase):
@@ -27,8 +30,8 @@ class TestProperty(TestCase):
         self.assertEqual(TestThing.simple_class_prop, 100)
 
         # Test that instance-level access reflects class value
-        instance1 = TestThing(id="test1", log_level=logging.WARN)
-        instance2 = TestThing(id="test2", log_level=logging.WARN)
+        instance1 = TestThing(id="test1")
+        instance2 = TestThing(id="test2")
         self.assertEqual(instance1.simple_class_prop, 100)
         self.assertEqual(instance2.simple_class_prop, 100)
 
@@ -50,7 +53,7 @@ class TestProperty(TestCase):
         # Verify value wasn't changed after failed assignment
         self.assertEqual(TestThing.managed_class_prop, 50)
         # Test instance-level validation
-        instance = TestThing(id="test3", log_level=logging.WARN)
+        instance = TestThing(id="test3")
         with self.assertRaises(ValueError):
             instance.managed_class_prop = -20
         # Test that instance-level access reflects class value
@@ -70,7 +73,7 @@ class TestProperty(TestCase):
             TestThing.readonly_class_prop = "new-value"
 
         # Test that setting raises an error at instance level
-        instance = TestThing(id="test4", log_level=logging.WARN)
+        instance = TestThing(id="test4")
         with self.assertRaises(ValueError):
             instance.readonly_class_prop = "new-value"
 
@@ -88,7 +91,7 @@ class TestProperty(TestCase):
         self.assertEqual(TestThing.deletable_class_prop, 150)
 
         # Test deletion
-        instance = TestThing(id="test5", log_level=logging.WARN)
+        instance = TestThing(id="test5")
         del TestThing.deletable_class_prop
         self.assertEqual(TestThing.deletable_class_prop, 100)  # Should return to default
         self.assertEqual(instance.deletable_class_prop, 100)
@@ -102,7 +105,7 @@ class TestProperty(TestCase):
     def test_05_descriptor_access(self):
         """Test descriptor access for class properties"""
         # Test direct access through descriptor
-        instance = TestThing(id="test6", log_level=logging.WARN)
+        instance = TestThing(id="test6")
         self.assertIsInstance(TestThing.not_a_class_prop, Number)
         self.assertEqual(instance.not_a_class_prop, 43)
         instance.not_a_class_prop = 50
@@ -165,10 +168,10 @@ class TestProperty(TestCase):
 
         test_prekill, test_postkill = self._generate_db_ops_tests()
 
-        thing = TestThing(id=thing_id, use_default_db=True, log_level=logging.WARN)
+        thing = TestThing(id=thing_id, use_default_db=True)
         test_prekill(thing)
 
-        thing = TestThing(id=thing_id, use_default_db=True, log_level=logging.WARN)
+        thing = TestThing(id=thing_id, use_default_db=True)
         test_postkill(thing)
 
     def test_07_json_db_operations(self):
@@ -182,7 +185,6 @@ class TestProperty(TestCase):
             id=thing_id,
             use_json_file=True,
             json_filename=filename,
-            log_level=logging.WARN,
         )
         test_prekill(thing)
 
@@ -190,7 +192,6 @@ class TestProperty(TestCase):
             id=thing_id,
             use_json_file=True,
             json_filename=filename,
-            log_level=logging.WARN,
         )
         test_postkill(thing)
 
@@ -198,7 +199,7 @@ class TestProperty(TestCase):
 
     def test_08_db_config(self):
         """Test database configuration options"""
-        thing = TestThing(id="test-sql-config", log_level=logging.WARN)
+        thing = TestThing(id="test-sql-config")
 
         # ----- SQL config tests -----
         sql_db_config = {
