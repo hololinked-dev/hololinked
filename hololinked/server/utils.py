@@ -86,7 +86,6 @@ def consumer_broker_pubsub(id: str = None, access_point: str = "INPROC") -> Asyn
         event_unique_identifier="",
         access_point=access_point,
         context=global_config.zmq_context(),
-        logger=global_config.logger(),
     )
 
 
@@ -100,5 +99,4 @@ def consume_broker_pubsub_per_event(resource: EventAffordance) -> AsyncEventCons
         event_unique_identifier=f"{resource.thing_id}/{resource.name}",
         access_point=form.href,
         context=global_config.zmq_context(),
-        logger=global_config.logger(),
     )

@@ -1,5 +1,8 @@
-import threading, asyncio
-import logging, multiprocessing, unittest
+import threading
+import asyncio
+import logging
+import multiprocessing
+import unittest
 
 from hololinked.core.zmq.message import (
     ERROR,
@@ -25,7 +28,8 @@ from hololinked.core.zmq.brokers import (
     SyncZMQClient,
     AsyncZMQClient,
 )
-from hololinked.utils import get_current_async_loop, get_default_logger
+from hololinked.utils import get_current_async_loop
+from hololinked.logger import setup_logging
 
 try:
     from .utils import TestRunner
@@ -39,12 +43,15 @@ except ImportError:
     from things import TestThing
 
 
+setup_logging(logging.WARN)
+
+
 class TestBrokerMixin(MessageValidatorMixin):
     """Tests Individual ZMQ Server"""
 
     @classmethod
     def setUpServer(cls):
-        cls.server = AsyncZMQServer(id=cls.server_id, logger=cls.logger)
+        cls.server = AsyncZMQServer(id=cls.server_id)
 
     """
     Base class: BaseZMQ, BaseAsyncZMQ, BaseSyncZMQ
@@ -59,7 +66,7 @@ class TestBrokerMixin(MessageValidatorMixin):
 
     @classmethod
     def setUpThing(cls):
-        cls.thing = TestThing(id=cls.thing_id, logger=cls.logger, remote_accessible_logger=True)
+        cls.thing = TestThing(id=cls.thing_id, remote_accessible_logger=True)
 
     @classmethod
     def startServer(cls):
@@ -72,7 +79,6 @@ class TestBrokerMixin(MessageValidatorMixin):
     def setUpClass(cls):
         super().setUpClass()
         print(f"test ZMQ message brokers {cls.__name__}")
-        cls.logger = get_default_logger("test-message-broker", logging.ERROR)
         cls.done_queue = multiprocessing.Queue()
         cls.last_server_message = None
         cls.setUpThing()
@@ -88,7 +94,6 @@ class TestBasicServerAndClient(TestBrokerMixin):
         cls.sync_client = SyncZMQClient(
             id=cls.client_id,
             server_id=cls.server_id,
-            logger=cls.logger,
             handshake=False,
         )
         cls.client = cls.sync_client
@@ -246,7 +251,6 @@ class TestAsyncZMQClient(TestBrokerMixin):
         cls.async_client = AsyncZMQClient(
             id=cls.client_id,
             server_id=cls.server_id,
-            logger=cls.logger,
             handshake=False,
         )
         cls.client = cls.async_client
@@ -377,7 +381,6 @@ class TestMessageMappedClientPool(TestBrokerMixin):
             id="client-pool",
             client_ids=[cls.client_id],
             server_ids=[cls.server_id],
-            logger=cls.logger,
             handshake=False,
         )
         cls.client._client_to_thing_map[cls.client_id] = cls.thing_id

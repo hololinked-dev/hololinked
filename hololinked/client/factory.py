@@ -1,4 +1,3 @@
-import logging
 import threading
 import uuid
 import base64
@@ -6,6 +5,7 @@ import warnings
 import aiomqtt
 import httpx
 import ssl
+import structlog
 from typing import Any
 from paho.mqtt.client import Client as PahoMQTTClient, MQTTProtocolVersion, CallbackAPIVersion, MQTTMessage
 
@@ -18,7 +18,7 @@ from ..td.interaction_affordance import (
     EventAffordance,
 )
 from ..serializers import Serializers
-from ..utils import get_default_logger, set_global_event_loop_policy
+from ..utils import set_global_event_loop_policy
 from ..constants import ZMQ_TRANSPORTS
 from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
 from .proxy import ObjectProxy
@@ -91,7 +91,12 @@ class ClientFactory:
         skip_interaction_affordances = kwargs.get("skip_interaction_affordances", [])
         invokation_timeout = kwargs.get("invokation_timeout", 5.0)
         execution_timeout = kwargs.get("execution_timeout", 5.0)
-        logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
+        logger = kwargs.get("logger", structlog.get_logger()).bind(
+            component="client",
+            client_id=id,
+            protocol="zmq",
+            thing_id=thing_id,
+        )
 
         # ZMQ req-rep clients
         sync_zmq_client = SyncZMQClient(f"{id}|sync", server_id=server_id, logger=logger, access_point=access_point)
@@ -281,7 +286,12 @@ class ClientFactory:
 
         TD = Serializers.json.loads(response.content)
         id = f"client|{TD['id']}|HTTP|{uuid.uuid4().hex[:8]}"
-        logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
+        logger = kwargs.get("logger", structlog.get_logger()).bind(
+            component="client",
+            client_id=id,
+            protocol="http",
+            thing_id=TD["id"],
+        )
         object_proxy = ObjectProxy(id, td=TD, logger=logger, **kwargs)
 
         for name in TD.get("properties", []):
@@ -371,7 +381,12 @@ class ClientFactory:
                 The logging level to use for the client (e.g., logging.DEBUG, logging.INFO
         """
         id = f"mqtt-client|{hostname}:{port}|{uuid.uuid4().hex[:8]}"
-        logger = kwargs.get("logger", get_default_logger(id, log_level=kwargs.get("log_level", logging.INFO)))
+        logger = kwargs.get("logger", structlog.get_logger()).bind(
+            component="client",
+            client_id=id,
+            protocol="mqtt",
+            thing_id=thing_id,
+        )
 
         td_received_event = threading.Event()
         TD = None

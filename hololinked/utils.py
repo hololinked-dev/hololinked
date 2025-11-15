@@ -47,6 +47,15 @@ def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name=None) -
     raise ValueError(f"interface name {interface_name} not found in system interfaces.")
 
 
+def uuid_hex() -> str:
+    """
+    generate a random UUID hex string
+    """
+    from uuid import uuid4
+
+    return uuid4().hex[:8]
+
+
 def format_exception_as_json(exc: Exception) -> typing.Dict[str, typing.Any]:
     """
     return exception as a JSON serializable dictionary
@@ -166,6 +175,14 @@ async def complete_pending_tasks_in_current_loop_async():
     Complete all pending tasks in the current asyncio event loop.
     """
     await asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
+
+
+def cancel_pending_tasks_in_current_loop():
+    """Cancel all pending tasks in the current asyncio event loop"""
+    loop = get_current_async_loop()
+    tasks = asyncio.all_tasks(loop)
+    for task in tasks:
+        task.cancel()
 
 
 def print_pending_tasks_in_current_loop():

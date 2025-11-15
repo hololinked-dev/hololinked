@@ -2,6 +2,7 @@ import logging
 import inspect
 import ssl
 import typing
+import structlog
 
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import *  # noqa: F403
@@ -37,7 +38,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     )  # type: str
 
     logger = ClassSelector(
-        class_=logging.Logger,
+        class_=(logging.Logger, structlog.stdlib.BoundLoggerBase),
         default=None,
         allow_None=True,
         remote=False,
@@ -111,7 +112,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         EventSource.__init__(self)
         if self.id.startswith("/"):
             self.id = self.id[1:]
-            self.logger.info("removed leading '/' from id")
         if serializer is not None:
             Serializers.register_for_thing_instance(self.id, serializer)
 

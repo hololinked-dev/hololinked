@@ -419,6 +419,7 @@ class ConsumedThingEvent:
                     threading.Thread(target=cb, args=(event_data,)).start()
             except Exception as ex:
                 self.logger.error(f"Error occurred in callback {cb}: {ex}")
+                self.logger.exception(ex)
 
     async def async_schedule_callbacks(self, callbacks, event_data: typing.Any, concurrent: bool = False) -> None:
         """
@@ -445,6 +446,7 @@ class ConsumedThingEvent:
                     cb(event_data)
             except Exception as ex:
                 self.logger.error(f"Error occurred in callback {cb}: {ex}")
+                self.logger.exception(ex)
 
     def add_callbacks(
         self, callbacks: typing.Union[typing.List[typing.Callable], typing.Callable], asynch: bool = False

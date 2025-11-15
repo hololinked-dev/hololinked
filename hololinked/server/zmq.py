@@ -1,7 +1,7 @@
-import asyncio
 import typing
 import zmq
 import zmq.asyncio
+import structlog
 
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import get_current_async_loop
@@ -45,11 +45,15 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         """
         self.ipc_server = self.tcp_server = None
         self.ipc_event_publisher = self.tcp_event_publisher = self.inproc_events_proxy = None
+        tcp_socket_address = None
+
+        logger = kwargs.get("logger", None)
+        if not logger:
+            logger = structlog.get_logger().bind(component="zmq-server")
+            kwargs["logger"] = logger
         super().__init__(id=id, things=things, context=context, **kwargs)
         # note for later refactoring - we dont use add_things method here, be careful if that method becomes overloaded
         # at any point in future
-
-        tcp_socket_address = None
 
         if isinstance(access_points, str):
             access_points = [access_points]
@@ -108,16 +112,17 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         # doc in parent class
         eventloop = get_current_async_loop()
         if self.ipc_server is not None:
-            eventloop.call_soon(lambda: asyncio.create_task(self.recv_requests_and_dispatch_jobs(self.ipc_server)))
+            eventloop.create_task(self.recv_requests_and_dispatch_jobs(self.ipc_server))
         if self.tcp_server is not None:
-            eventloop.call_soon(lambda: asyncio.create_task(self.recv_requests_and_dispatch_jobs(self.tcp_server)))
+            eventloop.create_task(self.recv_requests_and_dispatch_jobs(self.tcp_server))
         if self.inproc_events_proxy is not None:
-            eventloop.call_soon(lambda: asyncio.create_task(self.tunnel_events_from_inproc()))
+            eventloop.create_task(self.tunnel_events_from_inproc())
         super().run_zmq_request_listener()
 
     async def tunnel_events_from_inproc(self) -> None:
         if not self.inproc_events_proxy:
             return
+        self.logger.info("starting to tunnel events from inproc to external publishers")
         self.inproc_events_proxy.subscribe()
         while self._run:
             try:
@@ -134,6 +139,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 break
             except Exception as e:
                 self.logger.error(f"error in tunneling events from inproc: {e}")
+        self.logger.info("stopped tunneling events from inproc")
 
     def stop(self) -> None:
         if self.ipc_server is not None:

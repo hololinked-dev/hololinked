@@ -1,4 +1,5 @@
 import logging
+import structlog
 from pydantic import BaseModel, model_validator
 
 from ..utils import forkable
@@ -28,7 +29,11 @@ class BaseProtocolServer(Parameterized):
     port = Integer(default=9000, bounds=(1, 65535))
     """The protocol port"""
 
-    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True)  # type: logging.Logger
+    logger = ClassSelector(
+        class_=(logging.Logger, structlog.stdlib.BoundLoggerBase),
+        default=None,
+        allow_None=True,
+    )  # type: logging.Logger | structlog.stdlib.BoundLogger
     """Logger instance"""
 
     log_level = Selector(

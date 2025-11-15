@@ -13,6 +13,7 @@ from hololinked.core.dataklasses import ActionInfoValidator
 from hololinked.core.thing import Thing, action
 from hololinked.td.interaction_affordance import ActionAffordance
 from hololinked.schema_validators import JSONSchemaValidator
+from hololinked.logger import setup_logging
 
 try:
     from .utils import TestCase, TestRunner
@@ -22,6 +23,9 @@ except ImportError:
     from utils import TestCase, TestRunner
     from things import TestThing
     from things.test_thing import replace_methods_with_actions
+
+
+setup_logging(log_level=logging.ERROR)
 
 
 class TestAction(TestCase):
@@ -81,7 +85,7 @@ class TestAction(TestCase):
 
     def test_2_bound_method(self):
         """Test if methods decorated with action are correctly bound"""
-        thing = TestThing(id="test-action", log_level=logging.ERROR)
+        thing = TestThing(id="test-action")
         replace_methods_with_actions(thing_cls=TestThing)
 
         # 1. instance method can be decorated with action
@@ -393,7 +397,7 @@ class TestAction(TestCase):
     # TODO - rename this test
     def test_5_thing_cls_actions(self):
         """Test class and instance level action access"""
-        thing = TestThing(id="test-action", log_level=logging.ERROR)
+        thing = TestThing(id="test-action")
         # class level
         for name, action in TestThing.actions.descriptors.items():
             self.assertIsInstance(action, Action)
@@ -432,7 +436,7 @@ class TestAction(TestCase):
 
     def test_6_action_affordance(self):
         """Test if action affordance is correctly created"""
-        thing = TestThing(id="test-action", log_level=logging.ERROR)
+        thing = TestThing(id="test-action")
 
         assert isinstance(thing.action_echo, BoundAction)  # type definition
         affordance = thing.action_echo.to_affordance()

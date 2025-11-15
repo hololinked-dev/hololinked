@@ -29,9 +29,8 @@ import os
 import typing
 import warnings
 import zmq.asyncio
-
-
-from .serializers.serializers import PythonBuiltinJSONSerializer
+import json
+import logging
 
 
 class Configuration:
@@ -101,6 +100,10 @@ class Configuration:
         "ZMQ_CONTEXT",
         # make debugging easier
         "DEBUG",
+        # logging
+        "LOG_LEVEL",
+        "USE_STRUCTLOG",
+        "COLORED_LOGS",
         # serializers
         "ALLOW_PICKLE",
         "ALLOW_UNKNOWN_SERIALIZATION",
@@ -115,6 +118,8 @@ class Configuration:
         set default values & use the values from environment file.
         Set use_environment to False to not use environment file.
         """
+        # note that all variables have not been implemented yet,
+        # things just come and go as of now
         self.TEMP_DIR = f"{tempfile.gettempdir()}{os.sep}hololinked"
         self.TCP_SOCKET_SEARCH_START_PORT = 60000
         self.TCP_SOCKET_SEARCH_END_PORT = 65535
@@ -128,6 +133,9 @@ class Configuration:
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
         self.ALLOW_CORS = False
+        self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
+        self.USE_STRUCTLOG = True
+        self.COLORED_LOGS = False
 
         if not use_environment:
             return
@@ -137,7 +145,7 @@ class Configuration:
             warnings.warn("no environment file found although asked to load from one", UserWarning)
             return
         with open(file, "r") as file:
-            config = PythonBuiltinJSONSerializer.load(file)  # type: typing.Dict
+            config = json.load(file)  # type: typing.Dict
         for item, value in config.items():
             setattr(self, item, value)
 
@@ -147,6 +155,10 @@ class Configuration:
             os.mkdir(self.TEMP_DIR)
         except FileExistsError:
             pass
+        from .logger import setup_logging
+
+        if self.USE_STRUCTLOG:
+            setup_logging(log_level=self.LOG_LEVEL, colored_logs=self.COLORED_LOGS)
 
     def copy(self):
         "returns a copy of this config as another object"
@@ -165,12 +177,6 @@ class Configuration:
         a synchronous socket if necessary.
         """
         return self.ZMQ_CONTEXT
-
-    def logger(self) -> typing.Any:
-        """Returns a global logger instance"""
-        from .utils import get_default_logger
-
-        return get_default_logger("hololinked")
 
     def set_default_server_execution_context(
         self,

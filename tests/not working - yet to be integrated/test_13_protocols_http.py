@@ -55,7 +55,7 @@ class TestHTTPServer(TestCase):
     def test_01_init_run_and_stop(self):
         """Test basic init, run and stop of the HTTP server."""
         # init, run and stop synchronously
-        server = HTTPServer(log_level=logging.ERROR + 10, port=60001)
+        server = HTTPServer(port=60001)
         server.run(forked=True)
         time.sleep(5)
         server.stop()

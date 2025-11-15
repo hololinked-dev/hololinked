@@ -9,7 +9,7 @@ from hololinked.server.zmq import ZMQServer
 from hololinked.server.mqtt import MQTTPublisher
 from hololinked.serializers import Serializers
 from hololinked.config import global_config
-from hololinked.server import run
+from hololinked.server import run, stop
 from things import TestThing, OceanOpticsSpectrometer
 
 global_config.DEBUG = True
@@ -39,7 +39,7 @@ mqtt_ssl.check_hostname = True
 mqtt_ssl.verify_mode = ssl.CERT_REQUIRED
 mqtt_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
 
-http_server = HTTPServer(port=9000)
+http_server = HTTPServer(port=8080, config=dict(cors=True))
 zmq_server = ZMQServer(id="example-test-server", access_points="IPC")
 mqtt_publisher = MQTTPublisher(
     hostname="localhost",
@@ -49,8 +49,19 @@ mqtt_publisher = MQTTPublisher(
     qos=1,
     ssl_context=mqtt_ssl,
 )
+
+
+# thing1.run(servers=[http_server, zmq_server, mqtt_publisher])
 zmq_server.add_things(thing1, thing2)
 mqtt_publisher.add_things(thing2)
 http_server.add_things(thing1)
 
-run(zmq_server, mqtt_publisher, http_server)
+run(zmq_server, mqtt_publisher, http_server, forked=True)
+for i in range(100):
+    print(f"Running main thread iteration {i}")
+    import time
+
+    time.sleep(1)
+
+stop()
+print("Servers shut down successfully.")
