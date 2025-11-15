@@ -21,7 +21,16 @@ def normalize_component_name(_, __, event_dict: dict[str, Any]) -> dict[str, Any
 
 
 def setup_logging(log_level: int = logging.INFO) -> None:
-    """Setup structured logging for hololinked library"""
+    """
+    Setup structured logging for hololinked library
+    Not a flexible setup, override the entire function if you want a different logging configuration or monkey patch
+    this method.
+
+    Parameters
+    ----------
+    log_level : int
+        The logging level to use
+    """
     logging.basicConfig(format="%(message)s", level=log_level)
 
     global default_label_formatter
@@ -46,7 +55,7 @@ def setup_logging(log_level: int = logging.INFO) -> None:
         cache_logger_on_first_use=True,
     )
 
-    import asyncio  # noqa: F401
+    import zmq.asyncio  # noqa: F401
 
     asyncio_log = structlog.get_logger().bind(component="library|asyncio")
     for name, module in sys.modules.items():
@@ -54,9 +63,21 @@ def setup_logging(log_level: int = logging.INFO) -> None:
             if hasattr(module, "logger"):
                 module.logger = asyncio_log
 
-    import tornado.log
+    try:
+        import httpx  # noqa: F401
 
-    tornado_log = structlog.get_logger().bind(component="library|tornado")
-    tornado.log.access_log = tornado_log
-    tornado.log.app_log = tornado_log
-    tornado.log.gen_log = tornado_log
+        # httpx_log = structlog.get_logger().bind(component="library|httpx")
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+    except ImportError:
+        pass
+
+    try:
+        import tornado.log
+
+        tornado_log = structlog.get_logger().bind(component="library|tornado")
+        tornado.log.access_log = tornado_log
+        tornado.log.app_log = tornado_log
+        tornado.log.gen_log = tornado_log
+    except ImportError:
+        pass

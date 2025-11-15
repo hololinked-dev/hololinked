@@ -4,12 +4,13 @@ import threading
 import warnings
 
 from ..config import global_config
-from ..utils import get_current_async_loop, complete_pending_tasks_in_current_loop
+from ..utils import get_current_async_loop, cancel_pending_tasks_in_current_loop, forkable
 from ..core.zmq.rpc_server import RPCServer, ZMQ_TRANSPORTS
 from .server import BaseProtocolServer
 
 
-def run(*servers: BaseProtocolServer) -> None:
+@forkable
+def run(*servers: BaseProtocolServer, forked: bool = False) -> None:
     """run servers and serve your things"""
     from .zmq import ZMQServer
 
@@ -37,15 +38,30 @@ def run(*servers: BaseProtocolServer) -> None:
 
     threading.Thread(target=rpc_server.run).start()
 
+    shutdown_future = asyncio.Event()
+    run.shutdown_future = shutdown_future
+
+    async def shutdown():
+        shutdown_future = run.shutdown_future
+        await shutdown_future.wait()
+
     loop = get_current_async_loop()
-    futures = []
     for server in servers:
         if server == rpc_server:
             continue
-        futures.append(server.start())
+        loop.create_task(server.start())
 
-    loop.run_until_complete(asyncio.gather(*futures))
-    complete_pending_tasks_in_current_loop()
+    loop.run_until_complete(shutdown())
+    rpc_server.stop()
+    cancel_pending_tasks_in_current_loop()
+
+
+def stop():
+    """shutdown all running servers started with run()"""
+    if hasattr(run, "shutdown_future"):
+        run.shutdown_future.set()
+        return
+    warnings.warn("No running servers found to shutdown", category=UserWarning)
 
 
 def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list[str]]]) -> list[BaseProtocolServer]:

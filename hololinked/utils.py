@@ -177,6 +177,14 @@ async def complete_pending_tasks_in_current_loop_async():
     await asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
 
 
+def cancel_pending_tasks_in_current_loop():
+    """Cancel all pending tasks in the current asyncio event loop"""
+    loop = get_current_async_loop()
+    tasks = asyncio.all_tasks(loop)
+    for task in tasks:
+        task.cancel()
+
+
 def print_pending_tasks_in_current_loop():
     """
     Print all pending tasks in the current asyncio event loop.
