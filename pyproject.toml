@@ -32,7 +32,6 @@ classifiers = [
 keywords = ["data-acquisition", "zmq-rpc", "SCADA", "IoT", "Web of Things", "remote data logging"]
 dependencies = [
     "argon2-cffi>=23.1.0",
-    "ifaddr>=0.2.0,<0.3",
     "msgspec>=0.18.6",
     "pyzmq>=25.1.0,<26.2",
     "SQLAlchemy>2.0.21",
@@ -47,6 +46,12 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "structlog>=25.5.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "ifaddr>=0.2.0,<0.3",
+]
+
 
 [project.urls]
 Documentation = "https://hololinked.readthedocs.io/en/latest/index.html"
