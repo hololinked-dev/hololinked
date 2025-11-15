@@ -5,12 +5,14 @@ import socket
 import threading
 import tracemalloc
 import typing
+
 from collections import deque
 
 import structlog
 import zmq
 import zmq.asyncio
 
+from ...config import global_config
 from ...constants import ZMQ_TRANSPORTS, Operations
 from ...serializers import BaseSerializer, Serializers
 from ...utils import (
@@ -34,6 +36,7 @@ from .message import (
     RequestMessage,
     SerializableData,
 )
+
 
 if global_config.TRACE_MALLOC:
     tracemalloc.start()
