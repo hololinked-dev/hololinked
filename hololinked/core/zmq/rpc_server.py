@@ -200,7 +200,7 @@ class RPCServer(BaseZMQServer):
                     timeout_task = None
                     if invokation_timeout is not None:
                         ready_to_process_event = asyncio.Event()
-                        timeout_task = asyncio.create_task(
+                        timeout_task = eventloop.create_task(
                             self._process_timeouts(
                                 request_message=request_message,
                                 ready_to_process_event=ready_to_process_event,
@@ -209,7 +209,6 @@ class RPCServer(BaseZMQServer):
                                 timeout_type="invokation",
                             )
                         )
-                        eventloop.call_soon(lambda: timeout_task)
 
                     # check object level scheduling requirements and schedule the message
                     # append to messages list - message, event, timeout task, origin socket
@@ -273,7 +272,7 @@ class RPCServer(BaseZMQServer):
             execution_timed_out = True
             if execution_timeout is not None:
                 execution_completed_event = asyncio.Event()
-                execution_timeout_task = asyncio.create_task(
+                execution_timeout_task = eventloop.create_task(
                     self._process_timeouts(
                         request_message=request_message,
                         ready_to_process_event=execution_completed_event,
@@ -282,7 +281,6 @@ class RPCServer(BaseZMQServer):
                         timeout_type="execution",
                     )
                 )
-                eventloop.call_soon(lambda: execution_timeout_task)
 
             # always wait for reply from thing, since this loop is asyncio task (& in its own thread in RPC server),
             # timeouts always reach client without truly blocking by the GIL. If reply does not arrive, all other requests
@@ -903,8 +901,8 @@ class AsyncScheduler(Scheduler):
     def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
         self._job = job
         eventloop = get_current_async_loop()
-        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
-        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.run_thing_instance(self.instance, self)))
+        eventloop.create_task(self.rpc_server.tunnel_message_to_things(self))
+        eventloop.create_task(self.rpc_server.run_thing_instance(self.instance, self))
         self._job_queued_event.set()
 
 
@@ -935,7 +933,7 @@ class ThreadedScheduler(Scheduler):
         """"""
         self._job = job
         eventloop = get_current_async_loop()
-        eventloop.call_soon(lambda: asyncio.create_task(self.rpc_server.tunnel_message_to_things(self)))
+        eventloop.create_task(self.rpc_server.tunnel_message_to_things(self))
         self._execution_thread = threading.Thread(
             target=asyncio.run,
             args=(self.rpc_server.run_thing_instance(self.instance, self),),

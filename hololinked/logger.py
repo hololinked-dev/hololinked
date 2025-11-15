@@ -3,6 +3,8 @@ import structlog
 import copy
 from typing import Any
 from structlog.dev import KeyValueColumnFormatter
+import sys
+import types
 
 default_label_formatter = None
 
@@ -44,9 +46,17 @@ def setup_logging(log_level: int = logging.INFO) -> None:
         cache_logger_on_first_use=True,
     )
 
+    import asyncio  # noqa: F401
+
+    asyncio_log = structlog.get_logger().bind(component="library|asyncio")
+    for name, module in sys.modules.items():
+        if name.startswith("asyncio.") and isinstance(module, types.ModuleType):
+            if hasattr(module, "logger"):
+                module.logger = asyncio_log
+
     import tornado.log
 
-    tornado_log = structlog.get_logger().bind(component="library")
+    tornado_log = structlog.get_logger().bind(component="library|tornado")
     tornado.log.access_log = tornado_log
     tornado.log.app_log = tornado_log
     tornado.log.gen_log = tornado_log

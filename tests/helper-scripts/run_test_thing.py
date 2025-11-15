@@ -39,7 +39,7 @@ mqtt_ssl.check_hostname = True
 mqtt_ssl.verify_mode = ssl.CERT_REQUIRED
 mqtt_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
 
-http_server = HTTPServer(port=9000)
+http_server = HTTPServer(port=8080, config=dict(cors=True))
 zmq_server = ZMQServer(id="example-test-server", access_points="IPC")
 mqtt_publisher = MQTTPublisher(
     hostname="localhost",
@@ -49,6 +49,9 @@ mqtt_publisher = MQTTPublisher(
     qos=1,
     ssl_context=mqtt_ssl,
 )
+
+
+# thing1.run(servers=[http_server, zmq_server, mqtt_publisher])
 zmq_server.add_things(thing1, thing2)
 mqtt_publisher.add_things(thing2)
 http_server.add_things(thing1)

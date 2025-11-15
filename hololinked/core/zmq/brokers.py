@@ -10,7 +10,7 @@ import structlog
 from enum import Enum
 from zmq.utils.monitor import parse_monitor_message
 
-from ...utils import format_exception_as_json, run_callable_somehow, uuid_hex
+from ...utils import format_exception_as_json, run_callable_somehow, uuid_hex, get_current_async_loop
 from ...config import global_config
 from ...constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS, get_socket_type_name
 from ...serializers.serializers import Serializers
@@ -1968,8 +1968,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     def start_polling(self) -> None:
         """register the server message polling loop in the asyncio event loop"""
-        event_loop = asyncio.get_event_loop()
-        event_loop.call_soon(lambda: asyncio.create_task(self.poll_responses()))
+        get_current_async_loop().create_task(self.poll_responses())
 
     def stop_polling(self):
         """

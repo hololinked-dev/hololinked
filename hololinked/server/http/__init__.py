@@ -210,7 +210,6 @@ class HTTPServer(BaseProtocolServer):
         # event loop is buggy, so we remove it.
         ioloop.IOLoop.clear_current()
         # 2. sets async loop for a non-possessing thread as well
-        # event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop = get_current_async_loop()
         # 3. schedule the ZMQ client pool polling
         event_loop.create_task(self.zmq_client_pool.poll_responses())
