@@ -1,4 +1,5 @@
 import typing
+
 from enum import Enum, EnumMeta, StrEnum
 from types import FunctionType, MethodType
 

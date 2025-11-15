@@ -4,14 +4,15 @@ resources on the network. These classese are generally not for consumption by th
 """
 
 import typing
+
 from enum import Enum
 from types import FunctionType, MethodType
 
 from pydantic import BaseModel, RootModel
 
-from ..param.parameters import String, Boolean, Tuple, ClassSelector, Parameter
-from ..param.parameterized import ParameterizedMetaclass
 from ..constants import USE_OBJECT_NAME
+from ..param.parameterized import ParameterizedMetaclass
+from ..param.parameters import Boolean, ClassSelector, Parameter, String, Tuple
 from ..schema_validators import BaseSchemaValidator
 from ..utils import issubklass
 
