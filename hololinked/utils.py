@@ -12,7 +12,6 @@ from dataclasses import asdict
 from functools import wraps
 from inspect import Parameter, signature
 
-import ifaddr
 from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
 
 
@@ -33,6 +32,8 @@ def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name=None) -
     str:
         IP address of the interface
     """
+    import ifaddr
+
     adapters = ifaddr.get_adapters(include_unconfigured=True)
     for adapter in adapters:
         if not adapter_name:
@@ -121,6 +122,19 @@ def get_default_logger(
     return logger
 
 
+def get_current_async_loop():
+    """
+    get or automatically create an asnyc loop for the current thread.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        # set_event_loop_policy() - why not?
+        asyncio.set_event_loop(loop)
+    return loop
+
+
 def run_coro_sync(coro: typing.Coroutine):
     """
     run coroutine synchronously
@@ -139,9 +153,7 @@ def run_coro_sync(coro: typing.Coroutine):
         return eventloop.run_until_complete(coro)
 
 
-def run_callable_somehow(
-    method: typing.Union[typing.Callable, typing.Coroutine],
-) -> typing.Any:
+def run_callable_somehow(method: typing.Union[typing.Callable, typing.Coroutine]) -> typing.Any:
     """
     run method if synchronous, or when async, either schedule a coroutine or run it until its complete
     """
@@ -198,9 +210,23 @@ def print_pending_tasks_in_current_loop():
         print(f"Task: {task}, Status: {task._state}")
 
 
-def get_signature(
-    callable: typing.Callable,
-) -> typing.Tuple[typing.List[str], typing.List[type]]:
+def set_global_event_loop_policy():
+    if sys.platform.lower().startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    from .config import global_config
+
+    if global_config.USE_UVLOOP and sys.platform.lower() in [
+        "linux",
+        "darwin",
+        "linux2",
+    ]:
+        import uvloop
+
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
+
+def get_signature(callable: typing.Callable) -> typing.Tuple[typing.List[str], typing.List[type]]:
     """
     Retrieve the names and types of arguments based on annotations for the given callable.
 
@@ -334,19 +360,6 @@ def get_a_filename_from_instance(thing: type, extension: str = "json") -> str:
 
     filename = f"{class_name}-{safe_id or '_'}.{extension}"
     return filename
-
-
-def get_current_async_loop():
-    """
-    get or automatically create an asnyc loop for the current thread.
-    """
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        # set_event_loop_policy() - why not?
-        asyncio.set_event_loop(loop)
-    return loop
 
 
 class SerializableDataclass:
@@ -634,22 +647,6 @@ def forkable(func):
     return wrapper
 
 
-def set_global_event_loop_policy():
-    if sys.platform.lower().startswith("win"):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    from .config import global_config
-
-    if global_config.USE_UVLOOP and sys.platform.lower() in [
-        "linux",
-        "darwin",
-        "linux2",
-    ]:
-        import uvloop
-
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
-
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
@@ -658,14 +655,14 @@ __all__ = [
     run_coro_sync.__name__,
     run_callable_somehow.__name__,
     complete_pending_tasks_in_current_loop.__name__,
+    get_current_async_loop.__name__,
+    set_global_event_loop_policy.__name__,
     get_signature.__name__,
     isclassmethod.__name__,
     issubklass.__name__,
-    get_current_async_loop.__name__,
     get_input_model_from_signature.__name__,
     pydantic_validate_args_kwargs.__name__,
     get_return_type_from_signature.__name__,
     getattr_without_descriptor_read.__name__,
     forkable.__name__,
-    set_global_event_loop_policy.__name__,
 ]
