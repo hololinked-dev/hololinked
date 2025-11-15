@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hololinked"
-version = "0.3.7"
+version = "0.3.8"
 authors = [
     {name = "Vignesh Vaidyanathan", email = "info@hololinked.dev"},
 ]
@@ -143,3 +143,10 @@ exclude_dirs = [
     "licenses", 
     "tests"
 ]
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.isort]
+lines-between-types = 1
+lines-after-imports = 2
