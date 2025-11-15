@@ -1,26 +1,33 @@
-import copy
-import socket
-import zmq
-import zmq.asyncio
 import asyncio
-import typing
-import threading
+import copy
 import logging
+import socket
+import threading
 import tracemalloc
-import structlog
+import typing
+
 from collections import deque
 
+import structlog
+import zmq
+import zmq.asyncio
 
-from ..exceptions import BreakLoop, BreakInnerLoop
+from ...config import global_config
 from ...constants import ZMQ_TRANSPORTS, Operations
+from ...serializers import BaseSerializer, Serializers
 from ...utils import (
     format_exception_as_json,
     get_all_sub_things_recusively,
     get_current_async_loop,
     set_global_event_loop_policy,
 )
-from ...config import global_config
-from ...serializers import Serializers, BaseSerializer
+from ..actions import BoundAction  # noqa: F401
+from ..exceptions import BreakInnerLoop, BreakLoop
+from ..logger import LogHistoryHandler
+from ..properties import TypedList
+from ..property import Property  # noqa: F401
+from ..thing import Thing
+from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
 from .message import (
     EMPTY_BYTE,
     ERROR,
@@ -29,12 +36,6 @@ from .message import (
     RequestMessage,
     SerializableData,
 )
-from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
-from ..thing import Thing
-from ..property import Property  # noqa: F401
-from ..properties import TypedList
-from ..actions import BoundAction  # noqa: F401
-from ..logger import LogHistoryHandler
 
 
 if global_config.TRACE_MALLOC:
@@ -661,7 +662,7 @@ class RPCServer(BaseZMQServer):
         """
         TM = instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()  # type: dict[str, typing.Any]
         TD = copy.deepcopy(TM)
-        from ...td import PropertyAffordance, ActionAffordance, EventAffordance
+        from ...td import ActionAffordance, EventAffordance, PropertyAffordance
         from ...td.forms import Form
 
         if protocol.lower() == "inproc":
