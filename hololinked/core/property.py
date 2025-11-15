@@ -1,12 +1,12 @@
 import typing
 from enum import Enum
 
-from ..exceptions import StateMachineError
 from ..param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
 from ..schema_validators import JSONSchemaValidator
 from ..utils import issubklass
 from .dataklasses import RemoteResourceInfoValidator
 from .events import Event, EventDispatcher  # noqa: F401
+from .exceptions import StateMachineError
 
 
 class Property(Parameter):

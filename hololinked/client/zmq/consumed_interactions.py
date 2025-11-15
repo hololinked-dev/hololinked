@@ -26,8 +26,7 @@ from ...client.abstractions import (
     raise_local_exception,
     SSE,
 )
-from ..exceptions import ReplyNotArrivedError
-from ...exceptions import BreakLoop
+from ..exceptions import ReplyNotArrivedError, BreakLoop
 
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
