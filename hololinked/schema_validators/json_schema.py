@@ -1,4 +1,5 @@
 import typing
+
 from ..constants import JSON
 
 
