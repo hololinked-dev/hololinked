@@ -14,7 +14,7 @@ from ...utils import format_exception_as_json, run_callable_somehow, uuid_hex, g
 from ...config import global_config
 from ...constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS, get_socket_type_name
 from ...serializers.serializers import Serializers
-from ...exceptions import BreakLoop
+from ..exceptions import BreakLoop
 from .message import (
     ERROR,
     EXIT,

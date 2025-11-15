@@ -11,7 +11,7 @@ import structlog
 from collections import deque
 
 
-from ...exceptions import BreakLoop, BreakInnerLoop
+from ..exceptions import BreakLoop, BreakInnerLoop
 from ...constants import ZMQ_TRANSPORTS, Operations
 from ...utils import (
     format_exception_as_json,

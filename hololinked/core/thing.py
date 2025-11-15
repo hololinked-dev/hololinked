@@ -6,7 +6,7 @@ import structlog
 
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import *  # noqa: F403
-from ..exceptions import *  # noqa: F403
+from .exceptions import *  # noqa: F403
 from ..serializers import Serializers, BaseSerializer, JSONSerializer
 from .properties import String, ClassSelector
 from .property import Property

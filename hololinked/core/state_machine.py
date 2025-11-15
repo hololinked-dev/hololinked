@@ -3,7 +3,7 @@ from types import FunctionType, MethodType
 from enum import EnumMeta, Enum, StrEnum
 
 from ..param import edit_constant
-from ..exceptions import StateMachineError
+from .exceptions import StateMachineError
 from .property import Property
 from .properties import ClassSelector, TypedDict, Boolean
 from .thing import Thing

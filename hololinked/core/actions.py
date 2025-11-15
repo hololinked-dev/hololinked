@@ -16,7 +16,7 @@ from ..utils import (
     issubklass,
     isclassmethod,
 )
-from ..exceptions import StateMachineError
+from .exceptions import StateMachineError
 from ..schema_validators.validators import JSONSchemaValidator, PydanticSchemaValidator
 from .dataklasses import ActionInfoValidator
 
