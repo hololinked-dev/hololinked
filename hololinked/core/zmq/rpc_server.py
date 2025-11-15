@@ -372,8 +372,12 @@ class RPCServer(BaseZMQServer):
                 if fetch_execution_logs:
                     list_handler = LogHistoryHandler([])
                     list_handler.setLevel(logging.DEBUG)
-                    list_handler.setFormatter(instance.logger.handlers[0].formatter)
-                    instance.logger.addHandler(list_handler)
+                    if isinstance(instance.logger, structlog.stdlib.BoundLoggerBase):
+                        stdlib_logger = instance.logger._logger
+                    else:
+                        stdlib_logger = instance.logger
+                    list_handler.setFormatter(stdlib_logger.handlers[0].formatter)
+                    stdlib_logger.addHandler(list_handler)
 
                 # execute the operation
                 return_value = await self.execute_operation(instance, objekt, operation, payload, preserialized_payload)
@@ -429,7 +433,11 @@ class RPCServer(BaseZMQServer):
             finally:
                 # cleanup
                 if fetch_execution_logs:
-                    instance.logger.removeHandler(list_handler)
+                    if isinstance(instance.logger, structlog.stdlib.BoundLoggerBase):
+                        stdlib_logger = instance.logger._logger
+                    else:
+                        stdlib_logger = instance.logger
+                    stdlib_logger.removeHandler(list_handler)
                 instance.logger.debug(f"completed execution of operation {operation} on {objekt}")
         logger.info("stopped running thing")
 

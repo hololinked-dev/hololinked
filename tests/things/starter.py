@@ -1,10 +1,16 @@
 import asyncio
-import typing, multiprocessing, threading, logging, queue
+import typing
+import multiprocessing
+import threading
+import logging
+import queue
+
 from hololinked.exceptions import BreakLoop
 from hololinked.core.zmq.brokers import AsyncZMQServer
 from hololinked.core.zmq.message import EXIT
 from hololinked.core import ThingMeta, Thing
 from hololinked.utils import get_current_async_loop
+from hololinked.logger import setup_logging
 
 
 def run_thing_with_zmq_server(
@@ -15,6 +21,7 @@ def run_thing_with_zmq_server(
     log_level: int = logging.WARN,
     prerun_callback: typing.Optional[typing.Callable] = None,
 ) -> None:
+    setup_logging(log_level=log_level)
     if prerun_callback:
         prerun_callback(thing_cls)
     thing = thing_cls(id=id, log_level=log_level)  # type: Thing

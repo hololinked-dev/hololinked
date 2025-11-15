@@ -2,7 +2,7 @@
 
 ## Description
 
-`hololinked` is a beginner-friendly pythonic tool suited for instrumentation control and data acquisition over network (IoT & SCADA).
+`hololinked` is a beginner-friendly, extensible pythonic tool suited for instrumentation control and data acquisition over network (IoT & SCADA).
 
 As a novice, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, and you want to show the data in a dashboard, provide a PyQt GUI or run automated scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 
@@ -19,7 +19,7 @@ From conda - <br>
 `pip install aiomqtt` (needs to be installed separately) <br>
 `conda install -c conda-forge hololinked` <br>
 
-Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
+Or, clone the repository (main branch for latest codebase, which can also contain bugs) and install `pip install .` / `pip install -e .`. The [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
 
 ## Usage/Quickstart
 
@@ -441,7 +441,7 @@ Operations which rely on request-reply pattern (properties and actions) also sup
 - `oneway` - issue the operation and dont collect the reply
 - `noblock` - issue the operation, obtain a message ID and collect the reply when you want
 
-[![Python Client Docs](https://img.shields.io/badge/Python%20Client%20Docs-Read%20More-blue?logo=readthedocs)](https://staging.docs.hololinked.dev)
+[![Python Client Docs](https://img.shields.io/badge/Python%20Client%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/beginners-guide/articles/object-proxy/)
 
 ### Javascript Clients
 

@@ -6,6 +6,7 @@ from uuid import uuid4
 from hololinked.client.abstractions import SSE
 from hololinked.client.factory import ClientFactory
 from hololinked.client.proxy import ObjectProxy
+from hololinked.logger import setup_logging
 
 try:
     from .things import TestThing
@@ -13,6 +14,8 @@ try:
 except ImportError:
     from things import TestThing
     from utils import TestCase, TestRunner, fake, AsyncTestCase
+
+setup_logging(log_level=logging.ERROR + 10)
 
 
 class TestRPCEndToEnd(TestCase):
@@ -29,7 +32,7 @@ class TestRPCEndToEnd(TestCase):
     @classmethod
     def setUpThing(cls):
         """Set up the thing for the zmq object proxy client"""
-        cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR + 10)
+        cls.thing = TestThing(id=cls.thing_id)
         cls.thing.run_with_zmq_server(forked=True)
         cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
 
@@ -51,7 +54,6 @@ class TestRPCEndToEnd(TestCase):
                 cls.server_id,
                 cls.thing_id,
                 "IPC",
-                log_level=logging.ERROR + 10,
                 ignore_TD_errors=True,
             )
             return cls._client
@@ -288,7 +290,7 @@ class TestRPCEndToEndAsync(AsyncTestCase):
     @classmethod
     def setUpThing(cls):
         """Set up the thing for the zmq object proxy client"""
-        cls.thing = TestThing(id=cls.thing_id, log_level=logging.ERROR + 10)
+        cls.thing = TestThing(id=cls.thing_id)
         cls.thing.run_with_zmq_server(forked=True)
         cls.thing_model = cls.thing.get_thing_model(ignore_errors=True).json()
 
@@ -309,7 +311,6 @@ class TestRPCEndToEndAsync(AsyncTestCase):
                 cls.server_id,
                 cls.thing_id,
                 "IPC",
-                log_level=logging.ERROR + 10,
                 ignore_TD_errors=True,
             )
             return cls._client
