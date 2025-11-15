@@ -26,14 +26,17 @@ def normalize_component_name(_, __, event_dict: dict[str, Any]) -> dict[str, Any
 
 def setup_logging(log_level: int = logging.INFO, colored_logs: bool = False, log_file: str = None) -> None:
     """
-    Setup structured logging for hololinked library
-    Not a flexible setup, override the entire function if you want a different logging configuration or monkey patch
-    this method.
+    Setup structured logging using structlog. Not a flexible setup, override the entire function
+    if you want a different logging configuration or monkey patch this method.
 
     Parameters
     ----------
-    log_level : int
-        The logging level to use
+    log_level: int
+        logging level to use
+    colored_logs: bool
+        whether to use colored logs in console, usually harder to pick it up in fluentd
+    log_file: str
+        optional log file to log into
     """
     logging.basicConfig(stream=sys.stdout, format="%(message)s", level=log_level)
     global default_label_formatter
