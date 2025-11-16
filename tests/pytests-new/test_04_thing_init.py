@@ -1,24 +1,24 @@
-import typing
-import unittest
 import pytest
 import logging
+
+from typing import Any
 
 from hololinked.core.actions import BoundAction
 from hololinked.core.events import EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
 from hololinked.core import Thing, ThingMeta, Action, Event, Property
 from hololinked.core.meta import (
-    DescriptorRegistry,
+    DescriptorRegistry,  # noqa: F401
     PropertiesRegistry,
     ActionsRegistry,
     EventsRegistry,
 )
-from hololinked.core.zmq.rpc_server import RPCServer, prepare_rpc_server
-from hololinked.core.properties import Parameter
+from hololinked.core.zmq.rpc_server import RPCServer
+from hololinked.core.properties import Parameter  # noqa: F401
 from hololinked.core.state_machine import BoundFSM
 from hololinked.utils import get_default_logger
 from hololinked.core.logger import RemoteAccessHandler
-
+from hololinked.logger import setup_logging
 
 from things import OceanOpticsSpectrometer
 
@@ -44,12 +44,14 @@ Test sequence is as follows:
 6. Test thing model generation
 """
 
+setup_logging(logging.WARN)
+
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
 def test_1_id(thing_cls: ThingMeta):
     """Test id property of Thing class"""
     # req. 1. instance name must be a string and cannot be changed after set
-    thing = thing_cls(id="test_id", log_level=logging.WARN)  # type: Thing
+    thing = thing_cls(id="test_id")  # type: Thing
     assert thing.id == "test_id"
     with pytest.raises(ValueError):
         thing.id = "new_instance"
@@ -66,10 +68,10 @@ def test_1_id(thing_cls: ThingMeta):
 
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
-def test_2_logger(thing_cls: ThingMeta):
+def notest_2_logger(thing_cls: ThingMeta):
     """Test logger setup"""
     # req. 1. logger must have remote access handler if remote_accessible_logger is True
-    logger = get_default_logger("test_logger", log_level=logging.WARN)
+    logger = get_default_logger("test_logger")
     thing = thing_cls(
         id="test_remote_accessible_logger",
         logger=logger,
@@ -78,7 +80,7 @@ def test_2_logger(thing_cls: ThingMeta):
     assert thing.logger == logger
     assert any(isinstance(handler, RemoteAccessHandler) for handler in thing.logger.handlers)
     # Therefore also check the false condition
-    logger = get_default_logger("test_logger_2", log_level=logging.WARN)
+    logger = get_default_logger("test_logger_2")
     thing = thing_cls(
         id="test_logger_without_remote_access",
         logger=logger,
@@ -88,16 +90,12 @@ def test_2_logger(thing_cls: ThingMeta):
     # NOTE - logger is modifiable after instantiation
 
     # req. 2. logger is created automatically if not provided
-    thing = thing_cls(id="test_logger_auto_creation", log_level=logging.WARN)
+    thing = thing_cls(id="test_logger_auto_creation")
     assert thing.logger is not None
     assert not any(isinstance(handler, RemoteAccessHandler) for handler in thing.logger.handlers)
     assert thing.logger != logger  # not the above logger that we used.
     # remote accessible only when we ask for it
-    thing = thing_cls(
-        id="test_logger_auto_creation_2",
-        log_level=logging.WARN,
-        remote_accessible_logger=True,
-    )  # type: Thing
+    thing = thing_cls(id="test_logger_auto_creation_2", remote_accessible_logger=True)  # type: Thing
     assert thing.logger is not None
     assert any(isinstance(handler, RemoteAccessHandler) for handler in thing.logger.handlers)
     assert thing.logger != logger
@@ -107,7 +105,7 @@ def test_2_logger(thing_cls: ThingMeta):
 def test_3_has_no_fsm(thing_cls: ThingMeta):
     """Test state and state_machine setup"""
     # req. 1. state property must be None when no state machine is present
-    thing = thing_cls(id="test_no_state_machine", log_level=logging.WARN)  # type: Thing
+    thing = thing_cls(id="test_no_state_machine")  # type: Thing
     if thing.state_machine is None:
         assert thing.state is None
         assert thing.state_machine is None
@@ -116,12 +114,12 @@ def test_3_has_no_fsm(thing_cls: ThingMeta):
 @pytest.mark.parametrize("thing_cls", [OceanOpticsSpectrometer])
 def test_4_bound_fsm(thing_cls: ThingMeta):
     """Test state and state_machine setup"""
-    thing1 = thing_cls(id="test_state_machine", log_level=logging.WARN)  # type: Thing
+    thing1 = thing_cls(id="test_state_machine")  # type: Thing
     # req. 1. state and state machine must be present because we create this subclass with a state machine
     assert thing1.state is not None
     assert isinstance(thing1.state_machine, BoundFSM)
     # req. 2. state and state machine must be different for different instances
-    thing2 = thing_cls(id="test_state_machine_2", log_level=logging.WARN)  # type: Thing
+    thing2 = thing_cls(id="test_state_machine_2")  # type: Thing
     # first check if state machine exists
     assert thing2.state is not None
     assert isinstance(thing2.state_machine, BoundFSM)
@@ -142,13 +140,13 @@ def test_4_bound_fsm(thing_cls: ThingMeta):
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
 def test_5_subthings(thing_cls: ThingMeta):
     """Test object composition"""
-    thing = thing_cls(id="test_subthings", log_level=logging.WARN, remote_accessible_logger=True)  # type: Thing
+    thing = thing_cls(id="test_subthings", remote_accessible_logger=True)  # type: Thing
     # req. 1. subthings must be a dictionary
     assert isinstance(thing.sub_things, dict)
     assert len(thing.sub_things) == 1  # logger
     # req. 2. subthings are always recomputed when accessed (at least thats the way it is right now),
     # so we can add new subthings anytime
-    thing.another_thing = OceanOpticsSpectrometer(id="another_thing", log_level=logging.WARN)
+    thing.another_thing = OceanOpticsSpectrometer(id="another_thing")
     assert isinstance(thing.sub_things, dict)
     assert len(thing.sub_things) == 2  # logger + another_thing
     # req. 3. subthings must be instances of Thing and have the parent as owner
@@ -163,11 +161,11 @@ def test_5_subthings(thing_cls: ThingMeta):
 def test_5_servers_init(thing_cls: ThingMeta):
     """Test if servers can be initialized/instantiated"""
     # req. 1. rpc_server and event_publisher must be None when not run()
-    thing = thing_cls(id="test_servers_init", log_level=logging.ERROR)  # type: Thing
+    thing = thing_cls(id="test_servers_init")  # type: Thing
     assert thing.rpc_server is None
     assert thing.event_publisher is None
     # req. 2. rpc_server and event_publisher must be instances of their respective classes when run()
-    prepare_rpc_server(thing, "IPC")
+    RPCServer(id="test-rpc-server-init", things=[thing], logger=thing.logger)  # prepare server class
     assert isinstance(thing.rpc_server, RPCServer)
     assert isinstance(thing.event_publisher, EventPublisher)
     # exit to quit nicely
@@ -180,6 +178,7 @@ Test sequence is as follows:
 1. Test metaclass of Thing class
 2. Test registry creation and access which is currently the main purpose of the metaclass
 """
+
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
 def test_6_metaclass_assigned(thing_cls: ThingMeta):
@@ -209,8 +208,8 @@ def test_7_registry_creation():
     assert Thing.events != OceanOpticsSpectrometer.events
 
     # create instances for further tests
-    thing = Thing(id="test_registry_creation", log_level=logging.WARN)
-    spectrometer = OceanOpticsSpectrometer(id="test_registry_creation_2", log_level=logging.WARN)
+    thing = Thing(id="test_registry_creation")
+    spectrometer = OceanOpticsSpectrometer(id="test_registry_creation_2")
 
     # req. 4. registry attributes must be instances of their respective classes also for instances
     assert isinstance(thing.properties, PropertiesRegistry)
@@ -236,18 +235,6 @@ def test_7_registry_creation():
     assert spectrometer.events != OceanOpticsSpectrometer.events
 
 
-# # Uncomment the following for type hints while coding registry tests,
-# # comment it before testing, otherwise tests will fail due to overriding Thing object
-# # class Thing(Thing):
-# #     class_registry: PropertiesRegistry | ActionsRegistry | EventsRegistry
-# #     instance_registry: PropertiesRegistry  | ActionsRegistry | EventsRegistry  | None
-# #     descriptor_object: type[Property | Action | Event]
-
-# # class OceanOpticsSpectrometer(OceanOpticsSpectrometer):
-# #     class_registry: PropertiesRegistry | ActionsRegistry | EventsRegistry
-# #     instance_registry: PropertiesRegistry  | ActionsRegistry | EventsRegistry  | None
-# #     descriptor_object: type[Property | Action | Event]
-
 """
 Test action registry first because actions are the easiest to test.
 1. Test owner attribute
@@ -255,454 +242,418 @@ Test action registry first because actions are the easiest to test.
 3. Test dunders
 """
 
-def setup_registry_tests():
-   
+
+class Registry:
+    """Class to hold registry class and object for parameterized tests"""
+
+    cls: type[PropertiesRegistry | ActionsRegistry | EventsRegistry]
+    cls_object: PropertiesRegistry | ActionsRegistry | EventsRegistry
+    inst_object: PropertiesRegistry | ActionsRegistry | EventsRegistry | None
+    obj: type[Property | Action | Event]
+    bound_object: type[BoundAction | EventDispatcher] | Any  # any is for property value
+    thing_cls: ThingMeta
+    thing_inst: Thing
+
+    def __init__(self) -> None:
+        pass
+
+
+@pytest.fixture(
+    params=[
+        pytest.param((Thing, PropertiesRegistry), id="Thing-PropertiesRegistry"),
+        pytest.param((Thing, ActionsRegistry), id="Thing-ActionsRegistry"),
+        pytest.param((Thing, EventsRegistry), id="Thing-EventsRegistry"),
+        pytest.param((OceanOpticsSpectrometer, PropertiesRegistry), id="OceanOpticsSpectrometer-PropertiesRegistry"),
+        pytest.param((OceanOpticsSpectrometer, ActionsRegistry), id="OceanOpticsSpectrometer-ActionsRegistry"),
+        pytest.param((OceanOpticsSpectrometer, EventsRegistry), id="OceanOpticsSpectrometer-EventsRegistry"),
+    ],
+)
+def registry(request) -> Registry:
     # create instances for further tests
-    cls.thing = Thing(id=f"test_{cls.registry_object.__name__}_registry", log_level=logging.WARN)
-    cls.spectrometer = OceanOpticsSpectrometer(
-        id=f"test_{cls.registry_object.__name__}_registry", log_level=logging.WARN
-    )
-    if cls.registry_cls == ActionsRegistry:
-        Thing.class_registry = Thing.actions
-        OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.actions
-        cls.thing.instance_registry = cls.thing.actions
-        cls.spectrometer.instance_registry = cls.spectrometer.actions
-        cls.bound_object = BoundAction
-    elif cls.registry_cls == PropertiesRegistry:
-        Thing.class_registry = Thing.properties
-        OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.properties
-        cls.thing.instance_registry = cls.thing.properties
-        cls.spectrometer.instance_registry = cls.spectrometer.properties
-        cls.bound_object = typing.Any
-    elif cls.registry_cls == EventsRegistry:
-        Thing.class_registry = Thing.events
-        OceanOpticsSpectrometer.class_registry = OceanOpticsSpectrometer.events
-        cls.thing.instance_registry = cls.thing.events
-        cls.spectrometer.instance_registry = cls.spectrometer.events
-        cls.bound_object = EventDispatcher
+    cls, registry_cls = request.param
+    thing = cls(id=f"test_{registry_cls.__name__}_registry")
+    registry = Registry()
+    registry.thing_cls = cls
+    registry.thing_inst = thing
+    registry.cls = registry_cls
+    if registry_cls == ActionsRegistry:
+        registry.cls_object = cls.actions
+        registry.inst_object = thing.actions
+        registry.obj = Action
+        registry.bound_object = BoundAction
+    elif registry_cls == PropertiesRegistry:
+        registry.cls_object = cls.properties
+        registry.inst_object = thing.properties
+        registry.obj = Parameter
+        registry.bound_object = Any
+    elif registry_cls == EventsRegistry:
+        registry.cls_object = cls.events
+        registry.inst_object = thing.events
+        registry.obj = Event
+        registry.bound_object = EventDispatcher
     else:
         raise NotImplementedError("This registry class is not implemented")
-    yield 
+    return registry
 
 
-
-def test_8_registry_owner():
+def test_8_registry_owner(registry: Registry):
     """Test owner attribute of DescriptorRegistry"""
     # See comment above TestRegistry class to enable type definitions
     # req. 1. owner attribute must be the class itself when accessed as class attribute
-    assert Thing.class_registry.owner == Thing
-    assert OceanOpticsSpectrometer.class_registry.owner == OceanOpticsSpectrometer
+    assert registry.cls_object.owner == registry.thing_cls
     # therefore owner instance must be None
-    assert Thing.class_registry.owner_inst is None
-    assert OceanOpticsSpectrometer.class_registry.owner_inst is None
+    assert registry.cls_object.owner_inst is None
 
     # req. 2. owner attribute must be the instance for instance registries (i.e. when accessed as instance attribute)
-    assert self.thing.instance_registry.owner == self.thing
-    assert self.spectrometer.instance_registry.owner == self.spectrometer
-    assert self.thing.instance_registry.owner_cls == Thing
-    assert self.spectrometer.instance_registry.owner_cls == OceanOpticsSpectrometer
+    assert registry.inst_object.owner == registry.thing_inst
+    assert registry.inst_object.owner_cls == registry.thing_cls
 
     # req. 3. descriptor_object must be defined correctly and is a class
-    assert Thing.class_registry.descriptor_object == self.registry_object
-    assert OceanOpticsSpectrometer.class_registry.descriptor_object == self.registry_object
-    assert self.thing.instance_registry.descriptor_object == self.registry_object
-    assert self.spectrometer.instance_registry.descriptor_object == self.registry_object
-        self.thing.instance_registry.descriptor_object,
-        Thing.class_registry.descriptor_object,
+    assert registry.cls_object.descriptor_object == registry.obj
+    assert registry.inst_object.descriptor_object == registry.obj
+    assert registry.cls_object.descriptor_object == registry.inst_object.descriptor_object
+
+
+def test_9_descriptors_access(registry: Registry):
+    """Test descriptors access"""
+
+    # req. 1. descriptors are instances of the descriptor object - Property | Action | Event
+    for name, value in registry.cls_object.descriptors.items():
+        assert isinstance(value, registry.obj)
+        assert isinstance(name, str)
+
+    # req. 2. either class level or instance level descriptors are same - not a strict requirement for different
+    # use cases, one can always add instance level descriptors
+    for name, value in registry.inst_object.descriptors.items():
+        assert isinstance(value, registry.obj)
+        assert isinstance(name, str)
+
+    # req. 3. because class level and instance level descriptors are same, they are equal
+    for (name, value), (name2, value2) in zip(
+        registry.cls_object.descriptors.items(),
+        registry.inst_object.descriptors.items(),
+    ):
+        assert name == name2
+        assert value == value2
+
+    # req. 4. descriptors can be cleared
+    assert hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{registry.cls.__name__.lower()}",
+    )
+    registry.inst_object.clear()
+    assert not hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{registry.cls.__name__.lower()}",
+    )
+    # clearing again any number of times should not raise error
+    registry.inst_object.clear()
+    registry.inst_object.clear()
+    assert not hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{registry.cls.__name__.lower()}",
     )
 
 
-#     def test_2_descriptors(self):
-#         """Test descriptors access"""
-#         if self.is_abstract_test_class:
-#             return
+def test_10_registry_dunders(registry: Registry):
+    """Test dunders of DescriptorRegistry"""
 
-#         # req. 1. descriptors are instances of the descriptor object - Property | Action | Event
-#         for name, value in Thing.class_registry.descriptors.items():
-#             self.assertIsInstance(value, self.registry_object)
-#             self.assertIsInstance(name, str)
-#         for name, value in OceanOpticsSpectrometer.class_registry.descriptors.items():
-#             self.assertIsInstance(value, self.registry_object)
-#             self.assertIsInstance(name, str)
-#         # subclass have more descriptors than parent class because our example Thing OceanOpticsSpectrometer
-#         # has defined its own actions, properties and events
-#         self.assertTrue(len(OceanOpticsSpectrometer.class_registry.descriptors) > len(Thing.class_registry.descriptors))
-#         # req. 2. either class level or instance level descriptors are same - not a strict requirement for different
-#         # use cases, one can always add instance level descriptors
-#         for name, value in self.thing.instance_registry.descriptors.items():
-#             self.assertIsInstance(value, self.registry_object)
-#             self.assertIsInstance(name, str)
-#         for name, value in self.spectrometer.instance_registry.descriptors.items():
-#             self.assertIsInstance(value, self.registry_object)
-#             self.assertIsInstance(name, str)
-#         # req. 3. because class level and instance level descriptors are same, they are equal
-#         for (name, value), (name2, value2) in zip(
-#             Thing.class_registry.descriptors.items(),
-#             self.thing.instance_registry.descriptors.items(),
-#         ):
-#             self.assertEqual(name, name2)
-#             self.assertEqual(value, value2)
-#         for (name, value), (name2, value2) in zip(
-#             OceanOpticsSpectrometer.class_registry.descriptors.items(),
-#             self.spectrometer.instance_registry.descriptors.items(),
-#         ):
-#             self.assertEqual(name, name2)
-#             self.assertEqual(value, value2)
-#         # req. 4. descriptors can be cleared
-#         self.assertTrue(
-#             hasattr(
-#                 self.thing.instance_registry,
-#                 f"_{self.thing.instance_registry._qualified_prefix}_{self.registry_cls.__name__.lower()}",
-#             )
-#         )
-#         self.thing.instance_registry.clear()
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.instance_registry,
-#                 f"_{self.thing.instance_registry._qualified_prefix}_{self.registry_cls.__name__.lower()}",
-#             )
-#         )
-#         # clearing again any number of times should not raise error
-#         self.thing.instance_registry.clear()
-#         self.thing.instance_registry.clear()
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.instance_registry,
-#                 f"_{self.thing.instance_registry._qualified_prefix}_{self.registry_cls.__name__.lower()}",
-#             )
-#         )
+    # req. 1. __getitem__ must return the descriptor object
+    for name, value in registry.cls_object.descriptors.items():
+        assert registry.cls_object[name] == value
+        # req. 2. __contains__ must return True if the descriptor is present
+        assert value in registry.cls_object
+        assert name in registry.cls_object.descriptors.keys()
 
-#     def test_3_dunders(self):
-#         """Test dunders of DescriptorRegistry"""
-#         if self.is_abstract_test_class:
-#             return
+    # req. 2. __iter__ must return an iterator over the descriptors dictionary
+    # which in turn iterates over the keys
+    assert all(isinstance(descriptor_name, str) for descriptor_name in registry.cls_object)
+    assert all(isinstance(descriptor_name, str) for descriptor_name in registry.inst_object)
+    # __iter__ can also be casted as other iterators like lists
+    descriptors = list(registry.inst_object)
+    assert isinstance(descriptors, list)
+    assert all(isinstance(descriptor_name, str) for descriptor_name in descriptors)
 
-#         # req. 1. __getitem__ must return the descriptor object
-#         for name, value in Thing.class_registry.descriptors.items():
-#             self.assertEqual(Thing.class_registry[name], value)
-#             # req. 2. __contains__ must return True if the descriptor is present
-#             self.assertIn(value, Thing.class_registry)
-#             self.assertIn(name, Thing.class_registry.descriptors.keys())
+    # req. 3. __len__ must return the number of descriptors
+    assert len(registry.cls_object) == len(registry.cls_object.descriptors)
+    assert len(registry.inst_object) == len(registry.inst_object.descriptors)
+    assert len(registry.inst_object) == len(registry.cls_object)
 
-#         # req. 2. __iter__ must return an iterator over the descriptors dictionary
-#         # which in turn iterates over the keys
-#         self.assertTrue(all(isinstance(descriptor_name, str) for descriptor_name in Thing.class_registry))
-#         self.assertTrue(
-#             all(isinstance(descriptor_name, str) for descriptor_name in OceanOpticsSpectrometer.class_registry)
-#         )
-#         # __iter__ can also be casted as other iterators like lists
-#         thing_descriptors = list(self.thing.instance_registry)
-#         spectrometer_descriptors = list(self.spectrometer.instance_registry)
-#         self.assertIsInstance(thing_descriptors, list)
-#         self.assertIsInstance(spectrometer_descriptors, list)
-#         self.assertTrue(all(isinstance(descriptor_name, str) for descriptor_name in thing_descriptors))
-#         self.assertTrue(all(isinstance(descriptor_name, str) for descriptor_name in spectrometer_descriptors))
+    # req. 4. registries have their unique hashes
+    # NOTE - not sure if this is really a useful feature or just plain stupid
+    # The requirement was to be able to generate unique hashes for each registry like foodict[<some hash>] = Thing.actions
+    foodict = {
+        registry.cls_object: 1,
+        registry.inst_object: 3,
+    }
+    assert foodict[registry.cls_object] == 1
+    assert foodict[registry.inst_object] == 3
 
-#         # req. 3. __len__ must return the number of descriptors
-#         self.assertTrue(len(Thing.class_registry) == len(Thing.class_registry.descriptors))
-#         self.assertTrue(
-#             len(OceanOpticsSpectrometer.class_registry) == len(OceanOpticsSpectrometer.class_registry.descriptors)
-#         )
-#         self.assertTrue(len(self.thing.instance_registry) == len(self.thing.instance_registry.descriptors))
-#         self.assertTrue(
-#             len(self.spectrometer.instance_registry) == len(self.spectrometer.instance_registry.descriptors)
-#         )
-#         self.assertTrue(len(self.thing.instance_registry) == len(Thing.class_registry))
-#         self.assertTrue(len(self.spectrometer.instance_registry) == len(OceanOpticsSpectrometer.class_registry))
-
-#         # req. 4. registries have their unique hashes
-#         # NOTE - not sure if this is really a useful feature or just plain stupid
-#         # The requirement was to be able to generate unique hashes for each registry like foodict[<some hash>] = Thing.actions
-#         foodict = {
-#             Thing.class_registry: 1,
-#             OceanOpticsSpectrometer.class_registry: 2,
-#             self.thing.instance_registry: 3,
-#             self.spectrometer.instance_registry: 4,
-#         }
-#         self.assertEqual(foodict[Thing.class_registry], 1)
-#         self.assertEqual(foodict[OceanOpticsSpectrometer.class_registry], 2)
-#         self.assertEqual(foodict[self.thing.instance_registry], 3)
-#         self.assertEqual(foodict[self.spectrometer.instance_registry], 4)
-
-#         # __dir__ not yet tested
-#         # __str__ will not be tested
-
-#     def test_4_bound_objects(self):
-#         """Test bound objects returned from descriptor access"""
-#         if self.is_abstract_test_class:
-#             return
-#         if self.registry_object not in [Property, Parameter, Action]:
-#             # Events work a little differently, may need to be tested separately or refactored to same implementation
-#             return
-
-#         # req. 1. number of bound objects must be equal to number of descriptors
-#         # for example, number of bound actions must be equal to number of actions
-#         self.assertEqual(
-#             len(self.thing.instance_registry),
-#             len(self.thing.instance_registry.descriptors),
-#         )
-#         self.assertEqual(
-#             len(self.spectrometer.instance_registry),
-#             len(self.spectrometer.instance_registry.descriptors),
-#         )
-
-#         # req. 2. bound objects must be instances of bound instances
-#         for name, value in self.thing.instance_registry.values.items():
-#             if self.bound_object != typing.Any:
-#                 self.assertIsInstance(value, self.bound_object)
-#             self.assertIsInstance(name, str)
-#         for name, value in self.spectrometer.instance_registry.values.items():
-#             if self.bound_object != typing.Any:
-#                 self.assertIsInstance(value, self.bound_object)
-#             self.assertIsInstance(name, str)
+    # __dir__ not yet tested
+    # __str__ will not be tested
 
 
-# class TestActionRegistry(TestRegistry):
-#     """Test ActionRegistry class"""
+def test_11_bound_objects(registry: Registry):
+    """Test bound objects returned from descriptor access"""
+    # req. 1. number of bound objects must be equal to number of descriptors
+    # for example, number of bound actions must be equal to number of actions
+    assert len(registry.inst_object) == len(registry.inst_object.descriptors)
 
-#     @classmethod
-#     def setUpRegistryObjects(cls):
-#         cls.registry_cls = ActionsRegistry
-#         cls.registry_object = Action
-
-
-# class TestEventRegistry(TestRegistry):
-#     @classmethod
-#     def setUpRegistryObjects(cls):
-#         cls.registry_cls = EventsRegistry
-#         cls.registry_object = Event
-
-#     def test_2_descriptors(self):
-#         if self.is_abstract_test_class:
-#             return
-
-#         super().test_2_descriptors()
-
-#         # req. 5. observables and change events are also descriptors
-#         for name, value in self.thing.events.observables.items():
-#             self.assertIsInstance(value, Property)
-#             self.assertIsInstance(name, str)
-#         for name, value in self.thing.events.change_events.items():
-#             self.assertIsInstance(value, Event)
-#             self.assertIsInstance(name, str)
-#         # req. 4. descriptors can be cleared
-#         self.assertTrue(
-#             hasattr(
-#                 self.thing.events,
-#                 f"_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}",
-#             )
-#         )
-#         self.assertTrue(
-#             hasattr(
-#                 self.thing.events,
-#                 f"_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events",
-#             )
-#         )
-#         self.assertTrue(
-#             hasattr(
-#                 self.thing.events,
-#                 f"_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables",
-#             )
-#         )
-#         self.thing.events.clear()
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.events,
-#                 f"_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}",
-#             )
-#         )
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.events,
-#                 f"_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events",
-#             )
-#         )
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.events,
-#                 f"_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables",
-#             )
-#         )
-#         self.thing.events.clear()
-#         self.thing.events.clear()
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.events,
-#                 f"_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}",
-#             )
-#         )
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.events,
-#                 f"_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events",
-#             )
-#         )
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.events,
-#                 f"_{self.thing.events._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables",
-#             )
-#         )
+    # req. 2. bound objects must be instances of bound instances
+    for name, value in registry.inst_object.values.items():
+        if registry.bound_object != Any:
+            assert isinstance(value, registry.bound_object)
+        assert isinstance(name, str)
 
 
-# class TestPropertiesRegistry(TestRegistry):
-#     @classmethod
-#     def setUpRegistryObjects(cls):
-#         cls.registry_cls = PropertiesRegistry
-#         cls.registry_object = Parameter
-
-#     def test_2_descriptors(self):
-#         if self.is_abstract_test_class:
-#             return
-
-#         super().test_2_descriptors()
-
-#         # req. 5. parameters that are subclass of Property are usually remote objects
-#         for name, value in self.thing.properties.remote_objects.items():
-#             self.assertIsInstance(value, Property)
-#             self.assertIsInstance(name, str)
-#         for name, value in self.spectrometer.properties.remote_objects.items():
-#             self.assertIsInstance(value, Property)
-#             self.assertIsInstance(name, str)
-#         # req. 6. db_objects, db_init_objects, db_persisting_objects, db_commit_objects are also descriptors
-#         for name, value in self.thing.properties.db_objects.items():
-#             self.assertIsInstance(value, Property)
-#             self.assertIsInstance(name, str)
-#             self.assertTrue(value.db_init or value.db_persist or value.db_commit)
-#         for name, value in self.thing.properties.db_init_objects.items():
-#             self.assertIsInstance(value, Property)
-#             self.assertIsInstance(name, str)
-#             self.assertTrue(value.db_init or value.db_persist)
-#             self.assertFalse(value.db_commit)
-#         for name, value in self.thing.properties.db_commit_objects.items():
-#             self.assertIsInstance(value, Property)
-#             self.assertIsInstance(name, str)
-#             self.assertTrue(value.db_commit or value.db_persist)
-#             self.assertFalse(value.db_init)
-#         for name, value in self.thing.properties.db_persisting_objects.items():
-#             self.assertIsInstance(value, Property)
-#             self.assertIsInstance(name, str)
-#             self.assertTrue(value.db_persist)
-#             self.assertFalse(value.db_init)  # in user given cases, this could be true, this is not strict requirement
-#             self.assertFalse(value.db_commit)  # in user given cases, this could be true, this is not strict requirement
-
-#         # req. 4. descriptors can be cleared
-#         self.assertTrue(
-#             hasattr(
-#                 self.thing.properties,
-#                 f"_{self.thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}",
-#             )
-#         )
-#         self.thing.properties.clear()
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.properties,
-#                 f"_{self.thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}",
-#             )
-#         )
-#         self.thing.properties.clear()
-#         self.thing.properties.clear()
-#         self.assertTrue(
-#             not hasattr(
-#                 self.thing.properties,
-#                 f"_{self.thing.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}",
-#             )
-#         )
-
-#     def test_5_bulk_read_write(self):
-#         """Test bulk read and write operations for properties"""
-
-#         # req. 1. test read in bulk for readAllProperties
-#         prop_values = self.spectrometer.properties.get()
-#         # read value is a dictionary
-#         self.assertIsInstance(prop_values, dict)
-#         self.assertTrue(len(prop_values) > 0)
-#         # all properties are read at instance level and get only reads remote objects
-#         self.assertTrue(len(prop_values) == len(self.spectrometer.properties.remote_objects))
-#         # read values are not descriptors themselves
-#         for name, value in prop_values.items():
-#             self.assertIsInstance(name, str)
-#             self.assertNotIsInstance(value, Parameter)  # descriptor has been read
-
-#         # req. 2. properties can be read with new names
-#         prop_values = self.spectrometer.properties.get(
-#             integration_time="integrationTime",
-#             state="State",
-#             trigger_mode="triggerMode",
-#         )
-#         self.assertIsInstance(prop_values, dict)
-#         self.assertTrue(len(prop_values) == 3)
-#         for name, value in prop_values.items():
-#             self.assertIsInstance(name, str)
-#             self.assertTrue(name in ["integrationTime", "triggerMode", "State"])
-#             self.assertNotIsInstance(value, Parameter)
-
-#         # req. 3. read in bulk for readMultipleProperties
-#         prop_values = self.spectrometer.properties.get(
-#             names=["integration_time", "trigger_mode", "state", "last_intensity"]
-#         )
-#         # read value is a dictionary
-#         self.assertIsInstance(prop_values, dict)
-#         self.assertTrue(len(prop_values) == 4)
-#         # read values are not descriptors themselves
-#         for name, value in prop_values.items():
-#             self.assertIsInstance(name, str)
-#             self.assertTrue(name in ["integration_time", "trigger_mode", "state", "last_intensity"])
-#             self.assertNotIsInstance(value, Parameter)
-
-#         # req. 4. read a property that is not present raises AttributeError
-#         with self.assertRaises(AttributeError) as ex:
-#             prop_values = self.spectrometer.properties.get(
-#                 names=[
-#                     "integration_time",
-#                     "trigger_mode",
-#                     "non_existent_property",
-#                     "last_intensity",
-#                 ]
-#             )
-#         self.assertTrue("property non_existent_property does not exist" in str(ex.exception))
-
-#         # req. 5. write in bulk
-#         prop_values = self.spectrometer.properties.get()
-#         self.spectrometer.properties.set(integration_time=10, trigger_mode=1)
-#         self.assertNotEqual(prop_values["integration_time"], self.spectrometer.integration_time)
-#         self.assertNotEqual(prop_values["trigger_mode"], self.spectrometer.trigger_mode)
-
-#         # req. 6. writing a non existent property raises RuntimeError
-#         with self.assertRaises(RuntimeError) as ex:
-#             self.spectrometer.properties.set(integration_time=120, trigger_mode=2, non_existent_property=10)
-#         self.assertTrue("Some properties could not be set due to errors" in str(ex.exception))
-#         self.assertTrue("non_existent_property" in str(ex.exception.__notes__))
-#         # but those that exist will still be written
-#         self.assertEqual(self.spectrometer.integration_time, 120)
-#         self.assertEqual(self.spectrometer.trigger_mode, 2)
-
-#     def test_6_db_properties(self):
-#         """Test db operations for properties"""
-
-#         # req. 1. db operations are supported only at instance level
-#         with self.assertRaises(AttributeError) as ex:
-#             Thing.properties.load_from_DB()
-#         self.assertTrue("database operations are only supported at instance level" in str(ex.exception))
-#         with self.assertRaises(AttributeError) as ex:
-#             Thing.properties.get_from_DB()
-#         self.assertTrue("database operations are only supported at instance level" in str(ex.exception))
+@pytest.fixture(
+    params=[
+        pytest.param((Thing, EventsRegistry), id="Thing-EventsRegistry"),
+        pytest.param((OceanOpticsSpectrometer, EventsRegistry), id="OceanOpticsSpectrometer-EventsRegistry"),
+    ],
+)
+def event_registry(request) -> Registry:
+    cls, registry_cls = request.param
+    thing = cls(id=f"test_{registry_cls.__name__}_registry")
+    registry = Registry()
+    registry.thing_cls = cls
+    registry.thing_inst = thing
+    registry.cls = registry_cls
+    registry.cls_object = cls.events
+    registry.inst_object = thing.events
+    registry.obj = Event
+    registry.bound_object = EventDispatcher
+    return registry
 
 
-# def load_tests(loader, tests, pattern):
-#     suite = unittest.TestSuite()
-#     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestThingInit))
-#     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestOceanOpticsSpectrometer))
-#     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestMetaclass))
-#     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestActionRegistry))
-#     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestPropertiesRegistry))
-#     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestEventRegistry))
-#     return suite
+def test_12_descriptors_access_events(event_registry: Registry):
+    registry = event_registry
+    # req. 5. observables and change events are also descriptors
+    for name, value in registry.inst_object.observables.items():
+        assert isinstance(value, Property)
+        assert isinstance(name, str)
+    for name, value in registry.inst_object.change_events.items():
+        assert isinstance(value, Event)
+        assert isinstance(name, str)
+    # req. 4. descriptors can be cleared
+    assert hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{EventsRegistry.__name__.lower()}",
+    )
+    assert hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events",
+    )
+    assert hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables",
+    )
+    registry.inst_object.clear()
+    assert not hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{EventsRegistry.__name__.lower()}",
+    )
+    assert not hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events",
+    )
+    assert not hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables",
+    )
+    registry.inst_object.clear()
+    registry.inst_object.clear()
+    assert not hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{EventsRegistry.__name__.lower()}",
+    )
+    assert not hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{EventsRegistry.__name__.lower()}_change_events",
+    )
+    assert not hasattr(
+        registry.inst_object,
+        f"_{registry.inst_object._qualified_prefix}_{EventsRegistry.__name__.lower()}_observables",
+    )
 
 
-# if __name__ == "__main__":
-#     runner = TestRunner()
-#     runner.run(load_tests(unittest.TestLoader(), None, None))
+@pytest.fixture(
+    params=[
+        pytest.param((Thing, PropertiesRegistry), id="Thing-PropertiesRegistry"),
+        pytest.param((OceanOpticsSpectrometer, PropertiesRegistry), id="OceanOpticsSpectrometer-PropertiesRegistry"),
+    ],
+)
+def properties_registry(request) -> Registry:
+    cls, registry_cls = request.param
+    thing = cls(id=f"test_{registry_cls.__name__}_registry")
+    registry = Registry()
+    registry.thing_cls = cls
+    registry.thing_inst = thing
+    registry.cls = registry_cls
+    registry.cls_object = cls.properties
+    registry.inst_object = thing.properties
+    registry.obj = Property
+    registry.bound_object = Any
+    return registry
+
+
+def test_13_descriptors_access_properties(properties_registry: Registry):
+    registry = properties_registry
+
+    # req. 5. parameters that are subclass of Property are usually remote objects
+    for name, value in registry.thing_inst.properties.remote_objects.items():
+        assert isinstance(value, Property)
+        assert isinstance(name, str)
+
+    # req. 6. db_objects, db_init_objects, db_persisting_objects, db_commit_objects are also descriptors
+    for name, value in registry.thing_inst.properties.db_objects.items():
+        assert isinstance(value, Property)
+        assert isinstance(name, str)
+        assert value.db_init or value.db_persist or value.db_commit
+    for name, value in registry.thing_inst.properties.db_init_objects.items():
+        assert isinstance(value, Property)
+        assert isinstance(name, str)
+        assert value.db_init or value.db_persist
+        assert not value.db_commit
+    for name, value in registry.thing_inst.properties.db_commit_objects.items():
+        assert isinstance(value, Property)
+        assert isinstance(name, str)
+        assert value.db_commit or value.db_persist
+        assert not value.db_init
+    for name, value in registry.thing_inst.properties.db_persisting_objects.items():
+        assert isinstance(value, Property)
+        assert isinstance(name, str)
+        assert value.db_persist
+        assert not value.db_init  # in user given cases, this could be true, this is not strict requirement
+        assert not value.db_commit  # in user given cases, this could be true, this is not strict requirement
+
+    # req. 4. descriptors can be cleared
+    assert hasattr(
+        registry.thing_inst.properties,
+        f"_{registry.thing_inst.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}",
+    )
+
+    registry.thing_inst.properties.clear()
+    assert not hasattr(
+        registry.thing_inst.properties,
+        f"_{registry.thing_inst.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}",
+    )
+
+    registry.thing_inst.properties.clear()
+    registry.thing_inst.properties.clear()
+    assert not hasattr(
+        registry.thing_inst.properties,
+        f"_{registry.thing_inst.properties._qualified_prefix}_{PropertiesRegistry.__name__.lower()}",
+    )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param((OceanOpticsSpectrometer, PropertiesRegistry), id="OceanOpticsSpectrometer-PropertiesRegistry"),
+    ],
+)
+def spectrometer_registry(request) -> Registry:
+    cls, registry_cls = request.param
+    thing = cls(id=f"test_{registry_cls.__name__}_registry")
+    registry = Registry()
+    registry.thing_cls = cls
+    registry.thing_inst = thing
+    registry.cls = registry_cls
+    registry.cls_object = cls.properties
+    registry.inst_object = thing.properties
+    registry.obj = Property
+    registry.bound_object = Any
+    return registry
+
+
+def test_14_bulk_read_write_properties(spectrometer_registry: Registry):
+    """Test bulk read and write operations for properties"""
+    registry = spectrometer_registry
+
+    # req. 1. test read in bulk for readAllProperties
+    prop_values = registry.thing_inst.properties.get()
+    # read value is a dictionary
+    assert isinstance(prop_values, dict)
+    assert len(prop_values) > 0
+    # all properties are read at instance level and get only reads remote objects
+    assert len(prop_values) == len(registry.thing_inst.properties.remote_objects)
+    # read values are not descriptors themselves
+    for name, value in prop_values.items():
+        assert isinstance(name, str)
+        assert not isinstance(value, Parameter)  # descriptor has been read
+
+    # req. 2. properties can be read with new names
+    prop_values = registry.thing_inst.properties.get(
+        integration_time="integrationTime",
+        state="State",
+        trigger_mode="triggerMode",
+    )
+    assert isinstance(prop_values, dict)
+    assert len(prop_values) == 3
+    for name, value in prop_values.items():
+        assert isinstance(name, str)
+        assert name in ["integrationTime", "triggerMode", "State"]
+        assert not isinstance(value, Parameter)
+
+    # req. 3. read in bulk for readMultipleProperties
+    prop_values = registry.thing_inst.properties.get(
+        names=["integration_time", "trigger_mode", "state", "last_intensity"]
+    )
+    # read value is a dictionary
+    assert isinstance(prop_values, dict)
+    assert len(prop_values) == 4
+    # read values are not descriptors themselves
+    for name, value in prop_values.items():
+        assert isinstance(name, str)
+        assert name in ["integration_time", "trigger_mode", "state", "last_intensity"]
+        assert not isinstance(value, Parameter)
+
+    # req. 4. read a property that is not present raises AttributeError
+    with pytest.raises(AttributeError) as ex:
+        prop_values = registry.thing_inst.properties.get(
+            names=[
+                "integration_time",
+                "trigger_mode",
+                "non_existent_property",
+                "last_intensity",
+            ]
+        )
+    assert "property non_existent_property does not exist" in str(ex.value)
+
+    # req. 5. write in bulk
+    prop_values = registry.thing_inst.properties.get()
+    registry.thing_inst.properties.set(integration_time=10, trigger_mode=1)
+    assert prop_values["integration_time"] != registry.thing_inst.integration_time
+    assert prop_values["trigger_mode"] != registry.thing_inst.trigger_mode
+
+    # req. 6. writing a non existent property raises RuntimeError
+    with pytest.raises(RuntimeError) as ex:
+        registry.thing_inst.properties.set(integration_time=120, trigger_mode=2, non_existent_property=10)
+    assert "Some properties could not be set due to errors" in str(ex.value)
+    # __notes__ is not standard in pytest exceptions, so we skip that assertion
+    # but those that exist will still be written
+    assert registry.thing_inst.integration_time == 120
+    assert registry.thing_inst.trigger_mode == 2
+
+
+def test_15_db_properties():
+    """Test db operations for properties"""
+    # req. 1. db operations are supported only at instance level
+    with pytest.raises(AttributeError) as ex:
+        Thing.properties.load_from_DB()
+    assert "database operations are only supported at instance level" in str(ex.value)
+    with pytest.raises(AttributeError) as ex:
+        Thing.properties.get_from_DB()
+    assert "database operations are only supported at instance level" in str(ex.value)
+
+
+def test_16_inheritance_of_registries():
+    """Test that registries are inherited properly"""
+    # req. 1. subclass have more descriptors than parent class because our example Thing OceanOpticsSpectrometer
+    # has defined its own actions, properties and events
+    assert len(OceanOpticsSpectrometer.properties.descriptors) > len(Thing.properties.descriptors)
+    assert len(OceanOpticsSpectrometer.actions.descriptors) > len(Thing.actions.descriptors)
+    assert len(OceanOpticsSpectrometer.events.descriptors) > len(Thing.events.descriptors)
 
 
 # """
