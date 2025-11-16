@@ -32,6 +32,7 @@ except ImportError:
     from things import OceanOpticsSpectrometer, TestThing
     from things.spectrometer import Intensity
 
+
 setup_logging(log_level=logging.ERROR + 10)
 
 

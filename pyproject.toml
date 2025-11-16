@@ -88,7 +88,8 @@ test = [
     "fastjsonschema==2.20.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
-    "pytest-order>=1.0.0"
+    "pytest-order>=1.0.0",
+    "pytest-asyncio>=1.3.0",
 ]   
 linux = [
     "uvloop==0.20.0"
@@ -97,14 +98,15 @@ linux = [
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra --strict-markers --strict-config --ignore=lib64"
-testpaths = ["tests/pytests-new"]
+testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
     "order: mark test to run in a specific order",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests"
+    "integration: marks tests as integration tests",
+    "asyncio: mark test as asyncio to run with pytest-asyncio"
 ]
 filterwarnings = [
     "error",
