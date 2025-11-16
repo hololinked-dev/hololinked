@@ -102,6 +102,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+asyncio_mode = "auto"
 markers = [
     "order: mark test to run in a specific order",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
