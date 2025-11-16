@@ -20,6 +20,7 @@ from hololinked.core.properties import (
     ClassSelector,
 )
 from hololinked.utils import issubklass
+from hololinked.logger import setup_logging
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing
@@ -27,6 +28,8 @@ try:
 except ImportError:
     from things import OceanOpticsSpectrometer, TestThing
     from things.spectrometer import Intensity
+
+setup_logging(log_level=logging.ERROR + 10)
 
 
 # ------------------- Fixtures -------------------
