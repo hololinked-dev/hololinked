@@ -4,11 +4,16 @@ import os
 import copy
 import pydantic
 import pytest
+import json
+
+from dataclasses import dataclass
+from typing import Callable
 
 from hololinked.core.properties import Number
 from hololinked.storage.database import BaseDB, ThingDB
-from hololinked.serializers import PythonBuiltinJSONSerializer
 from hololinked.logger import setup_logging
+from hololinked.utils import uuid_hex
+
 
 try:
     from .things import TestThing
@@ -18,31 +23,33 @@ except ImportError:
 setup_logging(log_level=logging.ERROR)
 
 
+@dataclass
+class Defaults:
+    SIMPLE_CLASS_PROP: int = 42
+    MANAGED_CLASS_PROP: int = 0
+    DELETABLE_CLASS_PROP: int = 100
+
+
 @pytest.fixture(autouse=True)
 def reset_class_properties():
     # Reset class properties to defaults before each test
-    TestThing.simple_class_prop = 42
-    TestThing.managed_class_prop = 0
-    TestThing.deletable_class_prop = 100
-    try:
-        if not hasattr(TestThing, "not_a_class_prop"):
-            from hololinked.core.properties import Number
+    TestThing.simple_class_prop = Defaults.SIMPLE_CLASS_PROP
+    TestThing.managed_class_prop = Defaults.MANAGED_CLASS_PROP
+    TestThing.deletable_class_prop = Defaults.DELETABLE_CLASS_PROP
 
-            TestThing.not_a_class_prop = Number(default=43)
-    except Exception:
-        pass
     yield
 
 
+@pytest.mark.order(1)
 def test_simple_class_property():
     # Test class-level access
-    assert TestThing.simple_class_prop == 42
+    assert TestThing.simple_class_prop == Defaults.SIMPLE_CLASS_PROP
     TestThing.simple_class_prop = 100
     assert TestThing.simple_class_prop == 100
 
     # Test that instance-level access reflects class value
-    instance1 = TestThing(id="test1")
-    instance2 = TestThing(id="test2")
+    instance1 = TestThing(id=f"test-simple-class-prop-{uuid_hex()}")
+    instance2 = TestThing(id=f"test-simple-class-prop-{uuid_hex()}")
     assert instance1.simple_class_prop == 100
     assert instance2.simple_class_prop == 100
 
@@ -52,9 +59,10 @@ def test_simple_class_property():
     assert instance2.simple_class_prop == 200
 
 
+@pytest.mark.order(2)
 def test_managed_class_property():
     # Test initial value
-    assert TestThing.managed_class_prop == 0
+    assert TestThing.managed_class_prop == Defaults.MANAGED_CLASS_PROP
     # Test valid value assignment
     TestThing.managed_class_prop = 50
     assert TestThing.managed_class_prop == 50
@@ -64,7 +72,7 @@ def test_managed_class_property():
     # Verify value wasn't changed after failed assignment
     assert TestThing.managed_class_prop == 50
     # Test instance-level validation
-    instance = TestThing(id="test3")
+    instance = TestThing(id=f"test-managed-class-prop-{uuid_hex()}")
     with pytest.raises(ValueError):
         instance.managed_class_prop = -20
     # Test that instance-level access reflects class value
@@ -75,6 +83,7 @@ def test_managed_class_property():
     assert instance.managed_class_prop == 100
 
 
+@pytest.mark.order(3)
 def test_readonly_class_property():
     # Test reading the value
     assert TestThing.readonly_class_prop == "read-only-value"
@@ -84,7 +93,7 @@ def test_readonly_class_property():
         TestThing.readonly_class_prop = "new-value"
 
     # Test that setting raises an error at instance level
-    instance = TestThing(id="test4")
+    instance = TestThing(id=f"test-readonly-class-prop-{uuid_hex()}")
     with pytest.raises(ValueError):
         instance.readonly_class_prop = "new-value"
 
@@ -93,30 +102,32 @@ def test_readonly_class_property():
     assert instance.readonly_class_prop == "read-only-value"
 
 
+@pytest.mark.order(4)
 def test_deletable_class_property():
     # Test initial value
-    assert TestThing.deletable_class_prop == 100
+    assert TestThing.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP
 
     # Test setting new value
     TestThing.deletable_class_prop = 150
     assert TestThing.deletable_class_prop == 150
 
     # Test deletion
-    instance = TestThing(id="test5")
+    instance = TestThing(id=f"test-deletable-class-prop-{uuid_hex()}")
     del TestThing.deletable_class_prop
-    assert TestThing.deletable_class_prop == 100  # Should return to default
-    assert instance.deletable_class_prop == 100
+    assert TestThing.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP  # Should return to default
+    assert instance.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP
 
     # Test instance-level deletion
     instance.deletable_class_prop = 200
     assert TestThing.deletable_class_prop == 200
     del instance.deletable_class_prop
-    assert TestThing.deletable_class_prop == 100  # Should return to default
+    assert TestThing.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP  # Should return to default
 
 
+@pytest.mark.order(5)
 def test_descriptor_access():
     # Test direct access through descriptor
-    instance = TestThing(id="test6")
+    instance = TestThing(id=f"test-descriptor-access-{uuid_hex()}")
     assert isinstance(TestThing.not_a_class_prop, Number)
     assert instance.not_a_class_prop == 43
     instance.not_a_class_prop = 50
@@ -135,7 +146,8 @@ def test_descriptor_access():
         _ = instance.not_a_class_prop
 
 
-def _generate_db_ops_tests():
+@pytest.fixture()
+def db_ops_tests() -> tuple[Callable, Callable]:
     def test_prekill(thing: TestThing):
         assert thing.db_commit_number_prop == 0
         thing.db_commit_number_prop = 100
@@ -166,7 +178,8 @@ def _generate_db_ops_tests():
     return test_prekill, test_postkill
 
 
-def test_sqlalchemy_db_operations():
+@pytest.mark.order(6)
+def test_sqlalchemy_db_operations(db_ops_tests: tuple[Callable, Callable]):
     thing_id = "test-db-operations"
     file_path = f"{thing_id}.db"
     try:
@@ -175,7 +188,7 @@ def test_sqlalchemy_db_operations():
         pass
     assert not os.path.exists(file_path)
 
-    test_prekill, test_postkill = _generate_db_ops_tests()
+    test_prekill, test_postkill = db_ops_tests
 
     thing = TestThing(id=thing_id, use_default_db=True)
     test_prekill(thing)
@@ -184,32 +197,26 @@ def test_sqlalchemy_db_operations():
     test_postkill(thing)
 
 
-def test_json_db_operations():
+@pytest.mark.order(7)
+def test_json_db_operations(db_ops_tests: tuple[Callable, Callable]):
     with tempfile.NamedTemporaryFile(delete=False) as tf:
         filename = tf.name
 
-    thing_id = "test-db-operations-json"
-    test_prekill, test_postkill = _generate_db_ops_tests()
+    thing_id = f"test-db-operations-json-{uuid_hex()}"
+    test_prekill, test_postkill = db_ops_tests
 
-    thing = TestThing(
-        id=thing_id,
-        use_json_file=True,
-        json_filename=filename,
-    )
+    thing = TestThing(id=thing_id, use_json_file=True, json_filename=filename)
     test_prekill(thing)
 
-    thing = TestThing(
-        id=thing_id,
-        use_json_file=True,
-        json_filename=filename,
-    )
+    thing = TestThing(id=thing_id, use_json_file=True, json_filename=filename)
     test_postkill(thing)
 
     os.remove(filename)
 
 
+@pytest.mark.order(8)
 def test_db_config():
-    thing = TestThing(id="test-sql-config")
+    thing = TestThing(id=f"test-sql-config-{uuid_hex()}")
 
     # ----- SQL config tests -----
     sql_db_config = {
@@ -221,7 +228,7 @@ def test_db_config():
         "password": "postgresnonadminpassword",
     }
     with open("test_sql_config.json", "w") as f:
-        PythonBuiltinJSONSerializer.dump(sql_db_config, f)
+        json.dump(sql_db_config, f)
 
     # correct config
     ThingDB(thing, config_file="test_sql_config.json")
@@ -229,14 +236,14 @@ def test_db_config():
     sql_db_config_2 = copy.deepcopy(sql_db_config)
     sql_db_config_2["passworda"] = "postgresnonadminpassword"
     with open("test_sql_config.json", "w") as f:
-        PythonBuiltinJSONSerializer.dump(sql_db_config_2, f)
+        json.dump(sql_db_config_2, f)
     with pytest.raises(pydantic.ValidationError):
         ThingDB(thing, config_file="test_sql_config.json")
     # missing field
     sql_db_config_3 = copy.deepcopy(sql_db_config)
     sql_db_config_3.pop("password")
     with open("test_sql_config.json", "w") as f:
-        PythonBuiltinJSONSerializer.dump(sql_db_config_3, f)
+        json.dump(sql_db_config_3, f)
     with pytest.raises(ValueError):
         ThingDB(thing, config_file="test_sql_config.json")
     # URI instead of other fields
@@ -245,7 +252,7 @@ def test_db_config():
         uri="postgresql://hololinked:postgresnonadminpassword@localhost:5432/hololinked",
     )
     with open("test_sql_config.json", "w") as f:
-        PythonBuiltinJSONSerializer.dump(sql_db_config, f)
+        json.dump(sql_db_config, f)
     ThingDB(thing, config_file="test_sql_config.json")
 
     os.remove("test_sql_config.json")
@@ -261,7 +268,7 @@ def test_db_config():
         "authSource": "admin",
     }
     with open("test_mongo_config.json", "w") as f:
-        PythonBuiltinJSONSerializer.dump(mongo_db_config, f)
+        json.dump(mongo_db_config, f)
 
     # correct config
     BaseDB.load_conf("test_mongo_config.json")
@@ -269,14 +276,14 @@ def test_db_config():
     mongo_db_config_2 = copy.deepcopy(mongo_db_config)
     mongo_db_config_2["passworda"] = "mongononadminpassword"
     with open("test_mongo_config.json", "w") as f:
-        PythonBuiltinJSONSerializer.dump(mongo_db_config_2, f)
+        json.dump(mongo_db_config_2, f)
     with pytest.raises(pydantic.ValidationError):
         BaseDB.load_conf("test_mongo_config.json")
     # missing field
     mongo_db_config_3 = copy.deepcopy(mongo_db_config)
     mongo_db_config_3.pop("password")
     with open("test_mongo_config.json", "w") as f:
-        PythonBuiltinJSONSerializer.dump(mongo_db_config_3, f)
+        json.dump(mongo_db_config_3, f)
     with pytest.raises(ValueError):
         BaseDB.load_conf("test_mongo_config.json")
     # URI instead of other fields
@@ -285,7 +292,7 @@ def test_db_config():
         uri="mongodb://hololinked:mongononadminpassword@localhost:27017/hololinked?authSource=admin",
     )
     with open("test_mongo_config.json", "w") as f:
-        PythonBuiltinJSONSerializer.dump(mongo_db_config, f)
+        json.dump(mongo_db_config, f)
     # correct config
     BaseDB.load_conf("test_mongo_config.json")
 
@@ -298,7 +305,7 @@ def test_db_config():
         "file": "test_sqlite.db",
     }
     with open("test_sqlite_config.json", "w") as f:
-        PythonBuiltinJSONSerializer.dump(sqlite_db_config, f)
+        json.dump(sqlite_db_config, f)
 
     # correct config
     ThingDB(thing, config_file="test_sqlite_config.json")
