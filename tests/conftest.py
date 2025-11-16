@@ -1,17 +1,20 @@
-"""
-Pytest configuration and shared fixtures for hololinked tests.
-"""
+"""pytest configuration and shared fixtures for hololinked tests"""
 
 import asyncio
-import pytest
-import zmq.asyncio
+import logging
 import sys
+
+from dataclasses import dataclass
 from typing import Generator
 from uuid import uuid4
+
+import pytest
+import zmq.asyncio
+
 from faker import Faker
-from dataclasses import dataclass
 
 from hololinked.config import global_config
+from hololinked.logger import setup_logging
 from hololinked.serializers import Serializers
 
 
@@ -59,6 +62,7 @@ def zmq_context() -> Generator[zmq.asyncio.Context, None, None]:
 def setup_test_environment(zmq_context, event_loop):
     """Automatically setup test environment for each file"""
     # This fixture runs automatically for every test
+    setup_logging(log_level=logging.ERROR + 10)
     yield
     # Reset serializers after each test
     Serializers().reset()
