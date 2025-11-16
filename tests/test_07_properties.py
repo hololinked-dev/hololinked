@@ -1,17 +1,18 @@
-import logging
-import tempfile
-import os
 import copy
-import pydantic
-import pytest
 import json
+import logging
+import os
+import tempfile
 
 from dataclasses import dataclass
 from typing import Callable
 
+import pydantic
+import pytest
+
 from hololinked.core.properties import Number
-from hololinked.storage.database import BaseDB, ThingDB
 from hololinked.logger import setup_logging
+from hololinked.storage.database import BaseDB, ThingDB
 from hololinked.utils import uuid_hex
 
 
@@ -20,7 +21,8 @@ try:
 except ImportError:
     from things import TestThing
 
-setup_logging(log_level=logging.ERROR)
+
+setup_logging(log_level=logging.ERROR + 10)
 
 
 @dataclass

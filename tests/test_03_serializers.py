@@ -1,9 +1,9 @@
 import pytest
 
+from things import TestThing
+
 from hololinked.serializers import Serializers
 from hololinked.serializers.serializers import BaseSerializer
-
-from things import TestThing
 
 
 class YAMLSerializer(BaseSerializer):

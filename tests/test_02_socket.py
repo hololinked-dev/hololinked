@@ -1,8 +1,8 @@
 import pytest
 import zmq.asyncio
 
-from hololinked.core.zmq.brokers import BaseZMQ
 from hololinked.constants import ZMQ_TRANSPORTS
+from hololinked.core.zmq.brokers import BaseZMQ
 
 
 def test_1_socket_creation_defaults(zmq_context):

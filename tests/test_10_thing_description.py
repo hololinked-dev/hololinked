@@ -1,26 +1,29 @@
 import logging
+
 import pytest
+
 from pydantic import BaseModel
+
 from hololinked.constants import ResourceTypes
-from hololinked.schema_validators.json_schema import JSONSchema
+from hololinked.core.properties import (
+    Boolean,
+    ClassSelector,
+    List,
+    Number,
+    Property,
+    Selector,
+    String,
+)
+from hololinked.logger import setup_logging
 from hololinked.td.data_schema import DataSchema
 from hololinked.td.interaction_affordance import (
-    PropertyAffordance,
-    InteractionAffordance,
     ActionAffordance,
     EventAffordance,
-)
-from hololinked.core.properties import (
-    Property,
-    Number,
-    String,
-    Boolean,
-    List,
-    Selector,
-    ClassSelector,
+    InteractionAffordance,
+    PropertyAffordance,
 )
 from hololinked.utils import issubklass
-from hololinked.logger import setup_logging
+
 
 try:
     from .things import OceanOpticsSpectrometer, TestThing

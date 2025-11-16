@@ -1,26 +1,27 @@
-import pytest
 import logging
 
 from typing import Any
 
-from hololinked.core.actions import BoundAction
-from hololinked.core.events import EventDispatcher
-from hololinked.core.zmq.brokers import EventPublisher
-from hololinked.core import Thing, ThingMeta, Action, Event, Property
-from hololinked.core.meta import (
-    DescriptorRegistry,  # noqa: F401
-    PropertiesRegistry,
-    ActionsRegistry,
-    EventsRegistry,
-)
-from hololinked.core.zmq.rpc_server import RPCServer
-from hololinked.core.properties import Parameter  # noqa: F401
-from hololinked.core.state_machine import BoundFSM
-from hololinked.utils import get_default_logger
-from hololinked.core.logger import RemoteAccessHandler
-from hololinked.logger import setup_logging
+import pytest
 
 from things import OceanOpticsSpectrometer
+
+from hololinked.core import Action, Event, Property, Thing, ThingMeta
+from hololinked.core.actions import BoundAction
+from hololinked.core.events import EventDispatcher
+from hololinked.core.logger import RemoteAccessHandler
+from hololinked.core.meta import (
+    ActionsRegistry,
+    DescriptorRegistry,  # noqa: F401
+    EventsRegistry,
+    PropertiesRegistry,
+)
+from hololinked.core.properties import Parameter  # noqa: F401
+from hololinked.core.state_machine import BoundFSM
+from hololinked.core.zmq.brokers import EventPublisher
+from hololinked.core.zmq.rpc_server import RPCServer
+from hololinked.logger import setup_logging
+from hololinked.utils import get_default_logger
 
 
 """
@@ -44,7 +45,7 @@ Test sequence is as follows:
 6. Test thing model generation
 """
 
-setup_logging(logging.WARN)
+setup_logging(logging.ERROR + 10)
 
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])

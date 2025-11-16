@@ -1,19 +1,23 @@
 import asyncio
 import logging
+
+from copy import deepcopy
+
 import pytest
 
-from hololinked.utils import isclassmethod
 from hololinked.core.actions import (
     Action,
     BoundAction,
-    BoundSyncAction,
     BoundAsyncAction,
+    BoundSyncAction,
 )
 from hololinked.core.dataklasses import ActionInfoValidator
 from hololinked.core.thing import action
-from hololinked.td.interaction_affordance import ActionAffordance
-from hololinked.schema_validators import JSONSchemaValidator
 from hololinked.logger import setup_logging
+from hololinked.schema_validators import JSONSchemaValidator
+from hololinked.td.interaction_affordance import ActionAffordance
+from hololinked.utils import isclassmethod
+
 
 try:
     from .things import TestThing
@@ -21,18 +25,19 @@ try:
 except ImportError:
     from things import TestThing
     from things.test_thing import replace_methods_with_actions
-
-setup_logging(log_level=logging.ERROR)
+setup_logging(log_level=logging.ERROR + 10)
 
 
 @pytest.fixture(scope="module")
-def thing():
-    t = TestThing(id="test-action")
-    replace_methods_with_actions(thing_cls=TestThing)
-    return t
+def thing() -> TestThing:
+    thing_cls = deepcopy(TestThing)
+    _thing = thing_cls(id="test-action")
+    replace_methods_with_actions(thing_cls=thing_cls)
+    return _thing
 
 
-def test_1_allowed_actions():
+@pytest.mark.order(1)
+def test_allowed_actions():
     """Test if methods can be decorated with action"""
     # 1. instance method can be decorated with action
     assert TestThing.action_echo == action()(TestThing.action_echo.obj)  # already predecorated as action
@@ -67,7 +72,8 @@ def test_1_allowed_actions():
     assert Action(TestThing.pydantic_validated_action) == action()(TestThing.pydantic_validated_action)
 
 
-def test_2_bound_method(thing: TestThing):
+@pytest.mark.order(2)
+def test_bound_method(thing: TestThing):
     """Test if methods decorated with action are correctly bound"""
     # 1. instance method can be decorated with action
     assert isinstance(thing.action_echo, BoundAction)
@@ -227,7 +233,8 @@ def test_2_bound_method(thing: TestThing):
     assert thing.json_schema_validated_action.bound_obj == thing
 
 
-def test_3_remote_info():
+@pytest.mark.order(3)
+def test_remote_info():
     """Test if the validator is working correctly, on which the logic of the action is based"""
     remote_info = TestThing.action_echo.execution_info
     assert isinstance(remote_info, ActionInfoValidator)
@@ -301,7 +308,8 @@ def test_3_remote_info():
     assert isinstance(remote_info.schema_validator, JSONSchemaValidator)
 
 
-def test_4_api_and_invalid_actions():
+@pytest.mark.order(4)
+def test_api_and_invalid_actions():
     """Test if action prevents invalid objects from being named as actions and raises neat errors"""
     # done allow action decorator to be terminated without '()' on a method
     with pytest.raises(TypeError) as ex:
@@ -337,7 +345,8 @@ def test_4_api_and_invalid_actions():
     assert str(ex.value).startswith("Only 'safe', 'idempotent', 'synchronous' are allowed")
 
 
-def test_5_thing_cls_actions(thing: TestThing):
+@pytest.mark.order(5)
+def test_thing_cls_actions(thing: TestThing):
     """Test class and instance level action access"""
     # class level
     for name, act in TestThing.actions.descriptors.items():
@@ -371,7 +380,8 @@ def test_5_thing_cls_actions(thing: TestThing):
         asyncio.run(TestThing.parameterized_action_async(4, "hello4", 5))
 
 
-def test_6_action_affordance(thing: TestThing):
+@pytest.mark.order(6)
+def test_action_affordance(thing: TestThing):
     """Test if action affordance is correctly created"""
     assert isinstance(thing.action_echo, BoundAction)
     affordance = thing.action_echo.to_affordance()

@@ -1,22 +1,21 @@
 import logging
+
 import pytest
+
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
-from hololinked.td.interaction_affordance import EventAffordance
 from hololinked.logger import setup_logging
+from hololinked.td.interaction_affordance import EventAffordance
 from hololinked.utils import uuid_hex
+
 
 try:
     from .things import TestThing
 except ImportError:
     from things import TestThing
 
-setup_logging(log_level=logging.ERROR)
 
-
-@pytest.fixture(scope="module")
-def thing():
-    return TestThing(id=f"test-event-{uuid_hex()}")
+setup_logging(log_level=logging.ERROR + 10)
 
 
 def validate_event_dispatcher(descriptor: Event, dispatcher: EventDispatcher, thing: TestThing):
@@ -32,8 +31,10 @@ def validate_event_dispatcher(descriptor: Event, dispatcher: EventDispatcher, th
     assert dispatcher._unique_identifier == f"{thing._qualified_id}/{descriptor.name}"
 
 
-def test_1_pure_events(thing):
+@pytest.mark.order(1)
+def test_pure_events():
     """Test basic event functionality"""
+    thing = TestThing(id=f"test-pure-events-{uuid_hex()}")
     # 1. Test class-level access to event descriptor
     assert isinstance(TestThing.test_event, Event)  # class access returns descriptor
     # 2. Test instance-level access to event dispatcher which is returned by the descriptor
@@ -41,8 +42,10 @@ def test_1_pure_events(thing):
     # 3. Event with JSON schema has schema variable set
 
 
-def test_2_observable_events(thing):
+@pytest.mark.order(2)
+def test_observable_events():
     """Test observable event (of properties) functionality"""
+    thing = TestThing(id=f"test-observable-events-{uuid_hex()}")
     # 1. observable properties have an event descriptor associated with them as a reference
     assert isinstance(TestThing.observable_list_prop._observable_event_descriptor, Event)
     assert isinstance(TestThing.state._observable_event_descriptor, Event)
@@ -71,7 +74,9 @@ def test_2_observable_events(thing):
     )
 
 
-def test_3_event_affordance(thing):
+@pytest.mark.order(3)
+def test_event_affordance():
     """Test event affordance generation"""
+    thing = TestThing(id=f"test-event-affordance-{uuid_hex()}")
     event = TestThing.test_event.to_affordance(thing)
     assert isinstance(event, EventAffordance)
