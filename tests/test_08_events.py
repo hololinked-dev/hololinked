@@ -1,7 +1,5 @@
 import logging
 
-import pytest
-
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
 from hololinked.logger import setup_logging
@@ -31,8 +29,7 @@ def validate_event_dispatcher(descriptor: Event, dispatcher: EventDispatcher, th
     assert dispatcher._unique_identifier == f"{thing._qualified_id}/{descriptor.name}"
 
 
-@pytest.mark.order(1)
-def test_pure_events():
+def test_01_pure_events():
     """Test basic event functionality"""
     thing = TestThing(id=f"test-pure-events-{uuid_hex()}")
     # 1. Test class-level access to event descriptor
@@ -42,8 +39,7 @@ def test_pure_events():
     # 3. Event with JSON schema has schema variable set
 
 
-@pytest.mark.order(2)
-def test_observable_events():
+def test_02_observable_events():
     """Test observable event (of properties) functionality"""
     thing = TestThing(id=f"test-observable-events-{uuid_hex()}")
     # 1. observable properties have an event descriptor associated with them as a reference
@@ -74,8 +70,7 @@ def test_observable_events():
     )
 
 
-@pytest.mark.order(3)
-def test_event_affordance():
+def test_03_event_affordance():
     """Test event affordance generation"""
     thing = TestThing(id=f"test-event-affordance-{uuid_hex()}")
     event = TestThing.test_event.to_affordance(thing)

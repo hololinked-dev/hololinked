@@ -5,8 +5,6 @@ Converted from unittest to pytest format.
 
 from uuid import UUID, uuid4
 
-import pytest
-
 from hololinked.core.zmq.message import (
     ERROR,
     EXIT,
@@ -101,8 +99,7 @@ def validate_event_message(event_message: EventMessage, app_ids: AppIDs) -> None
     assert isinstance(event_message.body[1], PreserializedData)
 
 
-@pytest.mark.order(1)
-def test_1_request_message(app_ids: AppIDs) -> None:
+def test_01_request_message(app_ids: AppIDs) -> None:
     """test the request message"""
 
     # request messages types are OPERATION, HANDSHAKE & EXIT
@@ -132,7 +129,7 @@ def test_1_request_message(app_ids: AppIDs) -> None:
     assert request_message.type == EXIT
 
 
-def test_2_response_message(app_ids: AppIDs) -> None:
+def test_02_response_message(app_ids: AppIDs) -> None:
     """test the response message"""
 
     # response messages types are HANDSHAKE, TIMEOUT, INVALID_MESSAGE, ERROR and REPLY
@@ -194,7 +191,7 @@ def test_2_response_message(app_ids: AppIDs) -> None:
     assert request_message.id == response_message.id
 
 
-def test_3_event_message(app_ids: AppIDs) -> None:
+def test_03_event_message(app_ids: AppIDs) -> None:
     """test the event message"""
     event_message = EventMessage.craft_from_arguments(
         event_id="test-event",

@@ -49,7 +49,7 @@ setup_logging(logging.ERROR + 10)
 
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
-def test_1_id(thing_cls: ThingMeta):
+def test_01_id(thing_cls: ThingMeta):
     """Test id property of Thing class"""
     # req. 1. instance name must be a string and cannot be changed after set
     thing = thing_cls(id="test_id")  # type: Thing
@@ -69,7 +69,7 @@ def test_1_id(thing_cls: ThingMeta):
 
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
-def notest_2_logger(thing_cls: ThingMeta):
+def notest_02_logger(thing_cls: ThingMeta):
     """Test logger setup"""
     # req. 1. logger must have remote access handler if remote_accessible_logger is True
     logger = get_default_logger("test_logger")
@@ -103,7 +103,7 @@ def notest_2_logger(thing_cls: ThingMeta):
 
 
 @pytest.mark.parametrize("thing_cls", [Thing])
-def test_3_has_no_fsm(thing_cls: ThingMeta):
+def test_03_has_no_fsm(thing_cls: ThingMeta):
     """Test state and state_machine setup"""
     # req. 1. state property must be None when no state machine is present
     thing = thing_cls(id="test_no_state_machine")  # type: Thing
@@ -113,7 +113,7 @@ def test_3_has_no_fsm(thing_cls: ThingMeta):
 
 
 @pytest.mark.parametrize("thing_cls", [OceanOpticsSpectrometer])
-def test_4_bound_fsm(thing_cls: ThingMeta):
+def test_04_bound_fsm(thing_cls: ThingMeta):
     """Test state and state_machine setup"""
     thing1 = thing_cls(id="test_state_machine")  # type: Thing
     # req. 1. state and state machine must be present because we create this subclass with a state machine
@@ -139,7 +139,7 @@ def test_4_bound_fsm(thing_cls: ThingMeta):
 
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
-def test_5_subthings(thing_cls: ThingMeta):
+def test_05_subthings(thing_cls: ThingMeta):
     """Test object composition"""
     thing = thing_cls(id="test_subthings", remote_accessible_logger=True)  # type: Thing
     # req. 1. subthings must be a dictionary
@@ -159,7 +159,7 @@ def test_5_subthings(thing_cls: ThingMeta):
 
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
-def test_5_servers_init(thing_cls: ThingMeta):
+def test_06_servers_init(thing_cls: ThingMeta):
     """Test if servers can be initialized/instantiated"""
     # req. 1. rpc_server and event_publisher must be None when not run()
     thing = thing_cls(id="test_servers_init")  # type: Thing
@@ -182,7 +182,7 @@ Test sequence is as follows:
 
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
-def test_6_metaclass_assigned(thing_cls: ThingMeta):
+def test_07_metaclass_assigned(thing_cls: ThingMeta):
     """test metaclass of Thing class"""
     # req. 1 metaclass must be ThingMeta of any Thing class
     assert thing_cls.__class__ == ThingMeta
@@ -190,7 +190,7 @@ def test_6_metaclass_assigned(thing_cls: ThingMeta):
     assert Thing.__class__ == OceanOpticsSpectrometer.__class__
 
 
-def test_7_registry_creation():
+def test_08_registry_creation():
     """test registry creation and access which is currently the main purpose of the metaclass"""
     # req. 1. registry attributes must be instances of their respective classes
     assert isinstance(Thing.properties, PropertiesRegistry)
@@ -297,7 +297,7 @@ def registry(request) -> Registry:
     return registry
 
 
-def test_8_registry_owner(registry: Registry):
+def test_09_registry_owner(registry: Registry):
     """Test owner attribute of DescriptorRegistry"""
     # See comment above TestRegistry class to enable type definitions
     # req. 1. owner attribute must be the class itself when accessed as class attribute
@@ -315,7 +315,7 @@ def test_8_registry_owner(registry: Registry):
     assert registry.cls_object.descriptor_object == registry.inst_object.descriptor_object
 
 
-def test_9_descriptors_access(registry: Registry):
+def test_10_descriptors_access(registry: Registry):
     """Test descriptors access"""
 
     # req. 1. descriptors are instances of the descriptor object - Property | Action | Event
@@ -356,7 +356,7 @@ def test_9_descriptors_access(registry: Registry):
     )
 
 
-def test_10_registry_dunders(registry: Registry):
+def test_11_registry_dunders(registry: Registry):
     """Test dunders of DescriptorRegistry"""
 
     # req. 1. __getitem__ must return the descriptor object
@@ -394,7 +394,7 @@ def test_10_registry_dunders(registry: Registry):
     # __str__ will not be tested
 
 
-def test_11_bound_objects(registry: Registry):
+def test_12_bound_objects(registry: Registry):
     """Test bound objects returned from descriptor access"""
     # req. 1. number of bound objects must be equal to number of descriptors
     # for example, number of bound actions must be equal to number of actions
@@ -427,7 +427,7 @@ def event_registry(request) -> Registry:
     return registry
 
 
-def test_12_descriptors_access_events(event_registry: Registry):
+def test_13_descriptors_access_events(event_registry: Registry):
     registry = event_registry
     # req. 5. observables and change events are also descriptors
     for name, value in registry.inst_object.observables.items():
@@ -498,7 +498,7 @@ def properties_registry(request) -> Registry:
     return registry
 
 
-def test_13_descriptors_access_properties(properties_registry: Registry):
+def test_14_descriptors_access_properties(properties_registry: Registry):
     registry = properties_registry
 
     # req. 5. parameters that are subclass of Property are usually remote objects
@@ -567,7 +567,7 @@ def spectrometer_registry(request) -> Registry:
     return registry
 
 
-def test_14_bulk_read_write_properties(spectrometer_registry: Registry):
+def test_15_bulk_read_write_properties(spectrometer_registry: Registry):
     """Test bulk read and write operations for properties"""
     registry = spectrometer_registry
 
@@ -637,7 +637,7 @@ def test_14_bulk_read_write_properties(spectrometer_registry: Registry):
     assert registry.thing_inst.trigger_mode == 2
 
 
-def test_15_db_properties():
+def test_16_db_properties():
     """Test db operations for properties"""
     # req. 1. db operations are supported only at instance level
     with pytest.raises(AttributeError) as ex:
@@ -648,7 +648,7 @@ def test_15_db_properties():
     assert "database operations are only supported at instance level" in str(ex.value)
 
 
-def test_16_inheritance_of_registries():
+def test_17_inheritance_of_registries():
     """Test that registries are inherited properly"""
     # req. 1. subclass have more descriptors than parent class because our example Thing OceanOpticsSpectrometer
     # has defined its own actions, properties and events

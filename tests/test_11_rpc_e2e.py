@@ -54,14 +54,14 @@ def client(thing: TestThing, access_point: str) -> ObjectProxy:
 
 
 class TestRPC_E2E:
-    @pytest.mark.order(1)
-    def test_creation_and_handshake(self, client: ObjectProxy, thing_model: dict[str, Any]):
+    """End-to-end tests for RPC"""
+
+    def test_01_creation_and_handshake(self, client: ObjectProxy, thing_model: dict[str, Any]):
         assert isinstance(client, ObjectProxy)
         assert len(client.properties) + len(client.actions) + len(client.events) >= (
             len(thing_model["properties"]) + len(thing_model["actions"]) + len(thing_model["events"])
         )
 
-    @pytest.mark.order(2)
     @pytest.mark.parametrize(
         "payload",
         [
@@ -70,10 +70,9 @@ class TestRPC_E2E:
             pytest.param(fake.json(), id="json"),
         ],
     )
-    def test_invoke_action_manual(self, client: ObjectProxy, payload: Any):
+    def test_02_invoke_action_manual(self, client: ObjectProxy, payload: Any):
         assert client.invoke_action("action_echo", payload) == payload
 
-    @pytest.mark.order(3)
     @pytest.mark.parametrize(
         "payload",
         [
@@ -82,10 +81,9 @@ class TestRPC_E2E:
             pytest.param(fake.address(), id="address"),
         ],
     )
-    def test_invoke_action_dot_notation(self, client: ObjectProxy, payload: Any):
+    def test_03_invoke_action_dot_notation(self, client: ObjectProxy, payload: Any):
         assert client.action_echo(payload) == payload
 
-    @pytest.mark.order(4)
     @pytest.mark.parametrize(
         "payload",
         [
@@ -93,11 +91,10 @@ class TestRPC_E2E:
             pytest.param(fake.random_int(), id="random-int"),
         ],
     )
-    def test_invoke_action_oneway(self, client: ObjectProxy, payload: Any):
+    def test_04_invoke_action_oneway(self, client: ObjectProxy, payload: Any):
         assert client.invoke_action("set_non_remote_number_prop", payload, oneway=True) is None
         assert client.get_non_remote_number_prop() == payload
 
-    @pytest.mark.order(5)
     @pytest.mark.parametrize(
         "payload",
         [
@@ -107,20 +104,18 @@ class TestRPC_E2E:
             ),
         ],
     )
-    def test_invoke_action_noblock(self, client: ObjectProxy, payload: Any):
+    def test_05_invoke_action_noblock(self, client: ObjectProxy, payload: Any):
         noblock_msg_id = client.invoke_action("action_echo", payload, noblock=True)
         assert isinstance(noblock_msg_id, str)
         assert client.invoke_action("action_echo", fake.pylist(20, value_types=[int, float, str, bool])) == fake.last
         assert client.invoke_action("action_echo", fake.pylist(10, value_types=[int, float, str, bool])) == fake.last
         assert client.read_reply(noblock_msg_id) == payload
 
-    @pytest.mark.order(6)
-    def test_read_property_manual(self, client: ObjectProxy):
+    def test_06_read_property_manual(self, client: ObjectProxy):
         assert isinstance(client.read_property("number_prop"), (int, float))
         assert isinstance(client.read_property("string_prop"), str)
         assert client.read_property("selector_prop") in TestThing.selector_prop.objects
 
-    @pytest.mark.order(7)
     @pytest.mark.parametrize(
         "prop, payload",
         [
@@ -137,18 +132,16 @@ class TestRPC_E2E:
             ),
         ],
     )
-    def test_write_property_manual(self, client: ObjectProxy, prop: str, payload: Any):
+    def test_07_write_property_manual(self, client: ObjectProxy, prop: str, payload: Any):
         client.write_property(prop, payload)
         assert client.read_property(prop) == payload
 
-    @pytest.mark.order(8)
-    def test_read_property_dot_notation(self, client: ObjectProxy):
+    def test_08_read_property_dot_notation(self, client: ObjectProxy):
         assert isinstance(client.number_prop, (int, float))
         assert isinstance(client.string_prop, str)
         assert client.selector_prop in TestThing.selector_prop.objects
 
-    @pytest.mark.order(9)
-    def test_write_property_dot_notation(self, client: ObjectProxy):
+    def test_09_write_property_dot_notation(self, client: ObjectProxy):
         client.number_prop = fake.random_number()
         assert client.number_prop == fake.last
         client.selector_prop = TestThing.selector_prop.objects[
@@ -158,7 +151,6 @@ class TestRPC_E2E:
         client.observable_list_prop = fake.pylist(25, value_types=[int, float, str, bool])
         assert client.observable_list_prop == fake.last
 
-    @pytest.mark.order(10)
     @pytest.mark.parametrize(
         "prop, payload",
         [
@@ -175,27 +167,24 @@ class TestRPC_E2E:
             ),
         ],
     )
-    def test_write_property_oneway(self, client: ObjectProxy, prop: str, payload: Any):
+    def test_10_write_property_oneway(self, client: ObjectProxy, prop: str, payload: Any):
         client.write_property(prop, payload, oneway=True)
         assert client.read_property(prop) == payload
 
-    @pytest.mark.order(11)
-    def test_read_property_noblock(self, client: ObjectProxy):
+    def test_11_read_property_noblock(self, client: ObjectProxy):
         noblock_msg_id = client.read_property("number_prop", noblock=True)
         assert isinstance(noblock_msg_id, str)
         assert client.read_property("selector_prop") in TestThing.selector_prop.objects
         assert isinstance(client.read_property("string_prop"), str)
         assert client.read_reply(noblock_msg_id) == client.number_prop
 
-    @pytest.mark.order(12)
-    def test_write_property_noblock(self, client: ObjectProxy):
+    def test_12_write_property_noblock(self, client: ObjectProxy):
         noblock_msg_id = client.write_property("number_prop", fake.random_number(), noblock=True)
         assert isinstance(noblock_msg_id, str)
         assert client.read_property("number_prop") == fake.last
         assert client.read_reply(noblock_msg_id) is None
 
-    @pytest.mark.order(13)
-    def test_error_handling(self, client: ObjectProxy):
+    def test_13_error_handling(self, client: ObjectProxy):
         client.string_prop = "world"
         assert client.string_prop == "world"
         with pytest.raises(ValueError):
@@ -205,8 +194,7 @@ class TestRPC_E2E:
         with pytest.raises(AttributeError):
             _ = client.non_remote_number_prop
 
-    @pytest.mark.order(14)
-    def test_rw_multiple_properties(self, client: ObjectProxy):
+    def test_14_rw_multiple_properties(self, client: ObjectProxy):
         client.write_multiple_properties(number_prop=15, string_prop="foobar")
         assert client.number_prop == 15
         assert client.string_prop == "foobar"
@@ -219,8 +207,7 @@ class TestRPC_E2E:
         assert props["number_prop"] == -15
         assert props["string_prop"] == "foobar"
 
-    @pytest.mark.order(15)
-    def test_05_subscribe_event(self, client: ObjectProxy):
+    def test_15_subscribe_event(self, client: ObjectProxy):
         results = []
 
         def cb(value: SSE):
@@ -234,7 +221,6 @@ class TestRPC_E2E:
         assert len(results) == 100, f"Expected 100 events, got {len(results)}"
         client.unsubscribe_event("test_event")
 
-    @pytest.mark.order(16)
     @pytest.mark.parametrize(
         "prop, prospective_values, op",
         [
@@ -256,7 +242,7 @@ class TestRPC_E2E:
             ),
         ],
     )
-    def test_06_observe_properties(self, client: ObjectProxy, prop: str, prospective_values: Any, op: str):
+    def test_16_observe_properties(self, client: ObjectProxy, prop: str, prospective_values: Any, op: str):
         assert hasattr(client, f"{prop}_change_event")
         result = []
         attempt = 0
@@ -281,8 +267,6 @@ class TestRPC_E2E:
         for index, res in enumerate(result):
             assert res.data == prospective_values[index]
 
-    @pytest.mark.order(17)
-    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "payload",
         [
@@ -291,19 +275,15 @@ class TestRPC_E2E:
             pytest.param(fake.json(), id="json"),
         ],
     )
-    async def test_async_invoke_action(self, client, payload):
+    async def test_17_async_invoke_action(self, client, payload):
         result = await client.async_invoke_action("action_echo", payload)
         assert result == payload
 
-    @pytest.mark.order(18)
-    @pytest.mark.asyncio
-    async def test_async_read_property(self, client):
+    async def test_18_async_read_property(self, client):
         assert isinstance(await client.async_read_property("number_prop"), (int, float))
         assert isinstance(await client.async_read_property("string_prop"), str)
         assert await client.async_read_property("selector_prop") in TestThing.selector_prop.objects
 
-    @pytest.mark.order(19)
-    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "prop, payload",
         [
@@ -320,6 +300,6 @@ class TestRPC_E2E:
             ),
         ],
     )
-    async def test_async_write_property(self, client, prop, payload):
+    async def test_19_async_write_property(self, client, prop, payload):
         await client.async_write_property(prop, payload)
         assert await client.async_read_property(prop) == payload

@@ -20,7 +20,7 @@ def yaml_serializer() -> BaseSerializer:
     return YAMLSerializer()
 
 
-def test_1_singleton():
+def test_01_singleton():
     """Test the singleton nature of the Serializers class."""
 
     serializers = Serializers()
@@ -51,7 +51,7 @@ def test_1_singleton():
     # self.assertEqual(Serializers().default, Serializers.pickle)
 
 
-def test_2_protocol_registration(yaml_serializer: BaseSerializer):
+def test_02_protocol_registration(yaml_serializer: BaseSerializer):
     """i.e. test if a new serializer (protocol) can be registered"""
 
     # get existing number of serializers
@@ -91,7 +91,7 @@ def test_2_protocol_registration(yaml_serializer: BaseSerializer):
     assert len(Serializers.content_types) == num_serializers + 1
 
 
-def test_3_registration_for_objects():
+def test_03_registration_for_objects():
     """i.e. test if a new serializer can be registered for a specific property, action or event"""
     Serializers.register_content_type_for_object(TestThing.base_property, "application/x-pickle")
     Serializers.register_content_type_for_object(TestThing.action_echo, "application/msgpack")
@@ -103,12 +103,12 @@ def test_3_registration_for_objects():
     assert Serializers.for_object(None, "TestThing", "test_unknown_property") == Serializers.default
 
 
-def test_4_registration_for_objects_by_name():
+def test_04_registration_for_objects_by_name():
     Serializers.register_content_type_for_object_per_thing_instance("test_thing", "base_property", "application/yaml")
     assert isinstance(Serializers.for_object("test_thing", None, "base_property"), YAMLSerializer)
 
 
-def test_5_registration_dict():
+def test_05_registration_dict():
     """test the dictionary where all serializers are stored"""
     # depends on test 3
     assert "test_thing" in Serializers.object_content_type_map
@@ -122,7 +122,7 @@ def test_5_registration_dict():
     assert Serializers.object_content_type_map["TestThing"]["test_event"] == "application/yaml"
 
 
-def test_6_retrieval():
+def test_06_retrieval():
     # added in previous tests
     assert isinstance(Serializers.for_object("test_thing", None, "base_property"), YAMLSerializer)
     # unknown object should retrieve the default serializer
@@ -131,14 +131,14 @@ def test_6_retrieval():
     assert Serializers.for_object("test_unknown_thing", None, "base_property") == Serializers.default
 
 
-def test_7_set_default():
+def test_07_set_default():
     """test setting the default serializer"""
     # get existing default
     old_default = Serializers.default
     # set new default and check if default is set
     Serializers.default = Serializers.yaml
     assert Serializers.default == Serializers.yaml
-    test_6_retrieval()  # check if retrieval is consistent with default
+    test_06_retrieval()  # check if retrieval is consistent with default
     # reset default and check if default is reset
     Serializers.default = old_default
     assert Serializers.default == old_default

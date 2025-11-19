@@ -42,8 +42,7 @@ def reset_class_properties():
     yield
 
 
-@pytest.mark.order(1)
-def test_simple_class_property():
+def test_01_simple_class_property():
     # Test class-level access
     assert TestThing.simple_class_prop == Defaults.SIMPLE_CLASS_PROP
     TestThing.simple_class_prop = 100
@@ -61,8 +60,7 @@ def test_simple_class_property():
     assert instance2.simple_class_prop == 200
 
 
-@pytest.mark.order(2)
-def test_managed_class_property():
+def test_02_managed_class_property():
     # Test initial value
     assert TestThing.managed_class_prop == Defaults.MANAGED_CLASS_PROP
     # Test valid value assignment
@@ -85,8 +83,7 @@ def test_managed_class_property():
     assert instance.managed_class_prop == 100
 
 
-@pytest.mark.order(3)
-def test_readonly_class_property():
+def test_03_readonly_class_property():
     # Test reading the value
     assert TestThing.readonly_class_prop == "read-only-value"
 
@@ -104,8 +101,7 @@ def test_readonly_class_property():
     assert instance.readonly_class_prop == "read-only-value"
 
 
-@pytest.mark.order(4)
-def test_deletable_class_property():
+def test_04_deletable_class_property():
     # Test initial value
     assert TestThing.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP
 
@@ -126,8 +122,7 @@ def test_deletable_class_property():
     assert TestThing.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP  # Should return to default
 
 
-@pytest.mark.order(5)
-def test_descriptor_access():
+def test_05_descriptor_access():
     # Test direct access through descriptor
     instance = TestThing(id=f"test-descriptor-access-{uuid_hex()}")
     assert isinstance(TestThing.not_a_class_prop, Number)
@@ -180,8 +175,7 @@ def db_ops_tests() -> tuple[Callable, Callable]:
     return test_prekill, test_postkill
 
 
-@pytest.mark.order(6)
-def test_sqlalchemy_db_operations(db_ops_tests: tuple[Callable, Callable]):
+def test_06_sqlalchemy_db_operations(db_ops_tests: tuple[Callable, Callable]):
     thing_id = "test-db-operations"
     file_path = f"{thing_id}.db"
     try:
@@ -199,8 +193,7 @@ def test_sqlalchemy_db_operations(db_ops_tests: tuple[Callable, Callable]):
     test_postkill(thing)
 
 
-@pytest.mark.order(7)
-def test_json_db_operations(db_ops_tests: tuple[Callable, Callable]):
+def test_07_json_db_operations(db_ops_tests: tuple[Callable, Callable]):
     with tempfile.NamedTemporaryFile(delete=False) as tf:
         filename = tf.name
 
@@ -216,8 +209,7 @@ def test_json_db_operations(db_ops_tests: tuple[Callable, Callable]):
     os.remove(filename)
 
 
-@pytest.mark.order(8)
-def test_db_config():
+def test_08_db_config():
     thing = TestThing(id=f"test-sql-config-{uuid_hex()}")
 
     # ----- SQL config tests -----

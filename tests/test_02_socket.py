@@ -1,17 +1,18 @@
 import pytest
 import zmq.asyncio
 
+from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.zmq.brokers import BaseZMQ
 
 
-def test_1_socket_creation_defaults(zmq_context):
+def test_01_socket_creation_defaults():
     """check the default settings of socket creation - an IPC socket which is a ROUTER and async"""
     socket, socket_address = BaseZMQ.get_socket(
         server_id="test-server",
         socket_id="test-server",
         node_type="server",
-        context=zmq_context,
+        context=global_config.zmq_context(),
     )
     assert isinstance(socket, zmq.asyncio.Socket)
     assert socket.getsockopt_string(zmq.IDENTITY) == "test-server"
@@ -21,7 +22,7 @@ def test_1_socket_creation_defaults(zmq_context):
     socket.close()
 
 
-def test_2_context_options():
+def test_02_context_options():
     """
     Check that context and socket type are as expected.
     Async context should be used for async socket and sync context for sync socket.
@@ -51,7 +52,7 @@ def test_2_context_options():
     context.term()
 
 
-def test_3_transport_options():
+def test_03_transport_options():
     """check only three transport options are supported"""
     context = zmq.asyncio.Context()
     socket, socket_address = BaseZMQ.get_socket(
@@ -143,7 +144,7 @@ def test_3_transport_options():
         )
 
 
-def test_4_socket_options():
+def test_04_socket_options():
     """check that socket options are as expected"""
     context = zmq.asyncio.Context()
 

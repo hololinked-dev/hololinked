@@ -1,15 +1,10 @@
-import asyncio
-import typing
-import multiprocessing
-import threading
 import logging
+import multiprocessing
 import queue
+import threading
+import typing
 
-from hololinked.exceptions import BreakLoop
-from hololinked.core.zmq.brokers import AsyncZMQServer
-from hololinked.core.zmq.message import EXIT
-from hololinked.core import ThingMeta, Thing
-from hololinked.utils import get_current_async_loop
+from hololinked.core import ThingMeta
 from hololinked.logger import setup_logging
 
 
@@ -107,25 +102,3 @@ def run_thing_with_zmq_server_forked(
         )
         T.start()
         return T
-
-
-def run_zmq_server(server: AsyncZMQServer, owner, done_queue: multiprocessing.Queue) -> None:
-    event_loop = get_current_async_loop()
-
-    async def run():
-        while True:
-            try:
-                messages = await server.async_recv_requests()
-                owner.last_server_message = messages[0]
-                for message in messages:
-                    if message.type == EXIT:
-                        server.exit()
-                        return
-                await asyncio.sleep(0.01)
-            except BreakLoop:
-                break
-
-    event_loop.run_until_complete(run())
-    event_loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(event_loop)))
-    if done_queue:
-        done_queue.put(True)

@@ -36,9 +36,6 @@ except ImportError:
 setup_logging(log_level=logging.ERROR + 10)
 
 
-# ------------------- Fixtures -------------------
-
-
 @pytest.fixture(scope="module")
 def thing():
     return OceanOpticsSpectrometer(id="test-thing", log_level=logging.ERROR)
@@ -49,10 +46,7 @@ def test_thing():
     return TestThing(id="test-thing", log_level=logging.ERROR)
 
 
-# ------------------- TestInteractionAffordance -------------------
-
-
-def test_associated_objects(thing):
+def test_01_associated_objects(thing):
     affordance = PropertyAffordance()
     affordance.objekt = OceanOpticsSpectrometer.integration_time
     affordance.owner = thing
@@ -100,7 +94,7 @@ def test_associated_objects(thing):
     affordance.objekt = OceanOpticsSpectrometer.integration_time
 
 
-def test_number_schema(thing):
+def test_02_number_schema(thing):
     schema = OceanOpticsSpectrometer.integration_time.to_affordance(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert schema.type == "number"
@@ -154,7 +148,7 @@ def test_number_schema(thing):
     assert schema.unit == integration_time.metadata["unit"]
 
 
-def test_string_schema(thing):
+def test_03_string_schema(thing):
     schema = OceanOpticsSpectrometer.status.to_affordance(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
 
@@ -179,7 +173,7 @@ def test_string_schema(thing):
     assert schema.default == status.default
 
 
-def test_boolean_schema(thing):
+def test_04_boolean_schema(thing):
     schema = OceanOpticsSpectrometer.nonlinearity_correction.to_affordance(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
 
@@ -197,7 +191,7 @@ def test_boolean_schema(thing):
     assert schema.default == nonlinearity_correction.default
 
 
-def test_array_schema(thing):
+def test_05_array_schema(thing):
     schema = OceanOpticsSpectrometer.wavelengths.to_affordance(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
 
@@ -256,7 +250,7 @@ def test_array_schema(thing):
                 _ = subtype["maxItems"]
 
 
-def test_enum_schema(thing):
+def test_06_enum_schema(thing):
     schema = OceanOpticsSpectrometer.trigger_mode.to_affordance(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
 
@@ -290,7 +284,7 @@ def test_enum_schema(thing):
     assert enum_subschema["enum"] == trigger_mode.objects
 
 
-def test_class_selector_custom_schema(thing):
+def test_07_class_selector_custom_schema(thing):
     last_intensity = ClassSelector(
         default=Intensity([], []),
         allow_None=False,
@@ -313,7 +307,7 @@ def test_class_selector_custom_schema(thing):
     assert subschema["properties"] == Intensity.schema["properties"]
 
 
-def test_json_schema_properties(thing):
+def test_08_json_schema_properties(thing):
     json_schema_prop = TestThing.json_schema_prop  # type: Property
     json_schema_prop.allow_None = False
     schema = json_schema_prop.to_affordance(owner_inst=thing)
@@ -334,7 +328,7 @@ def test_json_schema_properties(thing):
         assert subschema.get(key, NotImplemented) == json_schema_prop.model[key]
 
 
-def test_pydantic_properties(thing):
+def test_09_pydantic_properties(thing):
     pydantic_prop = TestThing.pydantic_prop  # type: Property
     pydantic_prop.allow_None = False
     schema = pydantic_prop.to_affordance(owner_inst=thing)
@@ -367,9 +361,6 @@ def test_pydantic_properties(thing):
     assert subschema["type"] == "null"
 
 
-def test_thing_model_generation():
+def test_10_thing_model_generation():
     thing = TestThing(id="test-thing-model", log_level=logging.ERROR + 10)
     assert isinstance(thing.get_thing_model(skip_names=["base_property"]).json(), dict)
-
-
-# No main block needed for pytest

@@ -36,8 +36,7 @@ def thing() -> TestThing:
     return _thing
 
 
-@pytest.mark.order(1)
-def test_allowed_actions():
+def test_01_allowed_actions():
     """Test if methods can be decorated with action"""
     # 1. instance method can be decorated with action
     assert TestThing.action_echo == action()(TestThing.action_echo.obj)  # already predecorated as action
@@ -72,8 +71,7 @@ def test_allowed_actions():
     assert Action(TestThing.pydantic_validated_action) == action()(TestThing.pydantic_validated_action)
 
 
-@pytest.mark.order(2)
-def test_bound_method(thing: TestThing):
+def test_02_bound_method(thing: TestThing):
     """Test if methods decorated with action are correctly bound"""
     # 1. instance method can be decorated with action
     assert isinstance(thing.action_echo, BoundAction)
@@ -233,8 +231,7 @@ def test_bound_method(thing: TestThing):
     assert thing.json_schema_validated_action.bound_obj == thing
 
 
-@pytest.mark.order(3)
-def test_remote_info():
+def test_03_remote_info():
     """Test if the validator is working correctly, on which the logic of the action is based"""
     remote_info = TestThing.action_echo.execution_info
     assert isinstance(remote_info, ActionInfoValidator)
@@ -308,8 +305,7 @@ def test_remote_info():
     assert isinstance(remote_info.schema_validator, JSONSchemaValidator)
 
 
-@pytest.mark.order(4)
-def test_api_and_invalid_actions():
+def test_04_api_and_invalid_actions():
     """Test if action prevents invalid objects from being named as actions and raises neat errors"""
     # done allow action decorator to be terminated without '()' on a method
     with pytest.raises(TypeError) as ex:
@@ -345,8 +341,7 @@ def test_api_and_invalid_actions():
     assert str(ex.value).startswith("Only 'safe', 'idempotent', 'synchronous' are allowed")
 
 
-@pytest.mark.order(5)
-def test_thing_cls_actions(thing: TestThing):
+def test_05_thing_cls_actions(thing: TestThing):
     """Test class and instance level action access"""
     # class level
     for name, act in TestThing.actions.descriptors.items():
@@ -380,8 +375,7 @@ def test_thing_cls_actions(thing: TestThing):
         asyncio.run(TestThing.parameterized_action_async(4, "hello4", 5))
 
 
-@pytest.mark.order(6)
-def test_action_affordance(thing: TestThing):
+def test_06_action_affordance(thing: TestThing):
     """Test if action affordance is correctly created"""
     assert isinstance(thing.action_echo, BoundAction)
     affordance = thing.action_echo.to_affordance()

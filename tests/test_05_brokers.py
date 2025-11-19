@@ -139,13 +139,13 @@ def start_server(server: AsyncZMQServer, sync_client: SyncZMQClient, app_ids: Ap
         print("Server did not properly process exit request")
 
 
-def test_sync_client_handshake_complete(sync_client: SyncZMQClient):
+def test_01_01_sync_client_handshake_complete(sync_client: SyncZMQClient):
     sync_client.handshake()
     assert sync_client._monitor_socket is not None
     assert sync_client._monitor_socket in sync_client.poller
 
 
-async def test_sync_client_basic_message_contract_types(
+async def test_01_02_sync_client_basic_message_contract_types(
     sync_client: SyncZMQClient,
     server: AsyncZMQServer,
     app_ids: AppIDs,
@@ -195,7 +195,7 @@ async def test_sync_client_basic_message_contract_types(
     sync_client.handshake()
 
 
-async def test_sync_client_polling(sync_client: SyncZMQClient, server: AsyncZMQServer):
+async def test_01_03_sync_client_polling(sync_client: SyncZMQClient, server: AsyncZMQServer):
     done = asyncio.Future()
 
     async def verify_poll_stopped():
@@ -223,7 +223,7 @@ async def test_async_client_handshake_complete(async_client: AsyncZMQClient):
     assert async_client._monitor_socket in async_client.poller
 
 
-async def test_async_client_message_contract_types(
+async def test_02_01_async_client_message_contract_types(
     async_client: AsyncZMQClient,
     server: AsyncZMQServer,
     app_ids: AppIDs,
@@ -275,7 +275,7 @@ async def test_async_client_message_contract_types(
     validate_response_message(msg, app_ids=active_app_ids)
 
 
-async def test_mapped_handshake_complete(message_mapped_client: MessageMappedZMQClientPool):
+async def test_03_01_mapped_handshake_complete(message_mapped_client: MessageMappedZMQClientPool):
     message_mapped_client.handshake()
     await message_mapped_client.handshake_complete()
     for client in message_mapped_client.pool.values():
@@ -337,7 +337,7 @@ async def test_mapped_message_contract_types(
     message_mapped_client.stop_polling()
 
 
-async def test_mapped_verify_polling(message_mapped_client: MessageMappedZMQClientPool):
+async def test_03_02_mapped_verify_polling(message_mapped_client: MessageMappedZMQClientPool):
     done = asyncio.Future()
 
     async def verify_poll_stopped():

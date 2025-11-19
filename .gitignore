@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.crt 
+test*.db
 
 # C extensions
 *.so
