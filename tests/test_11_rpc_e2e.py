@@ -2,7 +2,6 @@ import logging
 import time
 
 from typing import Any, Generator
-from uuid import uuid4
 
 import pytest
 
@@ -10,6 +9,7 @@ from hololinked.client.abstractions import SSE
 from hololinked.client.factory import ClientFactory
 from hololinked.client.proxy import ObjectProxy
 from hololinked.logger import setup_logging
+from hololinked.utils import uuid_hex
 
 
 try:
@@ -24,10 +24,11 @@ setup_logging(log_level=logging.ERROR + 10)
 
 
 @pytest.fixture(scope="module")
-def thing() -> Generator[TestThing, None, None]:
-    thing_id = f"test-thing-{uuid4().hex[:8]}"
+def thing(request) -> Generator[TestThing, None, None]:
+    access_point = request.param
+    thing_id = f"test-thing-{uuid_hex()}"
     thing = TestThing(id=thing_id)
-    thing.run_with_zmq_server(forked=True)
+    thing.run_with_zmq_server(forked=True, access_points=[access_point])
     yield thing
     thing.rpc_server.stop()
 
@@ -38,11 +39,11 @@ def thing_model(thing: TestThing) -> dict[str, Any]:
 
 
 @pytest.fixture(scope="module")
-def client(thing: TestThing):
+def client(thing: TestThing, access_point: str) -> ObjectProxy:
     client = ClientFactory.zmq(
-        thing.id,
-        thing.id,
-        "IPC",
+        server_id=thing.id,
+        thing_id=thing.id,
+        access_point=access_point.replace("*", "localhost"),
         ignore_TD_errors=True,
     )
     return client
@@ -101,7 +102,10 @@ def test_invoke_action_oneway(client: ObjectProxy, payload: Any) -> None:
 @pytest.mark.parametrize(
     "payload",
     [
-        pytest.param(fake.pylist(20, value_types=[int, float, str, bool]), id="pylist-explicit-types"),
+        pytest.param(
+            fake.pylist(20, value_types=[int, float, str, bool]),
+            id="pylist-explicit-types",
+        ),
     ],
 )
 def test_invoke_action_noblock(client: ObjectProxy, payload: Any) -> None:
@@ -154,8 +158,8 @@ def test_read_property_dot_notation(client: ObjectProxy) -> None:
 @pytest.mark.order(9)
 def test_write_property_dot_notation(client: ObjectProxy) -> None:
     """
-    write properties using dot notation, unfortunately using parametrization here will not achieve the purpose,
-    so its explicitly written out
+    write properties using dot notation, unfortunately using parametrization #
+    here will not achieve the purpose, so its explicitly written out
     """
     client.number_prop = fake.random_number()
     assert client.number_prop == fake.last
