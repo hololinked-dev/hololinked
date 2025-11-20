@@ -22,7 +22,7 @@ from hololinked.td.interaction_affordance import (
     InteractionAffordance,
     PropertyAffordance,
 )
-from hololinked.utils import issubklass
+from hololinked.utils import issubklass, uuid_hex
 
 
 try:
@@ -38,12 +38,12 @@ setup_logging(log_level=logging.ERROR + 10)
 
 @pytest.fixture(scope="module")
 def thing():
-    return OceanOpticsSpectrometer(id="test-thing", log_level=logging.ERROR)
+    return OceanOpticsSpectrometer(id=f"test-thing-{uuid_hex()}", log_level=logging.ERROR)
 
 
 @pytest.fixture(scope="module")
 def test_thing():
-    return TestThing(id="test-thing", log_level=logging.ERROR)
+    return TestThing(id=f"test-spectrometer-thing-{uuid_hex()}", log_level=logging.ERROR)
 
 
 def test_01_associated_objects(thing):

@@ -143,7 +143,7 @@ def test_05_descriptor_access():
         _ = instance.not_a_class_prop
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def db_ops_tests() -> tuple[Callable, Callable]:
     def test_prekill(thing: TestThing):
         assert thing.db_commit_number_prop == 0

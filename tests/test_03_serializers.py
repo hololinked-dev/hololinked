@@ -14,7 +14,7 @@ class YAMLSerializer(BaseSerializer):
         return "application/yaml"
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def yaml_serializer() -> BaseSerializer:
     # test register a new serializer with content type
     return YAMLSerializer()

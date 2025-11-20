@@ -1,10 +1,14 @@
-import logging
-import structlog
 import copy
-from typing import Any
-from structlog.dev import KeyValueColumnFormatter
+import logging
 import sys
 import types
+
+from typing import Any
+
+import structlog
+
+from structlog.dev import KeyValueColumnFormatter
+
 
 default_label_formatter = None
 
@@ -67,8 +71,8 @@ def setup_logging(log_level: int = logging.INFO, colored_logs: bool = False, log
         import httpx  # noqa: F401
 
         # httpx_log = structlog.get_logger().bind(component="library|httpx")
-        logging.getLogger("httpcore").setLevel(logging.WARNING)
-        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING if log_level <= logging.WARNING else log_level)
+        logging.getLogger("httpx").setLevel(logging.WARNING if log_level <= logging.WARNING else log_level)
     except ImportError:
         pass
 
