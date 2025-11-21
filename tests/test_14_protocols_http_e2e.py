@@ -56,6 +56,7 @@ def client(td_endpoint: str) -> "ObjectProxy":
     return ClientFactory.http(url=td_endpoint, ignore_TD_errors=True)
 
 
+@pytest.mark.asyncio(loop_scope="class")
 class TestHTTP_E2E(BaseRPC_E2E):
     def test_14_rw_multiple_properties(self, client: ObjectProxy):
         pass
