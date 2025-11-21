@@ -21,7 +21,6 @@ except ImportError:
     from test_13_protocols_http import hostname_prefix, wait_until_server_ready
     from things import TestThing
 
-
 setup_logging(log_level=logging.ERROR + 10)
 set_global_event_loop_policy()
 get_current_async_loop()

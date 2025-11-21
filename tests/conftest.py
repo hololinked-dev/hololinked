@@ -11,6 +11,7 @@ import zmq.asyncio
 from hololinked.config import global_config
 from hololinked.logger import setup_logging
 from hololinked.serializers import Serializers
+from hololinked.server import stop
 from hololinked.utils import get_current_async_loop, set_global_event_loop_policy
 
 
@@ -29,18 +30,21 @@ class AppIDs:
     """A thing ID"""
 
 
-# @pytest.fixture(autouse=True, scope="module")
+@pytest.fixture(autouse=True, scope="module")
 def setup_test_environment():
     """Automatically setup test environment for each file"""
     # This fixture runs automatically for every test
     set_global_event_loop_policy()
+    get_current_async_loop()
     global_config.ZMQ_CONTEXT = zmq.asyncio.Context()
     setup_logging(log_level=logging.ERROR + 10)
     yield
+    stop()
+    get_current_async_loop().close()
     # Reset serializers after each test
     Serializers().reset()
+    global_config.ZMQ_CONTEXT.destroy(linger=0)
     global_config.ZMQ_CONTEXT.term()
-    get_current_async_loop().close()
 
 
 @pytest.fixture()
