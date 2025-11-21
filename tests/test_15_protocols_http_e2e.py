@@ -13,14 +13,14 @@ from hololinked.utils import get_current_async_loop, set_global_event_loop_polic
 try:
     from .test_11_rpc_e2e import TestRPC_E2E as BaseRPC_E2E  # noqa: F401
     from .test_11_rpc_e2e import client, thing, thing_model  # noqa: F401
-    from .test_15_protocols_http import hostname_prefix, wait_until_server_ready
+    from .test_14_protocols_http import hostname_prefix, wait_until_server_ready
     from .things import TestThing
 except ImportError:
     from test_11_rpc_e2e import TestRPC_E2E as BaseRPC_E2E  # noqa: F401
     from test_11_rpc_e2e import client, thing, thing_model  # noqa: F401
+    from test_14_protocols_http import hostname_prefix, wait_until_server_ready
     from things import TestThing
 
-    from tests.test_15_protocols_http import hostname_prefix, wait_until_server_ready
 
 setup_logging(log_level=logging.ERROR + 10)
 set_global_event_loop_policy()
