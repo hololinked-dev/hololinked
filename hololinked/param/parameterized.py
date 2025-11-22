@@ -42,7 +42,7 @@ try:
     import numpy as np
 
     dt_types = dt_types + (np.datetime64,)
-except:
+except ImportError:
     pass
 
 # External components can register an async executor which will run
@@ -719,9 +719,6 @@ class SortedDependencies:
     dynamic: typing.List[DynamicDependencyInfo] = field(default_factory=list)
 
     def __iadd__(self, other: "SortedDependencies") -> "SortedDependencies":
-        assert isinstance(other, SortedDependencies), wrap_error_text(
-            f"Can only add other ResolvedDepedency types to iteself, given type {type(other)}"
-        )
         self.static += other.static
         self.dynamic += other.dynamic
         return self
@@ -998,15 +995,19 @@ class EventResolver:
         for mcs_super in classlist(self.owner_cls)[:-1][::-1]:
             if isinstance(mcs_super, ParameterizedMetaclass):
                 for dep in mcs_super.parameters.event_resolver._unresolved_watcher_info:  # type: ignore - why doesnt it work?
-                    assert isinstance(dep, UnresolvedWatcherInfo), wrap_error_text(  # dummy assertion to check types
-                        f"""Parameters._unresolved_watcher_info only accept UnresolvedWatcherInfo type, given type {type(dep)}"""
-                    )
+                    if not isinstance(dep, UnresolvedWatcherInfo):
+                        raise TypeError(
+                            f"Parameters._unresolved_watcher_info only accept UnresolvedWatcherInfo type, given type {type(dep)}"
+                        )
                     method = getattr(mcs_super, dep.method_name, None)
                     if method is not None and hasattr(method, "param_dependency_info"):
-                        assert isinstance(method.param_dependency_info, GeneralDependencyInfo), wrap_error_text(
-                            f"""attribute 'param_depency_info' reserved by param library, 
-                            please use another name for your attributes of type {type(method.param_dependency_info)}."""
-                        )  # dummy assertion to check types
+                        if not isinstance(method.param_dependency_info, GeneralDependencyInfo):
+                            raise TypeError(
+                                wrap_error_text(
+                                    f"attribute 'param_depency_info' reserved by param library, " +
+                                    f"please use another name for your attributes of type {type(method.param_dependency_info)}."
+                                )
+                            ) 
                         dinfo: GeneralDependencyInfo = method.param_dependency_info
                         if not any(dep.method_name == w.method_name for w in _watch + _inherited) and dinfo.invoke:
                             _inherited.append(dep)
@@ -1078,8 +1079,8 @@ class EventResolver:
                 cls = depended_obj_notation.owner
                 if not isinstance(cls, ParameterizedMetaclass):
                     raise TypeError(
-                        wrap_error_text("""Currently dependencies of a parameter from another class except a subclass 
-                                    of parameterized is not supported""")
+                        "Currently dependencies of a parameter from another class " +
+                        "except a subclass of parameterized is not supported."
                     )
                 info = ParameterDependencyInfo(
                     inst=inst,
@@ -1122,8 +1123,11 @@ class EventResolver:
 
         cls = (src, None) if isinstance(src, type) else (type(src), src)
         if attr == "parameters":
-            assert isinstance(obj, str), wrap_error_text("""object preceding parameters access (i.e. <name of obj>.parameters)
-              in dependency resolution became None due to internal error.""")
+            if not isinstance(obj, str):
+                raise TypeError(
+                    "object preceding parameters access (i.e. <name of obj>.parameters) " +
+                    "in dependency resolution became None due to internal error."
+                )
             sorted_dependencies = self.convert_notation_to_dependency_info(obj[1:], dynamic, intermediate)
             for p in src.parameters:
                 sorted_dependencies += src.parameters.event_resolver.convert_notation_to_dependency_info(
@@ -1169,14 +1173,17 @@ class EventResolver:
         2. The attribute being depended on, i.e. either a parameter or method
         3. The parameter attribute being depended on
         """
-        assert notation.count(":") <= 1, "argument '{notation}' for depends has more than one colon"
+        if not notation.count(":") <= 1:
+            raise ValueError(f"argument '{notation}' for depends has more than one colon")
         notation = notation.strip()
         m = re.match(r"(?P<path>[^:]*):?(?P<what>.*)", notation)
-        assert m is not None, f"could not parse object notation for finding dependecies {notation}"
+        if m is None:
+            raise ValueError(f"could not parse object notation for finding dependecies {notation}")
         what = m.group("what")
         path = "." + m.group("path")
         m = re.match(r"(?P<obj>.*)(\.)(?P<attr>.*)", path)
-        assert m is not None, f"could not parse object notation for finding dependecies {notation}"
+        if m is None:
+            raise ValueError(f"could not parse object notation for finding dependecies {notation}")
         obj = m.group("obj")
         attr = m.group("attr")
         return obj or None, attr, what or "value"
@@ -2210,7 +2217,6 @@ def descendents(class_: type) -> typing.List[type]:
     The list is ordered from least- to most-specific.  Can be useful for
     printing the contents of an entire class hierarchy.
     """
-    assert isinstance(class_, type)
     q = [class_]
     out = []
     while len(q):
