@@ -743,12 +743,9 @@ def depends_on(*parameters, invoke: bool = True, on_init: bool = True, queued: b
         for dep in deps:
             if not isinstance(dep, (str, Parameter)):
                 raise ValueError(
-                    wrap_error_text(
-                        f"""The depends_on decorator only accepts string types referencing a parameter or parameter 
-                        instances, found {type(dep).__name__} type instead."""
-                    )
+                    f"The depends_on decorator only accepts string types referencing a parameter or parameter " +
+                    f"instances, found {type(dep).__name__} type instead."
                 )
-
         _dinfo = GeneralDependencyInfo(dependencies=deps, queued=queued, on_init=on_init, invoke=invoke)
         if hasattr(func, "param_dependency_info") and not isinstance(func.param_dependency_info, GeneralDependencyInfo):
             raise TypeError(f"attribute 'param_depency_info' reserved by param library, please use another name.")
@@ -1148,18 +1145,13 @@ class EventResolver:
                 return SortedDependencies()
             elif isinstance(attr_obj, FunctionType):
                 raise NotImplementedError(
-                    wrap_error_text(
-                        f"""In this version of param, support for dependency on other callbacks is removed.
-                    Please divide your methods with your own logic. 
-                    """
-                    )
+                    f"In this version of param, support for dependency on other callbacks is removed." +
+                    " Please divide your methods with your own logic."
                 )
             else:
                 raise AttributeError(
-                    wrap_error_text(
-                        f"""Attribute {attr!r} could not be resolved on {src} or resolved attribute not supported 
-                    for dependent events"""
-                    )
+                    f"Attribute {attr!r} could not be resolved on {src} or resolved attribute not supported " +
+                    "for dependent events"
                 )
         else:
             raise AttributeError(f"Attribute {attr!r} could not be resolved on {src}.")
@@ -1544,9 +1536,9 @@ class EventDispatcher:
         if iscoroutinefunction(watcher.fn):
             if async_executor is None:
                 raise RuntimeError(
-                    wrap_error_text(f"""Could not execute {watcher.fn} coroutine function. Please 
-                    register a asynchronous executor on param.parameterized.async_executor, which 
-                    schedules the function on an event loop.""")
+                    f"Could not execute {watcher.fn} coroutine function. Please " +
+                    "register a asynchronous executor on param.parameterized.async_executor, which " +
+                    "schedules the function on an event loop."
                 )
             async_executor(partial(watcher.fn, *args, **kwargs))
         else:
@@ -1560,7 +1552,7 @@ class EventDispatcher:
         changed for a Parameter of type Event, setting it to True so
         that it is clear which Event parameter has been triggered.
         """
-        raise NotImplementedError(wrap_error_text("""Triggering of events is not supported due to incomplete logic."""))
+        raise NotImplementedError("Triggering of events is not supported due to incomplete logic.")
         trigger_params = [
             p for p in self_.self_or_cls.param if hasattr(self_.self_or_cls.param[p], "_autotrigger_value")
         ]
