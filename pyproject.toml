@@ -135,6 +135,6 @@ exclude_dirs = [
     ".github", 
     "doc", 
     "examples", 
-    "licenses", "
-    tests"
+    "licenses", 
+    "tests"
 ]
