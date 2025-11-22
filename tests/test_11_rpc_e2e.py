@@ -211,7 +211,7 @@ class TestRPC_E2E:
         client.subscribe_event("test_event", cb)
         time.sleep(3)
 
-        for i in range(100):
+        for i in range(10):
             client.push_events(total_number_of_events=1)
             time.sleep(1)
             if len(results) > 0:

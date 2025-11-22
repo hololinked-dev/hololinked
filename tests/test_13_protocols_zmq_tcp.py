@@ -10,7 +10,7 @@ except ImportError:
 
 @pytest.fixture(scope="class")
 def access_point(request):
-    return "tcp://*:5556"
+    return "tcp://*:61000"
 
 
 @pytest.mark.asyncio(loop_scope="class")

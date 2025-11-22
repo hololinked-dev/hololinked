@@ -6,7 +6,6 @@ from hololinked.client import ClientFactory, ObjectProxy
 from hololinked.server import stop
 from hololinked.utils import uuid_hex
 
-
 try:
     from .test_11_rpc_e2e import TestRPC_E2E as BaseRPC_E2E  # noqa: F401
     from .test_11_rpc_e2e import client, thing, thing_model  # noqa: F401
@@ -21,7 +20,7 @@ except ImportError:
 
 @pytest.fixture(scope="class")
 def port() -> int:
-    return 60050
+    return 63000
 
 
 @pytest.fixture(scope="class")

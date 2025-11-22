@@ -3,7 +3,6 @@ import itertools
 import random
 import sys
 import time
-
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Generator
@@ -27,7 +26,6 @@ from hololinked.server.http.handlers import RPCHandler
 from hololinked.server.security import Argon2BasicSecurity, BcryptBasicSecurity, Security
 from hololinked.utils import uuid_hex
 
-
 try:
     from .things import OceanOpticsSpectrometer
 except ImportError:
@@ -42,7 +40,7 @@ start_acquisition_endpoint = "/start-acquisition"
 intensity_measurement_event_endpoint = "/intensity-measurement-event"
 stop_acquisition_endpoint = "/stop-acquisition"
 
-count = itertools.count(60001)
+count = itertools.count(62000)
 
 
 @pytest.fixture(scope="module")
