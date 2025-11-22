@@ -76,14 +76,14 @@ jobs:
         run: |
           uv venv .venv
           source .venv/bin/activate
-          uv sync --no-install-project --group test --group dev
+          uv sync --group test --group dev
 
       - name: install dependencies (windows)
         if: runner.os == 'Windows'
         run: |
           uv venv .venv
           .venv\Scripts\activate
-          uv sync --no-install-project --group test --group dev
+          uv sync --group test --group dev
 
       - name: run unit tests (linux/macOS)
         if: runner.os != 'Windows' && matrix.python-version != 3.13
