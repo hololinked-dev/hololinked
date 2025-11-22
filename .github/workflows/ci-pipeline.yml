@@ -29,6 +29,33 @@ jobs:
       - name: run ruff linter
         run: ruff check hololinked
 
+  scan:
+    name: security scan with bandit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: set up python 3.11
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.11
+
+      - name: install bandit
+        run: pip install bandit
+
+      - name: run bandit security scan
+        run: |
+          bandit -c pyproject.toml hololinked/*.py
+          bandit -c pyproject.toml hololinked/*.py -d json -o bandit-report.json
+
+      - name: upload bandit report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-scan-report
+          path: bandit-report.json
+
   test:
     name: unit-integration tests
     needs: codestyle
