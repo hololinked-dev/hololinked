@@ -46,7 +46,7 @@ dependencies = [
 generic = [
     "ifaddr>=0.2.0,<0.3",
     "fastjsonschema==2.20.0",
-    "serpent==1.41",
+    "serpent>=1.41,<2.0",
 ]
 security = [
     "bcrypt==4.3.0",
@@ -54,14 +54,17 @@ security = [
 ]
 db = [
     "sqlalchemy>2.0.21",
-    "sqlachemy-utils>=0.41",
+    "sqlalchemy-utils>=0.41",
     "psycopg2-binary>=2.9.11",
     "pymongo>=4.15.2",
+]
+linux = [
+    "uvloop==0.20.0"
 ]
 
 
 [project.urls]
-Documentation = "https://hololinked.readthedocs.io/en/latest/index.html"
+Documentation = "https://docs.hololinked.dev"
 Repository = "https://github.com/hololinked-dev/hololinked"
 
 [tool.setuptools]
@@ -84,16 +87,14 @@ dev = [
     "numpy>=2.0.0",
     "pandas==2.2.3",
     "faker==37.5.0",
-    "bcrypt==4.3.0",
     "pip>=25.2",
     "ruff>=0.12.10",
     "jupyter>=1.1.1",
 ]
 test = [
     "requests==2.32.3",
-    "coverage==7.8.0",
-    "numpy>=2.0.0",
     "faker==37.5.0",
+    "numpy>=2.0.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "pytest-order>=1.0.0",
@@ -102,18 +103,16 @@ test = [
 scanning = [
     "bandit>=1.9.1",
 ]   
-linux = [
-    "uvloop==0.20.0"
-]
+
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra --strict-markers --strict-config --ignore=lib64"
 testpaths = ["tests"]
-norecursedirs = ["tests/yet-to-be-integrated*"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+norecursedirs = ["tests/yet-to-be-integrated*"]
 asyncio_mode = "auto"
 markers = [
     "order: mark test to run in a specific order",
