@@ -1,12 +1,16 @@
-import aiomqtt
 import logging
-from typing import Any, Callable
-from paho.mqtt.client import Client as PahoMQTTClient, MQTTMessage
 
-from ..abstractions import SSE, ConsumedThingEvent
-from ...td.interaction_affordance import EventAffordance
+from typing import Any, Callable
+
+import aiomqtt
+
+from paho.mqtt.client import Client as PahoMQTTClient
+from paho.mqtt.client import MQTTMessage
+
+from ...serializers import BaseSerializer, Serializers  # noqa: F401
 from ...td.forms import Form
-from ...serializers import Serializers, BaseSerializer  # noqa: F401
+from ...td.interaction_affordance import EventAffordance
+from ..abstractions import SSE, ConsumedThingEvent
 
 
 class MQTTConsumer(ConsumedThingEvent):

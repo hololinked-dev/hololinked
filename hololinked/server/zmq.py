@@ -1,13 +1,14 @@
 import typing
+
+import structlog
 import zmq
 import zmq.asyncio
-import structlog
 
 from ..constants import ZMQ_TRANSPORTS
-from ..utils import get_current_async_loop
 from ..core.thing import Thing
 from ..core.zmq.brokers import AsyncEventConsumer, AsyncZMQServer, EventPublisher
 from ..core.zmq.rpc_server import RPCServer
+from ..utils import get_current_async_loop
 from .server import BaseProtocolServer
 
 

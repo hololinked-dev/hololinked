@@ -1,8 +1,9 @@
-import typing
-import structlog
 import base64
+import typing
 
-from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
+import structlog
+
+from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
 
 
 class ObjectProxy:

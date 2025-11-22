@@ -1,8 +1,9 @@
 import typing
+
 from dataclasses import dataclass
 
 from ..constants import byte_types
-from .serializers import Serializers, BaseSerializer
+from .serializers import BaseSerializer, Serializers
 
 
 @dataclass
