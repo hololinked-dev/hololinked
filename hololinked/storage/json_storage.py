@@ -1,9 +1,11 @@
 import os
 import threading
+
 from typing import Any, Dict, List, Optional, Union
-from ..serializers import JSONSerializer
+
 from ..core.property import Property
 from ..param import Parameterized
+from ..serializers import JSONSerializer
 
 
 class ThingJSONStorage:
