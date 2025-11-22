@@ -1,12 +1,14 @@
-from typing import Any, Optional
-import uuid
-import zmq.asyncio
 import logging
+import uuid
+
+from typing import Any, Optional
+
+import zmq.asyncio
 
 from ..config import global_config
 from ..constants import Operations
-from ..core import Thing, Action
-from ..core.zmq import AsyncZMQClient, AsyncEventConsumer
+from ..core import Action, Thing
+from ..core.zmq import AsyncEventConsumer, AsyncZMQClient
 from ..td.interaction_affordance import EventAffordance
 
 

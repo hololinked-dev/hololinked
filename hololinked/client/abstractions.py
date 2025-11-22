@@ -24,16 +24,17 @@ SOFTWARE.
 # copied from wotpy repository
 
 import asyncio
-import threading
-import typing
 import builtins
 import logging
+import threading
+import typing
+
 from dataclasses import dataclass
 
-from ..td import PropertyAffordance, ActionAffordance, EventAffordance
+from ..constants import Operations
+from ..td import ActionAffordance, EventAffordance, PropertyAffordance
 from ..td.forms import Form
 from ..utils import get_current_async_loop
-from ..constants import Operations
 
 
 class ConsumedThingAction:

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
+
 from pydantic import BaseModel, TypeAdapter
+from pydantic._internal._core_utils import CoreSchemaOrField, is_core_schema
 from pydantic.json_schema import GenerateJsonSchema
-from pydantic._internal._core_utils import is_core_schema, CoreSchemaOrField
-from typing import Optional, Sequence, Union, Any, Mapping, List, Dict
 
 
 JSONSchema = dict[str, Any]  # A type to represent JSONSchema

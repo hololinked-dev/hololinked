@@ -1,7 +1,9 @@
 import typing
+
 from pydantic import Field
-from .base import Schema
+
 from ..constants import JSON
+from .base import Schema
 
 
 class ExpectedResponse(Schema):

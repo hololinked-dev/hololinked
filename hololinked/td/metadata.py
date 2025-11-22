@@ -1,4 +1,5 @@
 import typing
+
 from pydantic import Field
 
 from .base import Schema

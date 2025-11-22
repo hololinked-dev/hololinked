@@ -1,29 +1,30 @@
 from typing import Any, ClassVar, Optional
-from pydantic import BaseModel, Field, ConfigDict, RootModel
 
-from .base import Schema
-from .utils import get_summary
-from ..utils import issubklass
+from pydantic import BaseModel, ConfigDict, Field, RootModel
+
 from ..constants import JSON, JSONSerializable
-from ..schema_validators.json_schema import JSONSchema
+from ..core import Property
 from ..core.properties import (
-    String,
-    Number,
-    Integer,
     Boolean,
-    List,
-    TypedList,
-    Tuple,
-    TupleSelector,
-    Selector,
-    TypedDict,
-    TypedKeyMappingsDict,
     ClassSelector,
     Filename,
     Foldername,
+    Integer,
+    List,
+    Number,
     Path,
+    Selector,
+    String,
+    Tuple,
+    TupleSelector,
+    TypedDict,
+    TypedKeyMappingsDict,
+    TypedList,
 )
-from ..core import Property
+from ..schema_validators.json_schema import JSONSchema
+from ..utils import issubklass
+from .base import Schema
+from .utils import get_summary
 
 
 class DataSchema(Schema):
