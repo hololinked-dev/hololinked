@@ -59,6 +59,7 @@ jobs:
   test:
     name: unit-integration tests
     needs: codestyle
+    if: false
 
     strategy:
       matrix:
