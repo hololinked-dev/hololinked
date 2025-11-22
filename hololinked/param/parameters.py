@@ -228,7 +228,7 @@ class IPAddress(Parameter):
 
     def __init__(
         self,
-        default: typing.Optional[str] = "0.0.0.0",
+        default: typing.Optional[str] = "127.0.0.1",
         *,
         allow_ipv4: bool = True,
         allow_ipv6: bool = True,
@@ -560,7 +560,6 @@ class Number(Parameter):
         """
         # Values outside the bounds are silently cropped to
         # be inside the bounds.
-        assert self.bounds is not None, "Cannot crop to bounds when bounds is None"
         vmin, vmax = self.bounds
         incmin, incmax = self.inclusive_bounds
         if vmin is not None:
