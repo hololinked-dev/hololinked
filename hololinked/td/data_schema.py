@@ -1,29 +1,30 @@
 from typing import Any, ClassVar, Optional
-from pydantic import BaseModel, Field, ConfigDict, RootModel
 
-from .base import Schema
-from .utils import get_summary
-from ..utils import issubklass
+from pydantic import BaseModel, ConfigDict, Field, RootModel
+
 from ..constants import JSON, JSONSerializable
-from ..schema_validators.json_schema import JSONSchema
+from ..core import Property
 from ..core.properties import (
-    String,
-    Number,
-    Integer,
     Boolean,
-    List,
-    TypedList,
-    Tuple,
-    TupleSelector,
-    Selector,
-    TypedDict,
-    TypedKeyMappingsDict,
     ClassSelector,
     Filename,
     Foldername,
+    Integer,
+    List,
+    Number,
     Path,
+    Selector,
+    String,
+    Tuple,
+    TupleSelector,
+    TypedDict,
+    TypedKeyMappingsDict,
+    TypedList,
 )
-from ..core import Property
+from ..schema_validators.json_schema import JSONSchema
+from ..utils import issubklass
+from .base import Schema
+from .utils import get_summary
 
 
 class DataSchema(Schema):
@@ -57,9 +58,6 @@ class DataSchema(Schema):
 
     def ds_build_fields_from_property(self, property: Property) -> None:
         """populates schema information from descriptor object"""
-        assert isinstance(property, Property), (
-            f"only Property is a subclass of dataschema, given type: {type(property)}"
-        )
         self.title = get_summary(property.doc)
         if property.constant:
             self.const = property.constant
@@ -92,12 +90,6 @@ class DataSchema(Schema):
         generates the schema specific to the type,
         calls `ds_build_fields_from_property()` after choosing the right type
         """
-        assert isinstance(property, Property)
-
-        if not isinstance(property, Property):
-            raise TypeError(
-                f"Property affordance schema can only be generated for Property. Given type {type(property)}"
-            )
         if self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
             data_schema = self._custom_schema_generators[property]()
         elif isinstance(property, Property) and property.model is not None:
@@ -436,9 +428,8 @@ class EnumSchema(SelectorSchema):
 
     def ds_build_fields_from_property(self, property) -> None:
         """generates the schema"""
-        assert isinstance(property, Selector), (
-            f"EnumSchema compatible property is only Selector, not {property.__class__}"
-        )
+        if not isinstance(property, Selector):
+            raise TypeError(f"EnumSchema compatible property is only Selector, not {property.__class__}")
         self.enum = list(property.objects)
         super().ds_build_fields_from_property(property)
 

@@ -1,37 +1,37 @@
+import base64
+import ssl
 import threading
 import uuid
-import base64
 import warnings
+from typing import Any
+
 import aiomqtt
 import httpx
-import ssl
 import structlog
-from typing import Any
-from paho.mqtt.client import Client as PahoMQTTClient, MQTTProtocolVersion, CallbackAPIVersion, MQTTMessage
+from paho.mqtt.client import CallbackAPIVersion, MQTTMessage, MQTTProtocolVersion
+from paho.mqtt.client import Client as PahoMQTTClient
 
-
-from ..core import Thing, Action
-from ..core.zmq import SyncZMQClient, AsyncZMQClient
+from ..constants import ZMQ_TRANSPORTS
+from ..core import Thing
+from ..core.zmq import AsyncZMQClient, SyncZMQClient
+from ..serializers import Serializers
 from ..td.interaction_affordance import (
-    PropertyAffordance,
     ActionAffordance,
     EventAffordance,
+    PropertyAffordance,
 )
-from ..serializers import Serializers
 from ..utils import set_global_event_loop_policy
-from ..constants import ZMQ_TRANSPORTS
-from .abstractions import ConsumedThingAction, ConsumedThingProperty, ConsumedThingEvent
+from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
+from .http.consumed_interactions import HTTPAction, HTTPEvent, HTTPProperty
+from .mqtt.consumed_interactions import MQTTConsumer  # only one type for now
 from .proxy import ObjectProxy
-from .http.consumed_interactions import HTTPProperty, HTTPAction, HTTPEvent
 from .zmq.consumed_interactions import (
+    ReadMultipleProperties,
+    WriteMultipleProperties,
     ZMQAction,
     ZMQEvent,
     ZMQProperty,
-    WriteMultipleProperties,
-    ReadMultipleProperties,
 )
-from .mqtt.consumed_interactions import MQTTConsumer  # only one type for now
-
 
 set_global_event_loop_policy()
 
@@ -103,7 +103,7 @@ class ClientFactory:
         async_zmq_client = AsyncZMQClient(f"{id}|async", server_id=server_id, logger=logger, access_point=access_point)
 
         # Fetch the TD
-        assert isinstance(Thing.get_thing_model, Action)
+        Thing.get_thing_model  # type: Action
         FetchTDAffordance = Thing.get_thing_model.to_affordance()
         FetchTDAffordance.override_defaults(name="get_thing_description", thing_id=thing_id)
         FetchTD = ZMQAction(
