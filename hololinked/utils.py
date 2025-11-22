@@ -1,18 +1,19 @@
-import sys
-import logging
-import re
 import asyncio
 import inspect
-import typing
-import types
-import traceback
-import ifaddr
+import logging
+import re
+import sys
 import threading
-from functools import wraps
+import traceback
+import types
+import typing
 from collections import OrderedDict
 from dataclasses import asdict
-from pydantic import BaseModel, ConfigDict, create_model, Field, RootModel
+from functools import wraps
 from inspect import Parameter, signature
+
+import ifaddr
+from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
 
 
 def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name=None) -> str:
