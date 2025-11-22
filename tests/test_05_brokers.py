@@ -1,530 +1,361 @@
-import threading
 import asyncio
-import logging
 import multiprocessing
-import unittest
+import threading
 
-from hololinked.core.zmq.message import (
-    ERROR,
-    EXIT,
-    OPERATION,
-    HANDSHAKE,
-    REPLY,
-    PreserializedData,
-    RequestHeader,
-    RequestMessage,
-    SerializableData,
-)  # client to server
-from hololinked.core.zmq.message import (
-    TIMEOUT,
-    INVALID_MESSAGE,
-    ERROR,
-    ResponseMessage,
-    ResponseHeader,
-)  # server to client
+from dataclasses import dataclass
+from typing import Generator
+
+import pytest
+
 from hololinked.core.zmq.brokers import (
+    AsyncZMQClient,
     AsyncZMQServer,
     MessageMappedZMQClientPool,
     SyncZMQClient,
-    AsyncZMQClient,
 )
-from hololinked.utils import get_current_async_loop
-from hololinked.logger import setup_logging
+from hololinked.core.zmq.message import (
+    ERROR,
+    EXIT,
+    HANDSHAKE,
+    INVALID_MESSAGE,
+    REPLY,
+    TIMEOUT,
+    RequestMessage,
+    ResponseMessage,
+    SerializableData,
+)
+from hololinked.exceptions import BreakLoop
+from hololinked.utils import get_current_async_loop, uuid_hex
+
 
 try:
-    from .utils import TestRunner
-    from .test_01_message import MessageValidatorMixin
-    from .things.starter import run_zmq_server
-    from .things import TestThing
+    from .conftest import AppIDs as MessageAppIDs
+    from .test_01_message import validate_response_message
 except ImportError:
-    from utils import TestRunner
-    from test_01_message import MessageValidatorMixin
-    from things.starter import run_zmq_server
-    from things import TestThing
+    from conftest import AppIDs as MessageAppIDs
+    from test_01_message import validate_response_message
 
 
-setup_logging(logging.WARN)
-
-
-class TestBrokerMixin(MessageValidatorMixin):
-    """Tests Individual ZMQ Server"""
-
-    @classmethod
-    def setUpServer(cls):
-        cls.server = AsyncZMQServer(id=cls.server_id)
-
+@dataclass
+class AppIDs:
     """
-    Base class: BaseZMQ, BaseAsyncZMQ, BaseSyncZMQ
-    Servers: BaseZMQServer, AsyncZMQServer, ZMQServerPool
-    Clients: BaseZMQClient, SyncZMQClient, AsyncZMQClient, MessageMappedZMQClientPool
+    Application related IDs generally used by end-user,
+    like server, client, and thing IDs.
     """
 
-    @classmethod
-    def setUpClient(cls):
-        cls.sync_client = None
-        cls.async_client = None
-
-    @classmethod
-    def setUpThing(cls):
-        cls.thing = TestThing(id=cls.thing_id, remote_accessible_logger=True)
-
-    @classmethod
-    def startServer(cls):
-        cls._server_thread = threading.Thread(
-            target=run_zmq_server, args=(cls.server, cls, cls.done_queue), daemon=True
-        )
-        cls._server_thread.start()
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        print(f"test ZMQ message brokers {cls.__name__}")
-        cls.done_queue = multiprocessing.Queue()
-        cls.last_server_message = None
-        cls.setUpThing()
-        cls.setUpServer()
-        cls.setUpClient()
-        cls.startServer()
-
-
-class TestBasicServerAndClient(TestBrokerMixin):
-    @classmethod
-    def setUpClient(cls):
-        super().setUpClient()
-        cls.sync_client = SyncZMQClient(
-            id=cls.client_id,
-            server_id=cls.server_id,
-            handshake=False,
-        )
-        cls.client = cls.sync_client
-
-    def test_1_handshake_complete(self):
-        """
-        Test handshake so that client can connect to server. Once client connects to server,
-        verify a ZMQ internal monitoring socket is available.
-        """
-        self.client.handshake()
-        self.assertTrue(self.client._monitor_socket is not None)
-        self.assertTrue(self.client._monitor_socket in self.client.poller)
-        # both directions
-        # HANDSHAKE = 'HANDSHAKE' # 1 - find out if the server is alive
-
-    def test_2_message_contract_types(self):
-        """
-        Once composition is checked, check different message types
-        """
-        # message types
-        request_message = RequestMessage.craft_from_arguments(
-            receiver_id=self.server_id,
-            sender_id=self.client_id,
-            thing_id=self.thing_id,
-            objekt="some_prop",
-            operation="readProperty",
-        )
-
-        async def handle_message_types_server():
-            # server to client
-            # REPLY = b'REPLY' # 4 - response for operation
-            # TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
-            # EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
-            # INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
-            await self.server._handle_timeout(request_message, timeout_type="execution")  # 5
-            await self.server._handle_invalid_message(request_message, SerializableData(Exception("test")))  # 7
-            await self.server._handshake(request_message)  # 1
-            await self.server._handle_error_message(request_message, Exception("test"))  # 6
-            await self.server.async_send_response(request_message)  # 4
-            await self.server.async_send_response_with_message_type(
-                request_message, ERROR, SerializableData(Exception("test"))
-            )  # 6
-
-        get_current_async_loop().run_until_complete(handle_message_types_server())
-
-        """
-        message types
-
-        both directions
-        HANDSHAKE = b'HANDSHAKE' # 1 - taken care by test_1...
-        
-        client to server 
-        OPERATION = b'OPERATION' 2 - taken care by test_2_... # operation request from client to server
-        EXIT = b'EXIT' # 3 - taken care by test_7... # exit the server
-        
-        server to client
-        REPLY = b'REPLY' # 4 - response for operation
-        TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
-        EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
-        INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
-        SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' not yet tested # socket died - zmq's builtin event
-        
-        peer to peer
-        INTERRUPT = b'INTERRUPT' not yet tested # interrupt a socket while polling 
-        """
-
-        msg = self.client.recv_response(request_message.id)
-        self.assertEqual(msg.type, TIMEOUT)
-        self.validate_response_message(msg)
-
-        msg = self.client.recv_response(request_message.id)
-        self.assertEqual(msg.type, INVALID_MESSAGE)
-        self.validate_response_message(msg)
-
-        msg = self.client.socket.recv_multipart()  # handshake dont come as response
-        response_message = ResponseMessage(msg)
-        self.assertEqual(response_message.type, HANDSHAKE)
-        self.validate_response_message(response_message)
-
-        msg = self.client.recv_response(request_message.id)
-        self.assertEqual(msg.type, ERROR)
-        self.validate_response_message(msg)
-
-        msg = self.client.recv_response(request_message.id)
-        self.assertEqual(msg.type, REPLY)
-        self.validate_response_message(msg)
-
-        msg = self.client.recv_response(request_message.id)
-        # custom crafted explicitly to be ERROR
-        self.assertEqual(msg.type, ERROR)
-        self.validate_response_message(msg)
-
-        self.client.handshake()
-
-    def test_3_verify_polling(self):
-        """
-        Test if polling may be stopped and started again
-        """
-
-        async def verify_poll_stopped(self: TestBasicServerAndClient) -> None:
-            await self.server.poll_requests()
-            self.server.poll_timeout = 1000
-            await self.server.poll_requests()
-            self.done_queue.put(True)
-
-        async def stop_poll(self: TestBasicServerAndClient) -> None:
-            await asyncio.sleep(0.1)
-            self.server.stop_polling()
-            await asyncio.sleep(0.1)
-            self.server.stop_polling()
-
-        # When the above two functions running,
-        # we dont send a message as the thread is also running
-        get_current_async_loop().run_until_complete(asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)]))
-
-        self.assertTrue(self.done_queue.get())
-        self.assertEqual(self.server.poll_timeout, 1000)
-        self.client.handshake()
-
-    @classmethod
-    def tearDownClass(cls):
-        """
-        Test if exit reaches to server
-        """
-        # EXIT = b'EXIT' # 7 - exit the server
-        request_message = RequestMessage.craft_with_message_type(
-            receiver_id=cls.server_id, sender_id=cls.client_id, message_type=EXIT
-        )
-        cls.client.socket.send_multipart(request_message.byte_array)
-
-        # TODO - fix the following, somehow socket is not closing fully,
-        # although we have previously tested this and its known to work.
-        # try:
-        #     cls.client.recv_response(message_id=b'not-necessary')
-        #     assert False, "Expected ConnectionAbortedError"
-        # except ConnectionAbortedError as ex:
-        #     assert str(ex).startswith(f"server disconnected for {cls.client_id}"), f"Unexpected error message: {str(ex)}"
-
-        done = cls.done_queue.get(timeout=3)
-        if done:
-            cls._server_thread.join()
-        else:
-            print("Server did not properly process exit request")
-        super().tearDownClass()
-
-    # TODO
-    # peer to peer
-    # INTERRUPT = b'INTERRUPT' # interrupt a socket while polling
-    # first test the length
-
-
-class TestAsyncZMQClient(TestBrokerMixin):
-    @classmethod
-    def setUpClient(cls):
-        cls.async_client = AsyncZMQClient(
-            id=cls.client_id,
-            server_id=cls.server_id,
-            handshake=False,
-        )
-        cls.client = cls.async_client
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
-    def test_1_handshake_complete(self):
-        """
-        Test handshake so that client can connect to server. Once client connects to server,
-        verify a ZMQ internal monitoring socket is available.
-        """
-
-        async def test():
-            self.client.handshake()
-            await self.client.handshake_complete()
-            self.assertTrue(self.client._monitor_socket is not None)
-            self.assertTrue(self.client._monitor_socket in self.client.poller)
-
-        get_current_async_loop().run_until_complete(test())
-        # both directions
-        # HANDSHAKE = 'HANDSHAKE' # 1 - find out if the server is alive
-
-    def test_2_message_contract_types(self):
-        """
-        Once composition is checked, check different message types
-        """
-        # message types
-        request_message = RequestMessage.craft_from_arguments(
-            receiver_id=self.server_id,
-            sender_id=self.client_id,
-            thing_id=self.thing_id,
-            objekt="some_prop",
-            operation="readProperty",
-        )
-
-        async def handle_message_types_server():
-            # server to client
-            # REPLY = b'REPLY' # 4 - response for operation
-            # TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
-            # EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
-            # INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
-            await self.server._handle_timeout(request_message, timeout_type="invokation")  # 5
-            await self.server._handle_invalid_message(request_message, SerializableData(Exception("test1")))
-            await self.server._handshake(request_message)
-            await self.server._handle_error_message(request_message, Exception("test2"))
-            await self.server.async_send_response(request_message)
-            await self.server.async_send_response_with_message_type(
-                request_message, ERROR, SerializableData(Exception("test3"))
-            )
-
-        async def handle_message_types_client():
-            """
-            message types
-            both directions
-            HANDSHAKE = b'HANDSHAKE' # 1 - taken care by test_1...
-
-            client to server
-            OPERATION = b'OPERATION' 2 - taken care by test_2_... # operation request from client to server
-            EXIT = b'EXIT' # 3 - taken care by test_7... # exit the server
-
-            server to client
-            REPLY = b'REPLY' # 4 - response for operation
-            TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
-            EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
-            INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
-            SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' not yet tested # socket died - zmq's builtin event
-
-            peer to peer
-            INTERRUPT = b'INTERRUPT' not yet tested # interrupt a socket while polling
-            """
-            msg = await self.client.async_recv_response(request_message.id)
-            self.assertEqual(msg.type, TIMEOUT)
-            self.validate_response_message(msg)
-
-            msg = await self.client.async_recv_response(request_message.id)
-            self.assertEqual(msg.type, INVALID_MESSAGE)
-            self.validate_response_message(msg)
-
-            msg = await self.client.socket.recv_multipart()  # handshake don't come as response
-            response_message = ResponseMessage(msg)
-            self.assertEqual(response_message.type, HANDSHAKE)
-            self.validate_response_message(response_message)
-
-            msg = await self.client.async_recv_response(request_message.id)
-            self.assertEqual(msg.type, ERROR)
-            self.validate_response_message(msg)
-
-            msg = await self.client.async_recv_response(request_message.id)
-            self.assertEqual(msg.type, REPLY)
-            self.validate_response_message(msg)
-
-            msg = await self.client.async_recv_response(request_message.id)
-            self.assertEqual(msg.type, ERROR)
-            self.validate_response_message(msg)
-
-        # exit checked separately at the end
-        get_current_async_loop().run_until_complete(
-            asyncio.gather(*[handle_message_types_server(), handle_message_types_client()])
-        )
-
-    @classmethod
-    def tearDownClass(cls):
-        """
-        Test if exit reaches to server
-        """
-        # EXIT = b'EXIT' # 7 - exit the server
-        request_message = RequestMessage.craft_with_message_type(
-            receiver_id=cls.server_id, sender_id=cls.client_id, message_type=EXIT
-        )
-        cls.client.socket.send_multipart(request_message.byte_array)
-        done = cls.done_queue.get(timeout=3)
-
-        # TODO - check server disconnected like previous test
-
-        if done:
-            cls._server_thread.join()
-        else:
-            print("Server did not properly process exit request")
-        super().tearDownClass()
-
-
-class TestMessageMappedClientPool(TestBrokerMixin):
-    @classmethod
-    def setUpClient(cls):
-        cls.client = MessageMappedZMQClientPool(
-            id="client-pool",
-            client_ids=[cls.client_id],
-            server_ids=[cls.server_id],
-            handshake=False,
-        )
-        cls.client._client_to_thing_map[cls.client_id] = cls.thing_id
-        cls.client._thing_to_client_map[cls.thing_id] = cls.client_id
-
-    def test_1_handshake_complete(self):
-        """
-        Test handshake so that client can connect to server. Once client connects to server,
-        verify a ZMQ internal monitoring socket is available.
-        """
-
-        async def test():
-            self.client.handshake()
-            await self.client.handshake_complete()
-            for client in self.client.pool.values():
-                self.assertTrue(client._monitor_socket is not None)
-                self.assertTrue(client._monitor_socket in self.client.poller)
-
-        get_current_async_loop().run_until_complete(test())
-        # both directions
-        # HANDSHAKE = 'HANDSHAKE' # 1 - find out if the server is alive
-
-    def test_2_message_contract_types(self):
-        """
-        Once composition is checked, check different message types
-        """
-        # message types
-        request_message = RequestMessage.craft_from_arguments(
-            receiver_id=self.server_id,
-            sender_id=self.client_id,
-            thing_id=self.thing_id,
-            objekt="some_prop",
-            operation="readProperty",
-        )
-
-        async def handle_message_types():
-            """
-            message types
-            both directions
-            HANDSHAKE = b'HANDSHAKE' # 1 - taken care by test_1...
-
-            client to server
-            OPERATION = b'OPERATION' 2 - taken care by test_2_... # operation request from client to server
-            EXIT = b'EXIT' # 3 - taken care by test_7... # exit the server
-
-            server to client
-            REPLY = b'REPLY' # 4 - response for operation
-            TIMEOUT = b'TIMEOUT' # 5 - timeout message, operation could not be completed
-            EXCEPTION = b'EXCEPTION' # 6 - exception occurred while executing operation
-            INVALID_MESSAGE = b'INVALID_MESSAGE' # 7 - invalid message
-            SERVER_DISCONNECTED = 'EVENT_DISCONNECTED' not yet tested # socket died - zmq's builtin event
-
-            peer to peer
-            INTERRUPT = b'INTERRUPT' not yet tested # interrupt a socket while polling
-            """
-            self.client.start_polling()
-
-            self.client.events_map[request_message.id] = self.client.event_pool.pop()
-            await self.server._handle_timeout(request_message, timeout_type="invokation")  # 5
-            msg = await self.client.async_recv_response(self.thing_id, request_message.id)
-            self.assertEqual(msg.type, TIMEOUT)
-            self.validate_response_message(msg)
-
-            self.client.events_map[request_message.id] = self.client.event_pool.pop()
-            await self.server._handle_invalid_message(request_message, SerializableData(Exception("test")))
-            msg = await self.client.async_recv_response(self.thing_id, request_message.id)
-            self.assertEqual(msg.type, INVALID_MESSAGE)
-            self.validate_response_message(msg)
-
-            self.client.events_map[request_message.id] = self.client.event_pool.pop()
-            await self.server._handshake(request_message)
-            msg = await self.client.pool[self.client_id].socket.recv_multipart()  # handshake don't come as response
-            response_message = ResponseMessage(msg)
-            self.assertEqual(response_message.type, HANDSHAKE)
-            self.validate_response_message(response_message)
-
-            self.client.events_map[request_message.id] = self.client.event_pool.pop()
-            await self.server.async_send_response(request_message)
-            msg = await self.client.async_recv_response(self.thing_id, request_message.id)
-            self.assertEqual(msg.type, REPLY)
-            self.validate_response_message(msg)
-
-            self.client.events_map[request_message.id] = self.client.event_pool.pop()
-            await self.server.async_send_response_with_message_type(
-                request_message, ERROR, SerializableData(Exception("test"))
-            )
-            msg = await self.client.async_recv_response(self.thing_id, request_message.id)
-            self.assertEqual(msg.type, ERROR)
-            self.validate_response_message(msg)
-
-            self.client.stop_polling()
-
-        # exit checked separately at the end
-        get_current_async_loop().run_until_complete(asyncio.gather(*[handle_message_types()]))
-
-    def test_3_verify_polling(self):
-        """
-        Test if polling may be stopped and started again
-        """
-
-        async def verify_poll_stopped(self: "TestMessageMappedClientPool") -> None:
-            await self.client.poll_responses()
-            self.client.poll_timeout = 1000
-            await self.client.poll_responses()
-            self.done_queue.put(True)
-
-        async def stop_poll(self: "TestMessageMappedClientPool") -> None:
-            await asyncio.sleep(0.1)
-            self.client.stop_polling()
-            await asyncio.sleep(0.1)
-            self.client.stop_polling()
-
-        # When the above two functions running,
-        # we dont send a message as the thread is also running
-        get_current_async_loop().run_until_complete(asyncio.gather(*[verify_poll_stopped(self), stop_poll(self)]))
-        self.assertTrue(self.done_queue.get())
-        self.assertEqual(self.client.poll_timeout, 1000)
-
-    @classmethod
-    def tearDownClass(cls):
-        """
-        Test if exit reaches to server
-        """
-        # EXIT = b'EXIT' # 7 - exit the server
-        request_message = RequestMessage.craft_with_message_type(
-            receiver_id=cls.server_id, sender_id=cls.client_id, message_type=EXIT
-        )
-        cls.client[cls.client_id].socket.send_multipart(request_message.byte_array)
-        done = cls.done_queue.get(timeout=3)
-        if done:
-            cls._server_thread.join()
-        else:
-            print("Server did not process exit message correctly")
-        super().tearDownClass()
-
-
-def load_tests(loader, tests, pattern):
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestBasicServerAndClient))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestAsyncZMQClient))
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestMessageMappedClientPool))
-    return suite
-
-
-if __name__ == "__main__":
-    runner = TestRunner()
-    runner.run(load_tests(unittest.TestLoader(), None, None))
+    server_id: str
+    """RPC server ID"""
+    thing_id: str
+    """A thing ID"""
+    sync_client_id: str
+    """A synchronous client ID"""
+    async_client_id: str
+    """An asynchronous client ID"""
+    msg_mapped_async_client_id: str
+    """A message-mapped asynchronous client ID"""
+
+
+@pytest.fixture(scope="module")
+def app_ids() -> AppIDs:
+    """Generate unique test IDs for server, client, and thing for each test"""
+    return AppIDs(
+        server_id=f"test-server-{uuid_hex()}",
+        thing_id=f"test-thing-{uuid_hex()}",
+        sync_client_id=f"test-sync-client-{uuid_hex()}",
+        async_client_id=f"test-async-client-{uuid_hex()}",
+        msg_mapped_async_client_id=f"test-mapped-async-client-{uuid_hex()}",
+    )
+
+
+@pytest.fixture(scope="module")
+def server(app_ids: AppIDs) -> Generator[AsyncZMQServer, None, None]:
+    server = AsyncZMQServer(id=app_ids.server_id)
+    yield server
+    # exit written in thread
+    # server.exit()
+
+
+@pytest.fixture(scope="module")
+def sync_client(app_ids: AppIDs) -> Generator[SyncZMQClient, None, None]:
+    client = SyncZMQClient(id=app_ids.sync_client_id, server_id=app_ids.server_id, handshake=False)
+    yield client
+    client.exit()
+
+
+@pytest.fixture(scope="module")
+def async_client(app_ids: AppIDs) -> Generator[AsyncZMQClient, None, None]:
+    client = AsyncZMQClient(id=app_ids.async_client_id, server_id=app_ids.server_id, handshake=False)
+    yield client
+    client.exit()
+
+
+@pytest.fixture(scope="module")
+def message_mapped_client(app_ids: AppIDs) -> Generator[MessageMappedZMQClientPool, None, None]:
+    client = MessageMappedZMQClientPool(
+        id="client-pool",
+        client_ids=[app_ids.msg_mapped_async_client_id],
+        server_ids=[app_ids.server_id],
+        handshake=False,
+    )
+    client._client_to_thing_map[app_ids.msg_mapped_async_client_id] = app_ids.thing_id
+    client._thing_to_client_map[app_ids.thing_id] = app_ids.msg_mapped_async_client_id
+    yield client
+    client.exit()
+
+
+def run_zmq_server(server: AsyncZMQServer, done_queue: multiprocessing.Queue) -> None:
+    event_loop = get_current_async_loop()
+
+    async def run():
+        while True:
+            try:
+                messages = await server.async_recv_requests()
+                for message in messages:
+                    if message.type == EXIT:
+                        server.exit()
+                        break
+                await asyncio.sleep(0.01)
+            except BreakLoop:
+                break
+
+    event_loop.run_until_complete(run())
+    event_loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(event_loop)))
+    if done_queue:
+        done_queue.put(True)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def start_server(server: AsyncZMQServer, sync_client: SyncZMQClient, app_ids: AppIDs):
+    done_queue = multiprocessing.Queue()
+    thread = threading.Thread(target=run_zmq_server, args=(server, done_queue), daemon=True)
+    thread.start()
+    yield thread
+    request_message = RequestMessage.craft_with_message_type(
+        receiver_id=app_ids.server_id,
+        sender_id=app_ids.sync_client_id,
+        message_type=EXIT,
+    )
+    sync_client.socket.send_multipart(request_message.byte_array)
+    done = done_queue.get(timeout=3)
+    if done:
+        thread.join()
+    else:
+        print("Server did not properly process exit request")
+
+
+def test_01_01_sync_client_handshake_complete(sync_client: SyncZMQClient):
+    sync_client.handshake()
+    assert sync_client._monitor_socket is not None
+    assert sync_client._monitor_socket in sync_client.poller
+
+
+async def test_01_02_sync_client_basic_message_contract_types(
+    sync_client: SyncZMQClient,
+    server: AsyncZMQServer,
+    app_ids: AppIDs,
+) -> None:
+    active_app_ids = MessageAppIDs(
+        server_id=app_ids.server_id, thing_id=app_ids.thing_id, client_id=app_ids.sync_client_id
+    )
+    request_message = RequestMessage.craft_from_arguments(
+        receiver_id=app_ids.server_id,
+        sender_id=app_ids.sync_client_id,
+        thing_id=app_ids.thing_id,
+        objekt="some_prop",
+        operation="readproperty",
+    )
+
+    await server._handle_timeout(request_message, timeout_type="execution")
+    await server._handle_invalid_message(request_message, SerializableData(Exception("test")))
+    await server._handshake(request_message)
+    await server._handle_error_message(request_message, Exception("test"))
+    await server.async_send_response(request_message)
+    await server.async_send_response_with_message_type(request_message, ERROR, SerializableData(Exception("test")))
+
+    msg = sync_client.recv_response(request_message.id)
+    assert msg.type == TIMEOUT
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    msg = sync_client.recv_response(request_message.id)
+    assert msg.type == INVALID_MESSAGE
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    msg = sync_client.socket.recv_multipart()
+    response_message = ResponseMessage(msg)
+    assert response_message.type == HANDSHAKE
+    validate_response_message(response_message, app_ids=active_app_ids)
+
+    msg = sync_client.recv_response(request_message.id)
+    assert msg.type == ERROR
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    msg = sync_client.recv_response(request_message.id)
+    assert msg.type == REPLY
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    msg = sync_client.recv_response(request_message.id)
+    assert msg.type == ERROR
+    validate_response_message(msg, app_ids=active_app_ids)
+    sync_client.handshake()
+
+
+async def test_01_03_sync_client_polling(sync_client: SyncZMQClient, server: AsyncZMQServer):
+    done = asyncio.Future()
+
+    async def verify_poll_stopped():
+        await server.poll_requests()
+        server.poll_timeout = 1000
+        await server.poll_requests()
+        done.set_result(True)
+
+    async def stop_poll():
+        await asyncio.sleep(0.1)
+        server.stop_polling()
+        await asyncio.sleep(0.1)
+        server.stop_polling()
+
+    await asyncio.gather(verify_poll_stopped(), stop_poll())
+    await done
+    assert server.poll_timeout == 1000
+    sync_client.handshake()
+
+
+async def test_async_client_handshake_complete(async_client: AsyncZMQClient):
+    async_client.handshake()
+    await async_client.handshake_complete()
+    assert async_client._monitor_socket is not None
+    assert async_client._monitor_socket in async_client.poller
+
+
+async def test_02_01_async_client_message_contract_types(
+    async_client: AsyncZMQClient,
+    server: AsyncZMQServer,
+    app_ids: AppIDs,
+) -> None:
+    active_app_ids = MessageAppIDs(
+        server_id=app_ids.server_id,
+        thing_id=app_ids.thing_id,
+        client_id=app_ids.async_client_id,
+    )
+
+    request_message = RequestMessage.craft_from_arguments(
+        receiver_id=app_ids.server_id,
+        sender_id=app_ids.async_client_id,
+        thing_id=app_ids.thing_id,
+        objekt="some_prop",
+        operation="readproperty",
+    )
+
+    await server._handle_timeout(request_message, timeout_type="invokation")
+    await server._handle_invalid_message(request_message, SerializableData(Exception("test1")))
+    await server._handshake(request_message)
+    await server._handle_error_message(request_message, Exception("test2"))
+    await server.async_send_response(request_message)
+    await server.async_send_response_with_message_type(request_message, ERROR, SerializableData(Exception("test3")))
+
+    msg = await async_client.async_recv_response(request_message.id)
+    assert msg.type == TIMEOUT
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    msg = await async_client.async_recv_response(request_message.id)
+    assert msg.type == INVALID_MESSAGE
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    msg = await async_client.socket.recv_multipart()
+    response_message = ResponseMessage(msg)
+    assert response_message.type == HANDSHAKE
+    validate_response_message(response_message, app_ids=active_app_ids)
+
+    msg = await async_client.async_recv_response(request_message.id)
+    assert msg.type == ERROR
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    msg = await async_client.async_recv_response(request_message.id)
+    assert msg.type == REPLY
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    msg = await async_client.async_recv_response(request_message.id)
+    assert msg.type == ERROR
+    validate_response_message(msg, app_ids=active_app_ids)
+
+
+async def test_03_01_mapped_handshake_complete(message_mapped_client: MessageMappedZMQClientPool):
+    message_mapped_client.handshake()
+    await message_mapped_client.handshake_complete()
+    for client in message_mapped_client.pool.values():
+        assert client._monitor_socket is not None
+        assert client._monitor_socket in message_mapped_client.poller
+
+
+async def test_mapped_message_contract_types(
+    message_mapped_client: MessageMappedZMQClientPool,
+    server: AsyncZMQServer,
+    app_ids: AppIDs,
+) -> None:
+    active_app_ids = MessageAppIDs(
+        server_id=app_ids.server_id,
+        thing_id=app_ids.thing_id,
+        client_id=app_ids.msg_mapped_async_client_id,
+    )
+    request_message = RequestMessage.craft_from_arguments(
+        receiver_id=app_ids.server_id,
+        sender_id=app_ids.msg_mapped_async_client_id,
+        thing_id=app_ids.thing_id,
+        objekt="some_prop",
+        operation="readproperty",
+    )
+
+    message_mapped_client.start_polling()
+
+    message_mapped_client.events_map[request_message.id] = message_mapped_client.event_pool.pop()
+    await server._handle_timeout(request_message, timeout_type="invokation")
+    msg = await message_mapped_client.async_recv_response(app_ids.thing_id, request_message.id)
+    assert msg.type == TIMEOUT
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    message_mapped_client.events_map[request_message.id] = message_mapped_client.event_pool.pop()
+    await server._handle_invalid_message(request_message, SerializableData(Exception("test")))
+    msg = await message_mapped_client.async_recv_response(app_ids.thing_id, request_message.id)
+    assert msg.type == INVALID_MESSAGE
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    message_mapped_client.events_map[request_message.id] = message_mapped_client.event_pool.pop()
+    await server._handshake(request_message)
+    msg = await message_mapped_client.pool[app_ids.msg_mapped_async_client_id].socket.recv_multipart()
+    response_message = ResponseMessage(msg)
+    assert response_message.type == HANDSHAKE
+    validate_response_message(response_message, app_ids=active_app_ids)
+
+    message_mapped_client.events_map[request_message.id] = message_mapped_client.event_pool.pop()
+    await server.async_send_response(request_message)
+    msg = await message_mapped_client.async_recv_response(app_ids.thing_id, request_message.id)
+    assert msg.type == REPLY
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    message_mapped_client.events_map[request_message.id] = message_mapped_client.event_pool.pop()
+    await server.async_send_response_with_message_type(request_message, ERROR, SerializableData(Exception("test")))
+    msg = await message_mapped_client.async_recv_response(app_ids.thing_id, request_message.id)
+    assert msg.type == ERROR
+    validate_response_message(msg, app_ids=active_app_ids)
+
+    message_mapped_client.stop_polling()
+
+
+async def test_03_02_mapped_verify_polling(message_mapped_client: MessageMappedZMQClientPool):
+    done = asyncio.Future()
+
+    async def verify_poll_stopped():
+        await message_mapped_client.poll_responses()
+        message_mapped_client.poll_timeout = 1000
+        await message_mapped_client.poll_responses()
+        done.set_result(True)
+
+    async def stop_poll():
+        await asyncio.sleep(0.1)
+        message_mapped_client.stop_polling()
+        await asyncio.sleep(0.1)
+        message_mapped_client.stop_polling()
+
+    await asyncio.gather(verify_poll_stopped(), stop_poll())
+    await done
+    assert message_mapped_client.poll_timeout == 1000

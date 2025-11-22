@@ -1,74 +1,7 @@
-import asyncio
-import zmq.asyncio
 import threading
 import typing
-import unittest
+
 from faker import Faker
-
-from hololinked.config import global_config
-
-
-class TestResult(unittest.TextTestResult):
-    """Custom test result class to format the output of test results."""
-
-    def addSuccess(self, test):
-        super().addSuccess(test)
-        self.stream.write(f" {test} ✔")
-        self.stream.flush()
-
-    def addFailure(self, test, err):
-        super().addFailure(test, err)
-        self.stream.write(f" {test} ❌")
-        self.stream.flush()
-
-    def addError(self, test, err):
-        super().addError(test, err)
-        self.stream.write(f" {test} ❌ Error")
-        self.stream.flush()
-
-
-class TestRunner(unittest.TextTestRunner):
-    """Custom test runner class to use the custom test result class."""
-
-    resultclass = TestResult
-
-
-class TestCase(unittest.TestCase):
-    """Custom test case class to print some extra spaces and info about test carried out"""
-
-    @classmethod
-    def setUpClass(cls):
-        print("----------------------------------------------------------------------")
-        global_config.ZMQ_CONTEXT = zmq.asyncio.Context()
-        # always replace otherwise one context opens too many sockets
-
-    @classmethod
-    def tearDownClass(cls):
-        print(f"\n\ntear down {cls.__name__}")
-
-    def setUp(self):
-        print()  # add gaps between results printed by unit test
-
-
-class AsyncTestCase(unittest.IsolatedAsyncioTestCase):
-    """Custom async test case class to print some extra spaces and info about test carried out"""
-
-    @classmethod
-    def setUpClass(cls):
-        global_config.ZMQ_CONTEXT = zmq.asyncio.Context()
-        # always replace otherwise one context opens too many sockets
-        print("----------------------------------------------------------------------")
-
-    @classmethod
-    def tearDownClass(cls):
-        print(f"\n\ntear down {cls.__name__}")
-
-    async def asyncSetUp(self):
-        loop = asyncio.get_running_loop()
-        loop.set_debug(False)
-
-    def setUp(self):
-        print()  # add gaps between results printed by unit test
 
 
 def print_lingering_threads(exclude_daemon: bool = True):
@@ -81,9 +14,7 @@ def print_lingering_threads(exclude_daemon: bool = True):
         alive_threads = [t for t in alive_threads if not t.daemon]
 
     for thread in alive_threads:
-        print(
-            f"Thread Name: {thread.name}, Thread ID: {thread.ident}, Is Alive: {thread.is_alive()}"
-        )
+        print(f"Thread Name: {thread.name}, Thread ID: {thread.ident}, Is Alive: {thread.is_alive()}")
 
 
 class TrackingFaker:

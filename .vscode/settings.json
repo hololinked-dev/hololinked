@@ -1,9 +1,25 @@
 {
+    // VS code settings used for this project
+    // Please consider installing and using these extensions to make 
+    // PRs consistent in terms of formatting and linting
     "editor.rulers": [
         80, 120
     ],
     "editor.formatOnSave": true,
+
     "ruff.lineLength": 120,
+    "ruff.organizeImports": true,
+    "ruff.lint.enable": true,
+    
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "explicit",
+            "source.fixAll.ruff": "explicit"
+        }
+    },
+    
     "[yaml]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.formatOnSave": true,

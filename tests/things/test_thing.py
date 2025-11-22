@@ -2,19 +2,21 @@ import asyncio
 import threading
 import time
 import typing
+
 import numpy as np
+
 from pydantic import BaseModel, Field, WithJsonSchema
 
-from hololinked.core import Thing, action, Property, Event
-from hololinked.core.properties import (
-    Number,
-    String,
-    Selector,
-    List,
-    Integer,
-    ClassSelector,
-)
+from hololinked.core import Event, Property, Thing, action
 from hololinked.core.actions import Action, BoundAction
+from hololinked.core.properties import (
+    ClassSelector,
+    Integer,
+    List,
+    Number,
+    Selector,
+    String,
+)
 from hololinked.param import ParameterizedFunction
 from hololinked.schema_validators import JSONSchema
 

@@ -1,45 +1,49 @@
-import warnings
 import logging
 import socket
 import ssl
 import typing
-import structlog
-from pydantic import BaseModel
-from copy import deepcopy
-from tornado import ioloop
-from tornado.web import Application
-from tornado.httpserver import HTTPServer as TornadoHTTP1Server
-# from tornado_http2.server import Server as TornadoHTTP2Server
+import warnings
 
-from ...param.parameters import IPAddress, ClassSelector, TypedList
+from copy import deepcopy
+
+import structlog
+
+from pydantic import BaseModel
+from tornado import ioloop
+from tornado.httpserver import HTTPServer as TornadoHTTP1Server
+from tornado.web import Application
+
+from ...config import global_config
 from ...constants import HTTP_METHODS
+from ...core.actions import Action
+from ...core.events import Event
+from ...core.property import Property
+from ...core.thing import Thing, ThingMeta
+from ...core.zmq.brokers import MessageMappedZMQClientPool
+
+# from tornado_http2.server import Server as TornadoHTTP2Server
+from ...param.parameters import ClassSelector, IPAddress, TypedList
+from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...utils import (
     get_current_async_loop,
     issubklass,
     pep8_to_dashed_name,
     run_callable_somehow,
 )
-from ...config import global_config
-from ...core.property import Property
-from ...core.actions import Action
-from ...core.events import Event
-from ...core.thing import Thing, ThingMeta
-from ...core.zmq.brokers import MessageMappedZMQClientPool
-from ...td import ActionAffordance, EventAffordance, PropertyAffordance
-from ..server import BaseProtocolServer, BrokerThing
 from ..security import Security
+from ..server import BaseProtocolServer, BrokerThing
 from ..utils import consume_broker_queue
 from .handlers import (
     ActionHandler,
-    LivenessProbeHandler,
-    ReadinessProbeHandler,
-    PropertyHandler,
-    EventHandler,
     BaseHandler,
+    EventHandler,
+    LivenessProbeHandler,
+    PropertyHandler,
+    ReadinessProbeHandler,
+    RPCHandler,
     RWMultiplePropertiesHandler,
     StopHandler,
     ThingDescriptionHandler,
-    RPCHandler,
 )
 
 
@@ -274,8 +278,14 @@ class HTTPServer(BaseProtocolServer):
         self.zmq_client_pool.stop_polling()
         if not self.tornado_instance:
             return
-        self.tornado_instance.stop()
-        await self.tornado_instance.close_all_connections()
+        try:
+            self.tornado_instance.stop()
+            await self.tornado_instance.close_all_connections()
+        except Exception as ex:
+            self.logger.error(
+                "error while stopping tornado server, use stop() method "
+                + f"from hololinked.server and do not reuse the port - {ex}"
+            )
 
     def add_property(
         self,

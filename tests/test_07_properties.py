@@ -1,306 +1,302 @@
-import logging
-import unittest
-import tempfile
-import os
 import copy
+import json
+import os
+import tempfile
+
+from dataclasses import dataclass
+from typing import Callable
+
 import pydantic
+import pytest
 
 from hololinked.core.properties import Number
 from hololinked.storage.database import BaseDB, ThingDB
-from hololinked.serializers import PythonBuiltinJSONSerializer
-from hololinked.logger import setup_logging
+from hololinked.utils import uuid_hex
+
 
 try:
-    from .utils import TestCase, TestRunner
     from .things import TestThing
 except ImportError:
-    from utils import TestCase, TestRunner
     from things import TestThing
 
 
-setup_logging(log_level=logging.ERROR)
+@dataclass
+class Defaults:
+    SIMPLE_CLASS_PROP: int = 42
+    MANAGED_CLASS_PROP: int = 0
+    DELETABLE_CLASS_PROP: int = 100
 
 
-class TestProperty(TestCase):
-    def test_01_simple_class_property(self):
-        """Test basic class property functionality"""
-        # Test class-level access
-        self.assertEqual(TestThing.simple_class_prop, 42)
-        TestThing.simple_class_prop = 100
-        self.assertEqual(TestThing.simple_class_prop, 100)
+@pytest.fixture(autouse=True)
+def reset_class_properties():
+    # Reset class properties to defaults before each test
+    TestThing.simple_class_prop = Defaults.SIMPLE_CLASS_PROP
+    TestThing.managed_class_prop = Defaults.MANAGED_CLASS_PROP
+    TestThing.deletable_class_prop = Defaults.DELETABLE_CLASS_PROP
 
-        # Test that instance-level access reflects class value
-        instance1 = TestThing(id="test1")
-        instance2 = TestThing(id="test2")
-        self.assertEqual(instance1.simple_class_prop, 100)
-        self.assertEqual(instance2.simple_class_prop, 100)
+    yield
 
-        # Test that instance-level changes affect class value
-        instance1.simple_class_prop = 200
-        self.assertEqual(TestThing.simple_class_prop, 200)
-        self.assertEqual(instance2.simple_class_prop, 200)
 
-    def test_02_managed_class_property(self):
-        """Test class property with custom getter/setter"""
-        # Test initial value
-        self.assertEqual(TestThing.managed_class_prop, 0)
-        # Test valid value assignment
-        TestThing.managed_class_prop = 50
-        self.assertEqual(TestThing.managed_class_prop, 50)
-        # Test validation in setter
-        with self.assertRaises(ValueError):
-            TestThing.managed_class_prop = -10
-        # Verify value wasn't changed after failed assignment
-        self.assertEqual(TestThing.managed_class_prop, 50)
-        # Test instance-level validation
-        instance = TestThing(id="test3")
-        with self.assertRaises(ValueError):
-            instance.managed_class_prop = -20
-        # Test that instance-level access reflects class value
-        self.assertEqual(instance.managed_class_prop, 50)
-        # Test that instance-level changes affects class value
-        instance.managed_class_prop = 100
-        self.assertEqual(TestThing.managed_class_prop, 100)
-        self.assertEqual(instance.managed_class_prop, 100)
+def test_01_simple_class_property():
+    # Test class-level access
+    assert TestThing.simple_class_prop == Defaults.SIMPLE_CLASS_PROP
+    TestThing.simple_class_prop = 100
+    assert TestThing.simple_class_prop == 100
 
-    def test_03_readonly_class_property(self):
-        """Test read-only class property behavior"""
-        # Test reading the value
-        self.assertEqual(TestThing.readonly_class_prop, "read-only-value")
+    # Test that instance-level access reflects class value
+    instance1 = TestThing(id=f"test-simple-class-prop-{uuid_hex()}")
+    instance2 = TestThing(id=f"test-simple-class-prop-{uuid_hex()}")
+    assert instance1.simple_class_prop == 100
+    assert instance2.simple_class_prop == 100
 
-        # Test that setting raises an error at class level
-        with self.assertRaises(ValueError):
-            TestThing.readonly_class_prop = "new-value"
+    # Test that instance-level changes affect class value
+    instance1.simple_class_prop = 200
+    assert TestThing.simple_class_prop == 200
+    assert instance2.simple_class_prop == 200
 
-        # Test that setting raises an error at instance level
-        instance = TestThing(id="test4")
-        with self.assertRaises(ValueError):
-            instance.readonly_class_prop = "new-value"
 
-        # Verify value remains unchanged
-        self.assertEqual(TestThing.readonly_class_prop, "read-only-value")
-        self.assertEqual(instance.readonly_class_prop, "read-only-value")
+def test_02_managed_class_property():
+    # Test initial value
+    assert TestThing.managed_class_prop == Defaults.MANAGED_CLASS_PROP
+    # Test valid value assignment
+    TestThing.managed_class_prop = 50
+    assert TestThing.managed_class_prop == 50
+    # Test validation in setter
+    with pytest.raises(ValueError):
+        TestThing.managed_class_prop = -10
+    # Verify value wasn't changed after failed assignment
+    assert TestThing.managed_class_prop == 50
+    # Test instance-level validation
+    instance = TestThing(id=f"test-managed-class-prop-{uuid_hex()}")
+    with pytest.raises(ValueError):
+        instance.managed_class_prop = -20
+    # Test that instance-level access reflects class value
+    assert instance.managed_class_prop == 50
+    # Test that instance-level changes affects class value
+    instance.managed_class_prop = 100
+    assert TestThing.managed_class_prop == 100
+    assert instance.managed_class_prop == 100
 
-    def test_04_deletable_class_property(self):
-        """Test class property deletion"""
-        # Test initial value
-        self.assertEqual(TestThing.deletable_class_prop, 100)
 
-        # Test setting new value
-        TestThing.deletable_class_prop = 150
-        self.assertEqual(TestThing.deletable_class_prop, 150)
+def test_03_readonly_class_property():
+    # Test reading the value
+    assert TestThing.readonly_class_prop == "read-only-value"
 
-        # Test deletion
-        instance = TestThing(id="test5")
-        del TestThing.deletable_class_prop
-        self.assertEqual(TestThing.deletable_class_prop, 100)  # Should return to default
-        self.assertEqual(instance.deletable_class_prop, 100)
+    # Test that setting raises an error at class level
+    with pytest.raises(ValueError):
+        TestThing.readonly_class_prop = "new-value"
 
-        # Test instance-level deletion
-        instance.deletable_class_prop = 200
-        self.assertEqual(TestThing.deletable_class_prop, 200)
-        del instance.deletable_class_prop
-        self.assertEqual(TestThing.deletable_class_prop, 100)  # Should return to default
+    # Test that setting raises an error at instance level
+    instance = TestThing(id=f"test-readonly-class-prop-{uuid_hex()}")
+    with pytest.raises(ValueError):
+        instance.readonly_class_prop = "new-value"
 
-    def test_05_descriptor_access(self):
-        """Test descriptor access for class properties"""
-        # Test direct access through descriptor
-        instance = TestThing(id="test6")
-        self.assertIsInstance(TestThing.not_a_class_prop, Number)
-        self.assertEqual(instance.not_a_class_prop, 43)
-        instance.not_a_class_prop = 50
-        self.assertEqual(instance.not_a_class_prop, 50)
+    # Verify value remains unchanged
+    assert TestThing.readonly_class_prop == "read-only-value"
+    assert instance.readonly_class_prop == "read-only-value"
 
-        del instance.not_a_class_prop
-        # deleter deletes only an internal instance variable
-        self.assertTrue(hasattr(TestThing, "not_a_class_prop"))
-        self.assertEqual(instance.not_a_class_prop, 43)
 
-        del TestThing.not_a_class_prop
-        # descriptor itself is deleted
-        self.assertFalse(hasattr(TestThing, "not_a_class_prop"))
-        self.assertFalse(hasattr(instance, "not_a_class_prop"))
-        with self.assertRaises(AttributeError):
-            instance.not_a_class_prop
+def test_04_deletable_class_property():
+    # Test initial value
+    assert TestThing.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP
 
-    def _generate_db_ops_tests(self) -> None:
-        def test_prekill(thing: TestThing) -> None:
-            self.assertEqual(thing.db_commit_number_prop, 0)
-            thing.db_commit_number_prop = 100
-            self.assertEqual(thing.db_commit_number_prop, 100)
-            self.assertEqual(thing.db_engine.get_property("db_commit_number_prop"), 100)
+    # Test setting new value
+    TestThing.deletable_class_prop = 150
+    assert TestThing.deletable_class_prop == 150
 
-            # test db persist property
-            self.assertEqual(thing.db_persist_selector_prop, "a")
-            thing.db_persist_selector_prop = "c"
-            self.assertEqual(thing.db_persist_selector_prop, "c")
-            self.assertEqual(thing.db_engine.get_property("db_persist_selector_prop"), "c")
+    # Test deletion
+    instance = TestThing(id=f"test-deletable-class-prop-{uuid_hex()}")
+    del TestThing.deletable_class_prop
+    assert TestThing.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP  # Should return to default
+    assert instance.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP
 
-            # test db init property
-            self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
-            thing.db_init_int_prop = 50
-            self.assertEqual(thing.db_init_int_prop, 50)
-            self.assertNotEqual(thing.db_engine.get_property("db_init_int_prop"), 50)
-            self.assertEqual(
-                thing.db_engine.get_property("db_init_int_prop"),
-                TestThing.db_init_int_prop.default,
-            )
-            del thing
+    # Test instance-level deletion
+    instance.deletable_class_prop = 200
+    assert TestThing.deletable_class_prop == 200
+    del instance.deletable_class_prop
+    assert TestThing.deletable_class_prop == Defaults.DELETABLE_CLASS_PROP  # Should return to default
 
-        def test_postkill(thing: TestThing) -> None:
-            # deleted thing and reload from database
-            self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
-            self.assertEqual(thing.db_persist_selector_prop, "c")
-            self.assertNotEqual(thing.db_commit_number_prop, 100)
-            self.assertEqual(thing.db_commit_number_prop, TestThing.db_commit_number_prop.default)
 
-        return test_prekill, test_postkill
+def test_05_descriptor_access():
+    # Test direct access through descriptor
+    instance = TestThing(id=f"test-descriptor-access-{uuid_hex()}")
+    assert isinstance(TestThing.not_a_class_prop, Number)
+    assert instance.not_a_class_prop == 43
+    instance.not_a_class_prop = 50
+    assert instance.not_a_class_prop == 50
 
-    def test_06_sqlalchemy_db_operations(self):
-        """Test SQLAlchemy database operations"""
-        thing_id = "test-db-operations"
-        file_path = f"{thing_id}.db"
-        try:
-            os.remove(file_path)
-        except (OSError, FileNotFoundError):
-            pass
-        self.assertTrue(not os.path.exists(file_path))
+    del instance.not_a_class_prop
+    # deleter deletes only an internal instance variable
+    assert hasattr(TestThing, "not_a_class_prop")
+    assert instance.not_a_class_prop == 43
 
-        test_prekill, test_postkill = self._generate_db_ops_tests()
+    del TestThing.not_a_class_prop
+    # descriptor itself is deleted
+    assert not hasattr(TestThing, "not_a_class_prop")
+    assert not hasattr(instance, "not_a_class_prop")
+    with pytest.raises(AttributeError):
+        _ = instance.not_a_class_prop
 
-        thing = TestThing(id=thing_id, use_default_db=True)
-        test_prekill(thing)
 
-        thing = TestThing(id=thing_id, use_default_db=True)
-        test_postkill(thing)
+@pytest.fixture(scope="module")
+def db_ops_tests() -> tuple[Callable, Callable]:
+    def test_prekill(thing: TestThing):
+        assert thing.db_commit_number_prop == 0
+        thing.db_commit_number_prop = 100
+        assert thing.db_commit_number_prop == 100
+        assert thing.db_engine.get_property("db_commit_number_prop") == 100
 
-    def test_07_json_db_operations(self):
-        with tempfile.NamedTemporaryFile(delete=False) as tf:
-            filename = tf.name
+        # test db persist property
+        assert thing.db_persist_selector_prop == "a"
+        thing.db_persist_selector_prop = "c"
+        assert thing.db_persist_selector_prop == "c"
+        assert thing.db_engine.get_property("db_persist_selector_prop") == "c"
 
-        thing_id = "test-db-operations-json"
-        test_prekill, test_postkill = self._generate_db_ops_tests()
+        # test db init property
+        assert thing.db_init_int_prop == TestThing.db_init_int_prop.default
+        thing.db_init_int_prop = 50
+        assert thing.db_init_int_prop == 50
+        assert thing.db_engine.get_property("db_init_int_prop") != 50
+        assert thing.db_engine.get_property("db_init_int_prop") == TestThing.db_init_int_prop.default
+        del thing
 
-        thing = TestThing(
-            id=thing_id,
-            use_json_file=True,
-            json_filename=filename,
-        )
-        test_prekill(thing)
+    def test_postkill(thing: TestThing):
+        # deleted thing and reload from database
+        assert thing.db_init_int_prop == TestThing.db_init_int_prop.default
+        assert thing.db_persist_selector_prop == "c"
+        assert thing.db_commit_number_prop != 100
+        assert thing.db_commit_number_prop == TestThing.db_commit_number_prop.default
 
-        thing = TestThing(
-            id=thing_id,
-            use_json_file=True,
-            json_filename=filename,
-        )
-        test_postkill(thing)
+    return test_prekill, test_postkill
 
-        os.remove(filename)
 
-    def test_08_db_config(self):
-        """Test database configuration options"""
-        thing = TestThing(id="test-sql-config")
+def test_06_sqlalchemy_db_operations(db_ops_tests: tuple[Callable, Callable]):
+    thing_id = "test-db-operations"
+    file_path = f"{thing_id}.db"
+    try:
+        os.remove(file_path)
+    except (OSError, FileNotFoundError):
+        pass
+    assert not os.path.exists(file_path)
 
-        # ----- SQL config tests -----
-        sql_db_config = {
-            "provider": "postgresql",
-            "host": "localhost",
-            "port": 5432,
-            "database": "hololinked",
-            "user": "hololinked",
-            "password": "postgresnonadminpassword",
-        }
-        with open("test_sql_config.json", "w") as f:
-            PythonBuiltinJSONSerializer.dump(sql_db_config, f)
+    test_prekill, test_postkill = db_ops_tests
 
-        # correct config
+    thing = TestThing(id=thing_id, use_default_db=True)
+    test_prekill(thing)
+
+    thing = TestThing(id=thing_id, use_default_db=True)
+    test_postkill(thing)
+
+
+def test_07_json_db_operations(db_ops_tests: tuple[Callable, Callable]):
+    with tempfile.NamedTemporaryFile(delete=False) as tf:
+        filename = tf.name
+
+    thing_id = f"test-db-operations-json-{uuid_hex()}"
+    test_prekill, test_postkill = db_ops_tests
+
+    thing = TestThing(id=thing_id, use_json_file=True, json_filename=filename)
+    test_prekill(thing)
+
+    thing = TestThing(id=thing_id, use_json_file=True, json_filename=filename)
+    test_postkill(thing)
+
+    os.remove(filename)
+
+
+def test_08_db_config():
+    thing = TestThing(id=f"test-sql-config-{uuid_hex()}")
+
+    # ----- SQL config tests -----
+    sql_db_config = {
+        "provider": "postgresql",
+        "host": "localhost",
+        "port": 5432,
+        "database": "hololinked",
+        "user": "hololinked",
+        "password": "postgresnonadminpassword",
+    }
+    with open("test_sql_config.json", "w") as f:
+        json.dump(sql_db_config, f)
+
+    # correct config
+    ThingDB(thing, config_file="test_sql_config.json")
+    # foreign field
+    sql_db_config_2 = copy.deepcopy(sql_db_config)
+    sql_db_config_2["passworda"] = "postgresnonadminpassword"
+    with open("test_sql_config.json", "w") as f:
+        json.dump(sql_db_config_2, f)
+    with pytest.raises(pydantic.ValidationError):
         ThingDB(thing, config_file="test_sql_config.json")
-        # foreign field
-        sql_db_config_2 = copy.deepcopy(sql_db_config)
-        sql_db_config_2["passworda"] = "postgresnonadminpassword"
-        with open("test_sql_config.json", "w") as f:
-            PythonBuiltinJSONSerializer.dump(sql_db_config_2, f)
-        self.assertRaises(
-            pydantic.ValidationError,
-            ThingDB,
-            thing,
-            config_file="test_sql_config.json",
-        )
-        # missing field
-        sql_db_config_3 = copy.deepcopy(sql_db_config)
-        sql_db_config_3.pop("password")
-        with open("test_sql_config.json", "w") as f:
-            PythonBuiltinJSONSerializer.dump(sql_db_config_3, f)
-        self.assertRaises(
-            ValueError,
-            ThingDB,
-            thing,
-            config_file="test_sql_config.json",
-        )
-        # URI instead of other fields
-        sql_db_config = dict(
-            provider="postgresql",
-            uri="postgresql://hololinked:postgresnonadminpassword@localhost:5432/hololinked",
-        )
-        with open("test_sql_config.json", "w") as f:
-            PythonBuiltinJSONSerializer.dump(sql_db_config, f)
+    # missing field
+    sql_db_config_3 = copy.deepcopy(sql_db_config)
+    sql_db_config_3.pop("password")
+    with open("test_sql_config.json", "w") as f:
+        json.dump(sql_db_config_3, f)
+    with pytest.raises(ValueError):
         ThingDB(thing, config_file="test_sql_config.json")
+    # URI instead of other fields
+    sql_db_config = dict(
+        provider="postgresql",
+        uri="postgresql://hololinked:postgresnonadminpassword@localhost:5432/hololinked",
+    )
+    with open("test_sql_config.json", "w") as f:
+        json.dump(sql_db_config, f)
+    ThingDB(thing, config_file="test_sql_config.json")
 
-        os.remove("test_sql_config.json")
+    os.remove("test_sql_config.json")
 
-        # ----- MongoDB config tests -----
-        mongo_db_config = {
-            "provider": "mongo",
-            "host": "localhost",
-            "port": 27017,
-            "database": "hololinked",
-            "user": "hololinked",
-            "password": "mongononadminpassword",
-            "authSource": "admin",
-        }
-        with open("test_mongo_config.json", "w") as f:
-            PythonBuiltinJSONSerializer.dump(mongo_db_config, f)
+    # ----- MongoDB config tests -----
+    mongo_db_config = {
+        "provider": "mongo",
+        "host": "localhost",
+        "port": 27017,
+        "database": "hololinked",
+        "user": "hololinked",
+        "password": "mongononadminpassword",
+        "authSource": "admin",
+    }
+    with open("test_mongo_config.json", "w") as f:
+        json.dump(mongo_db_config, f)
 
-        # correct config
+    # correct config
+    BaseDB.load_conf("test_mongo_config.json")
+    # foreign field
+    mongo_db_config_2 = copy.deepcopy(mongo_db_config)
+    mongo_db_config_2["passworda"] = "mongononadminpassword"
+    with open("test_mongo_config.json", "w") as f:
+        json.dump(mongo_db_config_2, f)
+    with pytest.raises(pydantic.ValidationError):
         BaseDB.load_conf("test_mongo_config.json")
-        # foreign field
-        mongo_db_config_2 = copy.deepcopy(mongo_db_config)
-        mongo_db_config_2["passworda"] = "mongononadminpassword"
-        with open("test_mongo_config.json", "w") as f:
-            PythonBuiltinJSONSerializer.dump(mongo_db_config_2, f)
-        self.assertRaises(pydantic.ValidationError, BaseDB.load_conf, "test_mongo_config.json")
-        # missing field
-        mongo_db_config_3 = copy.deepcopy(mongo_db_config)
-        mongo_db_config_3.pop("password")
-        with open("test_mongo_config.json", "w") as f:
-            PythonBuiltinJSONSerializer.dump(mongo_db_config_3, f)
-        self.assertRaises(ValueError, BaseDB.load_conf, "test_mongo_config.json")
-        # URI instead of other fields
-        mongo_db_config = dict(
-            provider="mongo",
-            uri="mongodb://hololinked:mongononadminpassword@localhost:27017/hololinked?authSource=admin",
-        )
-        with open("test_mongo_config.json", "w") as f:
-            PythonBuiltinJSONSerializer.dump(mongo_db_config, f)
-        # correct config
+    # missing field
+    mongo_db_config_3 = copy.deepcopy(mongo_db_config)
+    mongo_db_config_3.pop("password")
+    with open("test_mongo_config.json", "w") as f:
+        json.dump(mongo_db_config_3, f)
+    with pytest.raises(ValueError):
         BaseDB.load_conf("test_mongo_config.json")
+    # URI instead of other fields
+    mongo_db_config = dict(
+        provider="mongo",
+        uri="mongodb://hololinked:mongononadminpassword@localhost:27017/hololinked?authSource=admin",
+    )
+    with open("test_mongo_config.json", "w") as f:
+        json.dump(mongo_db_config, f)
+    # correct config
+    BaseDB.load_conf("test_mongo_config.json")
 
-        os.remove("test_mongo_config.json")
+    os.remove("test_mongo_config.json")
 
-        # ----- SQLite config tests -----
+    # ----- SQLite config tests -----
 
-        sqlite_db_config = {
-            "provider": "sqlite",
-            "file": "test_sqlite.db",
-        }
-        with open("test_sqlite_config.json", "w") as f:
-            PythonBuiltinJSONSerializer.dump(sqlite_db_config, f)
+    sqlite_db_config = {
+        "provider": "sqlite",
+        "file": "test_sqlite.db",
+    }
+    with open("test_sqlite_config.json", "w") as f:
+        json.dump(sqlite_db_config, f)
 
-        # correct config
-        ThingDB(thing, config_file="test_sqlite_config.json")
+    # correct config
+    ThingDB(thing, config_file="test_sqlite_config.json")
 
-        os.remove("test_sqlite_config.json")
-
-
-if __name__ == "__main__":
-    unittest.main(testRunner=TestRunner())
+    os.remove("test_sqlite_config.json")

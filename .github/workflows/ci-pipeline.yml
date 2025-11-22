@@ -76,33 +76,32 @@ jobs:
         run: |
           uv venv .venv
           source .venv/bin/activate
-          uv sync --no-install-project --group test --group dev
+          uv sync --group test --group dev
 
       - name: install dependencies (windows)
         if: runner.os == 'Windows'
         run: |
           uv venv .venv
           .venv\Scripts\activate
-          uv sync --no-install-project --group test --group dev
+          uv sync --group test --group dev
 
       - name: run unit tests (linux/macOS)
         if: runner.os != 'Windows' && matrix.python-version != 3.13
         run: |
           source .venv/bin/activate
-          uv run coverage run -m unittest discover -s tests -p 'test_*.py'
+          pytest -s -v
 
       - name: run unit tests (Windows)
         if: runner.os == 'Windows'
         run: |
           .venv\Scripts\activate
-          uv run coverage run -m unittest discover -s tests -p "test_*.py"
+          pytest -s -v
 
       - name: run unit tests and generate coverage report (linux/macOS python 3.13)
         if: runner.os != 'Windows' && matrix.python-version == 3.13
         run: |
           source .venv/bin/activate
-          uv run coverage run -m unittest discover -s tests -p 'test_*.py'
-          uv run coverage xml -o coverage.xml
+          pytest -s -v --cov=hololinked --cov-report=xml:coverage.xml
 
       - name: upload coverage report as artifact
         uses: actions/upload-artifact@v4

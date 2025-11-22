@@ -1,37 +1,40 @@
 import copy
 import typing
 import uuid
-from tornado.web import RequestHandler, StaticFileHandler
-from tornado.iostream import StreamClosedError
-import msgspec
-from msgspec import DecodeError as MsgspecJSONDecodeError
 
-from ...utils import format_exception_as_json, get_current_async_loop
+import msgspec
+
+from msgspec import DecodeError as MsgspecJSONDecodeError
+from tornado.iostream import StreamClosedError
+from tornado.web import RequestHandler, StaticFileHandler
+
 from ...config import global_config
+from ...constants import JSONSerializable, Operations
 from ...core.zmq.brokers import AsyncEventConsumer, EventConsumer
 from ...core.zmq.message import (
     EMPTY_BYTE,
-    TIMEOUT,
     ERROR,
     INVALID_MESSAGE,
+    TIMEOUT,
     ResponseMessage,
+    SerializableNone,
+    ServerExecutionContext,
+    ThingExecutionContext,
     default_server_execution_context,
     default_thing_execution_context,
-    ThingExecutionContext,
-    ServerExecutionContext,
 )
-from ...core.zmq.message import SerializableNone
-from ...constants import JSONSerializable, Operations
 from ...schema_validators import BaseSchemaValidator
-from ...serializers.payloads import PreserializedData, SerializableData
 from ...serializers import Serializers
+from ...serializers.payloads import PreserializedData, SerializableData
 from ...td import (
-    InteractionAffordance,
-    PropertyAffordance,
     ActionAffordance,
     EventAffordance,
+    InteractionAffordance,
+    PropertyAffordance,
 )
 from ...td.forms import Form
+from ...utils import format_exception_as_json, get_current_async_loop
+
 
 try:
     from ..security import BcryptBasicSecurity
@@ -662,6 +665,7 @@ class StopHandler(BaseHandler):
         self.server = owner_inst
         self.allowed_clients = self.server.allowed_clients
         self.security_schemes = self.server.security_schemes
+        self.logger = self.server.logger.bind(path=self.request.path)
 
     async def post(self):
         if not self.has_access_control:
@@ -691,6 +695,7 @@ class LivenessProbeHandler(BaseHandler):
 
         assert isinstance(owner_inst, HTTPServer)
         self.server = owner_inst
+        self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):
         self.set_status(200, "ok")
@@ -704,6 +709,7 @@ class ReadinessProbeHandler(BaseHandler):
 
         assert isinstance(owner_inst, HTTPServer)
         self.server = owner_inst
+        self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):
         try:
