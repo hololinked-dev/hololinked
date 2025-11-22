@@ -32,6 +32,7 @@ jobs:
   scan:
     name: security scan with bandit
     runs-on: ubuntu-latest
+    needs: codestyle
 
     steps:
       - name: checkout code
@@ -60,7 +61,7 @@ jobs:
 
   test:
     name: unit-integration tests
-    needs: codestyle
+    needs: scan
     if: false
 
     strategy:
