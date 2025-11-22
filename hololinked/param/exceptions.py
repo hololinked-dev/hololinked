@@ -3,17 +3,6 @@ import typing
 from contextlib import contextmanager
 
 
-def wrap_error_text(text: str) -> str:
-    # return T.wrap(text)
-    #'\n'+'\n'.join([line.lstrip()
-    return textwrap.fill(
-        text=textwrap.dedent(text).lstrip(),
-        initial_indent="\n",
-        expand_tabs=True,
-        replace_whitespace=True,
-    )
-
-
 def raise_TypeError(message, parameter) -> typing.NoReturn:
     owner_str = ""
     if isinstance(parameter, Parameter):
