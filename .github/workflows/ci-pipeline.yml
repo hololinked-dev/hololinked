@@ -48,10 +48,10 @@ jobs:
 
       - name: run bandit security scan
         run: |
-          bandit -c pyproject.toml hololinked/*.py
+          bandit -c pyproject.toml -r hololinked/ -b .bandit-baseline.json
           echo "----------------------------"
           echo "Rerunning to generate bandit report in JSON format..."
-          bandit -c pyproject.toml hololinked/*.py -f json -o bandit-report.json
+          bandit -c pyproject.toml -r hololinked/ -f json -b .bandit-baseline.json -o bandit-report.json
 
       - name: upload bandit report artifact
         uses: actions/upload-artifact@v4
