@@ -24,21 +24,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import inspect
 import array
 import datetime
-import io
-import uuid
 import decimal
-import typing
-import warnings
-from enum import Enum
-from collections import deque
+import inspect
+import io
+import json as pythonjson
 
 # serializers:
 import pickle
-import json as pythonjson
-from msgspec import json as msgspecjson, msgpack, Struct
+import typing
+import uuid
+import warnings
+from collections import deque
+from enum import Enum
+
+from msgspec import Struct, msgpack
+from msgspec import json as msgspecjson
 
 # default dytypes:
 try:
@@ -46,15 +48,15 @@ try:
 except ImportError:
     pass
 
-from ..param.parameters import (
-    TypeConstrainedList,
-    TypeConstrainedDict,
-    TypedKeyMappingsConstrainedDict,
-    ClassSelector,
-    String,
-    Parameter,
-)
 from ..constants import JSONSerializable
+from ..param.parameters import (
+    ClassSelector,
+    Parameter,
+    String,
+    TypeConstrainedDict,
+    TypeConstrainedList,
+    TypedKeyMappingsConstrainedDict,
+)
 from ..utils import MappableSingleton, format_exception_as_json, issubklass
 
 
@@ -201,11 +203,19 @@ class PickleSerializer(BaseSerializer):
 
     def dumps(self, data) -> bytes:
         "method called by ZMQ message brokers to serialize data"
-        return pickle.dumps(data)
+        from ..config import global_config
+
+        if global_config.ALLOW_PICKLE:
+            return pickle.dumps(data)
+        raise RuntimeError("Pickle serialization is not allowed by the global configuration")
 
     def loads(self, data) -> typing.Any:
         "method called by ZMQ message brokers to deserialize data"
-        return pickle.loads(self.convert_to_bytes(data))
+        from ..config import global_config
+
+        if global_config.ALLOW_PICKLE:
+            return pickle.loads(self.convert_to_bytes(data))
+        raise RuntimeError("Pickle deserialization is not allowed by the global configuration")
 
     @property
     def content_type(self) -> str:
@@ -476,7 +486,7 @@ class Serializers(metaclass=MappableSingleton):
         """
         if not isinstance(serializer, BaseSerializer):
             raise ValueError("serializer must be an instance of BaseSerializer, given : {}".format(type(serializer)))
-        from ..core import Property, Action, Event, Thing
+        from ..core import Action, Event, Property, Thing
 
         if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
             raise ValueError("object must be a Property, Action or Event, or Thing, got : {}".format(type(objekt)))
@@ -513,7 +523,7 @@ class Serializers(metaclass=MappableSingleton):
         """
         if content_type not in cls.content_types:
             raise ValueError("content type {} unsupported".format(content_type))
-        from ..core import Property, Action, Event, Thing
+        from ..core import Action, Event, Property, Thing
 
         if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
             raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
@@ -551,7 +561,7 @@ class Serializers(metaclass=MappableSingleton):
         """
         if content_type not in cls.content_types:
             raise ValueError("content type {} unsupported".format(content_type))
-        from ..core import Property, Action, Event
+        from ..core import Action, Event, Property
 
         if not isinstance(objekt, (Property, Action, Event, str)):
             raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
