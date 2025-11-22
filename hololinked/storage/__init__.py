@@ -1,6 +1,6 @@
-from .database import ThingDB, MongoThingDB
-from .json_storage import ThingJSONStorage
 from ..utils import get_a_filename_from_instance
+from .database import MongoThingDB, ThingDB
+from .json_storage import ThingJSONStorage
 
 
 def prepare_object_storage(instance, **kwargs):
