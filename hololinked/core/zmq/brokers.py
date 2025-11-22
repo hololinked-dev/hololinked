@@ -1,20 +1,21 @@
+import asyncio
 import os
+import threading
 import time
+import typing
 import warnings
+from enum import Enum
+
+import structlog
 import zmq
 import zmq.asyncio
-import asyncio
-import threading
-import typing
-import structlog
-from enum import Enum
 from zmq.utils.monitor import parse_monitor_message
 
-from ...utils import format_exception_as_json, run_callable_somehow, uuid_hex, get_current_async_loop
 from ...config import global_config
 from ...constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS, get_socket_type_name
-from ...serializers.serializers import Serializers
 from ...exceptions import BreakLoop
+from ...serializers.serializers import Serializers
+from ...utils import format_exception_as_json, get_current_async_loop, run_callable_somehow, uuid_hex
 from .message import (
     ERROR,
     EXIT,
@@ -24,14 +25,14 @@ from .message import (
     SERVER_DISCONNECTED,
     TIMEOUT,
     EventMessage,
+    PreserializedData,
+    PreserializedEmptyByte,
     RequestMessage,
     ResponseMessage,
     SerializableData,
-    PreserializedData,
+    SerializableNone,
     ServerExecutionContext,
     ThingExecutionContext,
-    SerializableNone,
-    PreserializedEmptyByte,
     default_server_execution_context,
     default_thing_execution_context,
 )
@@ -119,7 +120,8 @@ class BaseZMQ:
         RuntimeError
             if transport is `TCP` and a socket connection from client side is requested but a socket address is not supplied
         """
-        assert node_type.lower() in ["server", "client"], f"Invalid node_type: {node_type}"
+        if node_type.lower() not in ["server", "client"]:
+            raise ValueError(f"Invalid node_type: {node_type}")
         bind = node_type.lower() == "server"
         if len(access_point) == 3 or len(access_point) == 6 or isinstance(access_point, Enum):
             transport = access_point
@@ -929,11 +931,8 @@ class BaseZMQClient(BaseZMQ):
             BaseZMQ.exit(self)
             self.poller.unregister(self.socket)
             # TODO - there is some issue here while quitting
-            # print("poller exception did not occur 1")
             if self._monitor_socket is not None:
-                # print("poller exception did not occur 2")
                 self.poller.unregister(self._monitor_socket)
-                # print("poller exception did not occur 3")
         except Exception as ex:  # noqa
             # TODO log message and undo noqa
             # raises a weird key error for some reason
@@ -941,8 +940,7 @@ class BaseZMQClient(BaseZMQ):
             # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e502a350> - KeyError
             # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e5080750> - KeyError
             # unable to deregister from poller - <zmq.asyncio.Socket(zmq.PAIR) at 0x1c9e5082430> - KeyError
-            # self.logger.warning(f"unable to deregister from poller - {str(ex)} - {type(ex).__name__}")
-            pass
+            self.logger.warning(f"unable to deregister socket from poller - {str(ex)} - {type(ex).__name__}")
         try:
             if self._monitor_socket is not None:
                 self._monitor_socket.close(0)
@@ -1151,7 +1149,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                     # put the expected message in response message cache
                     # 2. also release the lock in every iteration because a message may be added in response cache
                     # and may not return the method, which means the loop will run again and the lock needs to reacquired
-                    pass
+                    self.logger.warning(f"could not release poller lock for recv_response - {str(ex)}")
 
     def execute(
         self,
@@ -1462,8 +1460,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             finally:
                 try:
                     self._poller_lock.release()
-                except Exception:
-                    pass
+                except Exception as ex:
+                    self.logger.warning(f"could not release poller lock for async_recv_response - {str(ex)}")
 
     async def async_execute(
         self,
@@ -2145,9 +2143,6 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             `Event` object that needs to be registered. Events created at `__init__()` of `Thing` are
             automatically registered.
         """
-        from ...core.events import EventDispatcher
-
-        assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
         if event._unique_identifier in self.events and event not in self.events:
             raise AttributeError(f"event {event._unique_identifier} already registered, please use another name.")
         self.event_ids.add(event._unique_identifier)
@@ -2215,8 +2210,8 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         finally:
             try:
                 self._send_lock.release()
-            except Exception:
-                pass
+            except Exception as ex:
+                self.logger.warning(f"could not release publish lock for event publisher - {str(ex)}")
 
     def exit(self):
         try:
@@ -2282,7 +2277,7 @@ class BaseEventConsumer(BaseZMQClient):
                 id=id,
                 event_id=event_unique_identifier,
             )
-        self.logger = logger
+        self.logger = logger  # type: structlog.stdlib.BoundLogger
         self.create_socket(
             server_id=id,
             socket_id=id,
@@ -2336,10 +2331,7 @@ class BaseEventConsumer(BaseZMQClient):
             self.poller.unregister(self.interruptor)
         except Exception as ex:  # noqa
             # TODO - log message and undo noqa
-            # self.logger.warning("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message: {}".format(
-            #     self.socket_address, str(E)))
-            # above line prints too many warnings
-            pass
+            self.logger.warning(f"could not unregister sockets from poller for event consumer - {str(ex)}")
         try:
             self.socket.close(0)
             self.interruptor.close(0)
@@ -2395,8 +2387,8 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
             finally:
                 try:
                     self._poller_lock.release()
-                except Exception:
-                    pass
+                except Exception as ex:
+                    self.logger.warning(f"could not release poller lock for event receive - {str(ex)}")
 
     def interrupt(self):
         """
@@ -2459,8 +2451,8 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
             finally:
                 try:
                     self._poller_lock.release()
-                except Exception:
-                    pass
+                except Exception as ex:
+                    self.logger.warning(f"could not release poller lock for event receive - {str(ex)}")
 
     async def interrupt(self):
         """
