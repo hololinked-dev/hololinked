@@ -1,6 +1,5 @@
 import base64
 import itertools
-import logging
 import random
 import sys
 import time
@@ -21,7 +20,6 @@ from hololinked.core.zmq.message import (
     ThingExecutionContext,
     default_server_execution_context,
 )
-from hololinked.logger import setup_logging
 from hololinked.serializers import BaseSerializer, JSONSerializer, MsgpackSerializer, PickleSerializer
 from hololinked.server import stop
 from hololinked.server.http import HTTPServer
@@ -34,9 +32,6 @@ try:
     from .things import OceanOpticsSpectrometer
 except ImportError:
     from things import OceanOpticsSpectrometer
-
-
-setup_logging(log_level=logging.ERROR + 10)
 
 
 hostname_prefix = "http://127.0.0.1"
@@ -164,11 +159,11 @@ def sse_stream(url: str, chunk_size: int = 2048, **kwargs):
                 yield event
 
 
-def test_01_init_run_and_stop(port: int):
+async def test_01_init_run_and_stop(port: int):
     server = HTTPServer(port=port)
     server.run(forked=True)
     wait_until_server_ready(port=port)
-    server.stop()
+    await server.async_stop()
     stop()
     time.sleep(2)
 
@@ -179,7 +174,7 @@ def test_01_init_run_and_stop(port: int):
     response = requests.post(f"{hostname_prefix}:{port}{stop_endpoint}")
     assert response.status_code in [200, 201, 202, 204]
     time.sleep(2)
-    server.stop()
+    await server.async_stop()
     stop()
 
 

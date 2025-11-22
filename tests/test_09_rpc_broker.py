@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import random
 import threading
 import time
@@ -16,13 +15,11 @@ from hololinked.client.abstractions import SSE
 from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty
 from hololinked.core import Thing
 from hololinked.core.actions import BoundAction
-from hololinked.core.zmq.brokers import AsyncZMQClient, SyncZMQClient
+from hololinked.core.zmq.brokers import AsyncZMQClient, EventDispatcher, SyncZMQClient  # noqa: F401
 from hololinked.core.zmq.rpc_server import RPCServer
-from hololinked.logger import setup_logging
 from hololinked.td import ActionAffordance, EventAffordance, PropertyAffordance
 from hololinked.td.forms import Form
-from hololinked.td.utils import get_zmq_unique_identifier_from_event_affordance
-from hololinked.utils import get_all_sub_things_recusively, get_current_async_loop, uuid_hex
+from hololinked.utils import get_all_sub_things_recusively, uuid_hex
 
 
 try:
@@ -35,23 +32,21 @@ except ImportError:
     from things import test_thing_TD as test_thing_original_TD
 
 
-data_structures = [
-    {"key": "value"},
-    [1, 2, 3],
-    "string",
-    42,
-    3.14,
-    True,
-    None,
-    {"nested": {"key": "value"}},
-    [{"list": "of"}, {"dicts": "here"}],
-    {"complex": {"nested": {"list": [1, 2, 3]}, "mixed": [1, "two", 3.0, None]}},
-    {"array": [1, 2, 3]},
-]  # to use for testing
-
-
-# global_config.DEBUG = True
-setup_logging(log_level=logging.ERROR)
+@pytest.fixture(scope="module")
+def data_structures():
+    return [
+        {"key": "value"},
+        [1, 2, 3],
+        "string",
+        42,
+        3.14,
+        True,
+        None,
+        {"nested": {"key": "value"}},
+        [{"list": "of"}, {"dicts": "here"}],
+        {"complex": {"nested": {"list": [1, 2, 3]}, "mixed": [1, "two", 3.0, None]}},
+        {"array": [1, 2, 3]},
+    ]
 
 
 @pytest.fixture(scope="class")
@@ -90,31 +85,35 @@ def thing(thing_id: str) -> TestThing:
 
 @pytest.fixture(scope="class")
 def server(server_id, thing) -> Generator[RPCServer, None, None]:
-    srv = RPCServer(id=server_id, things=[thing])
-    thread = threading.Thread(target=srv.run, daemon=False)
+    _server = RPCServer(id=server_id, things=[thing])
+    thread = threading.Thread(target=_server.run, daemon=False)
     thread.start()
-    yield srv
-    srv.stop()
+    yield _server
+    _server.stop()
 
 
 @pytest.fixture(scope="class")
-def async_client(client_id, server_id) -> AsyncZMQClient:
-    return AsyncZMQClient(
+def async_client(client_id, server_id) -> Generator[AsyncZMQClient, None, None]:
+    client = AsyncZMQClient(
         id=client_id,
         server_id=server_id,
         access_point="INPROC",
         handshake=False,
     )
+    yield client
+    client.exit()
 
 
 @pytest.fixture(scope="class")
-def sync_client(client_id, server_id) -> SyncZMQClient:
-    return SyncZMQClient(
+def sync_client(client_id, server_id) -> Generator[SyncZMQClient, None, None]:
+    client = SyncZMQClient(
         id=client_id + "-sync",
         server_id=server_id,
         access_point="INPROC",
         handshake=False,
     )
+    yield client
+    client.exit()
 
 
 @pytest.fixture(scope="class")
@@ -241,7 +240,7 @@ class TestRPCBroker:
         assert action_echo.last_return_value == 10
         assert action_echo(2) == 2
 
-    async def test_04_action_abstraction_thorough(self, action_echo: ZMQAction):
+    async def test_04_action_abstraction_thorough(self, action_echo: ZMQAction, data_structures: list[Any]):
         msg_ids = [None for _ in range(len(data_structures))]
         last_call_type = None
         for index, data in enumerate(data_structures):
@@ -275,7 +274,7 @@ class TestRPCBroker:
         await base_property.async_set(0)
         assert await base_property.async_get() == 0
 
-    async def test_06_property_abstractions_thorough(self, base_property: ZMQProperty):
+    async def test_06_property_abstractions_thorough(self, base_property: ZMQProperty, data_structures: list[Any]):
         msg_ids = [None for _ in range(len(data_structures))]
         last_call_type = None
         for index, data in enumerate(data_structures):
@@ -594,127 +593,121 @@ class TestRPCBroker:
                 assert isinstance(event._unique_identifier, str)
                 assert event._owner_inst == thing
 
+    @pytest.mark.parametrize(
+        "event_name, expected_data",
+        [
+            pytest.param("test_event", "test data", id="test_event"),
+            pytest.param("test_binary_payload_event", b"test data", id="test_binary_payload_event"),
+            pytest.param(
+                "test_event_with_json_schema",
+                {"val1": 1, "val2": "test", "val3": {"key": "value"}, "val4": [1, 2, 3]},
+                id="test_event_with_json_schema",
+            ),
+        ],
+    )
     def test_18_sync_client_event_stream(
         self,
         thing: TestThing,
         server: RPCServer,
         action_push_events: ZMQAction,
+        event_name: str,
+        expected_data: Any,
     ):
         """test if event can be streamed by a synchronous threaded client"""
 
-        def test_events(event_name: str, expected_data: Any) -> None:
-            resource = getattr(TestThing, event_name).to_affordance(thing)  # type: EventAffordance
-            form = Form()
-            form.href = server.event_publisher.socket_address
-            form.contentType = "application/json"
-            form.op = "subscribeevent"
-            form.subprotocol = "sse"
-            resource.forms = [form]
-            event_client = ZMQEvent(
-                resource=resource,
-                logger=structlog.get_logger(),
-                owner_inst=None,
-            )
+        resource = getattr(TestThing, event_name).to_affordance(thing)  # type: EventAffordance
 
-            assert (
-                get_zmq_unique_identifier_from_event_affordance(event_client.resource)
-                == getattr(thing, event_client.resource.name)._unique_identifier  # type: EventDispatcher
-            )
-            attempts = 100
-            results = []
+        form = Form()
+        form.href = server.event_publisher.socket_address
+        form.contentType = "application/json"
+        form.op = "subscribeevent"
+        form.subprotocol = "sse"
+        resource.forms = [form]
+        event_client = ZMQEvent(
+            resource=resource,
+            logger=structlog.get_logger(),
+            owner_inst=None,
+        )
 
-            def cb(value: SSE):
-                nonlocal results
-                results.append(value)
+        event_dispatcher = getattr(thing, event_name)  # type: EventDispatcher
+        assert f"{resource.thing_id}/{resource.name}" == event_dispatcher._unique_identifier
 
-            event_client.subscribe(cb)
-            time.sleep(5)  # calm down for event publisher to connect fully as there is no handshake for events
-            action_push_events(event_name=event_name, total_number_of_events=attempts)
+        attempts = 100
+        results = []
 
-            for i in range(attempts):
-                if len(results) == attempts:
-                    break
-                time.sleep(0.1)
-            assert abs(len(results) - attempts) <= 3
-            assert [res.data for res in results] == [expected_data] * len(results)
-            event_client.unsubscribe()
+        def cb(value: SSE):
+            nonlocal results
+            results.append(value)
 
-        for name, data in zip(
-            [
-                "test_event",
-                "test_binary_payload_event",
+        event_client.subscribe(cb)
+        time.sleep(5)  # calm down for event publisher to connect fully as there is no handshake for events
+        action_push_events(event_name=event_name, total_number_of_events=attempts)
+
+        for i in range(attempts):
+            if len(results) == attempts:
+                break
+            time.sleep(0.1)
+
+        assert abs(len(results) - attempts) <= 3
+        assert [res.data for res in results] == [expected_data] * len(results)
+        event_client.unsubscribe()
+
+    @pytest.mark.parametrize(
+        "event_name, expected_data",
+        [
+            pytest.param("test_event", "test data", id="test_event"),
+            pytest.param("test_binary_payload_event", b"test data", id="test_binary_payload_event"),
+            pytest.param(
                 "test_event_with_json_schema",
-            ],
-            [
-                "test data",
-                b"test data",
-                {
-                    "val1": 1,
-                    "val2": "test",
-                    "val3": {"key": "value"},
-                    "val4": [1, 2, 3],
-                },
-            ],
-        ):
-            test_events(name, data)
-
-    def test_19_async_client_event_stream(self, thing: TestThing, action_push_events: ZMQAction):
+                {"val1": 1, "val2": "test", "val3": {"key": "value"}, "val4": [1, 2, 3]},
+                id="test_event_with_json_schema",
+            ),
+        ],
+    )
+    async def test_19_async_client_event_stream(
+        self,
+        thing: TestThing,
+        action_push_events: ZMQAction,
+        event_name: str,
+        expected_data: Any,
+    ):
         """test if event can be streamed by an asynchronous client in an async loop"""
+        resource = getattr(TestThing, event_name).to_affordance(thing)  # type: EventAffordance
 
-        async def test_events(event_name: str, expected_data: Any) -> None:
-            resource = getattr(TestThing, event_name).to_affordance(thing)  # type: EventAffordance
-            form = Form()
-            form.href = thing.rpc_server.event_publisher.socket_address
-            form.contentType = "application/json"
-            form.op = "subscribeevent"
-            form.subprotocol = "sse"
-            resource.forms = [form]
-            event_client = ZMQEvent(
-                resource=resource,
-                logger=structlog.get_logger(),
-                owner_inst=None,
-            )
-            assert (
-                get_zmq_unique_identifier_from_event_affordance(event_client.resource)
-                == getattr(thing, event_client.resource.name)._unique_identifier  # type: EventDispatcher
-            )
-            attempts = 100
-            results = []
+        form = Form()
+        form.href = thing.rpc_server.event_publisher.socket_address
+        form.contentType = "application/json"
+        form.op = "subscribeevent"
+        form.subprotocol = "sse"
+        resource.forms = [form]
 
-            def cb(value: SSE):
-                nonlocal results
-                # print("event callback", value)
-                results.append(value)
+        event_client = ZMQEvent(
+            resource=resource,
+            logger=structlog.get_logger(),
+            owner_inst=None,
+        )
 
-            event_client.subscribe(cb, asynch=True)
-            time.sleep(5)  # calm down for event publisher to connect fully as there is no handshake for events
-            action_push_events(event_name=event_name, total_number_of_events=attempts)
+        event_dispatcher = getattr(thing, event_name)  # type: EventDispatcher
+        assert f"{resource.thing_id}/{resource.name}" == event_dispatcher._unique_identifier
 
-            for i in range(attempts):
-                if len(results) == attempts:
-                    break
-                await asyncio.sleep(0.1)
-            assert abs(len(results) - attempts) <= 3
-            # since we are pushing events in multiple protocols, sometimes the event from the previous test is
-            # still lingering on the socket. So the captured event must be at least the number of attempts.
-            assert [res.data for res in results] == [expected_data] * len(results)
-            event_client.unsubscribe()
+        attempts = 100
+        results = []
 
-        for name, data in zip(
-            [
-                "test_event",
-                "test_binary_payload_event",
-                "test_event_with_json_schema",
-            ],
-            [
-                "test data",
-                b"test data",
-                {
-                    "val1": 1,
-                    "val2": "test",
-                    "val3": {"key": "value"},
-                    "val4": [1, 2, 3],
-                },
-            ],
-        ):
-            get_current_async_loop().run_until_complete(test_events(name, data))
+        def cb(value: SSE):
+            nonlocal results
+            # print("event callback", value)
+            results.append(value)
+
+        event_client.subscribe(cb, asynch=True)
+        time.sleep(5)  # calm down for event publisher to connect fully as there is no handshake for events
+        action_push_events(event_name=event_name, total_number_of_events=attempts)
+
+        for i in range(attempts):
+            if len(results) == attempts:
+                break
+            await asyncio.sleep(0.1)
+        assert abs(len(results) - attempts) <= 3
+        # since we are pushing events in multiple protocols, sometimes the event from the previous test is
+        # still lingering on the socket. So the captured event must be at least the number of attempts.
+        assert [res.data for res in results] == [expected_data] * len(results)
+        event_client.unsubscribe()

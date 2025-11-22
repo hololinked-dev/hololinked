@@ -1,5 +1,3 @@
-import logging
-
 from typing import Any
 
 import pytest
@@ -20,7 +18,6 @@ from hololinked.core.properties import Parameter  # noqa: F401
 from hololinked.core.state_machine import BoundFSM
 from hololinked.core.zmq.brokers import EventPublisher
 from hololinked.core.zmq.rpc_server import RPCServer
-from hololinked.logger import setup_logging
 from hololinked.utils import get_default_logger
 
 
@@ -32,10 +29,7 @@ The tests in this file are for the initialization of the Thing class and its sub
 4. Test ActionRegistry class
 5. Test EventRegistry class
 6. Test PropertiesRegistry class
-"""
 
-
-"""
 Test sequence is as follows:
 1. Test id requirements 
 2. Test logger setup
@@ -44,8 +38,6 @@ Test sequence is as follows:
 5. Test servers init
 6. Test thing model generation
 """
-
-setup_logging(logging.ERROR + 10)
 
 
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])

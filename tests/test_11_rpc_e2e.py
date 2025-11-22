@@ -1,4 +1,3 @@
-import logging
 import time
 
 from typing import Any, Generator
@@ -8,7 +7,6 @@ import pytest
 from hololinked.client.abstractions import SSE
 from hololinked.client.factory import ClientFactory
 from hololinked.client.proxy import ObjectProxy
-from hololinked.logger import setup_logging
 from hololinked.utils import uuid_hex
 
 
@@ -18,9 +16,6 @@ try:
 except ImportError:
     from things import TestThing
     from utils import fake
-
-
-setup_logging(log_level=logging.ERROR + 10)
 
 
 @pytest.fixture(scope="class")
@@ -43,14 +38,15 @@ def thing_model(thing: TestThing) -> dict[str, Any]:
 
 
 @pytest.fixture(scope="class")
-def client(thing: TestThing, access_point: str) -> ObjectProxy:
+def client(thing: TestThing, access_point: str) -> Generator[ObjectProxy, None, None]:
     client = ClientFactory.zmq(
         server_id=thing.id,
         thing_id=thing.id,
         access_point=access_point.replace("*", "localhost"),
         ignore_TD_errors=True,
     )
-    return client
+    yield client
+    # client.close()
 
 
 class TestRPC_E2E:
@@ -207,7 +203,7 @@ class TestRPC_E2E:
         assert props["number_prop"] == -15
         assert props["string_prop"] == "foobar"
 
-    def notest_15_subscribe_event(self, client: ObjectProxy):
+    def test_15_subscribe_event(self, client: ObjectProxy):
         results = []
 
         def cb(value: SSE):

@@ -1,8 +1,5 @@
-import logging
-
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
-from hololinked.logger import setup_logging
 from hololinked.td.interaction_affordance import EventAffordance
 from hololinked.utils import uuid_hex
 
@@ -11,9 +8,6 @@ try:
     from .things import TestThing
 except ImportError:
     from things import TestThing
-
-
-setup_logging(log_level=logging.ERROR + 10)
 
 
 def validate_event_dispatcher(descriptor: Event, dispatcher: EventDispatcher, thing: TestThing):

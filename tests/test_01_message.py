@@ -1,8 +1,3 @@
-"""
-Pytest tests for message validation and messaging contract.
-Converted from unittest to pytest format.
-"""
-
 from uuid import UUID, uuid4
 
 from hololinked.core.zmq.message import (
@@ -21,7 +16,7 @@ from hololinked.core.zmq.message import (
     ResponseHeader,
     ResponseMessage,
     SerializableData,
-)  # client to server  # server to client
+)
 from hololinked.serializers.serializers import Serializers
 
 

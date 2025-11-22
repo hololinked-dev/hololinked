@@ -14,7 +14,6 @@ from hololinked.core.properties import (
     Selector,
     String,
 )
-from hololinked.logger import setup_logging
 from hololinked.td.data_schema import DataSchema
 from hololinked.td.interaction_affordance import (
     ActionAffordance,
@@ -31,9 +30,6 @@ try:
 except ImportError:
     from things import OceanOpticsSpectrometer, TestThing
     from things.spectrometer import Intensity
-
-
-setup_logging(log_level=logging.ERROR + 10)
 
 
 @pytest.fixture(scope="module")

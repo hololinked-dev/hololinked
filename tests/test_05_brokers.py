@@ -1,9 +1,9 @@
 import asyncio
-import logging
 import multiprocessing
 import threading
 
 from dataclasses import dataclass
+from typing import Generator
 
 import pytest
 
@@ -25,8 +25,7 @@ from hololinked.core.zmq.message import (
     SerializableData,
 )
 from hololinked.exceptions import BreakLoop
-from hololinked.logger import setup_logging
-from hololinked.utils import get_current_async_loop, set_global_event_loop_policy, uuid_hex
+from hololinked.utils import get_current_async_loop, uuid_hex
 
 
 try:
@@ -35,9 +34,6 @@ try:
 except ImportError:
     from conftest import AppIDs as MessageAppIDs
     from test_01_message import validate_response_message
-
-setup_logging(logging.ERROR + 10)
-set_global_event_loop_policy()
 
 
 @dataclass
@@ -72,22 +68,29 @@ def app_ids() -> AppIDs:
 
 
 @pytest.fixture(scope="module")
-def server(app_ids: AppIDs):
-    return AsyncZMQServer(id=app_ids.server_id)
+def server(app_ids: AppIDs) -> Generator[AsyncZMQServer, None, None]:
+    server = AsyncZMQServer(id=app_ids.server_id)
+    yield server
+    # exit written in thread
+    # server.exit()
 
 
 @pytest.fixture(scope="module")
-def sync_client(app_ids: AppIDs):
-    return SyncZMQClient(id=app_ids.sync_client_id, server_id=app_ids.server_id, handshake=False)
+def sync_client(app_ids: AppIDs) -> Generator[SyncZMQClient, None, None]:
+    client = SyncZMQClient(id=app_ids.sync_client_id, server_id=app_ids.server_id, handshake=False)
+    yield client
+    client.exit()
 
 
 @pytest.fixture(scope="module")
-def async_client(app_ids: AppIDs):
-    return AsyncZMQClient(id=app_ids.async_client_id, server_id=app_ids.server_id, handshake=False)
+def async_client(app_ids: AppIDs) -> Generator[AsyncZMQClient, None, None]:
+    client = AsyncZMQClient(id=app_ids.async_client_id, server_id=app_ids.server_id, handshake=False)
+    yield client
+    client.exit()
 
 
 @pytest.fixture(scope="module")
-def message_mapped_client(app_ids: AppIDs) -> MessageMappedZMQClientPool:
+def message_mapped_client(app_ids: AppIDs) -> Generator[MessageMappedZMQClientPool, None, None]:
     client = MessageMappedZMQClientPool(
         id="client-pool",
         client_ids=[app_ids.msg_mapped_async_client_id],
@@ -96,7 +99,8 @@ def message_mapped_client(app_ids: AppIDs) -> MessageMappedZMQClientPool:
     )
     client._client_to_thing_map[app_ids.msg_mapped_async_client_id] = app_ids.thing_id
     client._thing_to_client_map[app_ids.thing_id] = app_ids.msg_mapped_async_client_id
-    return client
+    yield client
+    client.exit()
 
 
 def run_zmq_server(server: AsyncZMQServer, done_queue: multiprocessing.Queue) -> None:

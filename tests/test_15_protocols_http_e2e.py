@@ -1,13 +1,10 @@
-import logging
-
 from typing import Any, Generator
 
 import pytest
 
 from hololinked.client import ClientFactory, ObjectProxy
-from hololinked.logger import setup_logging
 from hololinked.server import stop
-from hololinked.utils import get_current_async_loop, set_global_event_loop_policy, uuid_hex
+from hololinked.utils import uuid_hex
 
 
 try:
@@ -20,11 +17,6 @@ except ImportError:
     from test_11_rpc_e2e import client, thing, thing_model  # noqa: F401
     from test_14_protocols_http import hostname_prefix, wait_until_server_ready
     from things import TestThing
-
-
-setup_logging(log_level=logging.ERROR + 10)
-set_global_event_loop_policy()
-get_current_async_loop()
 
 
 @pytest.fixture(scope="class")

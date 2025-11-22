@@ -1,5 +1,4 @@
 import asyncio
-import logging
 
 from copy import deepcopy
 
@@ -13,7 +12,6 @@ from hololinked.core.actions import (
 )
 from hololinked.core.dataklasses import ActionInfoValidator
 from hololinked.core.thing import action
-from hololinked.logger import setup_logging
 from hololinked.schema_validators import JSONSchemaValidator
 from hololinked.td.interaction_affordance import ActionAffordance
 from hololinked.utils import isclassmethod
@@ -25,7 +23,6 @@ try:
 except ImportError:
     from things import TestThing
     from things.test_thing import replace_methods_with_actions
-setup_logging(log_level=logging.ERROR + 10)
 
 
 @pytest.fixture(scope="module")
