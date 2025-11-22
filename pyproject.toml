@@ -122,10 +122,3 @@ exclude = [
     "hololinked/core/properties.py",
     "hololinked/param"
 ]
-
-[tool.ruff.lint]
-extend-select = ["I"]
-
-[tool.ruff.lint.isort]
-lines-between-types = 1
-lines-after-imports = 2
