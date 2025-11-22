@@ -1,5 +1,4 @@
 import time
-
 from typing import Any, Generator
 
 import pytest
@@ -8,7 +7,6 @@ from hololinked.client.abstractions import SSE
 from hololinked.client.factory import ClientFactory
 from hololinked.client.proxy import ObjectProxy
 from hololinked.utils import uuid_hex
-
 
 try:
     from .things import TestThing
@@ -49,6 +47,7 @@ def client(thing: TestThing, access_point: str) -> Generator[ObjectProxy, None, 
     # client.close()
 
 
+@pytest.mark.asyncio(loop_scope="class")
 class TestRPC_E2E:
     """End-to-end tests for RPC"""
 
