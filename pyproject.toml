@@ -99,7 +99,7 @@ linux = [
 minversion = "8.0"
 addopts = "-ra --strict-markers --strict-config --ignore=lib64"
 testpaths = ["tests"]
-norecursedirs = ["tests/not*", "tests/working*"]
+norecursedirs = ["tests/yet-to-be-integrated*"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
