@@ -1,12 +1,13 @@
-from typing import Any, Optional
-import uuid
-import zmq.asyncio
 import logging
+import uuid
+from typing import Any, Optional
+
+import zmq.asyncio
 
 from ..config import global_config
 from ..constants import Operations
-from ..core import Thing, Action
-from ..core.zmq import AsyncZMQClient, AsyncEventConsumer
+from ..core import Thing
+from ..core.zmq import AsyncEventConsumer, AsyncZMQClient
 from ..td.interaction_affordance import EventAffordance
 
 
@@ -61,7 +62,7 @@ async def consume_broker_queue(
     await client.handshake_complete(10000)
 
     # fetch ZMQ INPROC TD
-    assert isinstance(Thing.get_thing_model, Action)  # type definition
+    Thing.get_thing_model  # type: Action
     FetchTMAffordance = Thing.get_thing_model.to_affordance()
     FetchTMAffordance.override_defaults(thing_id=thing_id, name="get_thing_description")
     fetch_td = ZMQAction(

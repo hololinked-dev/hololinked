@@ -228,7 +228,7 @@ class IPAddress(Parameter):
 
     def __init__(
         self,
-        default: typing.Optional[str] = "0.0.0.0",
+        default: typing.Optional[str] = "127.0.0.1",
         *,
         allow_ipv4: bool = True,
         allow_ipv6: bool = True,
@@ -560,7 +560,6 @@ class Number(Parameter):
         """
         # Values outside the bounds are silently cropped to
         # be inside the bounds.
-        assert self.bounds is not None, "Cannot crop to bounds when bounds is None"
         vmin, vmax = self.bounds
         incmin, incmax = self.inclusive_bounds
         if vmin is not None:
@@ -2331,10 +2330,8 @@ class BaseConstrainedList(collections.abc.MutableSequence):
     def _validate_bounds_for_set(self, value: typing.Any) -> None:
         if not (value.__len__() >= self.bounds[0] and value.__len__() <= self.bounds[1]):
             raise ValueError(
-                wrap_error_text(
-                    f"""given list {get_iterable_printfriendly_repr(value)} has length out of bounds {self.bounds}. 
-                given length : {value.__len__()}"""
-                )
+                f"given list {get_iterable_printfriendly_repr(value)} has length out of bounds {self.bounds}. " +
+                f"given length : {value.__len__()}"
             )
 
     def _validate_bounds_for_extension(self, value: typing.Any = [None]) -> None:
@@ -2343,10 +2340,8 @@ class BaseConstrainedList(collections.abc.MutableSequence):
             and self._inner.__len__() + value.__len__() <= self.bounds[1]
         ):
             raise ValueError(
-                wrap_error_text(
-                    f"""given list for extending {get_iterable_printfriendly_repr(value)} extends existing list longer 
-                than bounds {self.bounds}. given length : {self._inner.__len__() + value.__len__()}"""
-                )
+                f"given list for extending {get_iterable_printfriendly_repr(value)} extends existing list longer " +
+                f"than bounds {self.bounds}. given length : {self._inner.__len__() + value.__len__()}"
             )
 
     def __len__(self) -> int:
@@ -2478,17 +2473,15 @@ class TypeConstrainedList(BaseConstrainedList):
             for val in value:
                 if not isinstance(val, self.item_type):
                     raise TypeError(
-                        wrap_error_text(f"""
-                        Not all elements of list {get_iterable_printfriendly_repr(value)} given are of allowed item type(s), 
-                        which are : {self.item_type}. Given type {type(val)}. Cannot set or extend typed list.""")
+                        f"Not all elements of list {get_iterable_printfriendly_repr(value)} given are of allowed item type(s), " +
+                        f"which are : {self.item_type}. Given type {type(val)}. Cannot set or extend typed list."
                     )
 
     def _validate_item(self, value: typing.Any):
         if self.item_type is not None and not isinstance(value, self.item_type):
             raise TypeError(
-                wrap_error_text(f"""
-                    Not all elements given are of allowed item type(s), which are : {self.item_type}. 
-                    Given type {type(value)}. Cannot append or insert in typed list.""")
+                f"Not all elements given are of allowed item type(s), which are : {self.item_type}. " +
+                f"Given type {type(value)}. Cannot append or insert in typed list."
             )
 
     def __iadd__(self, value: typing.List[typing.Any]):
@@ -2626,23 +2619,20 @@ class TypeConstrainedDict(collections.abc.MutableMapping):
     def _validate_value(self, value) -> None:
         if not isinstance(value, dict):
             raise TypeError(
-                wrap_error_text(f"""
-                Given value for typed dictionary is not a dictionary. Given type : {type(value)}. Expected dictionary.""")
+                f"Given value for typed dictionary is not a dictionary. Given type : {type(value)}. Expected dictionary."
             )
 
     def _validate_bounds_for_set(self, value: typing.Dict) -> None:
         if not (self.bounds[0] <= value.__len__() <= self.bounds[1]):
             raise ValueError(
-                wrap_error_text(f"""
-                Given dictionary length outside bounds. Given length {value.__len__()}, expected length : {self.bounds}""")
+                f"Given dictionary length outside bounds. Given length {value.__len__()}, expected length : {self.bounds}"
             )
 
     def _validate_bounds_for_extension(self, value: typing.Dict = {"dummy": "dummy"}) -> None:
         if not (self.bounds[0] <= self._inner.__len__() + value.__len__() <= self.bounds[1]):
             raise ValueError(
-                wrap_error_text(f"""
-                Extending dictionary crosses bounds. Existing length {self._inner.__len__()}, 
-                length of items to be added : {value.__len__()}, allowed bounds : {self.bounds}""")
+                f"Extending dictionary crosses bounds. Existing length {self._inner.__len__()}, " +
+                f"length of items to be added : {value.__len__()}, allowed bounds : {self.bounds}"
             )
 
     def _validate_items(self, value: typing.Dict[typing.Any, typing.Any]) -> None:
@@ -2652,17 +2642,15 @@ class TypeConstrainedDict(collections.abc.MutableMapping):
             for key in keys:
                 if not isinstance(key, self.key_type):
                     raise TypeError(
-                        wrap_error_text(f"""
-                            Keys for typed dictionary contain incompatible types. 
-                            Allowed types : {self.key_type}, given type : {type(key)}""")
+                        f"Keys for typed dictionary contain incompatible types. " +
+                        f"Allowed types : {self.key_type}, given type : {type(key)}"
                     )
         if self.item_type is not None and len(values) != 0:
             for value in values:
                 if not isinstance(value, self.item_type):
                     raise TypeError(
-                        wrap_error_text(f"""
-                            Values for typed dictionary contain incompatible types. 
-                            Allowed types : {self.item_type}. given type : {type(value)}""")
+                        f"Values for typed dictionary contain incompatible types. " +
+                        f"Allowed types : {self.item_type}. given type : {type(value)}"
                     )
 
     def _validate_key_value_pair(self, __key: typing.Any, __value: typing.Any) -> None:
@@ -2796,8 +2784,7 @@ class TypedKeyMappingsConstrainedDict(TypeConstrainedDict):
                 raise KeyError(f"Keys except {self.key_list} not allowed for typed dictionary. Given key : {__key}.")
         elif not isinstance(__value, self.type_mapping[__key]):
             raise TypeError(
-                wrap_error_text(f""" 
-                Value for key {__key} not of expected type : {self.type_mapping[__key]}. Given type : {type(__value)}.""")
+                f"Value for key {__key} not of expected type : {self.type_mapping[__key]}. Given type : {type(__value)}."
             )
 
     def copy(self, return_as_typed: bool = False) -> typing.Union["TypedKeyMappingsConstrainedDict", typing.Dict]:

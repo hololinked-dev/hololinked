@@ -3,11 +3,9 @@ import socket
 import ssl
 import typing
 import warnings
-
 from copy import deepcopy
 
 import structlog
-
 from pydantic import BaseModel
 from tornado import ioloop
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
@@ -144,7 +142,8 @@ class HTTPServer(BaseProtocolServer):
         port: int, default 8080
             the port at which the server should be run
         address: str, default 0.0.0.0
-            IP address
+            IP address, use 0.0.0.0 to bind to all interfaces to expose the server to other devices in the network
+            and 127.0.0.1 to bind only to localhost
         logger: logging.Logger, optional
             logging.Logger instance
         log_level: int

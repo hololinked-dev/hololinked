@@ -1,17 +1,5 @@
-import textwrap
 import typing
 from contextlib import contextmanager
-
-
-def wrap_error_text(text: str) -> str:
-    # return T.wrap(text)
-    #'\n'+'\n'.join([line.lstrip()
-    return textwrap.fill(
-        text=textwrap.dedent(text).lstrip(),
-        initial_indent="\n",
-        expand_tabs=True,
-        replace_whitespace=True,
-    )
 
 
 def raise_TypeError(message, parameter) -> typing.NoReturn:
@@ -66,4 +54,4 @@ def exceptions_summarized():
 
 from .parameterized import Parameter
 
-__all__ = ["wrap_error_text", "raise_TypeError", "raise_ValueError", "get_iterable_printfriendly_repr"]
+__all__ = ["raise_TypeError", "raise_ValueError", "get_iterable_printfriendly_repr"]

@@ -3,7 +3,6 @@ import typing
 import uuid
 
 import msgspec
-
 from msgspec import DecodeError as MsgspecJSONDecodeError
 from tornado.iostream import StreamClosedError
 from tornado.web import RequestHandler, StaticFileHandler
@@ -34,7 +33,6 @@ from ...td import (
 )
 from ...td.forms import Form
 from ...utils import format_exception_as_json, get_current_async_loop
-
 
 try:
     from ..security import BcryptBasicSecurity
@@ -76,12 +74,11 @@ class BaseHandler(RequestHandler):
         metadata: typing.Optional[typing.Dict[str, typing.Any]]
             additional metadata about the resource, like allowed HTTP methods
         """
-        from . import HTTPServer
+        from . import HTTPServer  # noqa: F401
 
-        assert isinstance(owner_inst, HTTPServer)
         self.resource = resource
         self.schema_validator = None  # self.server.schema_validator # not supported yet
-        self.server = owner_inst
+        self.server = owner_inst  # type: HTTPServer
         self.zmq_client_pool = self.server.zmq_client_pool
         self.logger = self.server.logger.bind(
             resource=self.resource.name,
@@ -659,10 +656,9 @@ class StopHandler(BaseHandler):
     """Stops the tornado HTTP server"""
 
     def initialize(self, owner_inst=None) -> None:
-        from . import HTTPServer
+        from . import HTTPServer  # noqa: F401
 
-        assert isinstance(owner_inst, HTTPServer)
-        self.server = owner_inst
+        self.server = owner_inst  # type: HTTPServer
         self.allowed_clients = self.server.allowed_clients
         self.security_schemes = self.server.security_schemes
         self.logger = self.server.logger.bind(path=self.request.path)
@@ -691,10 +687,9 @@ class LivenessProbeHandler(BaseHandler):
     """Liveness probe handler"""
 
     def initialize(self, owner_inst=None) -> None:
-        from . import HTTPServer
+        from . import HTTPServer  # noqa: F401
 
-        assert isinstance(owner_inst, HTTPServer)
-        self.server = owner_inst
+        self.server = owner_inst  # type: HTTPServer
         self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):
@@ -705,10 +700,9 @@ class LivenessProbeHandler(BaseHandler):
 
 class ReadinessProbeHandler(BaseHandler):
     def initialize(self, owner_inst=None) -> None:
-        from . import HTTPServer
+        from . import HTTPServer  # noqa: F401
 
-        assert isinstance(owner_inst, HTTPServer)
-        self.server = owner_inst
+        self.server = owner_inst  # type: HTTPServer
         self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):

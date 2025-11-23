@@ -1,10 +1,10 @@
 import typing
 from enum import Enum
 
-from ..param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
-from ..utils import issubklass
 from ..exceptions import StateMachineError
+from ..param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
 from ..schema_validators import JSONSchemaValidator
+from ..utils import issubklass
 from .dataklasses import RemoteResourceInfoValidator
 from .events import Event, EventDispatcher  # noqa: F401
 
@@ -264,11 +264,6 @@ class Property(Parameter):
 
     def _post_value_set(self, obj, value: typing.Any) -> None:
         if (self.db_persist or self.db_commit) and hasattr(obj, "db_engine"):
-            from .thing import Thing
-
-            assert isinstance(obj, Thing), (
-                f"database property {self.name} bound to a non Thing, currently not supported"
-            )
             obj.db_engine.set_property(self, value)
         self.push_change_event(obj, value)
         return super()._post_value_set(obj, value)
@@ -330,7 +325,7 @@ class Property(Parameter):
 
 
 try:
-    from pydantic import BaseModel, RootModel, create_model, ConfigDict
+    from pydantic import BaseModel, ConfigDict, RootModel, create_model
 
     def wrap_plain_types_in_rootmodel(model: type) -> type[BaseModel] | type[RootModel]:
         """

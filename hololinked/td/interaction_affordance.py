@@ -1,21 +1,21 @@
-import typing
 import copy
+import typing
 from enum import Enum
 from typing import ClassVar, Optional
-from pydantic import ConfigDict
-from pydantic import BaseModel, RootModel
 
+from pydantic import BaseModel, ConfigDict, RootModel
+
+from ..constants import JSON, ResourceTypes
+from ..core.actions import Action
+from ..core.events import Event
+from ..core.property import Property
+from ..core.thing import Thing, ThingMeta
+from ..utils import issubklass
 from .base import Schema
 from .data_schema import DataSchema
 from .forms import Form
-from .utils import get_summary
-from ..utils import issubklass
-from ..constants import JSON, ResourceTypes
-from ..core.property import Property
-from ..core.actions import Action
-from ..core.events import Event
-from ..core.thing import Thing, ThingMeta
 from .pydantic_extensions import type_to_dataschema
+from .utils import get_summary
 
 
 class InteractionAffordance(Schema):
@@ -340,7 +340,8 @@ class PropertyAffordance(DataSchema, InteractionAffordance):
 
     @classmethod
     def generate(cls, property, owner=None):
-        assert isinstance(property, Property), f"property must be instance of Property, given type {type(property)}"
+        if not isinstance(property, Property):
+            raise TypeError(f"property must be instance of Property, given type {type(property)}")
         affordance = PropertyAffordance()
         affordance.owner = owner
         affordance.objekt = property
@@ -372,8 +373,7 @@ class ActionAffordance(InteractionAffordance):
         return ResourceTypes.ACTION
 
     def build(self) -> None:
-        action = self.objekt
-        assert isinstance(action, Action)  # type definition
+        action = self.objekt  # type: Action
         if action.obj.__doc__:
             title = get_summary(action.obj.__doc__)
             description = self.format_doc(action.obj.__doc__)
@@ -416,6 +416,8 @@ class ActionAffordance(InteractionAffordance):
 
     @classmethod
     def generate(cls, action: Action, owner, **kwargs) -> "ActionAffordance":
+        if not isinstance(action, Action):
+            raise TypeError(f"action must be instance of Action, given type {type(action)}")
         affordance = ActionAffordance()
         affordance.owner = owner
         affordance.objekt = action
@@ -444,8 +446,7 @@ class EventAffordance(InteractionAffordance):
         return ResourceTypes.EVENT
 
     def build(self) -> None:
-        event = self.objekt
-        assert isinstance(event, Event)  # type definition
+        event = self.objekt  # type: Event
         if event.__doc__:
             title = get_summary(event.doc)
             description = self.format_doc(event.doc)
@@ -464,6 +465,8 @@ class EventAffordance(InteractionAffordance):
 
     @classmethod
     def generate(cls, event: Event, owner, **kwargs) -> "EventAffordance":
+        if not isinstance(event, Event):
+            raise TypeError(f"event must be instance of Event, given type {type(event)}")
         affordance = EventAffordance()
         affordance.owner = owner
         affordance.objekt = event
