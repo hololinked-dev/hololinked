@@ -1000,10 +1000,8 @@ class EventResolver:
                     if method is not None and hasattr(method, "param_dependency_info"):
                         if not isinstance(method.param_dependency_info, GeneralDependencyInfo):
                             raise TypeError(
-                                wrap_error_text(
-                                    f"attribute 'param_depency_info' reserved by param library, " +
-                                    f"please use another name for your attributes of type {type(method.param_dependency_info)}."
-                                )
+                                f"attribute 'param_depency_info' reserved by param library, " +
+                                f"please use another name for your attributes of type {type(method.param_dependency_info)}."
                             ) 
                         dinfo: GeneralDependencyInfo = method.param_dependency_info
                         if not any(dep.method_name == w.method_name for w in _watch + _inherited) and dinfo.invoke:

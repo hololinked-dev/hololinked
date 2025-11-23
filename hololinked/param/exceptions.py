@@ -1,4 +1,3 @@
-import textwrap
 import typing
 from contextlib import contextmanager
 
@@ -55,4 +54,4 @@ def exceptions_summarized():
 
 from .parameterized import Parameter
 
-__all__ = ["wrap_error_text", "raise_TypeError", "raise_ValueError", "get_iterable_printfriendly_repr"]
+__all__ = ["raise_TypeError", "raise_ValueError", "get_iterable_printfriendly_repr"]
