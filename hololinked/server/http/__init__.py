@@ -142,7 +142,7 @@ class HTTPServer(BaseProtocolServer):
         port: int, default 8080
             the port at which the server should be run
         address: str, default 0.0.0.0
-            IP address, use 0.0.0.0 to bind to all interfaces to expose the serverr to other devices in the network
+            IP address, use 0.0.0.0 to bind to all interfaces to expose the server to other devices in the network
             and 127.0.0.1 to bind only to localhost
         logger: logging.Logger, optional
             logging.Logger instance
