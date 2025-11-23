@@ -56,23 +56,17 @@ jobs:
         if: matrix.tool == 'bandit'
         run: pip install bandit
 
-      - name: run bandit security scan
+      - name: run bandit scan
         if: matrix.tool == 'bandit'
         run: |
           bandit -c pyproject.toml -r hololinked/ -b .bandit-baseline.json
           # this is the step that will fail the job if new issues are found
 
-      - name: generate report
+      - name: generate JSON report
         if: matrix.tool == 'bandit'
         run: |
           echo "Rerunning to generate bandit report in JSON format..."
           bandit -c pyproject.toml -r hololinked/ -f json -b .bandit-baseline.json -o bandit-report.json
-
-      - name: display existing issues
-        if: matrix.tool == 'bandit'
-        run: |
-          echo "Rerunning to display existing issues which are included in the baseline..."
-          bandit -c pyproject.toml -r hololinked/ || true
 
       - name: upload bandit report artifact
         if: matrix.tool == 'bandit'
@@ -81,15 +75,27 @@ jobs:
           name: bandit-security-scan-report
           path: bandit-report.json
 
+      - name: display existing issues, which have already been accounted
+        if: matrix.tool == 'bandit'
+        run: |
+          echo "Rerunning to display existing issues which are included in the baseline..."
+          bandit -c pyproject.toml -r hololinked/ || true
+
       # ---------------- Gitleaks branch ----------------
-      - name: run gitleaks directory scan only
+      - name: run gitleaks scan on commits
         if: matrix.tool == 'gitleaks'
         uses: gitleaks/gitleaks-action@v2
-        with:
-          fetch-depth: 0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: run gitleaks scan on repo folder
+        if: matrix.tool == 'gitleaks'
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/hololinked zricethezav/gitleaks:latest \
+            dir hololinked/hololinked --verbose --log-level trace
+          docker run --rm -v ${{ github.workspace }}:/hololinked zricethezav/gitleaks:latest \
+            dir hololinked/.github --verbose --log-level trace
 
   test:
     name: unit-integration tests
