@@ -1,4 +1,4 @@
-import typing
+from typing import Any
 
 from dataclasses import dataclass
 
@@ -13,7 +13,7 @@ class SerializableData:
     The content type decides the serializer to be used.
     """
 
-    value: typing.Any
+    value: Any
     serializer: BaseSerializer | None = None
     content_type: str = "application/json"
     _serialized: bytes | None = None

@@ -31,12 +31,12 @@ import inspect
 import io
 import json as pythonjson
 import pickle
-import typing
 import uuid
 import warnings
 
 from collections import deque
 from enum import Enum
+from typing import Any
 
 from msgspec import Struct, msgpack
 from msgspec import json as msgspecjson
@@ -73,7 +73,7 @@ class BaseSerializer(object):
         super().__init__()
         self.type = None
 
-    def loads(self, data) -> typing.Any:
+    def loads(self, data) -> Any:
         "method called by ZMQ message brokers to deserialize data"
         raise NotImplementedError("implement loads()/deserialization in subclass")
 
@@ -109,7 +109,7 @@ class JSONSerializer(BaseSerializer):
         super().__init__()
         self.type = msgspecjson
 
-    def loads(self, data: typing.Union[bytearray, memoryview, bytes]) -> JSONSerializable:
+    def loads(self, data: bytearray | memoryview | bytes) -> JSONSerializable:
         "method called by ZMQ message brokers to deserialize data"
         return msgspecjson.decode(self.convert_to_bytes(data))
 
@@ -174,7 +174,7 @@ class PythonBuiltinJSONSerializer(JSONSerializer):
         super().__init__()
         self.type = pythonjson
 
-    def loads(self, data: typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
+    def loads(self, data: bytearray | memoryview | bytes) -> Any:
         "method called by ZMQ message brokers to deserialize data"
         return pythonjson.loads(self.convert_to_bytes(data))
 
@@ -184,7 +184,7 @@ class PythonBuiltinJSONSerializer(JSONSerializer):
         return data.encode("utf-8")
 
     @classmethod
-    def dump(cls, data: typing.Dict[str, typing.Any], file_desc) -> None:
+    def dump(cls, data: dict[str, Any], file_desc) -> None:
         "write JSON to file"
         pythonjson.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=cls.default)
 
@@ -209,7 +209,7 @@ class PickleSerializer(BaseSerializer):
             return pickle.dumps(data)
         raise RuntimeError("Pickle serialization is not allowed by the global configuration")
 
-    def loads(self, data) -> typing.Any:
+    def loads(self, data) -> Any:
         "method called by ZMQ message brokers to deserialize data"
         from ..config import global_config
 
@@ -238,11 +238,11 @@ class MsgpackSerializer(BaseSerializer):
     def dumps(self, value) -> bytes:
         return msgpack.encode(value, enc_hook=self.default_encode)
 
-    def loads(self, value) -> typing.Any:
+    def loads(self, value) -> Any:
         return msgpack.decode(self.convert_to_bytes(value), ext_hook=self.ext_decode)
 
     @classmethod
-    def default_encode(cls, obj) -> typing.Any:
+    def default_encode(cls, obj) -> Any:
         if "numpy" in globals() and isinstance(obj, numpy.ndarray):
             buf = io.BytesIO()
             numpy.save(buf, obj, allow_pickle=False)  # use .npy. which stores dtype, shape, order, endianness
@@ -250,7 +250,7 @@ class MsgpackSerializer(BaseSerializer):
         raise TypeError("Given type cannot be converted to MessagePack : {}".format(type(obj)))
 
     @classmethod
-    def ext_decode(cls, code: int, obj: memoryview) -> typing.Any:
+    def ext_decode(cls, code: int, obj: memoryview) -> Any:
         if code == MsgpackSerializer.codes["NDARRAY_EXT"]:
             if "numpy" in globals():
                 return numpy.load(io.BytesIO(obj), allow_pickle=False)
@@ -273,7 +273,7 @@ class TextSerializer(BaseSerializer):
     def dumps(self, data) -> bytes:
         return str(data).encode("utf-8")
 
-    def loads(self, data) -> typing.Any:
+    def loads(self, data) -> Any:
         return data.decode("utf-8")
 
     @property
@@ -295,7 +295,7 @@ try:
             "method called by ZMQ message brokers to serialize data"
             return serpent.dumps(data, module_in_classname=True)
 
-        def loads(self, data) -> typing.Any:
+        def loads(self, data) -> Any:
             "method called by ZMQ message brokers to deserialize data"
             return serpent.loads(self.convert_to_bytes(data))
 
@@ -380,32 +380,32 @@ class Serializers(metaclass=MappableSingleton):
         doc="A dictionary of content types and their serializers",
         readonly=True,
         class_member=True,
-    )  # type: typing.Dict[str, BaseSerializer]
+    )  # type: dict[str, BaseSerializer]
 
     allowed_content_types = Parameter(
         default=None,
         class_member=True,
         doc="A list of content types that are usually considered safe and will be supported by default without any configuration",
         readonly=True,
-    )  # type: typing.List[str]
+    )  # type: list[str]
 
     object_content_type_map = Parameter(
         default=dict(),
         class_member=True,
         doc="A dictionary of content types for specific properties, actions and events",
         readonly=True,
-    )  # type: typing.Dict[str, typing.Dict[str, str]]
+    )  # type: dict[str, dict[str, str]]
 
     object_serializer_map = Parameter(
         default=dict(),
         class_member=True,
         doc="A dictionary of serializer for specific properties, actions and events",
         readonly=True,
-    )  # type: typing.Dict[str, typing.Dict[str, BaseSerializer]]
+    )  # type: dict[str, dict[str, BaseSerializer]]
 
     protocol_serializer_map = Parameter(
         default=dict(), class_member=True, doc="A dictionary of serializer for a specific protocol", readonly=True
-    )  # type: typing.Dict[str, BaseSerializer]
+    )  # type: dict[str, BaseSerializer]
 
     @classmethod
     def register(cls, serializer: BaseSerializer, name: str | None = None, override: bool = False) -> None:
@@ -444,9 +444,9 @@ class Serializers(metaclass=MappableSingleton):
 
         Parameters
         ----------
-        thing_id: str | typing.Any
+        thing_id: str | Any
             the id of the Thing or the Thing that owns the property, action or event
-        thing_cls: str | typing.Any
+        thing_cls: str | Any
             the class name of the Thing or the Thing that owns the property, action or event
         objekt: str | Property | Action | Event
             the name of the property, action or event
@@ -472,7 +472,7 @@ class Serializers(metaclass=MappableSingleton):
 
     # @validate_call
     @classmethod
-    def register_for_object(cls, objekt: typing.Any, serializer: BaseSerializer) -> None:
+    def register_for_object(cls, objekt: Any, serializer: BaseSerializer) -> None:
         """
         Register (an existing) serializer for a property, action or event. Other option is to register a content type,
         the effects are similar.
@@ -505,7 +505,7 @@ class Serializers(metaclass=MappableSingleton):
 
     # @validate_call
     @classmethod
-    def register_content_type_for_object(cls, objekt: typing.Any, content_type: str) -> None:
+    def register_content_type_for_object(cls, objekt: Any, content_type: str) -> None:
         """
         Register content type for a property, action, event, or a `Thing` class to use a specific serializer.
 
@@ -544,7 +544,7 @@ class Serializers(metaclass=MappableSingleton):
     # @validate_call
     @classmethod
     def register_content_type_for_object_per_thing_instance(
-        cls, thing_id: str, objekt: str | typing.Any, content_type: str
+        cls, thing_id: str, objekt: str | Any, content_type: str
     ) -> None:
         """
         Register an existing content type for a property, action or event to use a specific serializer. Other option is
@@ -633,7 +633,7 @@ class Serializers(metaclass=MappableSingleton):
         cls.default = cls.json
 
     @allowed_content_types.getter
-    def get_allowed_content_types(cls) -> typing.List[str]:
+    def get_allowed_content_types(cls) -> list[str]:
         """
         Get a list of all allowed content types for serialization.
         """

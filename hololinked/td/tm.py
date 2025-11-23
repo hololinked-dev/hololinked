@@ -1,12 +1,13 @@
 import typing
-from pydantic import Field, ConfigDict
 
+from pydantic import ConfigDict, Field
+
+from ..core import Thing
+from ..core.state_machine import BoundFSM
 from .base import Schema
 from .data_schema import DataSchema
+from .interaction_affordance import ActionAffordance, EventAffordance, PropertyAffordance
 from .metadata import VersionInfo
-from .interaction_affordance import PropertyAffordance, ActionAffordance, EventAffordance
-from ..core.state_machine import BoundFSM
-from ..core import Thing
 
 
 class ThingModel(Schema):
