@@ -30,43 +30,63 @@ jobs:
         run: ruff check hololinked
 
   scan:
-    name: security scan with bandit
+    name: security scan (${{ matrix.tool }})
     runs-on: ubuntu-latest
     needs: codestyle
+
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [bandit, gitleaks]
 
     steps:
       - name: checkout code
         uses: actions/checkout@v4
-
-      - name: set up python 3.11
-        uses: actions/setup-python@v3
         with:
-          python-version: 3.11
+          fetch-depth: 0
+
+      # ---------------- Bandit branch ----------------
+      - name: set up python 3.11
+        if: matrix.tool == 'bandit'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: install bandit
+        if: matrix.tool == 'bandit'
         run: pip install bandit
 
       - name: run bandit security scan
+        if: matrix.tool == 'bandit'
         run: |
           bandit -c pyproject.toml -r hololinked/ -b .bandit-baseline.json
-          echo "----------------------------"
+          # this is the step that will fail the job if new issues are found
+
+      - name: generate report
+        if: matrix.tool == 'bandit'
+        run: |
           echo "Rerunning to generate bandit report in JSON format..."
           bandit -c pyproject.toml -r hololinked/ -f json -b .bandit-baseline.json -o bandit-report.json
 
+      - name: display existing issues
+        if: matrix.tool == 'bandit'
+        run: |
+          echo "Rerunning to display existing issues which are included in the baseline..."
+          bandit -c pyproject.toml -r hololinked/ || true
+
       - name: upload bandit report artifact
+        if: matrix.tool == 'bandit'
         uses: actions/upload-artifact@v4
         with:
           name: bandit-security-scan-report
           path: bandit-report.json
 
-  gitleaks:
-    name: gitleaks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      # ---------------- Gitleaks branch ----------------
+      - name: run gitleaks directory scan only
+        if: matrix.tool == 'gitleaks'
+        uses: gitleaks/gitleaks-action@v2
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
