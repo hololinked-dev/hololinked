@@ -3,11 +3,13 @@ import ssl
 import threading
 import uuid
 import warnings
+
 from typing import Any
 
 import aiomqtt
 import httpx
 import structlog
+
 from paho.mqtt.client import CallbackAPIVersion, MQTTMessage, MQTTProtocolVersion
 from paho.mqtt.client import Client as PahoMQTTClient
 
@@ -32,6 +34,7 @@ from .zmq.consumed_interactions import (
     ZMQEvent,
     ZMQProperty,
 )
+
 
 set_global_event_loop_policy()
 

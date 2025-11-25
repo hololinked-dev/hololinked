@@ -1,11 +1,15 @@
 import asyncio
-import uuid
 import threading
+import uuid
 import warnings
 
 from ..config import global_config
-from ..utils import get_current_async_loop, cancel_pending_tasks_in_current_loop, forkable
-from ..core.zmq.rpc_server import RPCServer, ZMQ_TRANSPORTS
+from ..core.zmq.rpc_server import ZMQ_TRANSPORTS, RPCServer
+from ..utils import (
+    cancel_pending_tasks_in_current_loop,
+    forkable,
+    get_current_async_loop,
+)
 from .server import BaseProtocolServer
 
 
@@ -65,9 +69,9 @@ def stop():
 
 
 def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list[str]]]) -> list[BaseProtocolServer]:
-    from .zmq import ZMQServer
     from .http import HTTPServer
     from .mqtt import MQTTPublisher
+    from .zmq import ZMQServer
 
     if access_points is not None and not isinstance(access_points, list):
         raise TypeError("access_points must be provided as a list of tuples.")

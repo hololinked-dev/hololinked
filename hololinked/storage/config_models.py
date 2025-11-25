@@ -1,6 +1,7 @@
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic.types import StrictStr, SecretStr, StrictInt
+from pydantic.types import SecretStr, StrictInt, StrictStr
 
 
 class SQLDBConfig(BaseModel):

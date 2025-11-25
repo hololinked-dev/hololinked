@@ -1,8 +1,9 @@
 import jsonschema
+
 from pydantic import BaseModel
 
-from ..utils import pydantic_validate_args_kwargs, json_schema_merge_args_to_kwargs
 from ..constants import JSON
+from ..utils import json_schema_merge_args_to_kwargs, pydantic_validate_args_kwargs
 
 
 class BaseSchemaValidator:  # type definition

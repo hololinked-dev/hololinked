@@ -1,9 +1,9 @@
 from .serializers import (  # noqa: F401
-    JSONSerializer,
-    PickleSerializer,
-    MsgpackSerializer,
-    TextSerializer,
-    PythonBuiltinJSONSerializer,
     BaseSerializer,
+    JSONSerializer,
+    MsgpackSerializer,
+    PickleSerializer,
+    PythonBuiltinJSONSerializer,
     Serializers,
+    TextSerializer,
 )

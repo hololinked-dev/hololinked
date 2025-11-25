@@ -1,10 +1,11 @@
 import typing
+
 from enum import Enum, EnumMeta, StrEnum
 from types import FunctionType, MethodType
 
-from ..exceptions import StateMachineError
 from ..param import edit_constant
 from .actions import Action
+from .exceptions import StateMachineError
 from .meta import ThingMeta
 from .properties import Boolean, ClassSelector, TypedDict
 from .property import Property

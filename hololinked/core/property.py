@@ -1,12 +1,15 @@
 import typing
+
 from enum import Enum
 
-from ..exceptions import StateMachineError
+from pydantic import BaseModel, ConfigDict, RootModel, create_model
+
 from ..param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
 from ..schema_validators import JSONSchemaValidator
 from ..utils import issubklass
 from .dataklasses import RemoteResourceInfoValidator
 from .events import Event, EventDispatcher  # noqa: F401
+from .exceptions import StateMachineError
 
 
 class Property(Parameter):
@@ -324,32 +327,25 @@ class Property(Parameter):
         return PropertyAffordance.generate(self, owner_inst or self.owner)
 
 
-try:
-    from pydantic import BaseModel, ConfigDict, RootModel, create_model
+def wrap_plain_types_in_rootmodel(model: type) -> type[BaseModel] | type[RootModel]:
+    """
+    Ensure a type is a subclass of BaseModel.
 
-    def wrap_plain_types_in_rootmodel(model: type) -> type[BaseModel] | type[RootModel]:
-        """
-        Ensure a type is a subclass of BaseModel.
-
-        If a `BaseModel` subclass is passed to this function, we will pass it
-        through unchanged. Otherwise, we wrap the type in a RootModel.
-        In the future, we may explicitly check that the argument is a type
-        and not a model instance.
-        """
-        if model is None:
-            return
-        if issubklass(model, BaseModel):
-            return model
-        return create_model(
-            f"{model!r}",
-            root=(model, ...),
-            __base__=RootModel,
-            __config__=ConfigDict(arbitrary_types_allowed=True),
-        )  # type: ignore[call-overload]
-except ImportError:
-
-    def wrap_plain_types_in_rootmodel(model: type) -> type:
-        raise ImportError("pydantic is not installed, please install it to use this feature") from None
+    If a `BaseModel` subclass is passed to this function, we will pass it
+    through unchanged. Otherwise, we wrap the type in a RootModel.
+    In the future, we may explicitly check that the argument is a type
+    and not a model instance.
+    """
+    if model is None:
+        return
+    if issubklass(model, BaseModel):
+        return model
+    return create_model(
+        f"{model!r}",
+        root=(model, ...),
+        __base__=RootModel,
+        __config__=ConfigDict(arbitrary_types_allowed=True),
+    )  # type: ignore[call-overload]
 
 
 __all__ = [Property.__name__]

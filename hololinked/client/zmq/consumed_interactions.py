@@ -1,33 +1,38 @@
 import asyncio
 import logging
-import typing
 import threading
-import warnings
 import traceback
+import typing
 import uuid
+import warnings
 
-from ...constants import Operations
-from ...serializers.payloads import SerializableData
-from ...core import Thing, Action  # noqa: F401
-from ...td import PropertyAffordance, ActionAffordance, EventAffordance
-from ...td.forms import Form
-from ...core.zmq.message import ResponseMessage
-from ...core.zmq.message import EMPTY_BYTE, TIMEOUT, ERROR, INVALID_MESSAGE
-from ...core.zmq.brokers import (
-    SyncZMQClient,
-    AsyncZMQClient,
-    EventConsumer,
-    AsyncEventConsumer,
-)
 from ...client.abstractions import (
+    SSE,
     ConsumedThingAction,
     ConsumedThingEvent,
     ConsumedThingProperty,
     raise_local_exception,
-    SSE,
 )
+from ...constants import Operations
+from ...core import Action, Thing  # noqa: F401
+from ...core.zmq.brokers import (
+    AsyncEventConsumer,
+    AsyncZMQClient,
+    BreakLoop,
+    EventConsumer,
+    SyncZMQClient,
+)
+from ...core.zmq.message import (
+    EMPTY_BYTE,
+    ERROR,
+    INVALID_MESSAGE,
+    TIMEOUT,
+    ResponseMessage,
+)
+from ...serializers.payloads import SerializableData
+from ...td import ActionAffordance, EventAffordance, PropertyAffordance
+from ...td.forms import Form
 from ..exceptions import ReplyNotArrivedError
-from ...exceptions import BreakLoop
 
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]

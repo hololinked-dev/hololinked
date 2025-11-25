@@ -7,20 +7,28 @@ import contextlib
 import logging
 import threading
 import typing
+
+from copy import deepcopy
+from typing import Any, AsyncIterator, Callable, Iterator
+
 import httpcore
 import httpx
-from typing import Any, AsyncIterator, Callable, Iterator
-from copy import deepcopy
 
 from ...constants import Operations
 from ...serializers import Serializers
+from ...td.forms import Form
 from ...td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
     PropertyAffordance,
 )
-from ...td.forms import Form
-from ..abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception, SSE
+from ..abstractions import (
+    SSE,
+    ConsumedThingAction,
+    ConsumedThingEvent,
+    ConsumedThingProperty,
+    raise_local_exception,
+)
 
 
 class HTTPConsumedAffordanceMixin:

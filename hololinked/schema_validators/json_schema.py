@@ -1,4 +1,5 @@
-import typing
+from typing import Any
+
 from ..constants import JSON
 
 
@@ -32,21 +33,21 @@ class JSONSchema:
     _schemas = {}
 
     @classmethod
-    def is_allowed_type(cls, typ: typing.Any) -> bool:
+    def is_allowed_type(cls, typ: Any) -> bool:
         """check if a certain base type has a JSON schema base type"""
         if typ in JSONSchema._replacements.keys():
             return True
         return False
 
     @classmethod
-    def has_additional_schema_definitions(cls, typ: typing.Any) -> bool:
+    def has_additional_schema_definitions(cls, typ: Any) -> bool:
         """Check, if in additional to the JSON schema base type, additional schema definitions exists."""
         if typ in JSONSchema._schemas.keys():
             return True
         return False
 
     @classmethod
-    def get_base_type(cls, typ: typing.Any) -> str:
+    def get_base_type(cls, typ: Any) -> str:
         if not JSONSchema.is_allowed_type(typ):
             raise TypeError(
                 f"Object for wot-td has invalid type for JSON conversion. Given type - {type(typ)}. "
@@ -55,9 +56,7 @@ class JSONSchema:
         return JSONSchema._replacements[typ]
 
     @classmethod
-    def register_type_replacement(
-        self, type: typing.Any, json_schema_base_type: str, schema: typing.Optional[JSON] = None
-    ) -> None:
+    def register_type_replacement(self, type: Any, json_schema_base_type: str, schema: JSON | None = None) -> None:
         """
         Specify a python type to map to a specific JSON type.
 
@@ -69,12 +68,12 @@ class JSONSchema:
 
         Parameters
         ----------
-        type: typing.Any
+        type: Any
             The Python type to register. The python type must be hashable (can be stored as a key in a dictionary).
         json_schema_base_type: str
             The base JSON schema type to map the Python type to. One of
             ('string', 'number', 'integer', 'boolean', 'object', 'array', 'null').
-        schema: typing.Optional[JSON]
+        schema: Optional[JSON]
             An optional JSON schema to use for the type.
         """
         if json_schema_base_type in JSONSchema._allowed_types:
@@ -92,7 +91,7 @@ class JSONSchema:
             )
 
     @classmethod
-    def get_additional_schema_definitions(cls, typ: typing.Any):
+    def get_additional_schema_definitions(cls, typ: Any):
         """schema for array and objects only supported"""
         if not JSONSchema.has_additional_schema_definitions(typ):
             raise ValueError(f"Schema for {typ} not provided. register one with JSONSchema.register_type_replacement()")

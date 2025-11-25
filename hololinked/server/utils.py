@@ -1,5 +1,6 @@
 import logging
 import uuid
+
 from typing import Any, Optional
 
 import zmq.asyncio
@@ -80,7 +81,7 @@ async def consume_broker_queue(
     return client, TD
 
 
-def consumer_broker_pubsub(id: str = None, access_point: str = "INPROC") -> AsyncEventConsumer:
+def consume_broker_pubsub(id: str = None, access_point: str = "INPROC") -> AsyncEventConsumer:
     """Consume all events from ZMQ (usually INPROC) pubsub"""
     return AsyncEventConsumer(
         id=id or f"event-proxy-{uuid.uuid4().hex[:8]}",

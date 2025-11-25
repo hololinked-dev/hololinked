@@ -1,20 +1,22 @@
-import uuid
-import aiomqtt
 import copy
 import ssl
-import structlog
+import uuid
+
 from typing import Any, Optional
 
-from ..utils import get_current_async_loop
-from .utils import consume_broker_queue, consume_broker_pubsub_per_event
+import aiomqtt
+import structlog
+
 from ..config import global_config
 from ..constants import Operations
-from ..serializers import Serializers
-from ..param.parameters import Selector, String, ClassSelector
-from ..core.zmq.message import EventMessage  # noqa: F401
 from ..core import Thing
+from ..core.zmq.message import EventMessage  # noqa: F401
+from ..param.parameters import ClassSelector, Selector, String
+from ..serializers import Serializers
 from ..td.interaction_affordance import EventAffordance, PropertyAffordance
+from ..utils import get_current_async_loop
 from .server import BaseProtocolServer
+from .utils import consume_broker_pubsub_per_event, consume_broker_queue
 
 
 class MQTTPublisher(BaseProtocolServer):

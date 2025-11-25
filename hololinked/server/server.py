@@ -1,12 +1,18 @@
 import logging
+
 import structlog
+
 from pydantic import BaseModel, model_validator
 
-from ..utils import forkable
+from ..core import Action, Event, Property, Thing
+from ..core.properties import ClassSelector, Integer, Selector, TypedList
 from ..param import Parameterized
-from ..core.properties import ClassSelector, Integer, TypedList, Selector
-from ..core import Thing, Property, Action, Event
-from ..td.interaction_affordance import PropertyAffordance, ActionAffordance, EventAffordance
+from ..td.interaction_affordance import (
+    ActionAffordance,
+    EventAffordance,
+    PropertyAffordance,
+)
+from ..utils import forkable
 
 
 class BrokerThing(BaseModel):

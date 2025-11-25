@@ -3,6 +3,7 @@ import itertools
 import random
 import sys
 import time
+
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Generator
@@ -25,6 +26,7 @@ from hololinked.server.http import HTTPServer
 from hololinked.server.http.handlers import RPCHandler
 from hololinked.server.security import Argon2BasicSecurity, BcryptBasicSecurity, Security
 from hololinked.utils import uuid_hex
+
 
 try:
     from .things import OceanOpticsSpectrometer
