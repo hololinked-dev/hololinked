@@ -22,7 +22,13 @@ from ...td.interaction_affordance import (
     EventAffordance,
     PropertyAffordance,
 )
-from ..abstractions import SSE, ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty, raise_local_exception
+from ..abstractions import (
+    SSE,
+    ConsumedThingAction,
+    ConsumedThingEvent,
+    ConsumedThingProperty,
+    raise_local_exception,
+)
 
 
 class HTTPConsumedAffordanceMixin:

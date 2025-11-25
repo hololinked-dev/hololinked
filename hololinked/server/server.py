@@ -7,7 +7,11 @@ from pydantic import BaseModel, model_validator
 from ..core import Action, Event, Property, Thing
 from ..core.properties import ClassSelector, Integer, Selector, TypedList
 from ..param import Parameterized
-from ..td.interaction_affordance import ActionAffordance, EventAffordance, PropertyAffordance
+from ..td.interaction_affordance import (
+    ActionAffordance,
+    EventAffordance,
+    PropertyAffordance,
+)
 from ..utils import forkable
 
 

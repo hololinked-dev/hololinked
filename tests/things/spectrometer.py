@@ -1,17 +1,18 @@
 import datetime
-from enum import StrEnum
 import threading
 import time
 import typing
-import numpy
+
 from dataclasses import dataclass
+from enum import StrEnum
 
+import numpy
 
-from hololinked.core import Thing, Property, action, Event
-from hololinked.core.properties import String, Integer, Number, List, Boolean, Selector, ClassSelector, TypedList
+from hololinked.core import Event, Thing, action
+from hololinked.core.properties import Boolean, ClassSelector, Integer, List, Number, Selector, String, TypedList
 from hololinked.core.state_machine import StateMachine
-from hololinked.serializers import JSONSerializer
 from hololinked.schema_validators import JSONSchema
+from hololinked.serializers import JSONSerializer
 from hololinked.server.http import HTTPServer
 
 

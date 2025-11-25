@@ -1,16 +1,19 @@
 import os
-import sys
 import ssl
+import sys
+
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
-from hololinked.server.http import HTTPServer
-from hololinked.server.zmq import ZMQServer
-from hololinked.server.mqtt import MQTTPublisher
-from hololinked.serializers import Serializers
+from things import OceanOpticsSpectrometer, TestThing
+
 from hololinked.config import global_config
+from hololinked.serializers import Serializers
 from hololinked.server import run, stop
-from things import TestThing, OceanOpticsSpectrometer
+from hololinked.server.http import HTTPServer
+from hololinked.server.mqtt import MQTTPublisher
+from hololinked.server.zmq import ZMQServer
+
 
 global_config.DEBUG = True
 

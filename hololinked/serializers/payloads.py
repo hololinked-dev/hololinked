@@ -1,6 +1,5 @@
-from typing import Any
-
 from dataclasses import dataclass
+from typing import Any
 
 from ..constants import byte_types
 from .serializers import BaseSerializer, Serializers

@@ -11,7 +11,13 @@ from pymongo import errors as mongo_errors
 from sqlalchemy import JSON, Integer, LargeBinary, String, create_engine, select
 from sqlalchemy import inspect as inspect_database
 from sqlalchemy.ext import asyncio as asyncio_ext
-from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, sessionmaker
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    MappedAsDataclass,
+    mapped_column,
+    sessionmaker,
+)
 
 from ..constants import JSONSerializable
 from ..core.property import Property

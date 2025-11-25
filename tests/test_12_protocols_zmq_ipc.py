@@ -1,5 +1,6 @@
 import pytest
 
+
 try:
     from .test_11_rpc_e2e import TestRPC_E2E as BaseRPC_E2E  # noqa: F401
     from .test_11_rpc_e2e import client, thing, thing_model  # noqa: F401

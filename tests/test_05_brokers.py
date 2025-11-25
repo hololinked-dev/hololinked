@@ -7,6 +7,7 @@ from typing import Generator
 
 import pytest
 
+from hololinked.core.exceptions import BreakLoop
 from hololinked.core.zmq.brokers import (
     AsyncZMQClient,
     AsyncZMQServer,
@@ -24,7 +25,6 @@ from hololinked.core.zmq.message import (
     ResponseMessage,
     SerializableData,
 )
-from hololinked.exceptions import BreakLoop
 from hololinked.utils import get_current_async_loop, uuid_hex
 
 

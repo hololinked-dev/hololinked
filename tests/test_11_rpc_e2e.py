@@ -1,4 +1,5 @@
 import time
+
 from typing import Any, Generator
 
 import pytest
@@ -7,6 +8,7 @@ from hololinked.client.abstractions import SSE
 from hololinked.client.factory import ClientFactory
 from hololinked.client.proxy import ObjectProxy
 from hololinked.utils import uuid_hex
+
 
 try:
     from .things import TestThing
