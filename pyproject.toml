@@ -8,7 +8,7 @@ version = "0.3.8"
 authors = [
     {name = "Vignesh Vaidyanathan", email = "info@hololinked.dev"},
 ]
-description = "A ZMQ-based protocol-agnostic object oriented RPC toolkit primarily focussed for instrumentation control, data acquisition or IoT, however can be used for controlling generic python objects."
+description = "A ZMQ-based protocol-agnostic object oriented RPC toolkit primarily focussed for instrumentation control, data acquisition or IoT."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -92,7 +92,6 @@ test = [
 scanning = [
     "bandit>=1.9.1",
 ]   
-
 
 [tool.pytest.ini_options]
 minversion = "8.0"
