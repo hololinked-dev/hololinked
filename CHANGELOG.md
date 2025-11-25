@@ -11,8 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [v0.3.8] - 2025-11-15
 
 - supports structlog for logging, with colored logs and updated log statements
-- moves dependencies and imports to a more hexagonal architecture
+- SAST with bandit & gitleaks integrated into CI/CD pipelines
 - uses pytest instead of unittests
+- code improvements with isort, dependency refactoring etc.
 
 ## [v0.3.7] - 2025-10-30
 

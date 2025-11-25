@@ -18,6 +18,7 @@ from ...core import Action, Thing  # noqa: F401
 from ...core.zmq.brokers import (
     AsyncEventConsumer,
     AsyncZMQClient,
+    BreakLoop,
     EventConsumer,
     SyncZMQClient,
 )
@@ -31,7 +32,7 @@ from ...core.zmq.message import (
 from ...serializers.payloads import SerializableData
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...td.forms import Form
-from ..exceptions import BreakLoop, ReplyNotArrivedError
+from ..exceptions import ReplyNotArrivedError
 
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
