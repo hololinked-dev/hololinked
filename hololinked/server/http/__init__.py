@@ -1,10 +1,10 @@
 import logging
 import socket
 import ssl
-import typing
 import warnings
 
 from copy import deepcopy
+from typing import Any, Iterable, Type
 
 import structlog
 
@@ -70,7 +70,7 @@ class HTTPServer(BaseProtocolServer):
         class_=ssl.SSLContext,
         default=None,
         allow_None=True,
-    )  # type: typing.Optional[ssl.SSLContext]
+    )  # type: ssl.SSLContext | None
     """SSL context to provide encrypted communication"""
 
     allowed_clients = TypedList(item_type=str)
@@ -85,28 +85,28 @@ class HTTPServer(BaseProtocolServer):
         default=PropertyHandler,
         class_=(PropertyHandler, RPCHandler),
         isinstance=False,
-    )  # type: typing.Union[RPCHandler, PropertyHandler]
+    )  # type: RPCHandler | PropertyHandler
     """custom web request handler for property read-write"""
 
     action_handler = ClassSelector(
         default=ActionHandler,
         class_=(ActionHandler, RPCHandler),
         isinstance=False,
-    )  # type: typing.Union[RPCHandler, ActionHandler]
+    )  # type: RPCHandler | ActionHandler
     """custom web request handler for actions"""
 
     event_handler = ClassSelector(
         default=EventHandler,
         class_=(EventHandler, RPCHandler),
         isinstance=False,
-    )  # type: typing.Union[RPCHandler, EventHandler]
+    )  # type: RPCHandler | EventHandler
     """custom event handler for sending HTTP SSE"""
 
     security_schemes = TypedList(
         default=None,
         allow_None=True,
         item_type=Security,
-    )  # type: typing.Optional[typing.List[Security]]
+    )  # type: list[Security] | None
     """
     List of security schemes to be used by the server, 
     it is sufficient that one scheme passes for a request to be authorized.
@@ -127,15 +127,15 @@ class HTTPServer(BaseProtocolServer):
         *,
         port: int = 8080,
         address: str = "0.0.0.0",
-        things: typing.Optional[typing.List[Thing]] = None,
-        # host: typing.Optional[str] = None,
-        logger: typing.Optional[logging.Logger] = None,
+        things: list[Thing] | None = None,
+        # host: Optional[str] = None,
+        logger: logging.Logger | None = None,
         log_level: int = logging.INFO,
-        ssl_context: typing.Optional[ssl.SSLContext] = None,
-        security_schemes: typing.Optional[typing.List[Security]] = None,
+        ssl_context: ssl.SSLContext | None = None,
+        security_schemes: list[Security] | None = None,
         # protocol_version : int = 1, network_interface : str = 'Ethernet',
-        allowed_clients: typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,
-        config: typing.Optional[dict[str, typing.Any]] = None,
+        allowed_clients: str | Iterable[str] | None = None,
+        config: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
         """
@@ -292,7 +292,7 @@ class HTTPServer(BaseProtocolServer):
         self,
         URL_path: str,
         property: Property | PropertyAffordance,
-        http_methods: typing.Tuple[str, typing.Optional[str], typing.Optional[str]] | None = ("GET", "PUT", None),
+        http_methods: str | tuple[str | None, str | None, str | None] = ("GET", "PUT", None),
         handler: BaseHandler | PropertyHandler = PropertyHandler,
         **kwargs,
     ) -> None:
@@ -431,15 +431,15 @@ class ApplicationRouter:
         self.server = server
         self.logger = server.logger.bind(component="http-router")
         self._pending_rules = []
-        self._rules = dict()  # type: dict[str, typing.Any]
+        self._rules = dict()  # type: dict[str, Any]
 
     # can add a single property, action or event rule
     def add_rule(
         self,
         affordance: PropertyAffordance | ActionAffordance | EventAffordance,
         URL_path: str,
-        handler: typing.Type[BaseHandler],
-        kwargs: dict,
+        handler: Type[BaseHandler],
+        kwargs: dict[str, Any],
     ) -> None:
         """
         Add rules to the application router. Note that this method will replace existing rules and can duplicate
@@ -511,9 +511,9 @@ class ApplicationRouter:
     # can add multiple properties, actions and events at once
     def add_interaction_affordances(
         self,
-        properties: typing.Iterable[PropertyAffordance],
-        actions: typing.Iterable[ActionAffordance],
-        events: typing.Iterable[EventAffordance],
+        properties: Iterable[PropertyAffordance],
+        actions: Iterable[ActionAffordance],
+        events: Iterable[EventAffordance],
         thing_id: str = None,
     ) -> None:
         for property in properties:
@@ -729,7 +729,7 @@ class ApplicationRouter:
             return "/resources/wot-tm"
         return f"/{pep8_to_dashed_name(interaction_affordance_name)}"
 
-    def adapt_http_methods(self, http_methods: typing.Any):
+    def adapt_http_methods(self, http_methods: Any):
         """comply the supplied HTTP method to the router to a tuple and check if the method is supported"""
         if isinstance(http_methods, str):
             http_methods = (http_methods,)

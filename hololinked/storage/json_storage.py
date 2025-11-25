@@ -1,7 +1,7 @@
 import os
 import threading
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from ..core.property import Property
 from ..param import Parameterized
@@ -24,7 +24,7 @@ class ThingJSONStorage:
         Serializer used for encoding and decoding JSON data. Defaults to an instance of ``JSONSerializer``.
     """
 
-    def __init__(self, filename: str, instance: Parameterized, serializer: Optional[Any] = None):
+    def __init__(self, filename: str, instance: Parameterized, serializer: Any = None):
         self.filename = filename
         self.thing_instance = instance
         self.id = instance.id
@@ -32,7 +32,7 @@ class ThingJSONStorage:
         self._lock = threading.RLock()
         self._data = self._load()
 
-    def _load(self) -> Dict[str, Any]:
+    def _load(self) -> dict[str, Any]:
         """
         Load and decode data from the JSON file.
 
@@ -60,7 +60,7 @@ class ThingJSONStorage:
         with open(self.filename, "wb") as f:
             f.write(raw_bytes)
 
-    def get_property(self, property: Union[str, Property]) -> Any:
+    def get_property(self, property: str | Property) -> Any:
         """
         Fetch a single property.
 
@@ -80,7 +80,7 @@ class ThingJSONStorage:
         with self._lock:
             return self._data[name]
 
-    def set_property(self, property: Union[str, Property], value: Any) -> None:
+    def set_property(self, property: str | Property, value: Any) -> None:
         """
         change the value of an already existing property.
 
@@ -96,7 +96,7 @@ class ThingJSONStorage:
             self._data[name] = value
             self._save()
 
-    def get_properties(self, properties: Dict[Union[str, Property], Any]) -> Dict[str, Any]:
+    def get_properties(self, properties: dict[str | Property, Any]) -> dict[str, Any]:
         """
         get multiple properties at once.
 
@@ -114,7 +114,7 @@ class ThingJSONStorage:
         with self._lock:
             return {name: self._data.get(name) for name in names}
 
-    def set_properties(self, properties: Dict[Union[str, Property], Any]) -> None:
+    def set_properties(self, properties: dict[str | Property, Any]) -> None:
         """
         change the values of already existing few properties at once
 
@@ -129,7 +129,7 @@ class ThingJSONStorage:
                 self._data[name] = value
             self._save()
 
-    def get_all_properties(self) -> Dict[str, Any]:
+    def get_all_properties(self) -> dict[str, Any]:
         """
         read all properties of the ``Thing`` instance.
         """
@@ -137,8 +137,10 @@ class ThingJSONStorage:
             return dict(self._data)
 
     def create_missing_properties(
-        self, properties: Dict[str, Property], get_missing_property_names: bool = False
-    ) -> Optional[List[str]]:
+        self,
+        properties: dict[str, Property],
+        get_missing_property_names: bool = False,
+    ) -> list[str] | None:
         """
         create any and all missing properties of ``Thing`` instance
 

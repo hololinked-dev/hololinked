@@ -1,4 +1,4 @@
-import typing
+from typing import Optional
 
 from .base import Schema
 
@@ -11,8 +11,8 @@ class SecurityScheme(Schema):
 
     scheme: str = None
     description: str = None
-    descriptions: typing.Optional[typing.Dict[str, str]] = None
-    proxy: typing.Optional[str] = None
+    descriptions: Optional[dict[str, str]] = None
+    proxy: Optional[str] = None
 
     def __init__(self):
         super().__init__()

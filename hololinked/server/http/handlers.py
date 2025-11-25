@@ -1,6 +1,7 @@
 import copy
-import typing
 import uuid
+
+from typing import Any, Optional
 
 import msgspec
 
@@ -50,8 +51,8 @@ __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
 
 class LocalExecutionContext(msgspec.Struct):
-    noblock: typing.Optional[bool] = None
-    messageID: typing.Optional[str] = None
+    noblock: Optional[bool] = None
+    messageID: Optional[str] = None
 
 
 class BaseHandler(RequestHandler):
@@ -63,7 +64,7 @@ class BaseHandler(RequestHandler):
         self,
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
         owner_inst=None,
-        metadata: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Parameters
@@ -73,7 +74,7 @@ class BaseHandler(RequestHandler):
             ZMQ Request object
         owner_inst: HTTPServer
             owning `hololinked.server.HTTPServer` instance
-        metadata: typing.Optional[typing.Dict[str, typing.Any]]
+        metadata: dict[str, Any] | None,
             additional metadata about the resource, like allowed HTTP methods
         """
         from . import HTTPServer  # noqa: F401
@@ -169,7 +170,7 @@ class BaseHandler(RequestHandler):
 
     def get_execution_parameters(
         self,
-    ) -> typing.Tuple[ServerExecutionContext, ThingExecutionContext, LocalExecutionContext, SerializableData]:
+    ) -> tuple[ServerExecutionContext, ThingExecutionContext, LocalExecutionContext, SerializableData]:
         """
         merges all arguments to a single JSON body and retrieves execution context (like oneway calls, fetching executing
         logs) and timeouts, payloads in URL query parameters etc.
@@ -231,7 +232,7 @@ class BaseHandler(RequestHandler):
             self._message_id = message_id
             return message_id
 
-    def get_request_payload(self) -> typing.Tuple[SerializableData, PreserializedData]:
+    def get_request_payload(self) -> tuple[SerializableData, PreserializedData]:
         """retrieves the payload from the request body, does not necessarily deserialize it"""
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
@@ -528,7 +529,7 @@ class EventHandler(BaseHandler):
         self,
         resource: InteractionAffordance | EventAffordance,
         owner_inst=None,
-        metadata: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         super().initialize(resource, owner_inst, metadata)
         self.data_header = b"data: %s\n\n"

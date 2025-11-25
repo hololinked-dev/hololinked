@@ -1,8 +1,7 @@
 import copy
-import typing
 
 from enum import Enum
-from typing import ClassVar, Optional
+from typing import Any, ClassVar, Optional
 
 from pydantic import BaseModel, ConfigDict, RootModel
 
@@ -28,10 +27,10 @@ class InteractionAffordance(Schema):
     """
 
     title: Optional[str] = None
-    titles: Optional[typing.Dict[str, str]] = None
+    titles: Optional[dict[str, str]] = None
     description: Optional[str] = None
-    descriptions: Optional[typing.Dict[str, str]] = None
-    forms: Optional[typing.List[Form]] = None
+    descriptions: Optional[dict[str, str]] = None
+    forms: Optional[list[Form]] = None
     # uri variables
 
     _custom_schema_generators: ClassVar = dict()
@@ -117,7 +116,7 @@ class InteractionAffordance(Schema):
         """populate the fields of the schema for the specific interaction affordance"""
         raise NotImplementedError("build must be implemented in subclass of InteractionAffordance")
 
-    def retrieve_form(self, op: str, default: typing.Any = None) -> Form:
+    def retrieve_form(self, op: str, default: Any = None) -> Form:
         """
         retrieve form for a certain operation, return default if not found
 
@@ -125,13 +124,13 @@ class InteractionAffordance(Schema):
         ----------
         op: str
             operation for which the form is to be retrieved
-        default: typing.Any, optional
+        default: Any, optional
             default value to return if form is not found, by default None.
             One can make use of a sensible default value for one's logic.
 
         Returns
         -------
-        Dict[str, typing.Any]
+        dict[str, Any]
             JSON representation of the form
         """
         if self.forms is None:
@@ -141,7 +140,7 @@ class InteractionAffordance(Schema):
                 return form
         return default
 
-    def pop_form(self, op: str, default: typing.Any = None) -> Form:
+    def pop_form(self, op: str, default: Any = None) -> Form:
         """
         retrieve and remove form for a certain operation, return default if not found
 
@@ -149,13 +148,13 @@ class InteractionAffordance(Schema):
         ----------
         op: str
             operation for which the form is to be retrieved
-        default: typing.Any, optional
+        default: Any, optional
             default value to return if form is not found, by default None.
             One can make use of a sensible default value for one's logic.
 
         Returns
         -------
-        Dict[str, typing.Any]
+        dict[str, Any]
             JSON representation of the form
         """
         if self.forms is None:
@@ -168,7 +167,7 @@ class InteractionAffordance(Schema):
     @classmethod
     def generate(
         cls, interaction: Property | Action | Event, owner: Thing
-    ) -> typing.Union["PropertyAffordance", "ActionAffordance", "EventAffordance"]:
+    ) -> "PropertyAffordance | ActionAffordance | EventAffordance":
         """
         build the schema for the specific interaction affordance within the container object.
         Use the `json()` method to get the JSON representation of the schema.
@@ -185,7 +184,7 @@ class InteractionAffordance(Schema):
 
         Returns
         -------
-        typing.Union[PropertyAffordance, ActionAffordance, EventAffordance]
+        "PropertyAffordance | ActionAffordance | EventAffordance"
         """
         raise NotImplementedError("generate_schema must be implemented in subclass of InteractionAffordance")
 
@@ -203,7 +202,7 @@ class InteractionAffordance(Schema):
 
         Returns
         -------
-        typing.Union[PropertyAffordance, ActionAffordance, EventAffordance]
+        "PropertyAffordance | ActionAffordance | EventAffordance"
         """
         if cls == PropertyAffordance:
             affordance_name = "properties"
@@ -213,7 +212,7 @@ class InteractionAffordance(Schema):
             affordance_name = "events"
         else:
             raise ValueError(f"unknown affordance type - {cls}, cannot create object from TD")
-        affordance_json = TD[affordance_name][name]  # type: typing.Dict[str, JSON]
+        affordance_json = TD[affordance_name][name]  # type: dict[str, JSON]
         affordance = cls()
         for field in cls.model_fields:
             if field in affordance_json:
