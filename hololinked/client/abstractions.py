@@ -27,9 +27,9 @@ import asyncio
 import builtins
 import logging
 import threading
-import typing
 
 from dataclasses import dataclass
+from typing import Any, Callable
 
 from ..constants import Operations
 from ..td import ActionAffordance, EventAffordance, PropertyAffordance
@@ -44,16 +44,15 @@ class ConsumedThingAction:
     def __init__(
         self,
         resource: ActionAffordance,
-        owner_inst: typing.Any,
+        owner_inst: Any,
         logger: logging.Logger,
-        # schema_validator: typing.Type[BaseSchemaValidator] | None = None
     ) -> None:
         """
         Parameters
         ----------
         resource: ActionAffordance
             dataclass TD fragment representing the action (must have forms).
-        owner_inst: typing.Optional[typing.Any]
+        owner_inst: Any
             instance of the owning consumed Thing or `ObjectProxy`
         logger: logging.Logger
             logger instance
@@ -63,7 +62,7 @@ class ConsumedThingAction:
         self.logger = logger
         self.schema_validator = None  # schema_validator
 
-    def get_last_return_value(self, raise_exception: bool = False) -> typing.Any:
+    def get_last_return_value(self, raise_exception: bool = False) -> Any:
         """retrieve return value of the last call to the action"""
         raise NotImplementedError("implement get_last_return_value per protocol")
 
@@ -73,38 +72,38 @@ class ConsumedThingAction:
     )
     """cached return value of the last call to the method"""
 
-    def __call__(self, *args, **kwargs) -> typing.Any:
+    def __call__(self, *args, **kwargs) -> Any:
         """
         Invoke action/method on server
 
         Parameters
         ----------
-        *args: typing.Any
+        *args: Any
             arguments to the action
-        **kwargs: typing.Any
+        **kwargs: Any
             keyword arguments to the action
 
         Returns
         -------
-        typing.Any
+        Any
             reply of the action call
         """
         raise NotImplementedError("implement action __call__ per protocol")
 
-    async def async_call(self, *args, **kwargs) -> typing.Any:
+    async def async_call(self, *args, **kwargs) -> Any:
         """
         async invoke action on server - asynchronous at the network level, may not necessarily be at the server level.
 
         Parameters
         ----------
-        *args: typing.Any
+        *args: Any
             arguments to the action
-        **kwargs: typing.Any
+        **kwargs: Any
             keyword arguments to the action
 
         Returns
         -------
-        typing.Any
+        Any
             reply of the action call
         """
         raise NotImplementedError("implement action async_call per protocol")
@@ -116,9 +115,9 @@ class ConsumedThingAction:
 
         Parameters
         ----------
-        *args: typing.Any
+        *args: Any
             arguments to the action
-        **kwargs: typing.Any
+        **kwargs: Any
             keyword arguments to the action
         """
         raise NotImplementedError("implement action oneway call per protocol")
@@ -130,9 +129,9 @@ class ConsumedThingAction:
 
         Parameters
         ----------
-        *args: typing.Any
+        *args: Any
             arguments to the action
-        **kwargs: typing.Any
+        **kwargs: Any
             keyword arguments to the action
 
         Returns
@@ -142,7 +141,7 @@ class ConsumedThingAction:
         """
         raise NotImplementedError("implement action noblock call per protocol")
 
-    def read_reply(self, message_id: str, timeout: float | int | None = None) -> typing.Any:
+    def read_reply(self, message_id: str, timeout: float | int | None = None) -> Any:
         """
         Read the reply of the action call which was scheduled with `noblock`.
 
@@ -155,7 +154,7 @@ class ConsumedThingAction:
 
         Returns
         -------
-        typing.Any
+        Any
             reply of the action call
         """
         raise NotImplementedError("implement action read_reply per protocol")
@@ -173,15 +172,13 @@ class ConsumedThingProperty:
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
-    def __init__(
-        self, resource: PropertyAffordance, owner_inst: typing.Optional[typing.Any], logger: logging.Logger
-    ) -> None:
+    def __init__(self, resource: PropertyAffordance, owner_inst: Any, logger: logging.Logger) -> None:
         """
         Parameters
         ----------
         resource: PropertyAffordance
             dataclass object TD fragment representing the property (must have forms).
-        owner_inst: typing.Optional[typing.Any]
+        owner_inst: Any
             instance of the owning consumed Thing or `ObjectProxy`
         logger: logging.Logger
             logger instance
@@ -191,50 +188,50 @@ class ConsumedThingProperty:
         self.logger = logger
 
     @property  # i.e. cannot have setter
-    def last_read_value(self) -> typing.Any:
+    def last_read_value(self) -> Any:
         """cache of last read value"""
         raise NotImplementedError("implement last_read_value per protocol")
 
-    def set(self, value: typing.Any) -> None:
+    def set(self, value: Any) -> None:
         """
         Set or write property value.
 
         Parameters
         ----------
-        value: typing.Any
+        value: Any
             value to set
         """
         raise NotImplementedError("implement property set per protocol")
 
-    def get(self) -> typing.Any:
+    def get(self) -> Any:
         """
         Get or read property value.
 
         Returns
         -------
-        typing.Any
+        Any
             property value
         """
         raise NotImplementedError("implement property get per protocol")
 
-    async def async_set(self, value: typing.Any) -> None:
+    async def async_set(self, value: Any) -> None:
         """
         Async set or write property value - asynchronous at the network level, may not necessarily be at the server level.
 
         Parameters
         ----------
-        value: typing.Any
+        value: Any
             value to set
         """
         raise NotImplementedError("implement async property set per protocol")
 
-    async def async_get(self) -> typing.Any:
+    async def async_get(self) -> Any:
         """
         Async get or read property value - asynchronous at the network level, may not necessarily be at the server level.
 
         Returns
         -------
-        typing.Any
+        Any
             property value
         """
         raise NotImplementedError("implement async property get per protocol")
@@ -251,14 +248,14 @@ class ConsumedThingProperty:
         """
         raise NotImplementedError("implement property noblock get per protocol")
 
-    def noblock_set(self, value: typing.Any) -> str:
+    def noblock_set(self, value: Any) -> str:
         """
         Set or write property value without blocking, i.e. make a request and collect it later and the method returns immediately.
         Server must return a message ID to identify the request.
 
         Parameters
         ----------
-        value: typing.Any
+        value: Any
             value to set
 
         Returns
@@ -268,25 +265,25 @@ class ConsumedThingProperty:
         """
         raise NotImplementedError("implement property noblock set per protocol")
 
-    def oneway_set(self, value: typing.Any) -> None:
+    def oneway_set(self, value: Any) -> None:
         """
         Set property value without waiting for acknowledgement. The server also does not send any reply.
         There is no guarantee that the property value was set.
 
         Parameters
         ----------
-        value: typing.Any
+        value: Any
             value to set
         """
         raise NotImplementedError("implement property oneway set per protocol")
 
-    def observe(self, *callbacks: typing.Callable) -> None:
+    def observe(self, *callbacks: Callable) -> None:
         """
         Observe property value changes
 
         Parameters
         ----------
-        *callbacks: typing.Callable
+        *callbacks: Callable
             callback to call when property value changes
         """
         # looks like this will be unused. observe property is done via ConsumedThingEvent
@@ -297,7 +294,7 @@ class ConsumedThingProperty:
         # looks like this will be unused, observe property is done via ConsumedThingEvent
         raise NotImplementedError("implement property unobserve per protocol")
 
-    def read_reply(self, message_id: str, timeout: float | int | None = None) -> typing.Any:
+    def read_reply(self, message_id: str, timeout: float | int | None = None) -> Any:
         """
         Read the reply of the property get or set which was scheduled with `noblock`.
 
@@ -310,7 +307,7 @@ class ConsumedThingProperty:
 
         Returns
         -------
-        typing.Any
+        Any
             reply of the property get or set
         """
         raise NotImplementedError("implement property read_reply per protocol")
@@ -324,7 +321,7 @@ class ConsumedThingEvent:
         self,
         resource: EventAffordance,
         logger: logging.Logger,
-        owner_inst: typing.Any,
+        owner_inst: Any,
     ) -> None:
         """
         Parameters
@@ -333,7 +330,7 @@ class ConsumedThingEvent:
             dataclass object representing the event
         logger: logging.Logger
             logger instance
-        owner_inst: typing.Any
+        owner_inst: Any
             the parent object that owns this event
         """
         self.resource = resource
@@ -345,7 +342,7 @@ class ConsumedThingEvent:
 
     def subscribe(
         self,
-        callbacks: list[typing.Callable] | typing.Callable,
+        callbacks: list[Callable] | Callable,
         asynch: bool = False,
         concurrent: bool = False,
         deserialize: bool = True,
@@ -356,7 +353,7 @@ class ConsumedThingEvent:
 
         Parameters
         ----------
-        callbacks: typing.List[typing.Callable] | typing.Callable
+        callbacks: list[Callable] | Callable
             callback or list of callbacks to add
         asynch: bool
             whether to start an async(-io task) event listener instead of a threaded listener
@@ -387,27 +384,27 @@ class ConsumedThingEvent:
         # self._sync_callbacks.clear()
         # self._async_callbacks.clear()
 
-    def listen(self, form: Form, callbacks: list[typing.Callable], concurrent: bool = True, deserialize: bool = True):
+    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = True, deserialize: bool = True):
         """
         listen to events and call the callbacks
         """
         raise NotImplementedError("implement listen per protocol")
 
     async def async_listen(
-        self, form: Form, callbacks: list[typing.Callable], concurrent: bool = True, deserialize: bool = True
+        self, form: Form, callbacks: list[Callable], concurrent: bool = True, deserialize: bool = True
     ):
         """
         listen to events and call the callbacks
         """
         raise NotImplementedError("implement async_listen per protocol")
 
-    def schedule_callbacks(self, callbacks, event_data: typing.Any, concurrent: bool = False) -> None:
+    def schedule_callbacks(self, callbacks, event_data: Any, concurrent: bool = False) -> None:
         """
         schedule the callbacks to be called with the event data
 
         Parameters
         ----------
-        event_data: typing.Any
+        event_data: Any
             event data to pass to the callbacks
         concurrent: bool
             whether to run each callback in a separate thread
@@ -422,13 +419,13 @@ class ConsumedThingEvent:
                 self.logger.error(f"Error occurred in callback {cb}: {ex}")
                 self.logger.exception(ex)
 
-    async def async_schedule_callbacks(self, callbacks, event_data: typing.Any, concurrent: bool = False) -> None:
+    async def async_schedule_callbacks(self, callbacks, event_data: Any, concurrent: bool = False) -> None:
         """
         schedule the callbacks to be called with the event data
 
         Parameters
         ----------
-        event_data: typing.Any
+        event_data: Any
             event data to pass to the callbacks
         concurrent: bool
             whether to run each callback in a separate thread
@@ -449,15 +446,13 @@ class ConsumedThingEvent:
                 self.logger.error(f"Error occurred in callback {cb}: {ex}")
                 self.logger.exception(ex)
 
-    def add_callbacks(
-        self, callbacks: typing.Union[typing.List[typing.Callable], typing.Callable], asynch: bool = False
-    ) -> None:
+    def add_callbacks(self, callbacks: list[Callable] | Callable, asynch: bool = False) -> None:
         """
         add callbacks to the event
 
         Parameters
         ----------
-        *callbacks: typing.List[typing.Callable] | typing.Callable
+        *callbacks: list[Callable] | Callable
             callback or list of callbacks to add
         """
         raise NotImplementedError(
@@ -466,7 +461,7 @@ class ConsumedThingEvent:
         # for logic, see tag v0.3.2
 
 
-def raise_local_exception(error_message: typing.Dict[str, typing.Any]) -> None:
+def raise_local_exception(error_message: dict[str, Any]) -> None:
     """
     raises an exception on client side using an exception from server, using a mapping based on exception type
     (currently only python built-in exceptions supported). If the exception type is not found, a generic `Exception` is raised.
@@ -525,11 +520,11 @@ class SSE:
     def clear(self):
         """reset to default/empty values"""
         self.event = "message"  # type: str
-        self.data = ""  # type: typing.Any
-        self.id = None  # type: typing.Optional[str]
-        self.retry = None  # type: typing.Optional[int]
+        self.data = ""  # type: Any
+        self.id = None  # type: str | None
+        self.retry = None  # type: int | None
 
-    def flush(self) -> typing.Optional[dict]:
+    def flush(self) -> dict[str, Any] | None:
         """obtain the event payload as dictionary and reset to default values"""
         if not self.data and self.id is None:
             return None
