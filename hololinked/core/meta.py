@@ -1,8 +1,8 @@
 import copy
 import inspect
-import typing
 
 from types import FunctionType
+from typing import Any, KeysView, Type
 
 from ..constants import JSON, JSONSerializable
 from ..param.parameterized import EventDispatcher as ParamEventDispatcher
@@ -134,17 +134,17 @@ class DescriptorRegistry:
         raise NotImplementedError("Implement descriptor_object in subclass")
 
     @property
-    def descriptors(self) -> typing.Dict[str, type[Property | Action | Event]]:
+    def descriptors(self) -> dict[str, type[Property | Action | Event]]:
         """A dictionary with all the descriptors as values and their names as keys."""
         raise NotImplementedError("Implement descriptors in subclass")
 
     @property
-    def names(self) -> typing.KeysView[str]:
+    def names(self) -> KeysView[str]:
         """The names of the descriptors objects as a dictionary key view"""
         return self.descriptors.keys()
 
     @property
-    def values(self) -> typing.Dict[str, typing.Any]:
+    def values(self) -> dict[str, Any]:
         """
         The values contained within the descriptors after reading when accessed at instance level, otherwise,
         the descriptor objects as dictionary when accessed at class level.
@@ -174,7 +174,7 @@ class DescriptorRegistry:
         """Returns `True` if the descriptor object is in the descriptors dictionary."""
         raise NotImplementedError("contains not implemented yet")
 
-    def __dir__(self) -> typing.List[str]:
+    def __dir__(self) -> list[str]:
         """Adds descriptor object to the dir"""
         return super().__dir__() + self.descriptors.keys()  # type: ignore
 
@@ -194,7 +194,7 @@ class DescriptorRegistry:
             return f"<DescriptorRegistry({self.owner_cls.__name__}({self.owner_inst.id}))>"
         return f"<DescriptorRegistry({self.owner_cls.__name__})>"
 
-    def get_descriptors(self, recreate: bool = False) -> typing.Dict[str, Property | Action | Event]:
+    def get_descriptors(self, recreate: bool = False) -> dict[str, Property | Action | Event]:
         """
         a dictionary with all the descriptors as values and their names as keys.
 
@@ -224,7 +224,7 @@ class DescriptorRegistry:
             # and parameters are rarely added (and cannot be deleted)
             return descriptors
 
-    def get_values(self) -> typing.Dict[str, typing.Any]:
+    def get_values(self) -> dict[str, Any]:
         """
         the values contained within the descriptors after reading when accessed at instance level, otherwise,
         the descriptor objects as dictionary when accessed at class level.
@@ -299,12 +299,12 @@ class PropertiesRegistry(DescriptorRegistry):
         return Parameter
 
     @property
-    def descriptors(self) -> typing.Dict[str, Parameter]:
+    def descriptors(self) -> dict[str, Parameter]:
         if self.owner_inst is None:
             return super().get_descriptors()
         return dict(super().get_descriptors(), **self._instance_params)
 
-    values = property(DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__)  # type: typing.Dict[str, Parameter | Property | typing.Any]
+    values = property(DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__)  # type: dict[str, Parameter | Property | Any]
 
     def __getitem__(self, key: str) -> Property | Parameter:
         return self.descriptors[key]
@@ -313,7 +313,7 @@ class PropertiesRegistry(DescriptorRegistry):
         return value in self.descriptors.values() or value in self.descriptors
 
     @property
-    def defaults(self) -> typing.Dict[str, typing.Any]:
+    def defaults(self) -> dict[str, Any]:
         """default values of all properties as a dictionary with property names as keys"""
         defaults = {}
         for key, val in self.descriptors.items():
@@ -321,7 +321,7 @@ class PropertiesRegistry(DescriptorRegistry):
         return defaults
 
     @property
-    def remote_objects(self) -> typing.Dict[str, Property]:
+    def remote_objects(self) -> dict[str, Property]:
         """
         dictionary of properties that are remotely accessible (`remote=True`),
         which is also a default setting for all properties
@@ -347,7 +347,7 @@ class PropertiesRegistry(DescriptorRegistry):
             return remote_props
 
     @property
-    def db_objects(self) -> typing.Dict[str, Property]:
+    def db_objects(self) -> dict[str, Property]:
         """
         dictionary of properties that are stored or loaded from the database
         (`db_init`, `db_persist` or `db_commit` set to `True`)
@@ -370,7 +370,7 @@ class PropertiesRegistry(DescriptorRegistry):
             return db_props
 
     @property
-    def db_init_objects(self) -> typing.Dict[str, Property]:
+    def db_init_objects(self) -> dict[str, Property]:
         """dictionary of properties that are initialized from the database (`db_init` or `db_persist` set to `True`)"""
         try:
             return getattr(
@@ -391,7 +391,7 @@ class PropertiesRegistry(DescriptorRegistry):
             return db_init_props
 
     @property
-    def db_commit_objects(self) -> typing.Dict[str, Property]:
+    def db_commit_objects(self) -> dict[str, Property]:
         """dictionary of properties that are committed to the database (`db_commit` or `db_persist` set to `True`)"""
         try:
             return getattr(
@@ -412,7 +412,7 @@ class PropertiesRegistry(DescriptorRegistry):
             return db_commit_props
 
     @property
-    def db_persisting_objects(self) -> typing.Dict[str, Property]:
+    def db_persisting_objects(self) -> dict[str, Property]:
         """dictionary of properties that are persisted through the database (`db_persist` set to `True`)"""
         try:
             return getattr(
@@ -432,13 +432,13 @@ class PropertiesRegistry(DescriptorRegistry):
             )
             return db_persisting_props
 
-    def get(self, **kwargs) -> typing.Dict[str, typing.Any]:
+    def get(self, **kwargs) -> dict[str, Any]:
         """
         read properties from the object, implements WoT operations `readAllProperties` and `readMultipleProperties`
 
         Parameters
         ----------
-        **kwargs: typing.Dict[str, typing.Any]
+        **kwargs: dict[str, Any]
 
             - names: `List[str]`
                 list of property names to be fetched
@@ -449,7 +449,7 @@ class PropertiesRegistry(DescriptorRegistry):
 
         Returns
         -------
-        typing.Dict[str, typing.Any]
+        dict[str, Any]
             dictionary of property names and their values
 
         Raises
@@ -492,14 +492,14 @@ class PropertiesRegistry(DescriptorRegistry):
             data[rename] = prop.__get__(self.owner_inst, self.owner_cls)
         return data
 
-    def set(self, **values: typing.Dict[str, typing.Any]) -> None:
+    def set(self, **values: dict[str, Any]) -> None:
         """
         set properties whose name is specified by keys of a dictionary; implements WoT operations `writeMultipleProperties`
         or `writeAllProperties`.
 
         Parameters
         ----------
-        values: typing.Dict[str, typing.Any]
+        values: dict[str, Any]
             dictionary of property names and its new values
 
         Raises
@@ -560,18 +560,18 @@ class PropertiesRegistry(DescriptorRegistry):
                 pass
 
     @supports_only_instance_access("database operations are only supported at instance level")
-    def get_from_DB(self) -> typing.Dict[str, typing.Any]:
+    def get_from_DB(self) -> dict[str, Any]:
         """
         get all properties (i.e. their values) currently stored in the database
 
         Returns
         -------
-        Dict[str, typing.Any]
+        dict[str, Any]
             dictionary of property names and their values
         """
         if not hasattr(self.owner_inst, "db_engine"):
             raise AttributeError("database engine not set, this object is not connected to a database")
-        props = self.owner_inst.db_engine.get_all_properties()  # type: typing.Dict
+        props = self.owner_inst.db_engine.get_all_properties()  # type: dict
         final_list = {}
         for name, prop in props.items():
             try:
@@ -607,7 +607,7 @@ class PropertiesRegistry(DescriptorRegistry):
                     self.owner_inst.logger.error(f"could not set attribute {db_prop} due to error {str(ex)}")
 
     @classmethod
-    def get_type_from_name(cls, name: str) -> typing.Type[Property]:
+    def get_type_from_name(cls, name: str) -> Type[Property]:
         return Property
 
     @supports_only_instance_access("additional property setup is required only for instances")
@@ -678,9 +678,9 @@ class ActionsRegistry(DescriptorRegistry):
     def descriptor_object(self) -> type[Action]:
         return Action
 
-    descriptors = property(DescriptorRegistry.get_descriptors)  # type: typing.Dict[str, Action]
+    descriptors = property(DescriptorRegistry.get_descriptors)  # type: dict[str, Action]
 
-    values = property(DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__)  # type: typing.Dict[str, Action]
+    values = property(DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__)  # type: dict[str, Action]
 
     def __getitem__(self, key: str) -> Action | BoundAction:
         if self.owner_inst is not None:
@@ -702,9 +702,9 @@ class EventsRegistry(DescriptorRegistry):
     def descriptor_object(self):
         return Event
 
-    descriptors = property(DescriptorRegistry.get_descriptors)  # type: typing.Dict[str, Event]
+    descriptors = property(DescriptorRegistry.get_descriptors)  # type: dict[str, Event]
 
-    values = property(DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__)  # type: typing.Dict[str, EventDispatcher]
+    values = property(DescriptorRegistry.get_values, doc=DescriptorRegistry.get_values.__doc__)  # type: dict[str, EventDispatcher]
 
     def __getitem__(self, key: str) -> Event | EventDispatcher:
         if self.owner_inst is not None:
@@ -726,7 +726,7 @@ class EventsRegistry(DescriptorRegistry):
                 pass
 
     @property
-    def plain(self) -> typing.Dict[str, Event]:
+    def plain(self) -> dict[str, Event]:
         """dictionary of events that are not change events (i.e., not observable)"""
         try:
             return getattr(
@@ -746,7 +746,7 @@ class EventsRegistry(DescriptorRegistry):
             return non_change_events
 
     @property
-    def change_events(self) -> typing.Dict[str, Event]:
+    def change_events(self) -> dict[str, Event]:
         """dictionary of change events belonging to observable properties"""
         try:
             return getattr(
@@ -767,7 +767,7 @@ class EventsRegistry(DescriptorRegistry):
             return change_events
 
     @property
-    def observables(self) -> typing.Dict[str, Property]:
+    def observables(self) -> dict[str, Property]:
         """dictionary of all properties that are observable, i.e. that which push change events"""
         try:
             return getattr(
@@ -818,12 +818,12 @@ class Propertized(Parameterized):
     # Affordance object associated with it i.e _get_properties.to_affordance() function needs to work.
     # TODO - fix this anomaly
     @action()
-    def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
+    def _get_properties(self, **kwargs) -> dict[str, Any]:
         """ """
         return self.properties.get(**kwargs)
 
     @action()
-    def _set_properties(self, **values: typing.Dict[str, typing.Any]) -> None:
+    def _set_properties(self, **values: dict[str, Any]) -> None:
         """
         set properties whose name is specified by keys of a dictionary
 
@@ -835,7 +835,7 @@ class Propertized(Parameterized):
         return self.properties.set(**values)  # returns None
 
     @action()
-    def _get_properties_in_db(self) -> typing.Dict[str, JSONSerializable]:
+    def _get_properties_in_db(self) -> dict[str, JSONSerializable]:
         """
         get all properties in the database
 

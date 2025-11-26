@@ -1,9 +1,9 @@
-import typing
 import warnings
 
 from enum import Enum
 from inspect import getfullargspec, iscoroutinefunction
 from types import FunctionType, MethodType
+from typing import Any
 
 import jsonschema
 
@@ -141,7 +141,7 @@ class BoundAction:
         # stored only for reference, hardly used.
         self._execution_info: ActionInfoValidator
 
-    def validate_call(self, args, kwargs: typing.Dict[str, typing.Any]) -> None:
+    def validate_call(self, args, kwargs: dict[str, Any]) -> None:
         """
         Validate the call to the action, like payload, state machine state etc.
         Errors are raised as exceptions.

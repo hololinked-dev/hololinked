@@ -1,6 +1,5 @@
-import typing
-
 from enum import Enum
+from typing import Any, Callable
 
 from pydantic import BaseModel, ConfigDict, RootModel, create_model
 
@@ -35,29 +34,29 @@ class Property(Parameter):
 
     def __init__(
         self,
-        default: typing.Any = None,
+        default: Any = None,
         *,
-        doc: typing.Optional[str] = None,
+        doc: str | None = None,
         constant: bool = False,
         readonly: bool = False,
         allow_None: bool = False,
-        label: typing.Optional[str] = None,
-        state: typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+        label: str | None = None,
+        state: list | tuple | str | Enum | None = None,
         db_persist: bool = False,
         db_init: bool = False,
         db_commit: bool = False,
         observable: bool = False,
-        model: typing.Optional["BaseModel"] = None,
+        model: "BaseModel" | None = None,
         class_member: bool = False,
-        fget: typing.Optional[typing.Callable] = None,
-        fset: typing.Optional[typing.Callable] = None,
-        fdel: typing.Optional[typing.Callable] = None,
-        fcomparator: typing.Optional[typing.Callable] = None,
+        fget: Callable | None = None,
+        fset: Callable | None = None,
+        fdel: Callable | None = None,
+        fcomparator: Callable | None = None,
         deepcopy_default: bool = False,
         per_instance_descriptor: bool = False,
         remote: bool = True,
-        precedence: typing.Optional[float] = None,
-        metadata: typing.Optional[typing.Dict] = None,
+        precedence: float | None = None,
+        metadata: dict | None = None,
     ) -> None:
         """
         Parameters
@@ -169,7 +168,7 @@ class Property(Parameter):
         if observable:
             self._observable_event_descriptor = Event()
         self._execution_info_validator = None
-        self.execution_info = None  # typing.Optional[RemoteResource]
+        self.execution_info = None  # RemoteResource | None
         if remote:
             # TODO, this execution info validator can be refactored & removed later, adds an additional layer of info
             self._execution_info_validator = RemoteResourceInfoValidator(state=state, isproperty=True, obj=self)
@@ -184,7 +183,7 @@ class Property(Parameter):
                 self.model = wrap_plain_types_in_rootmodel(model)  # type: BaseModel
                 self.validator = self.model.model_validate
 
-    def __set_name__(self, owner: typing.Any, attrib_name: str) -> None:
+    def __set_name__(self, owner: Any, attrib_name: str) -> None:
         super().__set_name__(owner, attrib_name)
         if self._execution_info_validator:
             self._execution_info_validator.obj_name = attrib_name
@@ -197,12 +196,12 @@ class Property(Parameter):
             # This is a descriptor object, so we need to set it on the owner class
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
 
-    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
+    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> Any:
         read_value = super().__get__(obj, objtype)
         self.push_change_event(obj, read_value)
         return read_value
 
-    def push_change_event(self, obj, value: typing.Any) -> None:
+    def push_change_event(self, obj, value: Any) -> None:
         """
         Pushes change event both on read and write if an event publisher object is available
         on the owning `Thing`.
@@ -230,7 +229,7 @@ class Property(Parameter):
                 return
             event_dispatcher.push(value)
 
-    def validate_and_adapt(self, value) -> typing.Any:
+    def validate_and_adapt(self, value) -> Any:
         """
         Validate the given value and adapt it if a proper logical reasoning can be given,
         for example, cropping a number to its bounds. Returns modified value.
@@ -249,7 +248,7 @@ class Property(Parameter):
                 value = self.model(**value)
         return super().validate_and_adapt(value)
 
-    def external_set(self, obj: Parameterized, value: typing.Any) -> None:
+    def external_set(self, obj: Parameterized, value: Any) -> None:
         """
         method called when the value of the property is set from an external source, e.g. a remote client.
         Usually introduces a state machine check before allowing the set operation.
@@ -265,13 +264,13 @@ class Property(Parameter):
                 )
             )
 
-    def _post_value_set(self, obj, value: typing.Any) -> None:
+    def _post_value_set(self, obj, value: Any) -> None:
         if (self.db_persist or self.db_commit) and hasattr(obj, "db_engine"):
             obj.db_engine.set_property(self, value)
         self.push_change_event(obj, value)
         return super()._post_value_set(obj, value)
 
-    def comparator(self, func: typing.Callable) -> typing.Callable:
+    def comparator(self, func: Callable) -> Callable:
         """
         Register a comparator method using this decorator to decide when to push
         a change event.

@@ -3,9 +3,9 @@ import datetime
 import logging
 import threading
 import time
-import typing
 
 from collections import deque
+from typing import Any  # noqa: F401
 
 import structlog
 
@@ -209,24 +209,24 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
                 self.diff_logs.clear()
         # self.owner.logger.info("ending log events.")
 
-    debug_logs = List(default=[], readonly=True, fget=lambda self: self._debug_logs, doc="logs at logging.DEBUG level")  # type: list[typing.Dict[str, typing.Any]]
+    debug_logs = List(default=[], readonly=True, fget=lambda self: self._debug_logs, doc="logs at logging.DEBUG level")  # type: list[dict[str, Any]]
 
-    warn_logs = List(default=[], readonly=True, fget=lambda self: self._warn_logs, doc="logs at logging.WARN level")  # type: list[typing.Dict[str, typing.Any]]
+    warn_logs = List(default=[], readonly=True, fget=lambda self: self._warn_logs, doc="logs at logging.WARN level")  # type: list[dict[str, Any]]
 
-    info_logs = List(default=[], readonly=True, fget=lambda self: self._info_logs, doc="logs at logging.INFO level")  # type: list[typing.Dict[str, typing.Any]]
+    info_logs = List(default=[], readonly=True, fget=lambda self: self._info_logs, doc="logs at logging.INFO level")  # type: list[dict[str, Any]]
 
-    error_logs = List(default=[], readonly=True, fget=lambda self: self._error_logs, doc="logs at logging.ERROR level")  # type: list[typing.Dict[str, typing.Any]]
+    error_logs = List(default=[], readonly=True, fget=lambda self: self._error_logs, doc="logs at logging.ERROR level")  # type: list[dict[str, Any]]
 
     critical_logs = List(
         default=[], readonly=True, fget=lambda self: self._critical_logs, doc="logs at logging.CRITICAL level"
-    )  # type: list[typing.Dict[str, typing.Any]]
+    )  # type: list[dict[str, Any]]
 
     execution_logs = List(
         default=[],
         readonly=True,
         fget=lambda self: self._execution_logs,
         doc="logs at all levels accumulated in order of collection/execution",
-    )  # type: list[typing.Dict[str, typing.Any]]
+    )  # type: list[dict[str, Any]]
 
 
 def prepare_object_logger(instance: RemoteObject, log_level: int, log_file: str, remote_access: bool = False) -> None:
@@ -283,7 +283,7 @@ class LogHistoryHandler(logging.Handler):
     execution logs that were collected during a specific operation.
     """
 
-    def __init__(self, log_list: typing.Optional[typing.List] = None):
+    def __init__(self, log_list: list | None = None):
         """
         Parameters
         ----------
@@ -292,7 +292,7 @@ class LogHistoryHandler(logging.Handler):
             Initial set of log entries to start with. Optional, defaults to empty list.
         """
         super().__init__()
-        self.log_list: typing.List[typing.Dict] = [] if not log_list else log_list
+        self.log_list: list[dict] = [] if not log_list else log_list
 
     def emit(self, record: logging.LogRecord):
         # log_entry = self.format(record)
