@@ -2,6 +2,9 @@
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+package-dir = {"hololinked" = "hololinked"}
+
 [project]
 name = "hololinked"
 version = "0.3.8"
@@ -57,19 +60,6 @@ dependencies = [
 [project.urls]
 Documentation = "https://docs.hololinked.dev"
 Repository = "https://github.com/hololinked-dev/hololinked"
-
-[tool.setuptools]
-packages = [
-    "hololinked", 
-    "hololinked.server", "hololinked.server.http",
-    "hololinked.client", "hololinked.client.http", "hololinked.client.zmq",
-    "hololinked.param", 
-    "hololinked.schema_validators", 
-    "hololinked.serializers", 
-    "hololinked.storage", 
-    "hololinked.td", 
-    "hololinked.core", "hololinked.core.zmq"
-]
 
 [dependency-groups]
 dev = [

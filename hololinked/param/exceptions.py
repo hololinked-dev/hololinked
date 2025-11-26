@@ -1,8 +1,8 @@
-import typing
+from typing import NoReturn
 from contextlib import contextmanager
 
 
-def raise_TypeError(message, parameter) -> typing.NoReturn:
+def raise_TypeError(message, parameter) -> NoReturn:
     owner_str = ""
     if isinstance(parameter, Parameter):
         owner_str = f" Owner info : {parameter.owner}, parameter name : {parameter.name}."
@@ -11,7 +11,7 @@ def raise_TypeError(message, parameter) -> typing.NoReturn:
     raise TypeError(message + owner_str)
 
 
-def raise_ValueError(message, parameter) -> typing.NoReturn:
+def raise_ValueError(message, parameter) -> NoReturn:    
     owner_str = ""
     if isinstance(parameter, Parameter):
         owner_str = f" Owner info : {parameter.owner}, parameter name : {parameter.name}."

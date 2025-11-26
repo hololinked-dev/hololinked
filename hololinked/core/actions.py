@@ -347,7 +347,7 @@ def action(
             except Exception as ex:
                 if global_config.VALIDATE_SCHEMAS:
                     warnings.warn(
-                        f"Could not infer input schema for {obj.__name__} due to {str(ex)}. "
+                        f"Could not infer input schema for {obj.__name__} due to - {str(ex)}. "
                         + "Considering filing a bug report if you think this should have worked correctly",
                         category=RuntimeWarning,
                     )

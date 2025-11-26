@@ -328,6 +328,10 @@ class Property(Parameter):
         return PropertyAffordance.generate(self, owner_inst or self.owner)
 
 
+class ModelRoot(RootModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
 def wrap_plain_types_in_rootmodel(model: type) -> Type[BaseModel] | Type[RootModel]:
     """
     Ensure a type is a subclass of BaseModel.
@@ -341,12 +345,7 @@ def wrap_plain_types_in_rootmodel(model: type) -> Type[BaseModel] | Type[RootMod
         return
     if issubklass(model, BaseModel):
         return model
-    return create_model(
-        f"{model!r}",
-        root=(model, ...),
-        __base__=RootModel,
-        __config__=ConfigDict(arbitrary_types_allowed=True),
-    )  # type: ignore[call-overload]
+    return create_model(f"{model!r}", root=(model, ...), __base__=ModelRoot)  # type: ignore[call-overload]
 
 
 __all__ = [Property.__name__]
