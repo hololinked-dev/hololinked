@@ -1,7 +1,6 @@
 import datetime
 import threading
 import time
-import typing
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -88,7 +87,7 @@ class OceanOpticsSpectrometer(Thing):
         default=None, allow_None=True, class_=Intensity, doc="reference intensity to overlap in background"
     )  # type: Intensity
 
-    def __init__(self, id: str, serial_number: typing.Optional[str] = None, **kwargs) -> None:
+    def __init__(self, id: str, serial_number: str | None = None, **kwargs) -> None:
         super().__init__(id=id, serial_number=serial_number, **kwargs)
         self.set_status("disconnected")
         if serial_number is not None:
@@ -140,7 +139,7 @@ class OceanOpticsSpectrometer(Thing):
         # this is only for testing, be careful
         doc="wavelength bins of measurement",
         fget=lambda self: self._wavelengths if self.state_machine.current_state != self.states.DISCONNECTED else None,
-    )  # type: typing.List[typing.Union[float, int]]
+    )  # type: list[float | int]
 
     pixel_count = Integer(
         default=None,
@@ -204,9 +203,9 @@ class OceanOpticsSpectrometer(Thing):
         default=None,
         allow_None=True,
         doc="set True for Seabreeze internal black level correction",
-    )  # type: typing.Optional[str]
+    )  # type: str | None
 
-    custom_background_intensity = TypedList(item_type=(float, int))  # type: typing.List[typing.Union[float, int]]
+    custom_background_intensity = TypedList(item_type=(float, int))  # type: list[float | int]
 
     nonlinearity_correction = Boolean(default=False, doc="automatic correction of non linearity in detector CCD")  # type: bool
 

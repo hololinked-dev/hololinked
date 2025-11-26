@@ -1,7 +1,8 @@
 import asyncio
 import threading
 import time
-import typing
+
+from typing import Annotated, Literal
 
 import numpy as np
 
@@ -116,9 +117,7 @@ class TestThing(Thing):
     def json_schema_validated_action(self, val1: int, val2: str, val3: dict, val4: list):
         return {"val1": val1, "val3": val3}
 
-    def pydantic_validated_action(
-        self, val1: int, val2: str, val3: dict, val4: list
-    ) -> typing.Dict[str, typing.Union[int, dict]]:
+    def pydantic_validated_action(self, val1: int, val2: str, val3: dict, val4: list) -> dict[str, int | dict]:
         return {"val2": val2, "val4": val4}
 
     @action()
@@ -351,7 +350,7 @@ class TestThing(Thing):
 
     JSONSchema.register_type_replacement(np.ndarray, "array")
 
-    NDArray = typing.Annotated[
+    NDArray = Annotated[
         np.ndarray,
         WithJsonSchema(
             {
@@ -460,7 +459,7 @@ class TestThing(Thing):
         input_schema=analog_offset_input_schema,
         output_schema=analog_offset_output_schema,
     )
-    def get_analogue_offset(self, voltage_range: str, coupling: str) -> typing.Tuple[float, float]:
+    def get_analogue_offset(self, voltage_range: str, coupling: str) -> tuple[float, float]:
         """analogue offset for a voltage range and coupling"""
         print(f"get_analogue_offset called with voltage_range={voltage_range}, coupling={coupling}")
         return 0.0, 0.0
@@ -516,9 +515,9 @@ class TestThing(Thing):
     @action()
     def set_channel_pydantic(
         self,
-        channel: typing.Literal["A", "B", "C", "D"],
+        channel: Literal["A", "B", "C", "D"],
         enabled: bool = True,
-        v_range: typing.Literal[
+        v_range: Literal[
             "10mV",
             "20mV",
             "50mV",
@@ -534,8 +533,8 @@ class TestThing(Thing):
             "MAX_RANGES",
         ] = "2V",
         offset: float = 0,
-        coupling: typing.Literal["AC", "DC"] = "DC_1M",
-        bw_limiter: typing.Literal["full", "20MHz"] = "full",
+        coupling: Literal["AC", "DC"] = "DC_1M",
+        bw_limiter: Literal["full", "20MHz"] = "full",
     ) -> None:
         """
         Set the parameter for a channel.
@@ -557,7 +556,7 @@ class TestThing(Thing):
         print(f"set_sensor_model called with value={value}")
 
     @action()
-    def set_sensor_model_pydantic(self, value: typing.Literal["QE25LP-S-MB", "QE12LP-S-MB-QED-D0"]):
+    def set_sensor_model_pydantic(self, value: Literal["QE25LP-S-MB", "QE12LP-S-MB-QED-D0"]):
         """
         Set the attached sensor to the meter under control.
         Sensor should be defined as a class and added to the AllowedSensors dict.
@@ -565,7 +564,7 @@ class TestThing(Thing):
         print(f"set_sensor_model_pydantic called with value={value}")
 
     @action()
-    def start_acquisition(self, max_count: typing.Annotated[int, Field(gt=0)]):
+    def start_acquisition(self, max_count: Annotated[int, Field(gt=0)]):
         """
         Start acquisition of energy measurements.
 
@@ -590,7 +589,7 @@ class TestThing(Thing):
 
     # ----- Serial Utility
     @action()
-    def execute_instruction(self, command: str, return_data_size: typing.Annotated[int, Field(ge=0)] = 0) -> str:
+    def execute_instruction(self, command: str, return_data_size: Annotated[int, Field(ge=0)] = 0) -> str:
         """
         executes instruction given by the ASCII string parameter 'command'.
         If return data size is greater than 0, it reads the response and returns the response.
@@ -600,7 +599,7 @@ class TestThing(Thing):
         return b""
 
 
-def replace_methods_with_actions(thing_cls: typing.Type[TestThing]) -> None:
+def replace_methods_with_actions(thing_cls: type[TestThing]) -> None:
     exposed_actions = []
     if not isinstance(thing_cls.action_echo, (Action, BoundAction)):
         thing_cls.action_echo = action()(thing_cls.action_echo)

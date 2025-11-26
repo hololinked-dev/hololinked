@@ -69,16 +69,16 @@ class ThingModel(Schema):
         raise NotImplementedError("This will be implemented in a future release for an API first approach")
 
     # not the best code and logic, but works for now
-    skip_properties = ["expose", "thing_description", "GUI", "object_info"]  # type: list[str]
-    skip_actions = [
+    skip_properties: list[str] = ["expose", "thing_description", "GUI", "object_info"]
+    skip_actions: list[str] = [
         Thing._add_property.name,
         Thing._get_properties.name,
         Thing._get_properties_in_db.name,
         Thing._set_properties.name,
         "get_postman_collection",
         "get_our_thing_model",
-    ]  # type: list[str]
-    skip_events = []  # type: list[str]
+    ]
+    skip_events: list[str] = []
 
     def add_interaction_affordances(self) -> None:
         """add interaction affordances to thing model"""
