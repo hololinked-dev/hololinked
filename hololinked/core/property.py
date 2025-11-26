@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Type
 
 from pydantic import BaseModel, ConfigDict, RootModel, create_model
 
@@ -328,7 +328,7 @@ class Property(Parameter):
         return PropertyAffordance.generate(self, owner_inst or self.owner)
 
 
-def wrap_plain_types_in_rootmodel(model: type) -> type[BaseModel] | type[RootModel]:
+def wrap_plain_types_in_rootmodel(model: type) -> Type[BaseModel] | Type[RootModel]:
     """
     Ensure a type is a subclass of BaseModel.
 

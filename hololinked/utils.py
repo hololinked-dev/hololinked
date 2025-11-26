@@ -402,7 +402,7 @@ def get_input_model_from_signature(
     remove_first_positional_arg: bool = False,
     ignore: Sequence[str] | None = None,
     model_for_empty_annotations: bool = False,
-) -> type[BaseModel] | None:
+) -> Type[BaseModel] | None:
     """
     Create a pydantic model for a function's signature.
 

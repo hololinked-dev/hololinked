@@ -129,12 +129,12 @@ class DescriptorRegistry:
             return prefix
 
     @property
-    def descriptor_object(self) -> type[Property | Action | Event]:
+    def descriptor_object(self) -> Type[Property | Action | Event]:
         """The type of descriptor object that this registry holds, i.e. `Property`, `Action` or `Event`"""
         raise NotImplementedError("Implement descriptor_object in subclass")
 
     @property
-    def descriptors(self) -> dict[str, type[Property | Action | Event]]:
+    def descriptors(self) -> dict[str, Type[Property | Action | Event]]:
         """A dictionary with all the descriptors as values and their names as keys."""
         raise NotImplementedError("Implement descriptors in subclass")
 
@@ -295,7 +295,7 @@ class PropertiesRegistry(DescriptorRegistry):
             self.event_dispatcher.prepare_instance_dependencies()
 
     @property
-    def descriptor_object(self) -> type[Parameter]:
+    def descriptor_object(self) -> Type[Parameter]:
         return Parameter
 
     @property
@@ -675,7 +675,7 @@ class ActionsRegistry(DescriptorRegistry):
     """
 
     @property
-    def descriptor_object(self) -> type[Action]:
+    def descriptor_object(self) -> Type[Action]:
         return Action
 
     descriptors = property(DescriptorRegistry.get_descriptors)  # type: dict[str, Action]
