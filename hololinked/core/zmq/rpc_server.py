@@ -4,9 +4,9 @@ import logging
 import socket
 import threading
 import tracemalloc
-import typing
 
 from collections import deque
+from typing import Any
 
 import structlog
 import zmq
@@ -84,18 +84,18 @@ class RPCServer(BaseZMQServer):
         default=None,
         doc="list of Things which are being executed",
         remote=False,
-    )  # type: typing.List[Thing]
+    )  # type: list[Thing]
 
-    schedulers: typing.Dict[str, "QueuedScheduler"]
+    schedulers: dict[str, "QueuedScheduler"]
 
     def __init__(
         self,
         *,
         id: str,
-        things: typing.Optional[typing.List[Thing]] = None,
+        things: list[Thing] | None = None,
         context: zmq.asyncio.Context | None = None,
         access_point: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.INPROC,
-        **kwargs: typing.Dict[str, typing.Any],
+        **kwargs: dict[str, Any],
     ) -> None:
         """
         Parameters
@@ -320,7 +320,7 @@ class RPCServer(BaseZMQServer):
         scheduler.cleanup()
         self.logger.info("stopped schedulers")
 
-    async def run_thing_instance(self, instance: Thing, scheduler: typing.Optional["Scheduler"] = None) -> None:
+    async def run_thing_instance(self, instance: Thing, scheduler: "Scheduler" | None = None) -> None:
         """
         run a single `Thing` instance in an infinite loop by allowing the scheduler to schedule operations on it.
 
@@ -446,9 +446,9 @@ class RPCServer(BaseZMQServer):
         instance: Thing,
         objekt: str,
         operation: str,
-        payload: typing.Any,
+        payload: Any,
         preserialized_payload: bytes,
-    ) -> typing.Any:
+    ) -> Any:
         """
         Execute a given operation on a thing instance.
 
@@ -509,7 +509,7 @@ class RPCServer(BaseZMQServer):
 
     def format_return_value(
         self,
-        return_value: typing.Any,
+        return_value: Any,
         serializer: BaseSerializer,
     ) -> tuple[SerializableData, PreserializedData]:
         if (
@@ -567,7 +567,7 @@ class RPCServer(BaseZMQServer):
         )
         eventloop.close()
 
-    def run_things(self, things: typing.List[Thing]):
+    def run_things(self, things: list[Thing]):
         """
         Run loop that executes operations on `Thing` instances. This method is blocking and is called by `run()` method.
 
@@ -594,7 +594,7 @@ class RPCServer(BaseZMQServer):
         self.logger.info("starting RPC server")
         for thing in self.things:
             self.schedulers[thing.id] = QueuedScheduler(thing, self)
-        threads = dict()  # type: typing.Dict[int, threading.Thread]
+        threads = dict()  # type: dict[int, threading.Thread]
         for thing in self.things:
             thread = threading.Thread(target=self.run_things, args=([thing],))
             thread.start()
@@ -639,7 +639,7 @@ class RPCServer(BaseZMQServer):
         protocol: str,
         ignore_errors: bool = False,
         skip_names: list[str] = [],
-    ) -> dict[str, typing.Any]:
+    ) -> dict[str, Any]:
         """
         Get the Thing Description (TD) for a specific Thing instance.
 
@@ -659,7 +659,7 @@ class RPCServer(BaseZMQServer):
         JSON
             The Thing Description in JSON format.
         """
-        TM = instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()  # type: dict[str, typing.Any]
+        TM = instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()  # type: dict[str, Any]
         TD = copy.deepcopy(TM)
         from ...td import ActionAffordance, EventAffordance, PropertyAffordance
         from ...td.forms import Form
@@ -750,9 +750,9 @@ class Scheduler:
     [UML Diagram subclasses](http://docs.hololinked.dev/UML/PDF/Scheduler.pdf)
     """
 
-    OperationRequest = typing.Tuple[str, str, str, SerializableData, PreserializedData, typing.Dict[str, typing.Any]]
-    OperationReply = typing.Tuple[SerializableData, PreserializedData, str]
-    JobInvokationType = typing.Tuple[AsyncZMQServer, RequestMessage, asyncio.Task, asyncio.Event]
+    OperationRequest = tuple[str, str, str, SerializableData, PreserializedData, dict[str, Any]]
+    OperationReply = tuple[SerializableData, PreserializedData, str]
+    JobInvokationType = tuple[AsyncZMQServer, RequestMessage, asyncio.Task, asyncio.Event]
     # [UML Diagram](http://docs.hololinked.dev/UML/PDF/RPCServer.pdf)
     _operation_execution_complete_event: asyncio.Event | threading.Event
     _operation_execution_ready_event: asyncio.Event | threading.Event
@@ -842,7 +842,7 @@ class Scheduler:
         )
 
     @classmethod
-    def format_reply_tuple(self, return_value: typing.Any) -> OperationReply:
+    def format_reply_tuple(self, return_value: Any) -> OperationReply:
         pass
 
 
