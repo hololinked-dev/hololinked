@@ -1,4 +1,4 @@
-import typing
+from typing import Any, Optional
 
 from pydantic import Field
 
@@ -26,7 +26,7 @@ class AdditionalExpectedResponse(Schema):
 
     success: bool = Field(default=False)
     contentType: str = Field(default="application/json")
-    response_schema: typing.Optional[JSON] = Field(default="exception", alias="schema")
+    response_schema: Optional[JSON] = Field(default="exception", alias="schema")
 
     def __init__(self):
         super().__init__()
@@ -42,19 +42,19 @@ class Form(Schema):
     op: str = None
     htv_methodName: str = Field(default=None, alias="htv:methodName")
     mqv_topic: str = Field(default=None, alias="mqv:topic")
-    contentType: typing.Optional[str] = "application/json"
-    additionalResponses: typing.Optional[typing.List[AdditionalExpectedResponse]] = None
-    contentEncoding: typing.Optional[str] = None
-    security: typing.Optional[str] = None
-    scopes: typing.Optional[str] = None
-    response: typing.Optional[ExpectedResponse] = None
-    subprotocol: typing.Optional[str] = None
+    contentType: Optional[str] = "application/json"
+    additionalResponses: Optional[list[AdditionalExpectedResponse]] = None
+    contentEncoding: Optional[str] = None
+    security: Optional[str] = None
+    scopes: Optional[str] = None
+    response: Optional[ExpectedResponse] = None
+    subprotocol: Optional[str] = None
 
     def __init__(self):
         super().__init__()
 
     @classmethod
-    def from_TD(cls, form_json: typing.Dict[str, typing.Any]) -> "Form":
+    def from_TD(cls, form_json: dict[str, Any]) -> "Form":
         """
         Create a Form instance from a Thing Description JSON object.
         :param form_json: The JSON representation of the form.

@@ -1,5 +1,3 @@
-import typing
-
 import structlog
 import zmq
 import zmq.asyncio
@@ -22,7 +20,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         *,
         id: str,
         access_points: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC,
-        things: typing.List["Thing"] = None,
+        things: list["Thing"] = None,
         context: zmq.asyncio.Context | None = None,
         **kwargs,
     ) -> None:

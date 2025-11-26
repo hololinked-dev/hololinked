@@ -1,7 +1,8 @@
 import inspect
 import logging
 import ssl
-import typing
+
+from typing import Any
 
 import structlog
 
@@ -46,7 +47,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             and network accessible handler is created if none supplied.""",
     )  # type: logging.Logger
 
-    state_machine = None  # type: typing.Optional["StateMachine"]
+    state_machine = None  # type: "StateMachine" | None
 
     # remote properties
     state = String(
@@ -57,7 +58,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         fget=lambda self: self.state_machine.current_state if self.state_machine else None,
         doc="""current state machine's state if state machine present, `None` indicates absence of state machine.
                 State machine returned state is always a string even if specified as an Enum in the state machine.""",
-    )  # type: typing.Optional[str]
+    )  # type: str | None
 
     # object_info = Property(doc="contains information about this object like the class name, script location etc.") # type: ThingInformation
 
@@ -72,9 +73,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self,
         *,
         id: str,
-        logger: typing.Optional[logging.Logger] = None,
-        serializer: typing.Optional[BaseSerializer | JSONSerializer] = None,
-        **kwargs: typing.Dict[str, typing.Any],
+        logger: logging.Logger | None = None,
+        serializer: BaseSerializer | JSONSerializer | None = None,
+        **kwargs: dict[str, Any],
     ) -> None:
         """
         Parameters
@@ -90,7 +91,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         serializer: BaseSerializer | JSONSerializer, optional
             Default serializer to be used for serializing and deserializing data.
             If not supplied, a `msgspec` based JSON Serializer is used.
-        **kwargs: typing.Dict[str, Any]
+        **kwargs: dict[str, Any]
             - `remote_accessible_logger`: `bool`, Default `False`.
                 if `True`, the log records can be streamed by a remote client. `remote_accessible_logger` can also be set as a
                 class attribute.
@@ -142,11 +143,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from .zmq.rpc_server import RPCServer  # noqa: F401
 
         # Type definitions
-        self.rpc_server = None  # type: typing.Optional[RPCServer]
-        self.db_engine: typing.Optional[ThingDB]
-        self._owners = None if not hasattr(self, "_owners") else self._owners  # type: typing.Optional[typing.List[Thing]]
-        self._remote_access_loghandler: typing.Optional[RemoteAccessHandler]
-        self._internal_fixed_attributes: typing.List[str]
+        self.rpc_server = None  # type: RPCServer | None
+        self.db_engine: ThingDB | None
+        self._owners = None if not hasattr(self, "_owners") else self._owners  # type: list[Thing] | None
+        self._remote_access_loghandler: RemoteAccessHandler | None
+        self._internal_fixed_attributes: list[str]
         self._qualified_id: str
         self._state_machine_state: str
         # database operations
@@ -154,7 +155,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # object is ready
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with id {self.id}")
 
-    def __setattr__(self, __name: str, __value: typing.Any) -> None:
+    def __setattr__(self, __name: str, __value: Any) -> None:
         if __name == "_internal_fixed_attributes" or __name in self._internal_fixed_attributes:
             # order of 'or' operation for above 'if' matters
             if not hasattr(self, __name) or getattr(self, __name, None) is None:
@@ -169,7 +170,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             super().__setattr__(__name, __value)
 
     @property
-    def sub_things(self) -> typing.Dict[str, "Thing"]:
+    def sub_things(self) -> dict[str, "Thing"]:
         """other `Thing`s' that are composed within this `Thing`."""
         things = dict()
         for name, subthing in inspect._getmembers(
@@ -220,7 +221,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self,
         access_points: list[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS | str | list[str] = ZMQ_TRANSPORTS.IPC,
         forked: bool = False,  # used by decorator
-        **kwargs: typing.Dict[str, typing.Any],
+        **kwargs: dict[str, Any],
     ) -> None:
         """
         Quick-start to serve `Thing` over ZMQ. This method is fully blocking.
@@ -267,12 +268,12 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         port: int = 8080,
         address: str = "0.0.0.0",
         # host: str = None,
-        allowed_clients: str | typing.Iterable[str] | None = None,
+        allowed_clients: str | list[str] | None = None,
         ssl_context: ssl.SSLContext | None = None,
         # protocol_version : int = 1,
         # network_interface : str = 'Ethernet',
         forked: bool = False,  # used by forkable decorator
-        **kwargs: typing.Dict[str, typing.Any],
+        **kwargs: dict[str, Any],
     ) -> None:
         """
         Quick-start to serve `Thing` over HTTP. This method is fully blocking.
@@ -285,13 +286,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             A convenience option to set IP address apart from 0.0.0.0 (i.e. bind to all interfaces, which is default)
         ssl_context: ssl.SSLContext | None
             provide custom certificates with an SSL context for encrypted communication
-        allowed_clients: typing.Iterable[str] | str | None
+        allowed_clients: str | list[str] | None
             serves request and sets CORS only from these clients, other clients are rejected with 403. Uses remote IP
             header value to achieve this. Unlike CORS, the server resource is not even executed if the client is not an allowed client.
             Note that the remote IP in a HTTP request is believable only from a trusted HTTP client, not a modified one.
         forked: bool, Default `False`
             if `True`, the server is started in a separate thread and this method returns immediately
-        **kwargs: typing.Dict[str, typing.Any]
+        **kwargs: dict[str, Any]
             additional keyword arguments:
 
             - `property_handler`: `BaseHandler` | `PropertyHandler`,
@@ -318,14 +319,14 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     @forkable  # noqa: F405
     def run(
         self,
-        **kwargs: typing.Dict[str, typing.Any],
+        **kwargs: dict[str, Any],
     ) -> None:
         """
         Expose the object with the given servers. This method is blocking until `exit()` is called.
 
         Parameters
         ----------
-        kwargs: typing.Dict[str, Any]
+        kwargs: dict[str, Any]
             keyword arguments
 
             - `access_points`: dict[str, dict | int | str | list[str]], optional
@@ -339,7 +340,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from ..server.server import BaseProtocolServer  # noqa: F401
 
         access_points = kwargs.get("access_points", None)  # type: dict[str, dict | int | str | list[str]]
-        servers = kwargs.get("servers", [])  # type: typing.Optional[typing.List[BaseProtocolServer]]
+        servers = kwargs.get("servers", [])  # type: list[BaseProtocolServer] | None
 
         if access_points is None and len(servers) == 0:
             raise ValueError("At least one of access_points or servers must be provided.")

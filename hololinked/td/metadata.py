@@ -1,4 +1,4 @@
-import typing
+from typing import Optional
 
 from pydantic import Field
 
@@ -7,9 +7,9 @@ from .base import Schema
 
 class Link(Schema):
     href: str
-    anchor: typing.Optional[str]
-    rel: typing.Optional[str]
-    type: typing.Optional[str] = Field(default="application/json")
+    anchor: Optional[str]
+    rel: Optional[str]
+    type: Optional[str] = Field(default="application/json")
 
 
 class VersionInfo(Schema):

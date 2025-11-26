@@ -28,8 +28,9 @@ import json
 import logging
 import os
 import tempfile
-import typing
 import warnings
+
+from typing import Any  # noqa: F401
 
 import zmq.asyncio
 
@@ -146,7 +147,7 @@ class Configuration:
             warnings.warn("no environment file found although asked to load from one", UserWarning)
             return
         with open(file, "r") as file:
-            config = json.load(file)  # type: typing.Dict
+            config = json.load(file)  # type: dict[str, Any]
         for item, value in config.items():
             setattr(self, item, value)
 
@@ -181,8 +182,8 @@ class Configuration:
 
     def set_default_server_execution_context(
         self,
-        invokation_timeout: typing.Optional[int] = None,
-        execution_timeout: typing.Optional[int] = None,
+        invokation_timeout: int | None = None,
+        execution_timeout: int | None = None,
         oneway: bool = False,
     ) -> None:
         """Sets the default server execution context for the application"""

@@ -12,6 +12,7 @@ from collections import OrderedDict
 from dataclasses import asdict
 from functools import wraps
 from inspect import Parameter, signature
+from typing import Any, Callable, Coroutine, Sequence, Type
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
 
@@ -59,7 +60,7 @@ def uuid_hex() -> str:
     return uuid4().hex[:8]
 
 
-def format_exception_as_json(exc: Exception) -> typing.Dict[str, typing.Any]:
+def format_exception_as_json(exc: Exception) -> dict[str, Any]:
     """
     return exception as a JSON serializable dictionary
     """
@@ -123,10 +124,8 @@ def get_default_logger(
     return logger
 
 
-def get_current_async_loop():
-    """
-    get or automatically create an asnyc loop for the current thread.
-    """
+def get_current_async_loop() -> asyncio.AbstractEventLoop:
+    """get or automatically create an asnyc loop for the current thread"""
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -136,15 +135,9 @@ def get_current_async_loop():
     return loop
 
 
-def run_coro_sync(coro: typing.Coroutine):
-    """
-    run coroutine synchronously
-    """
-    try:
-        eventloop = asyncio.get_event_loop()
-    except RuntimeError:
-        eventloop = asyncio.new_event_loop()
-        asyncio.set_event_loop(eventloop)
+def run_coro_sync(coro: Coroutine) -> Any:
+    """try to run coroutine synchronously, raises runtime error if event loop is already running"""
+    eventloop = get_current_async_loop()
     if eventloop.is_running():
         raise RuntimeError(
             f"asyncio event loop is already running, cannot setup coroutine {coro.__name__} to run sync, please await it."
@@ -154,7 +147,7 @@ def run_coro_sync(coro: typing.Coroutine):
         return eventloop.run_until_complete(coro)
 
 
-def run_callable_somehow(method: typing.Union[typing.Callable, typing.Coroutine]) -> typing.Any:
+def run_callable_somehow(method: Callable | Coroutine) -> Any:
     """
     run method if synchronous, or when async, either schedule a coroutine or run it until its complete
     """
@@ -177,14 +170,14 @@ def run_callable_somehow(method: typing.Union[typing.Callable, typing.Coroutine]
         return eventloop.run_until_complete(coro)
 
 
-def complete_pending_tasks_in_current_loop():
+def complete_pending_tasks_in_current_loop() -> None:
     """
     Complete all pending tasks in the current asyncio event loop.
     """
     get_current_async_loop().run_until_complete(asyncio.gather(*asyncio.all_tasks(get_current_async_loop())))
 
 
-async def complete_pending_tasks_in_current_loop_async():
+async def complete_pending_tasks_in_current_loop_async() -> None:
     """
     Complete all pending tasks in the current asyncio event loop.
     """
@@ -211,7 +204,7 @@ def print_pending_tasks_in_current_loop():
         print(f"Task: {task}, Status: {task._state}")
 
 
-def set_global_event_loop_policy():
+def set_global_event_loop_policy() -> None:
     if sys.platform.lower().startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -227,7 +220,7 @@ def set_global_event_loop_policy():
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
-def get_signature(callable: typing.Callable) -> typing.Tuple[typing.List[str], typing.List[type]]:
+def get_signature(callable: Callable) -> tuple[list[str], list[type]]:
     """
     Retrieve the names and types of arguments based on annotations for the given callable.
 
@@ -254,7 +247,7 @@ def get_signature(callable: typing.Callable) -> typing.Tuple[typing.List[str], t
     return arg_names, arg_types
 
 
-def getattr_without_descriptor_read(instance, key):
+def getattr_without_descriptor_read(instance: Any, key: str) -> Any:
     """
     supply to inspect._get_members (not inspect.get_members) to avoid calling
     __get__ on hardware attributes
@@ -275,7 +268,7 @@ def getattr_without_descriptor_read(instance, key):
     return getattr(instance, key, None)  # we can deal with None where we use this getter, so dont raise AttributeError
 
 
-def isclassmethod(method) -> bool:
+def isclassmethod(method: Callable) -> bool:
     """
     Returns `True` if the method is a classmethod, `False` otherwise.
     https://stackoverflow.com/questions/19227724/check-if-a-function-uses-classmethod
@@ -295,7 +288,7 @@ def isclassmethod(method) -> bool:
     return False
 
 
-def has_async_def(method) -> bool:
+def has_async_def(method: Callable) -> bool:
     """
     Checks if async def is found in method signature. Especially useful for class methods.
     https://github.com/python/cpython/issues/100224#issuecomment-2000895467
@@ -320,15 +313,15 @@ def has_async_def(method) -> bool:
     return False
 
 
-def issubklass(obj, cls) -> bool:
+def issubklass(obj: Any, cls: Any) -> bool:
     """
     Safely check if `obj` is a subclass of `cls`.
 
     Parameters
     ----------
-    obj: typing.Any
+    obj: Any
         The object to check if it's a subclass.
-    cls: typing.Any
+    cls: Any
         The class (or tuple of classes) to compare against.
 
     Returns
@@ -349,7 +342,7 @@ def issubklass(obj, cls) -> bool:
         return False
 
 
-def get_a_filename_from_instance(thing: type, extension: str = "json") -> str:
+def get_a_filename_from_instance(thing: Any, extension: str = "json") -> str:
     class_name = thing.__class__.__name__
 
     # Remove invalid characters from the instance name
@@ -375,7 +368,7 @@ class SerializableDataclass:
     def __getstate__(self):
         return self.json()
 
-    def __setstate__(self, values: typing.Dict):
+    def __setstate__(self, values: dict):
         for key, value in values.items():
             setattr(self, key, value)
 
@@ -397,7 +390,7 @@ class MappableSingleton(Singleton):
     def __setitem__(self, key, value) -> None:
         setattr(self, key, value)
 
-    def __getitem__(self, key) -> typing.Any:
+    def __getitem__(self, key) -> Any:
         return getattr(self, key)
 
     def __contains__(self, key) -> bool:
@@ -405,11 +398,11 @@ class MappableSingleton(Singleton):
 
 
 def get_input_model_from_signature(
-    func: typing.Callable,
+    func: Callable,
     remove_first_positional_arg: bool = False,
-    ignore: typing.Sequence[str] | None = None,
+    ignore: Sequence[str] | None = None,
     model_for_empty_annotations: bool = False,
-) -> type[BaseModel] | None:
+) -> Type[BaseModel] | None:
     """
     Create a pydantic model for a function's signature.
 
@@ -447,7 +440,7 @@ def get_input_model_from_signature(
 
     # fields is a dictionary of tuples of (type, default) that defines the input model
     type_hints = typing.get_type_hints(func, include_extras=True)
-    fields = {}  # type: typing.Dict[str, typing.Tuple[type, typing.Any]]
+    fields = {}  # type: dict[str, tuple[type, Any]]
     for name, p in parameters.items():
         if ignore and name in ignore:
             continue
@@ -483,7 +476,7 @@ def get_input_model_from_signature(
     return model
 
 
-def get_return_type_from_signature(func: typing.Callable) -> RootModel | None:
+def get_return_type_from_signature(func: Callable) -> RootModel | None:
     """Determine the return type of a function."""
     sig = inspect.signature(func)
     if sig.return_annotation == inspect.Signature.empty:
@@ -506,9 +499,9 @@ def get_return_type_from_signature(func: typing.Callable) -> RootModel | None:
 
 
 def pydantic_validate_args_kwargs(
-    model: typing.Type[BaseModel],
-    args: typing.Tuple = tuple(),
-    kwargs: typing.Dict = dict(),
+    model: Type[BaseModel],
+    args: tuple = tuple(),
+    kwargs: dict = dict(),
 ) -> None:
     """
     Validate and separate *args and **kwargs according to the fields of the given pydantic model.
@@ -573,9 +566,7 @@ def pydantic_validate_args_kwargs(
     model.model_validate(data)
 
 
-def json_schema_merge_args_to_kwargs(
-    schema: dict, args: typing.Tuple = tuple(), kwargs: typing.Dict = dict()
-) -> typing.Dict[str, typing.Any]:
+def json_schema_merge_args_to_kwargs(schema: dict, args: tuple = tuple(), kwargs: dict = dict()) -> dict[str, Any]:
     """
     Merge positional arguments into keyword arguments according to the schema.
 
@@ -622,7 +613,7 @@ def json_schema_merge_args_to_kwargs(
     return data
 
 
-def get_all_sub_things_recusively(thing) -> typing.List:
+def get_all_sub_things_recusively(thing) -> list:
     sub_things = [thing]
     for sub_thing in thing.sub_things.values():
         sub_things.extend(get_all_sub_things_recusively(sub_thing))

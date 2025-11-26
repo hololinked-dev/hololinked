@@ -6,7 +6,6 @@ import asyncio
 import contextlib
 import logging
 import threading
-import typing
 
 from copy import deepcopy
 from typing import Any, AsyncIterator, Callable, Iterator
@@ -122,7 +121,7 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        owner_inst: typing.Any = None,
+        owner_inst: Any = None,
         logger: logging.Logger = None,
     ) -> None:
         ConsumedThingAction.__init__(self=self, resource=resource, owner_inst=owner_inst, logger=logger)
@@ -207,7 +206,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        owner_inst: typing.Any = None,
+        owner_inst: Any = None,
         logger: logging.Logger = None,
     ) -> None:
         ConsumedThingProperty.__init__(self=self, resource=resource, owner_inst=owner_inst, logger=logger)
@@ -330,7 +329,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
         async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        owner_inst: typing.Any = None,
+        owner_inst: Any = None,
         logger: logging.Logger = None,
     ) -> None:
         ConsumedThingEvent.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)

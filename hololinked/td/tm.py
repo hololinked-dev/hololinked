@@ -1,4 +1,4 @@
-import typing
+from typing import Any, Optional
 
 from pydantic import ConfigDict, Field
 
@@ -22,28 +22,28 @@ class ThingModel(Schema):
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/ThingModel.pdf) <br>
     """
 
-    context: typing.List[str | typing.Dict[str, str]] = Field(["https://www.w3.org/2022/wot/td/v1.1"], alias="@context")
-    type: typing.Optional[typing.Union[str, typing.List[str]]] = None
+    context: list[str | dict[str, str]] = Field(["https://www.w3.org/2022/wot/td/v1.1"], alias="@context")
+    type: Optional[str | list[str]] = None
     id: str = None
     title: str = None
-    description: typing.Optional[str] = None
-    version: typing.Optional[VersionInfo] = None
-    created: typing.Optional[str] = None
-    modified: typing.Optional[str] = None
-    support: typing.Optional[str] = None
-    base: typing.Optional[str] = None
-    properties: typing.Dict[str, DataSchema] = Field(default_factory=dict)
-    actions: typing.Dict[str, ActionAffordance] = Field(default_factory=dict)
-    events: typing.Dict[str, EventAffordance] = Field(default_factory=dict)
+    description: Optional[str] = None
+    version: Optional[VersionInfo] = None
+    created: Optional[str] = None
+    modified: Optional[str] = None
+    support: Optional[str] = None
+    base: Optional[str] = None
+    properties: dict[str, DataSchema] = Field(default_factory=dict)
+    actions: dict[str, ActionAffordance] = Field(default_factory=dict)
+    events: dict[str, EventAffordance] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="allow")
 
     def __init__(
         self,
         instance: "Thing",
-        allow_loose_schema: typing.Optional[bool] = False,
+        allow_loose_schema: Optional[bool] = False,
         ignore_errors: bool = False,
-        skip_names: typing.Optional[list[str]] = [],
+        skip_names: Optional[list[str]] = [],
     ) -> None:
         super().__init__()
         self.instance = instance
@@ -69,8 +69,8 @@ class ThingModel(Schema):
         raise NotImplementedError("This will be implemented in a future release for an API first approach")
 
     # not the best code and logic, but works for now
-    skip_properties: typing.List[str] = ["expose", "thing_description", "GUI", "object_info"]
-    skip_actions: typing.List[str] = [
+    skip_properties: list[str] = ["expose", "thing_description", "GUI", "object_info"]
+    skip_actions: list[str] = [
         Thing._add_property.name,
         Thing._get_properties.name,
         Thing._get_properties_in_db.name,
@@ -78,9 +78,9 @@ class ThingModel(Schema):
         "get_postman_collection",
         "get_our_thing_model",
     ]
-    skip_events: typing.List[str] = []
+    skip_events: list[str] = []
 
-    def add_interaction_affordances(self):
+    def add_interaction_affordances(self) -> None:
         """add interaction affordances to thing model"""
         for affordance, items, affordance_cls, skip_list in [
             ["properties", self.instance.properties.remote_objects.items(), PropertyAffordance, self.skip_properties],
@@ -107,7 +107,7 @@ class ThingModel(Schema):
                         raise ex from None
                     self.instance.logger.error(f"Error while generating schema for {name} - {ex}")
 
-    def model_dump(self, **kwargs) -> dict[str, typing.Any]:
+    def model_dump(self, **kwargs) -> dict[str, Any]:
         """Return the JSON representation of the schema"""
 
         def dump_value(value):

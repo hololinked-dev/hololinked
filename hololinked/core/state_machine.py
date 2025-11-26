@@ -1,7 +1,6 @@
-import typing
-
 from enum import Enum, EnumMeta, StrEnum
 from types import FunctionType, MethodType
+from typing import Callable
 
 from ..param import edit_constant
 from .actions import Action
@@ -23,11 +22,11 @@ class StateMachine:
 
     initial_state = ClassSelector(
         default=None, allow_None=True, constant=True, class_=(Enum, str), doc="initial state of the machine"
-    )  # type: typing.Union[Enum, str]
+    )  # type: Enum | str
 
     states = ClassSelector(
         default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list), doc="list/enum of allowed states"
-    )  # type: typing.Union[EnumMeta, tuple, list]
+    )  # type: EnumMeta | tuple | list
 
     on_enter = TypedDict(
         default=None,
@@ -35,7 +34,7 @@ class StateMachine:
         key_type=str,
         doc="""callbacks to execute when a certain state is entered; 
                         specfied as map with state as keys and callbacks as list""",
-    )  # type: typing.Dict[str, typing.List[typing.Callable]]
+    )  # type: dict[str, list[Callable]]
 
     on_exit = TypedDict(
         default=None,
@@ -43,7 +42,7 @@ class StateMachine:
         key_type=str,
         doc="""callbacks to execute when certain state is exited; 
                         specfied as map with state as keys and callbacks as list""",
-    )  # type: typing.Dict[str, typing.List[typing.Callable]]
+    )  # type: dict[str, list[Callable]]
 
     machine = TypedDict(
         default=None,
@@ -51,7 +50,7 @@ class StateMachine:
         item_type=(list, tuple),
         key_type=str,  # i.e. its like JSON
         doc="the machine specification with state as key and objects as list",
-    )  # type: typing.Dict[str, typing.List[typing.Callable, Property]]
+    )  # type: dict[str, list[Callable | Property]]
 
     push_state_change_event = Boolean(
         default=True, doc="if `True`, when the state changes, an event is pushed with the new state"
@@ -66,13 +65,13 @@ class StateMachine:
 
     def __init__(
         self,
-        states: EnumMeta | typing.List[str] | typing.Tuple[str],
+        states: EnumMeta | list[str] | tuple[str],
         *,
         initial_state: StrEnum | str,
         push_state_change_event: bool = True,
-        on_enter: typing.Dict[str, typing.List[typing.Callable] | typing.Callable] = None,
-        on_exit: typing.Dict[str, typing.List[typing.Callable] | typing.Callable] = None,
-        **machine: typing.Dict[str, typing.Callable | Property],
+        on_enter: dict[str, list[Callable] | Callable] = None,
+        on_exit: dict[str, list[Callable] | Callable] = None,
+        **machine: dict[str, Callable | Property],
     ) -> None:
         """
         Parameters
@@ -199,14 +198,14 @@ class StateMachine:
             "Cannot set state machine directly. It is a class level attribute and can be defined only once."
         )
 
-    def __contains__(self, state: typing.Union[str, StrEnum]):
+    def __contains__(self, state: str | StrEnum):
         if isinstance(self.states, EnumMeta) and state in self.states.__members__:
             return True
         elif isinstance(self.states, tuple) and state in self.states:
             return True
         return False
 
-    def _get_machine_compliant_state(self, state) -> typing.Union[StrEnum, str]:
+    def _get_machine_compliant_state(self, state) -> StrEnum | str:
         """
         In case of not using StrEnum or iterable of str,
         this maps the enum of state to the state name.
@@ -219,7 +218,7 @@ class StateMachine:
             f"cannot comply state to a string: {state} which is of type {type(state)}. owner - {self.owner}."
         )
 
-    def contains_object(self, object: typing.Union[Property, typing.Callable]) -> bool:
+    def contains_object(self, object: Property | Callable) -> bool:
         """
         Check if specified object is found in any of the state machine states.
         Supply unbound method for checking methods, as state machine is specified at class level
@@ -253,7 +252,7 @@ class BoundFSM:
         self.owner = owner
         self.logger = state_machine.logger
 
-    def get_state(self) -> typing.Union[str, StrEnum, None]:
+    def get_state(self) -> str | StrEnum | None:
         """
         return the current state, one can also access it using the property `current state`.
 
@@ -267,9 +266,7 @@ class BoundFSM:
         except AttributeError:
             return self.initial_state
 
-    def set_state(
-        self, value: typing.Union[str, StrEnum, Enum], push_event: bool = True, skip_callbacks: bool = False
-    ) -> None:
+    def set_state(self, value: str | StrEnum | Enum, push_event: bool = True, skip_callbacks: bool = False) -> None:
         """
         set state of state machine. Also triggers state change callbacks if `skip_callbacks=False` and pushes a state
         change event when `push_event=True`. One can also set state using the '=' operator of the `current_state` property,
@@ -305,7 +302,7 @@ class BoundFSM:
 
     current_state = property(get_state, set_state, None, doc="""read and write current state of the state machine""")
 
-    def contains_object(self, object: typing.Union[Property, typing.Callable]) -> bool:
+    def contains_object(self, object: Property | Callable) -> bool:
         """
         Check if specified object is found in any of the state machine states.
         Supply unbound method for checking methods, as state machine is specified at class level
@@ -334,7 +331,7 @@ class BoundFSM:
             and self.owner.id == other.owner.id
         )
 
-    def __contains__(self, state: typing.Union[str, StrEnum]) -> bool:
+    def __contains__(self, state: str | StrEnum) -> bool:
         return state in self.descriptor
 
     @property

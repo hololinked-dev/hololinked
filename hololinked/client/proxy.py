@@ -1,5 +1,6 @@
 import base64
-import typing
+
+from typing import Any, Callable
 
 import structlog
 
@@ -56,10 +57,10 @@ class ObjectProxy:
         """
         self.id = id
         self._allow_foreign_attributes = kwargs.get("allow_foreign_attributes", False)
-        self._noblock_messages = dict()  # type: typing.Dict[str, ConsumedThingAction | ConsumedThingProperty]
+        self._noblock_messages = dict()  # type: dict[str, ConsumedThingAction | ConsumedThingProperty]
         self._schema_validator = kwargs.get("schema_validator", None)
         self.logger = kwargs.pop("logger", structlog.get_logger())
-        self.td = kwargs.get("td", dict())  # type: typing.Dict[str, typing.Any]
+        self.td = kwargs.get("td", dict())  # type: dict[str, Any]
 
         self._auth_header = None
         username = kwargs.get("username")
@@ -68,13 +69,13 @@ class ObjectProxy:
             token = f"{username}:{password}".encode("utf-8")
             self._auth_header = {"Authorization": f"Basic {base64.b64encode(token).decode('utf-8')}"}
 
-    def __getattribute__(self, __name: str) -> typing.Any:
+    def __getattribute__(self, __name: str) -> Any:
         obj = super().__getattribute__(__name)
         if isinstance(obj, ConsumedThingProperty):
             return obj.get()
         return obj
 
-    def __setattr__(self, __name: str, __value: typing.Any) -> None:
+    def __setattr__(self, __name: str, __value: Any) -> None:
         if (
             __name in ObjectProxy._own_attrs
             or (__name not in self.__dict__ and isinstance(__value, ObjectProxy.__allowed_attribute_types__))
@@ -120,7 +121,7 @@ class ObjectProxy:
     #     with the given name is supported in this Protocol Binding client."""
     #     raise NotImplementedError()
 
-    def invoke_action(self, name: str, *args, **kwargs) -> typing.Any:
+    def invoke_action(self, name: str, *args, **kwargs) -> Any:
         """
         invoke an action specified by name on the server with positional/keyword arguments
 
@@ -161,7 +162,7 @@ class ObjectProxy:
         else:
             return action(*args, **kwargs)
 
-    async def async_invoke_action(self, name: str, *args, **kwargs) -> typing.Any:
+    async def async_invoke_action(self, name: str, *args, **kwargs) -> Any:
         """
         async(io) call an action specified by name on the server with positional/keyword
         arguments. `noblock` and `oneway` are not supported for async calls.
@@ -192,7 +193,7 @@ class ObjectProxy:
             raise AttributeError(f"No remote action named {name}")
         return await action.async_call(*args, **kwargs)
 
-    def read_property(self, name: str, noblock: bool = False) -> typing.Any:
+    def read_property(self, name: str, noblock: bool = False) -> Any:
         """
         read property specified by name on server.
 
@@ -218,7 +219,7 @@ class ObjectProxy:
         else:
             return prop.get()
 
-    def write_property(self, name: str, value: typing.Any, oneway: bool = False, noblock: bool = False) -> None:
+    def write_property(self, name: str, value: Any, oneway: bool = False, noblock: bool = False) -> None:
         """
         write property specified by name on server with given value.
 
@@ -272,7 +273,7 @@ class ObjectProxy:
             raise AttributeError(f"No property named {name}")
         return await prop.async_get()
 
-    async def async_write_property(self, name: str, value: typing.Any) -> None:
+    async def async_write_property(self, name: str, value: Any) -> None:
         """
         async(io) write property specified by name on server with specified value.
         `noblock` and `oneway` are not supported for async calls.
@@ -296,7 +297,7 @@ class ObjectProxy:
             raise AttributeError(f"No property named {name}")
         await prop.async_set(value)
 
-    def read_multiple_properties(self, names: typing.List[str], noblock: bool = False) -> typing.Any:
+    def read_multiple_properties(self, names: list[str], noblock: bool = False) -> Any:
         """
         read properties specified by list of names.
 
@@ -331,7 +332,7 @@ class ObjectProxy:
         self,
         oneway: bool = False,
         noblock: bool = False,
-        **properties: typing.Dict[str, typing.Any],
+        **properties: dict[str, Any],
     ) -> None:
         """
         write properties whose name is specified by keys of a dictionary
@@ -365,7 +366,7 @@ class ObjectProxy:
         else:
             return method(**properties)
 
-    async def async_read_multiple_properties(self, names: typing.List[str]) -> None:
+    async def async_read_multiple_properties(self, names: list[str]) -> None:
         """
         async(io) read properties specified by list of names. `noblock` reads are not supported for asyncio.
 
@@ -385,7 +386,7 @@ class ObjectProxy:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         return await method.async_call(names=names)
 
-    async def async_write_multiple_properties(self, **properties: dict[str, typing.Any]) -> None:
+    async def async_write_multiple_properties(self, **properties: dict[str, Any]) -> None:
         """
         async(io) write properties whose name is specified by keys of a dictionary
 
@@ -411,7 +412,7 @@ class ObjectProxy:
     def observe_property(
         self,
         name: str,
-        callbacks: typing.Union[typing.List[typing.Callable], typing.Callable],
+        callbacks: list[Callable] | Callable,
         asynch: bool = False,
         concurrent: bool = False,
         deserialize: bool = True,
@@ -471,7 +472,7 @@ class ObjectProxy:
     def subscribe_event(
         self,
         name: str,
-        callbacks: typing.Union[typing.List[typing.Callable], typing.Callable],
+        callbacks: list[Callable] | Callable,
         asynch: bool = False,
         concurrent: bool = False,
         deserialize: bool = True,
@@ -534,7 +535,7 @@ class ObjectProxy:
             raise AttributeError(f"No event named {name}")
         event.unsubscribe()
 
-    def read_reply(self, message_id: str, timeout: typing.Optional[float] = 5.0) -> typing.Any:
+    def read_reply(self, message_id: str, timeout: float | None = 5.0) -> Any:
         """
         read reply of no block calls of an action or a property read/write.
 
@@ -551,17 +552,17 @@ class ObjectProxy:
         return obj.read_reply(message_id=message_id, timeout=timeout)
 
     @property
-    def properties(self) -> typing.List[ConsumedThingProperty]:
+    def properties(self) -> list[ConsumedThingProperty]:
         """list of properties that were consumed from the Thing Description"""
         return [prop for prop in self.__dict__.values() if isinstance(prop, ConsumedThingProperty)]
 
     @property
-    def actions(self) -> typing.List[ConsumedThingAction]:
+    def actions(self) -> list[ConsumedThingAction]:
         """list of actions that were consumed from the Thing Description"""
         return [action for action in self.__dict__.values() if isinstance(action, ConsumedThingAction)]
 
     @property
-    def events(self) -> typing.List[ConsumedThingEvent]:
+    def events(self) -> list[ConsumedThingEvent]:
         """list of events that were consumed from the Thing Description"""
         return [event for event in self.__dict__.values() if isinstance(event, ConsumedThingEvent)]
 
@@ -571,7 +572,7 @@ class ObjectProxy:
         return self.td.get("id", None)
 
     @property
-    def TD(self) -> typing.Dict[str, typing.Any]:
+    def TD(self) -> dict[str, Any]:
         """Thing Description of the consuimed thing"""
         return self.td
 

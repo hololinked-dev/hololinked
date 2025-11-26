@@ -122,7 +122,7 @@ class ClientFactory:
             ignore_errors=ignore_TD_errors,
             protocol=access_point.split("://")[0].upper() if access_point else "IPC",
             skip_names=skip_interaction_affordances,
-        )  # typing.Dict[str, typing.Any]
+        )  # dict[str, Any]
 
         # create ObjectProxy
         object_proxy = ObjectProxy(

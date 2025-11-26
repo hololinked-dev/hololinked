@@ -1,4 +1,4 @@
-import typing
+from typing import Any, overload
 
 import jsonschema
 
@@ -21,9 +21,9 @@ class Event:
 
     def __init__(
         self,
-        doc: typing.Optional[str] = None,
-        schema: typing.Optional[JSON] = None,
-        label: typing.Optional[str] = None,
+        doc: str | None = None,
+        schema: JSON | None = None,
+        label: str | None = None,
     ) -> None:
         """
         Parameters
@@ -49,7 +49,7 @@ class Event:
         self.name = name
         self.owner = owner
 
-    @typing.overload
+    @overload
     def __get__(self, obj, objtype) -> "EventDispatcher": ...
 
     def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass = None):
@@ -98,7 +98,11 @@ class EventDispatcher:
     __slots__ = ["_unique_identifier", "_publisher", "_owner_inst", "_descriptor"]
 
     def __init__(
-        self, unique_identifier: str, publisher: "EventPublisher", owner_inst: ParameterizedMetaclass, descriptor: Event
+        self,
+        unique_identifier: str,
+        publisher: "EventPublisher",
+        owner_inst: ParameterizedMetaclass,
+        descriptor: Event,
     ) -> None:
         self._unique_identifier = unique_identifier
         self._owner_inst = owner_inst
@@ -119,7 +123,7 @@ class EventDispatcher:
         if self._publisher is not None:
             self._publisher.register(self)
 
-    def push(self, data: typing.Any) -> None:
+    def push(self, data: Any) -> None:
         """
         publish the event.
 
@@ -130,7 +134,7 @@ class EventDispatcher:
         """
         self.publisher.publish(self, data=data)
 
-    def receive_acknowledgement(self, timeout: typing.Union[float, int, None]) -> bool:
+    def receive_acknowledgement(self, timeout: float | int | None) -> bool:
         """
         Unimplemented.
 

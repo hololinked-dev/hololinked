@@ -3,10 +3,9 @@ The following is a list of all dataclasses used to store information on the expo
 resources on the network. These classese are generally not for consumption by the package-end-user.
 """
 
-import typing
-
 from enum import Enum
 from types import FunctionType, MethodType
+from typing import Any
 
 from pydantic import BaseModel, RootModel
 
@@ -45,7 +44,7 @@ class RemoteResourceInfoValidator:
         accept_list=True,
         accept_item=True,
         doc="State machine state at which a callable will be executed or attribute/property can be written.",
-    )  # type: typing.Tuple[typing.Union[Enum, str]]
+    )  # type: tuple[Enum | str]
 
     obj = ClassSelector(
         default=None,
@@ -156,7 +155,7 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
         value = self.action_payload_schema_validator(value)
         setattr(self, "_return_value_schema", value)
 
-    def action_payload_schema_validator(self, value: typing.Any) -> typing.Any:
+    def action_payload_schema_validator(self, value: Any) -> Any:
         if value is None or isinstance(value, dict) or issubklass(value, (BaseModel, RootModel)):
             return value
         raise TypeError("Schema must be None, a dict, or a subclass of BaseModel or RootModel")

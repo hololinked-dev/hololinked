@@ -1,5 +1,4 @@
-import typing
-
+from typing import Any, Optional
 from uuid import uuid4
 
 import msgspec
@@ -84,13 +83,13 @@ class RequestHeader(msgspec.Struct):
     thingExecutionContext: ThingExecutionContext = msgspec.field(
         default_factory=lambda: default_thing_execution_context
     )
-    thingID: typing.Optional[str] = ""
-    objekt: typing.Optional[str] = ""
-    operation: typing.Optional[str] = ""
-    payloadContentType: typing.Optional[str] = "application/json"
-    preencodedPayloadContentType: typing.Optional[str] = "text/plain"
+    thingID: Optional[str] = ""
+    objekt: Optional[str] = ""
+    operation: Optional[str] = ""
+    payloadContentType: Optional[str] = "application/json"
+    preencodedPayloadContentType: Optional[str] = "text/plain"
 
-    def __getitem__(self, key: str) -> typing.Any:
+    def __getitem__(self, key: str) -> Any:
         try:
             return getattr(self, key)
         except AttributeError:
@@ -107,10 +106,10 @@ class ResponseHeader(msgspec.Struct):
     messageID: str
     receiverID: str
     senderID: str
-    payloadContentType: typing.Optional[str] = "application/json"
-    preencodedPayloadContentType: typing.Optional[str] = ""
+    payloadContentType: Optional[str] = "application/json"
+    preencodedPayloadContentType: Optional[str] = ""
 
-    def __getitem__(self, key: str) -> typing.Any:
+    def __getitem__(self, key: str) -> Any:
         try:
             return getattr(self, key)
         except AttributeError:
@@ -127,10 +126,10 @@ class EventHeader(msgspec.Struct):
     messageID: str
     senderID: str
     eventID: str
-    payloadContentType: typing.Optional[str] = "application/json"
-    preencodedPayloadContentType: typing.Optional[str] = ""
+    payloadContentType: Optional[str] = "application/json"
+    preencodedPayloadContentType: Optional[str] = ""
 
-    def __getitem__(self, key: str) -> typing.Any:
+    def __getitem__(self, key: str) -> Any:
         try:
             return getattr(self, key)
         except AttributeError:
@@ -155,14 +154,14 @@ class RequestMessage:
 
     length = Integer(default=5, readonly=True, class_member=True, doc="length of the message")  # type: int
 
-    def __init__(self, msg: typing.List[bytes]) -> None:
+    def __init__(self, msg: list[bytes]) -> None:
         self._bytes = msg
         self._header = None  # deserialized header
-        self._body = None  # type: typing.Optional[typing.Tuple[SerializableData, PreserializedData]]
+        self._body = None  # type: Optional[tuple[SerializableData, PreserializedData]]
         self._sender_id = None
 
     @property
-    def byte_array(self) -> typing.List[bytes]:
+    def byte_array(self) -> list[bytes]:
         """
         message byte array, either after being composed or as received from the socket.
 
@@ -182,7 +181,7 @@ class RequestMessage:
         return self._header
 
     @property
-    def body(self) -> typing.Tuple[SerializableData, PreserializedData]:
+    def body(self) -> tuple[SerializableData, PreserializedData]:
         """body of the message"""
         if self._body is None:
             self.parse_body()
@@ -214,12 +213,12 @@ class RequestMessage:
         return self.header["messageType"]
 
     @property
-    def server_execution_context(self) -> typing.Dict[str, typing.Any]:
+    def server_execution_context(self) -> dict[str, Any]:
         """server execution context"""
         return self.header["serverExecutionContext"]
 
     @property
-    def thing_execution_context(self) -> typing.Dict[str, typing.Any]:
+    def thing_execution_context(self) -> dict[str, Any]:
         """thing execution context"""
         return self.header["thingExecutionContext"]
 
@@ -256,8 +255,8 @@ class RequestMessage:
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: typing.Dict[str, typing.Any] = default_server_execution_context,
-        thing_execution_context: typing.Dict[str, typing.Any] = default_thing_execution_context,
+        server_execution_context: dict[str, Any] = default_server_execution_context,
+        thing_execution_context: dict[str, Any] = default_thing_execution_context,
     ) -> "RequestMessage":
         """
         create a request message from the given arguments
@@ -375,14 +374,14 @@ class ResponseMessage:
 
     length = Integer(default=5, readonly=True, class_member=True, doc="length of the message")  # type: int
 
-    def __init__(self, msg: typing.List[bytes]):
+    def __init__(self, msg: list[bytes]):
         self._bytes = msg
         self._header = None
         self._body = None
         self._sender_id = None
 
     @property
-    def byte_array(self) -> typing.List[bytes]:
+    def byte_array(self) -> list[bytes]:
         """the message in bytes, either after being composed or as received from the socket.
 
         Message indices:
@@ -421,7 +420,7 @@ class ResponseMessage:
         return self._header
 
     @property
-    def body(self) -> typing.Tuple[SerializableData, PreserializedData]:
+    def body(self) -> tuple[SerializableData, PreserializedData]:
         """body of the message"""
         if self._body is None:
             self.parse_body()

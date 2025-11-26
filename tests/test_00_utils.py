@@ -309,7 +309,7 @@ def test_06_no_model_func_with_args():
 def test_07_model_func_with_annotated_args():
     model = get_input_model_from_signature(func_with_annotated_args)
     assert issubklass(model, BaseModel)
-    # assert model.model_fields["args"].annotation == typing.List[int]
+    # assert model.model_fields["args"].annotation == list[int]
     assert len(model.model_fields) == 1
     assert model.model_config["extra"] == "forbid"
 
