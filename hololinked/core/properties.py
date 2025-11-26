@@ -21,10 +21,6 @@ from ..param.parameters import (
     named_objs,
 )
 from .property import Property
-from ..constants import USE_OBJECT_NAME, HTTP_METHODS
-
-GET = HTTP_METHODS.GET
-PUT = HTTP_METHODS.PUT
 
 
 class String(Property):
