@@ -542,6 +542,8 @@ class ApplicationRouter:
         for action in actions:
             if action in self:
                 continue
+            elif action.name == "get_thing_model":
+                continue
             route = self.adapt_route(action.name)
             if action.thing_id is not None:
                 path = f"/{action.thing_id}{route}"
@@ -554,8 +556,15 @@ class ApplicationRouter:
                 path = f"/{event.thing_id}{route}"
             self.server.add_event(URL_path=path, event=event, handler=self.server.event_handler)
 
-        # thing description handler
+        # thing model handler
         get_thing_model_action = next((action for action in actions if action.name == "get_thing_model"), None)
+        self.server.add_action(
+            URL_path=f"/{thing_id}/resources/wot-tm" if thing_id else "/resources/wot-tm",
+            action=get_thing_model_action,
+            http_method=("GET",),
+        )
+
+        # thing description handler
         get_thing_description_action = deepcopy(get_thing_model_action)
         get_thing_description_action.override_defaults(name="get_thing_description")
         self.server.add_action(
