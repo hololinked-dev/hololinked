@@ -375,6 +375,7 @@ class SelectorSchema(DataSchema):
             )
         for obj in objects:
             if any(types["type"] == JSONSchema._replacements.get(type(obj), None) for types in self.oneOf):
+                # just avoid duplicates of same type in oneOf
                 continue
             if isinstance(property, ClassSelector):
                 if not JSONSchema.is_allowed_type(obj):

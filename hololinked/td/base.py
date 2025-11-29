@@ -43,7 +43,5 @@ class Schema(BaseModel):
         idx = doc.find(marker)
         if idx != -1:
             doc = doc[:idx]
-        doc = doc.replace("\n", " ")
-        doc = doc.replace("\t", " ")
-        doc = doc.lstrip().rstrip()
+        doc = doc.replace("\n", "").replace("\t", " ").lstrip().rstrip()
         return doc
