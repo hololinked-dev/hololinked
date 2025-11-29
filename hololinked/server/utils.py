@@ -1,5 +1,4 @@
 import logging
-import uuid
 
 from typing import Any, Optional
 
@@ -10,6 +9,7 @@ from ..constants import Operations
 from ..core import Thing
 from ..core.zmq import AsyncEventConsumer, AsyncZMQClient
 from ..td.interaction_affordance import EventAffordance
+from ..utils import uuid_hex
 
 
 async def consume_broker_queue(
@@ -84,7 +84,7 @@ async def consume_broker_queue(
 def consume_broker_pubsub(id: str = None, access_point: str = "INPROC") -> AsyncEventConsumer:
     """Consume all events from ZMQ (usually INPROC) pubsub"""
     return AsyncEventConsumer(
-        id=id or f"event-proxy-{uuid.uuid4().hex[:8]}",
+        id=id or f"event-proxy-{uuid_hex()}",
         event_unique_identifier="",
         access_point=access_point,
         context=global_config.zmq_context(),
@@ -97,7 +97,7 @@ def consume_broker_pubsub_per_event(resource: EventAffordance) -> AsyncEventCons
     else:
         form = resource.retrieve_form(Operations.observeproperty)
     return AsyncEventConsumer(
-        id=f"{resource.name}|EventTunnel|{uuid.uuid4().hex[:8]}",
+        id=f"{resource.name}|EventTunnel|{uuid_hex()}",
         event_unique_identifier=f"{resource.thing_id}/{resource.name}",
         access_point=form.href,
         context=global_config.zmq_context(),

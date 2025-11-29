@@ -42,9 +42,8 @@ class DataSchema(Schema):
     const: Optional[bool] = None
     default: Optional[Any] = None
     readOnly: Optional[bool] = None
-    writeOnly: Optional[bool] = (
-        None  # write only can be considered as actions with no return value, so not used in this repository
-    )
+    writeOnly: Optional[bool] = None
+    # write only can be considered as actions with no return value, so not used in this repository
     format: Optional[str] = None
     unit: Optional[str] = None
     type: Optional[str] = None

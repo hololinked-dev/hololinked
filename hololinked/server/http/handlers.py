@@ -1,5 +1,4 @@
 import copy
-import uuid
 
 from typing import Any, Optional
 
@@ -34,7 +33,7 @@ from ...td import (
     PropertyAffordance,
 )
 from ...td.forms import Form
-from ...utils import format_exception_as_json, get_current_async_loop
+from ...utils import format_exception_as_json, get_current_async_loop, uuid_hex
 
 
 try:
@@ -570,7 +569,7 @@ class EventHandler(BaseHandler):
             else:
                 form = self.resource.retrieve_form(Operations.observeproperty)
             event_consumer = AsyncEventConsumer(
-                id=f"{self.resource.name}|HTTPEventTunnel|{uuid.uuid4().hex[:8]}",
+                id=f"{self.resource.name}|HTTPEventTunnel|{uuid_hex()}",
                 event_unique_identifier=f"{self.resource.thing_id}/{self.resource.name}",
                 access_point=form.href,
                 context=global_config.zmq_context(),
@@ -598,7 +597,6 @@ class EventHandler(BaseHandler):
             except Exception as ex:
                 self.logger.error(f"error while pushing event - {str(ex)}")
                 self.write(self.data_header % Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
-        event_consumer.exit()
 
 
 class JPEGImageEventHandler(EventHandler):

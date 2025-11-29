@@ -9,6 +9,7 @@ from ..utils import (
     cancel_pending_tasks_in_current_loop,
     forkable,
     get_current_async_loop,
+    uuid_hex,
 )
 from .server import BaseProtocolServer
 
@@ -35,7 +36,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False) -> None:
         rpc_server = zmq_servers[0]
     else:
         rpc_server = RPCServer(
-            id=f"rpc-broker-{uuid.uuid4().hex[:8]}",
+            id=f"rpc-broker-{uuid_hex()}",
             things=things,
             context=global_config.zmq_context(),
         )

@@ -1,6 +1,5 @@
 import copy
 import ssl
-import uuid
 
 from typing import Any, Optional
 
@@ -14,7 +13,7 @@ from ..core.zmq.message import EventMessage  # noqa: F401
 from ..param.parameters import ClassSelector, Selector, String
 from ..serializers import Serializers
 from ..td.interaction_affordance import EventAffordance, PropertyAffordance
-from ..utils import get_current_async_loop
+from ..utils import get_current_async_loop, uuid_hex
 from .server import BaseProtocolServer
 from .utils import consume_broker_pubsub_per_event, consume_broker_queue
 
@@ -109,7 +108,7 @@ class MQTTPublisher(BaseProtocolServer):
             )
         for thing in self._broker_things:
             thing, td = await consume_broker_queue(
-                id=f"{self.hostname}:{self.port}|mqtt-publisher|{uuid.uuid4().hex[:8]}",
+                id=f"{self.hostname}:{self.port}|mqtt-publisher|{uuid_hex()}",
                 server_id=thing.server_id,
                 thing_id=thing.thing_id,
                 access_point=thing.access_point,
