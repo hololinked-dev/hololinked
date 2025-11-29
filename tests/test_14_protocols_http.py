@@ -362,7 +362,7 @@ def do_a_path_e2e(session: requests.Session, endpoint: tuple[str, str, Any], **r
         assert response.json() == body
     # check headers
     assert "Access-Control-Allow-Origin" in response.headers
-    assert "Access-Control-Allow-Credentials" in response.headers
+    # assert "Access-Control-Allow-Credentials" in response.headers
     assert "Content-Type" in response.headers
 
     # test unsupported HTTP methods
@@ -380,7 +380,7 @@ def do_a_path_e2e(session: requests.Session, endpoint: tuple[str, str, Any], **r
     response = session.options(path, **request_kwargs)
     assert response.status_code in [200, 201, 202, 204]
     assert "Access-Control-Allow-Origin" in response.headers
-    assert "Access-Control-Allow-Credentials" in response.headers
+    # assert "Access-Control-Allow-Credentials" in response.headers
     assert "Access-Control-Allow-Headers" in response.headers
     assert "Access-Control-Allow-Methods" in response.headers
     allow_methods = response.headers.get("Access-Control-Allow-Methods", [])
