@@ -26,17 +26,17 @@ class SecurityScheme(Schema):
 class NoSecurityScheme(SecurityScheme):
     """No Security Scheme"""
 
-    in_: str = Field(default="header", alias="in")
-
     def build(self):
         self.scheme = "nosec"
         self.description = "currently no security scheme supported"
-        self.in_ = "header"
 
 
 class BasicSecurityScheme(SecurityScheme):
     """Basic Security Scheme"""
 
+    in_: str = Field(default="header", alias="in")
+
     def build(self):
         self.scheme = "basic"
         self.description = "HTTP Basic Authentication"
+        self.in_ = "header"

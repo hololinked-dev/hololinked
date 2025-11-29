@@ -57,7 +57,7 @@ try:
             self.expect_base64 = expect_base64
             self.name = name
 
-        def validate(self, username: str, password: str) -> bool:
+        def validate_input(self, username: str, password: str) -> bool:
             """
             plain validate a username and password
 
@@ -124,7 +124,7 @@ try:
             self._password_hash = self.ph.hash(password)
             self.name = name
 
-        def validate(self, username: str, password: str) -> bool:
+        def validate_input(self, username: str, password: str) -> bool:
             """
             plain validate a username and password
 

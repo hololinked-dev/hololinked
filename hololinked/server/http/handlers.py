@@ -101,8 +101,6 @@ class BaseHandler(RequestHandler):
         """
         if not self.allowed_clients and not self.security_schemes:
             return True
-        # a flag
-        authenticated = False
         # First check if the client is allowed to access the server
         origin = self.request.headers.get("Origin")
         if (
@@ -112,39 +110,44 @@ class BaseHandler(RequestHandler):
         ):
             self.set_status(401, "Unauthorized")
             return False
-        # Then check an authentication scheme either if the client is allowed or if there is no such list of allowed clients
+        # Then check an authentication scheme either if the client is allowed
+        # or if there is no such list of allowed clients
         if not self.security_schemes:
             self.logger.debug("no security schemes defined, allowing access")
-            authenticated = True
-        else:
-            try:
-                authorization_header = self.request.headers.get("Authorization", None)  # type: str
-                # will simply pass through if no such header is present
-                if authorization_header and "basic " in authorization_header.lower():
-                    for security_scheme in self.security_schemes:
-                        if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
-                            self.logger.info(
-                                f"authenticating client from {origin} with {security_scheme.__class__.__name__}"
-                            )
-                            authenticated = (
-                                security_scheme.validate_base64(authorization_header.split()[1])
-                                if security_scheme.expect_base64
-                                else security_scheme.validate(
-                                    username=authorization_header.split()[1].split(":", 1)[0],
-                                    password=authorization_header.split()[1].split(":", 1)[1],
-                                )
-                            )
-                            break
-            except Exception as ex:
-                self.set_status(500, "Authentication error")
-                self.logger.error(f"error while authenticating client - {str(ex)}")
-                return False
-        if authenticated:
+            return True
+        if self.is_authenticated:
             self.logger.info("client authenticated successfully")
             return True
         self.set_status(401, "Unauthorized")
         self.logger.info("client authentication failed or is not authorized to proceed")
         return False  # keep False always at the end
+
+    @property
+    def is_authenticated(self) -> bool:
+        """enforces authentication using the defined security schemes, freshly computed everytime"""
+        authorization_header = self.request.headers.get("Authorization", None)  # type: str
+        # will simply pass through if no such header is present
+        authenticated = False
+        if authorization_header and "basic " in authorization_header.lower():
+            for security_scheme in self.security_schemes:
+                if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
+                    try:
+                        self.logger.info(
+                            "authenticating client",
+                            origin=self.request.headers.get("Origin"),
+                            security_scheme=security_scheme.__class__.__name__,
+                        )
+                        if security_scheme.expect_base64:
+                            authenticated = security_scheme.validate_base64(authorization_header.split()[1])
+                        else:
+                            authenticated = security_scheme.validate_input(
+                                username=authorization_header.split()[1].split(":", 1)[0],
+                                password=authorization_header.split()[1].split(":", 1)[1],
+                            )
+                    except Exception as ex:
+                        self.logger.error(f"error while authenticating client - {str(ex)}")
+            return authenticated
+        return False
 
     def set_access_control_allow_headers(self) -> None:
         """
