@@ -139,7 +139,6 @@ class BaseHandler(RequestHandler):
             except Exception as ex:
                 self.set_status(500, "Authentication error")
                 self.logger.error(f"error while authenticating client - {str(ex)}")
-                self.logger.exception(ex)
                 return False
         if authenticated:
             self.logger.info("client authenticated successfully")
@@ -161,12 +160,18 @@ class BaseHandler(RequestHandler):
 
     def set_custom_default_headers(self) -> None:
         """
-        override this to set custom headers without having to reimplement entire handler
+        sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
+
+        ```yaml
+        Content-Type: application/json
+        Access-Control-Allow-Origin: <client>
+        ```
         """
-        raise NotImplementedError(
-            "implement set_custom_default_headers in child class to automatically call it"
-            + " while directing the request to Thing"
-        )
+        # Access-Control-Allow-Credentials: true
+        if self.server.config.cors:
+            # For credential login, access control allow origin cannot be '*',
+            # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+            self.set_header("Access-Control-Allow-Origin", "*")
 
     def get_execution_parameters(
         self,
@@ -306,23 +311,6 @@ class RPCHandler(BaseHandler):
             return False
         return True
 
-    def set_custom_default_headers(self) -> None:
-        """
-        sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
-
-        ```yaml
-        Content-Type: application/json
-        Access-Control-Allow-Credentials: true
-        Access-Control-Allow-Origin: <client>
-        ```
-        """
-        self.set_header("Access-Control-Allow-Credentials", "true")
-        if self.server.config.cors:
-            # For credential login, access control allow origin cannot be '*',
-            # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
-            self.logger.debug("setting Access-Control-Allow-Origin")
-            self.set_header("Access-Control-Allow-Origin", "*")
-
     async def options(self) -> None:
         """
         Options for the resource. Main functionality is to inform the client is a specific HTTP method is supported by
@@ -355,7 +343,6 @@ class RPCHandler(BaseHandler):
             self.set_status(400, f"error while decoding request - {str(ex)}")
             self.set_custom_default_headers()
             self.logger.error(f"error while decoding request - {str(ex)}")
-            self.logger.exception(ex)
             return
         try:
             # TODO - add schema validation here, we are anyway validating at some point within the ZMQ server
@@ -389,20 +376,19 @@ class RPCHandler(BaseHandler):
                 response_payload = self.get_response_payload(response_message)
                 self.set_status(200, "ok")
                 self.set_header("Content-Type", response_payload.content_type or "application/json")
+            if response_payload.value:
+                self.write(response_payload.value)
         except ConnectionAbortedError as ex:
             self.set_status(503, f"lost connection to thing - {str(ex)}")
             # TODO handle reconnection
         except Exception as ex:
             self.logger.error(f"error while scheduling RPC call - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"error while scheduling RPC call - {str(ex)}")
             response_payload = SerializableData(
                 value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
                 content_type="application/json",
             )
             response_payload.serialize()
-        self.set_custom_default_headers()  # remaining headers are set here
-        if response_payload.value:
             self.write(response_payload.value)
 
     async def handle_no_block_response(self) -> None:
@@ -418,7 +404,6 @@ class RPCHandler(BaseHandler):
             response_payload = self.get_response_payload(response_message)
             self.set_status(200, "ok")
             self.set_header("Content-Type", response_payload.content_type or "application/json")
-            self.set_custom_default_headers()
             if response_payload.value:
                 self.write(response_payload.value)
         except KeyError as ex:
@@ -430,7 +415,6 @@ class RPCHandler(BaseHandler):
             self.set_status(408, "timeout while waiting for response")
         except Exception as ex:
             self.logger.error(f"error while receiving no-block response - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"error while receiving no-block response - {str(ex)}")
             response_payload = SerializableData(
                 value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
@@ -549,7 +533,7 @@ class EventHandler(BaseHandler):
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
-        self.set_header("Access-Control-Allow-Credentials", "true")
+        super().set_custom_default_headers()
 
     async def get(self):
         """
@@ -594,7 +578,6 @@ class EventHandler(BaseHandler):
             self.set_status(200)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"could not subscribe to event source from thing - {str(ex)}")
             self.write(Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
             return
@@ -613,7 +596,6 @@ class EventHandler(BaseHandler):
                 break
             except Exception as ex:
                 self.logger.error(f"error while pushing event - {str(ex)}")
-                self.logger.exception(ex)
                 self.write(self.data_header % Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
         event_consumer.exit()
 
@@ -678,11 +660,10 @@ class StopHandler(BaseHandler):
             eventloop.create_task(self.server.async_stop())
             # dont call it in sequence, its not clear whether its designed for that
             self.set_status(204, "ok")
-            self.set_header("Access-Control-Allow-Credentials", "true")
         except Exception as ex:
             self.logger.error(f"error while stopping HTTP server - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"error while stopping HTTP server - {str(ex)}")
+        self.set_custom_default_headers()
         self.finish()
 
 
@@ -697,7 +678,7 @@ class LivenessProbeHandler(BaseHandler):
 
     async def get(self):
         self.set_status(200, "ok")
-        self.set_header("Access-Control-Allow-Credentials", "true")
+        self.set_custom_default_headers()
         self.finish()
 
 
@@ -718,7 +699,6 @@ class ReadinessProbeHandler(BaseHandler):
             )
         except Exception as ex:
             self.logger.error(f"error while checking readiness - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"error while checking readiness - {str(ex)}")
         else:
             if not all(reply.body[0].deserialize() is None for thing_id, reply in replies.items()):
@@ -726,19 +706,11 @@ class ReadinessProbeHandler(BaseHandler):
             else:
                 self.set_status(200, "ok")
                 self.write({id: "ready" for id in replies.keys()})
-            self.set_header("Access-Control-Allow-Credentials", "true")
         self.finish()
 
 
 class ThingDescriptionHandler(BaseHandler):
     """Thing Description generation handler"""
-
-    def set_custom_default_headers(self):
-        self.set_header("Access-Control-Allow-Credentials", "true")
-        if self.server.config.cors:
-            # For credential login, access control allow origin cannot be '*',
-            # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
-            self.set_header("Access-Control-Allow-Origin", "*")
 
     async def get(self):
         if self.has_access_control:
