@@ -897,26 +897,20 @@ class ThingDescriptionHandler(BaseHandler):
         TD["forms"].append(writemultipleproperties.json())
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
-        from ...td.security_definitions import SecurityScheme
+        from ...td.security_definitions import BasicSecurityScheme, NoSecurityScheme
 
-        TD["securityDefinitions"] = {}
-        sec_names: list[str] = []
+        TD["securityDefinitions"] = dict()
 
-        schemes = getattr(self.server, "security_schemes", None)
-        if schemes:
-            for i, scheme in enumerate(schemes):
+        if self.server.security_schemes:
+            TD["security"] = []
+            for scheme in self.server.security_schemes:
                 if isinstance(scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
-                    name = f"basic_sc_{i}"
-                    TD["securityDefinitions"][name] = {
-                        "scheme": "basic",
-                        "in": "header",
-                    }
-                    sec_names.append(name)
-
-        if not sec_names:
-            nosec = SecurityScheme()
-            nosec.build()
-            TD["securityDefinitions"]["nosec"] = nosec.json()
-            TD["security"] = ["nosec"]
+                    sec = BasicSecurityScheme()
+                    sec.build()
+                    TD["securityDefinitions"][scheme.name] = sec.json()
+                    TD["security"].append(scheme.name)
         else:
-            TD["security"] = sec_names
+            nosec = NoSecurityScheme()
+            nosec.build()
+            TD["security"] = ["nosec"]
+            TD["securityDefinitions"]["nosec"] = nosec.json()

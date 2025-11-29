@@ -4,8 +4,10 @@ Implementation of security schemes for a server.
 
 import base64
 
+from pydantic import BaseModel
 
-class Security:
+
+class Security(BaseModel):
     """Type definition for security schemes"""
 
     pass
@@ -17,8 +19,7 @@ try:
     class BcryptBasicSecurity(Security):
         """
         A username and password based security scheme using bcrypt.
-        The password is stored as a hash and will be deleted from memory after initialization
-        (most likely even after you keep a reference to the object).
+        The password is stored as a hash.
 
         The request must supply an authorization header in of the following formats:
 
@@ -38,8 +39,9 @@ try:
         username: str
         _password_hash: bytes
         expect_base64: bool
+        name: str
 
-        def __init__(self, username: str, password: str, expect_base64: bool = True) -> None:
+        def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             """
             Parameters
             ----------
@@ -52,8 +54,8 @@ try:
             """
             self.username = username
             self._password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
-            del password  # Remove password from memory
             self.expect_base64 = expect_base64
+            self.name = name
 
         def validate(self, username: str, password: str) -> bool:
             """
@@ -96,8 +98,7 @@ try:
     class Argon2BasicSecurity(Security):
         """
         A username and password based security scheme using Argon2.
-        The password is stored as a hash and will be deleted from memory after initialization
-        (most likely even after you keep a reference to the object).
+        The password is stored as a hash.
 
         The request must supply an authorization header in of the following formats:
 
@@ -114,13 +115,14 @@ try:
         username: str
         _password_hash: str
         expect_base64: bool
+        name: str
 
-        def __init__(self, username: str, password: str, expect_base64: bool = True) -> None:
+        def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             self.ph = argon2.PasswordHasher()
             self.username = username
             self.expect_base64 = expect_base64
             self._password_hash = self.ph.hash(password)
-            del password  # Remove password from memory
+            self.name = name
 
         def validate(self, username: str, password: str) -> bool:
             """
