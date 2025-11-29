@@ -281,8 +281,10 @@ class BoundFSM:
         ValueError:
             if the state is not found in the allowed states
         """
-
         if value in self.states:
+            given_state = self.descriptor._get_machine_compliant_state(value)
+            if given_state == self.current_state:
+                return
             previous_state = self.current_state
             next_state = self.descriptor._get_machine_compliant_state(value)
             self.owner._state_machine_state = next_state

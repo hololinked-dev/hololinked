@@ -167,7 +167,7 @@ class BaseHandler(RequestHandler):
         Access-Control-Allow-Origin: <client>
         ```
         """
-        # Access-Control-Allow-Credentials: true
+        # Access-Control-Allow-Credentials: true # only for cookie auth
         if self.server.config.cors:
             # For credential login, access control allow origin cannot be '*',
             # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
@@ -306,10 +306,10 @@ class RPCHandler(BaseHandler):
             return False
         if self.message_id is not None and method.upper() == "GET":
             return True
-        if method not in self.metadata.get("http_methods", []):
-            self.set_status(405, "method not allowed")
-            return False
-        return True
+        if method in self.metadata.get("http_methods", []):
+            return True
+        self.set_status(405, "method not allowed")
+        return False
 
     async def options(self) -> None:
         """
@@ -334,6 +334,7 @@ class RPCHandler(BaseHandler):
             `writeproperty`, `invokeaction`, `deleteproperty`
         """
         try:
+            self.set_custom_default_headers()
             server_execution_context, thing_execution_context, local_execution_context, additional_payload = (
                 self.get_execution_parameters()
             )
@@ -341,7 +342,6 @@ class RPCHandler(BaseHandler):
             payload = payload if payload.value else additional_payload
         except Exception as ex:
             self.set_status(400, f"error while decoding request - {str(ex)}")
-            self.set_custom_default_headers()
             self.logger.error(f"error while decoding request - {str(ex)}")
             return
         try:
@@ -394,6 +394,7 @@ class RPCHandler(BaseHandler):
     async def handle_no_block_response(self) -> None:
         """handles the no-block response for the noblock calls"""
         try:
+            self.set_custom_default_headers()
             self.logger.info("waiting for no-block response", message_id=self.message_id)
             response_message = await self.zmq_client_pool.async_recv_response(
                 thing_id=self.resource.thing_id,
