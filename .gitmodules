@@ -1,6 +1,3 @@
 [submodule "examples"]
 	path = examples
 	url = https://github.com/hololinked-dev/examples.git
-[submodule "doc"]
-	path = doc
-	url = https://github.com/hololinked-dev/docs-v2.git
