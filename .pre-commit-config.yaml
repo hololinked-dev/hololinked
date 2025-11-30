@@ -1,0 +1,28 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.7
+    hooks:
+      - id: ruff-check
+        files: ^hololinked/
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: v1.9.2
+    hooks:
+      - id: bandit
+        args:
+          [
+            "-c",
+            "pyproject.toml",
+            "-r",
+            "hololinked/",
+            "-b",
+            ".bandit-baseline.json",
+          ]
+        pass_filenames: false
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.26.0
+    hooks:
+      - id: gitleaks
+        entry: gitleaks git --pre-commit --redact --staged --verbose
+        pass_filenames: false
