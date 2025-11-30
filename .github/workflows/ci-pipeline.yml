@@ -26,8 +26,11 @@ jobs:
       - name: install ruff
         run: pip install ruff
 
-      - name: run ruff linter
+      - name: run ruff linter src directory
         run: ruff check hololinked
+
+      - name: run ruff linter tests directory
+        run: ruff check tests/*.py tests/things/*.py tests/helper-scripts/*.py
 
   scan:
     name: security scan (${{ matrix.tool }})
