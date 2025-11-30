@@ -54,7 +54,7 @@ dependencies = [
     "sqlalchemy>2.0.21",
     "sqlalchemy-utils>=0.41",
     "psycopg2-binary>=2.9.11",
-    "pymongo>=4.15.2",
+    "pymongo>=4.15.2"
 ]
 
 [project.urls]
@@ -69,6 +69,7 @@ dev = [
     "pandas==2.2.3",
     "pip>=25.2",
     "ruff>=0.12.10",
+    "pre-commit>=4.5.0",
 ]
 test = [
     "requests==2.32.3",
