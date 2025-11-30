@@ -39,12 +39,12 @@ from ...utils import format_exception_as_json, get_current_async_loop, uuid_hex
 try:
     from ..security import BcryptBasicSecurity
 except ImportError:
-    BcryptBasicSecurity = None  # type: ignore
+    BcryptBasicSecurity = None
 
 try:
     from ..security import Argon2BasicSecurity
 except ImportError:
-    Argon2BasicSecurity = None  # type: ignore
+    Argon2BasicSecurity = None
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
@@ -708,6 +708,7 @@ class ReadinessProbeHandler(BaseHandler):
             else:
                 self.set_status(200, "ok")
                 self.write({id: "ready" for id in replies.keys()})
+        self.set_custom_default_headers()
         self.finish()
 
 

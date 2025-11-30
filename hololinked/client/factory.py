@@ -1,7 +1,5 @@
-import base64
 import ssl
 import threading
-import uuid
 import warnings
 
 from typing import Any
@@ -22,11 +20,12 @@ from ..td.interaction_affordance import (
     EventAffordance,
     PropertyAffordance,
 )
-from ..utils import set_global_event_loop_policy
+from ..utils import set_global_event_loop_policy, uuid_hex
 from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
 from .http.consumed_interactions import HTTPAction, HTTPEvent, HTTPProperty
 from .mqtt.consumed_interactions import MQTTConsumer  # only one type for now
 from .proxy import ObjectProxy
+from .security import BasicSecurity
 from .zmq.consumed_interactions import (
     ReadMultipleProperties,
     WriteMultipleProperties,
@@ -71,8 +70,6 @@ class ClientFactory:
 
             - `logger`: `logging.Logger`, optional.
                  A custom logger instance to use for logging
-            - `log_level`: `int`, default `logging.INFO`.
-                The logging level to use for the client (e.g., logging.DEBUG, logging.INFO)
             - `ignore_TD_errors`: `bool`, default `False`.
                 Whether to ignore errors while fetching the Thing Description (TD)
             - `skip_interaction_affordances`: `list[str]`, default `[]`.
@@ -87,7 +84,7 @@ class ClientFactory:
         ObjectProxy
             An ObjectProxy instance representing the remote Thing
         """
-        id = f"{server_id}|{thing_id}|{access_point}|{uuid.uuid4()}"
+        id = kwargs.get("id", f"{server_id}|{thing_id}|{access_point}|{uuid_hex()}")
 
         # configs
         ignore_TD_errors = kwargs.get("ignore_TD_errors", False)
@@ -131,6 +128,7 @@ class ClientFactory:
             logger=logger,
             invokation_timeout=invokation_timeout,
             execution_timeout=execution_timeout,
+            security=kwargs.get("security", None),
         )
 
         # add properties
@@ -278,24 +276,26 @@ class ClientFactory:
 
         # fetch TD
         headers = {"Content-Type": "application/json"}
-        username = kwargs.get("username")
-        password = kwargs.get("password")
-        if username and password:
-            token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
-            headers["Authorization"] = f"Basic {token}"
+        security = kwargs.pop("security", None)
+        username = kwargs.pop("username", None)
+        password = kwargs.pop("password", None)
+        if not security and username and password:
+            security = BasicSecurity(username=username, password=password)
+        if isinstance(security, BasicSecurity):
+            headers["Authorization"] = security.http_header
 
         response = req_rep_sync_client.get(url, headers=headers)  # type: httpx.Response
         response.raise_for_status()
 
         TD = Serializers.json.loads(response.content)
-        id = f"client|{TD['id']}|HTTP|{uuid.uuid4().hex[:8]}"
+        id = kwargs.get("id", f"client|{TD['id']}|HTTP|{uuid_hex()}")
         logger = kwargs.get("logger", structlog.get_logger()).bind(
             component="client",
             client_id=id,
             protocol="http",
             thing_id=TD["id"],
         )
-        object_proxy = ObjectProxy(id, td=TD, logger=logger, **kwargs)
+        object_proxy = ObjectProxy(id, td=TD, logger=logger, security=security, **kwargs)
 
         for name in TD.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, TD)
@@ -383,7 +383,7 @@ class ClientFactory:
             - `log_level`: `int`, default `logging.INFO`.
                 The logging level to use for the client (e.g., logging.DEBUG, logging.INFO
         """
-        id = f"mqtt-client|{hostname}:{port}|{uuid.uuid4().hex[:8]}"
+        id = kwargs.get("id", f"mqtt-client|{hostname}:{port}|{uuid_hex()}")
         logger = kwargs.get("logger", structlog.get_logger()).bind(
             component="client",
             client_id=id,

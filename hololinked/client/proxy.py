@@ -1,5 +1,3 @@
-import base64
-
 from typing import Any, Callable
 
 import structlog
@@ -29,7 +27,7 @@ class ObjectProxy:
             "_events",
             "_noblock_messages",
             "_schema_validator",
-            "_auth_header",
+            "_security",
         ]
     )
 
@@ -59,15 +57,9 @@ class ObjectProxy:
         self._allow_foreign_attributes = kwargs.get("allow_foreign_attributes", False)
         self._noblock_messages = dict()  # type: dict[str, ConsumedThingAction | ConsumedThingProperty]
         self._schema_validator = kwargs.get("schema_validator", None)
+        self._security = kwargs.get("security", None)
         self.logger = kwargs.pop("logger", structlog.get_logger())
         self.td = kwargs.get("td", dict())  # type: dict[str, Any]
-
-        self._auth_header = None
-        username = kwargs.get("username")
-        password = kwargs.get("password")
-        if username and password:
-            token = f"{username}:{password}".encode("utf-8")
-            self._auth_header = {"Authorization": f"Basic {base64.b64encode(token).decode('utf-8')}"}
 
     def __getattribute__(self, __name: str) -> Any:
         obj = super().__getattribute__(__name)

@@ -4,7 +4,9 @@ Implementation of security schemes for a server.
 
 import base64
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
+
+from ..utils import uuid_hex
 
 
 class Security(BaseModel):
@@ -37,9 +39,10 @@ try:
         """
 
         username: str
-        _password_hash: bytes
         expect_base64: bool
         name: str
+
+        _password_hash: bytes = PrivateAttr()
 
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             """
@@ -51,11 +54,15 @@ try:
                 The password to be used for authentication
             expect_base64: bool
                 Whether to expect base64 encoded credentials in the authorization header. Default is True.
+            name: str
+                An optional unique name for the security scheme
             """
-            self.username = username
+            super().__init__(
+                username=username,
+                expect_base64=expect_base64,
+                name=name or f"bcrypt-basic-{uuid_hex()}",
+            )
             self._password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
-            self.expect_base64 = expect_base64
-            self.name = name
 
         def validate_input(self, username: str, password: str) -> bool:
             """
@@ -87,7 +94,7 @@ try:
             except (ValueError, TypeError):
                 return False
             username, password = decoded.split(":", 1)
-            return self.validate(username, password)
+            return self.validate_input(username, password)
 
 except ImportError:
     pass
@@ -113,16 +120,20 @@ try:
         """
 
         username: str
-        _password_hash: str
         expect_base64: bool
         name: str
 
+        _password_hash: str = PrivateAttr()
+        _ph: argon2.PasswordHasher | None = PrivateAttr(default=None)
+
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
-            self.ph = argon2.PasswordHasher()
-            self.username = username
-            self.expect_base64 = expect_base64
-            self._password_hash = self.ph.hash(password)
-            self.name = name
+            super().__init__(
+                username=username,
+                expect_base64=expect_base64,
+                name=name or f"argon2-basic-{uuid_hex()}",
+            )
+            self._ph = argon2.PasswordHasher()
+            self._password_hash = self._ph.hash(password)
 
         def validate_input(self, username: str, password: str) -> bool:
             """
@@ -136,7 +147,7 @@ try:
             if username != self.username:
                 return False
             try:
-                return self.ph.verify(self._password_hash, password)
+                return self._ph.verify(self._password_hash, password)
             except argon2.exceptions.VerifyMismatchError:
                 return False
 
@@ -157,7 +168,7 @@ try:
             except (ValueError, TypeError):
                 return False
             username, password = decoded.split(":", 1)
-            return self.validate(username, password)
+            return self.validate_input(username, password)
 
 except ImportError:
     pass

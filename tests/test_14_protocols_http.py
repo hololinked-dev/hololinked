@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Generator
 
+import httpx
 import pytest
 import requests
 
@@ -533,26 +534,18 @@ async def test_11_object_proxy_basic(object_proxy: ObjectProxy) -> None:
     assert object_proxy.read_property("integration_time") == 1200
 
 
-# def notest_12_object_proxy_with_basic_auth(self):
-#     security_scheme = BcryptBasicSecurity(username="cliuser", password="clipass")
-#     port = 60013
-#     thing_id = f"test-basic-proxy-{uuid.uuid4().hex[0:8]}"
-#     thing = OceanOpticsSpectrometer(id=thing_id, serial_number="simulation", log_level=logging.ERROR + 10)
-#     thing.run_with_http_server(
-#         forked=True,
-#         port=port,
-#         config={"cors": True},
-#         security_schemes=[security_scheme],
-#     )
-#     self.wait_until_server_ready(port=port)
+def test_12_object_proxy_with_basic_auth(port: int) -> None:
+    with running_thing(
+        id_prefix="test-auth",
+        port=port,
+        security_schemes=[BcryptBasicSecurity(username="cliuser", password="clipass")],
+    ) as thing:
+        td_endpoint = f"{hostname_prefix}:{port}/{thing.id}/resources/wot-td"
+        object_proxy = ClientFactory.http(
+            url=td_endpoint,
+            username="cliuser",
+            password="clipass",
+        )
+        assert object_proxy.read_property("max_intensity") == 16384
 
-#     object_proxy = ClientFactory.http(
-#         url=f"http://127.0.0.1:{port}/{thing_id}/resources/wot-td",
-#         username="cliuser",
-#         password="clipass",
-#     )
-#     self.assertEqual(object_proxy.read_property("max_intensity"), 16384)
-#     headers = {}
-#     token = base64.b64encode("cliuser:clipass".encode("utf-8")).decode("ascii")
-#     headers["Authorization"] = f"Basic {token}"
-#     self.stop_server(port=port, thing_ids=[thing_id], headers=headers)
+        pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)
