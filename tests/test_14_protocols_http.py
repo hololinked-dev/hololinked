@@ -21,11 +21,20 @@ from hololinked.core.zmq.message import (
     ThingExecutionContext,
     default_server_execution_context,
 )
-from hololinked.serializers import BaseSerializer, JSONSerializer, MsgpackSerializer, PickleSerializer
+from hololinked.serializers import (
+    BaseSerializer,
+    JSONSerializer,
+    MsgpackSerializer,
+    PickleSerializer,
+)
 from hololinked.server import stop
 from hololinked.server.http import HTTPServer
 from hololinked.server.http.handlers import RPCHandler
-from hololinked.server.security import Argon2BasicSecurity, BcryptBasicSecurity, Security
+from hololinked.server.security import (
+    Argon2BasicSecurity,
+    BcryptBasicSecurity,
+    Security,
+)
 from hololinked.utils import uuid_hex
 
 

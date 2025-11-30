@@ -8,7 +8,16 @@ from enum import StrEnum
 import numpy
 
 from hololinked.core import Event, Thing, action
-from hololinked.core.properties import Boolean, ClassSelector, Integer, List, Number, Selector, String, TypedList
+from hololinked.core.properties import (
+    Boolean,
+    ClassSelector,
+    Integer,
+    List,
+    Number,
+    Selector,
+    String,
+    TypedList,
+)
 from hololinked.core.state_machine import StateMachine
 from hololinked.schema_validators import JSONSchema
 from hololinked.serializers import JSONSerializer
@@ -176,7 +185,7 @@ class OceanOpticsSpectrometer(Thing):
     def get_trigger_mode(self):
         try:
             return self._trigger_mode
-        except:
+        except AttributeError:
             return OceanOpticsSpectrometer.properties["trigger_mode"].default
 
     integration_time = Number(
@@ -195,7 +204,7 @@ class OceanOpticsSpectrometer(Thing):
     def get_integration_time(self) -> float:
         try:
             return self._integration_time
-        except:
+        except AttributeError:
             return OceanOpticsSpectrometer.properties["integration_time"].default
 
     background_correction = Selector(

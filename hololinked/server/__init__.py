@@ -1,6 +1,5 @@
 import asyncio
 import threading
-import uuid
 import warnings
 
 from ..config import global_config
