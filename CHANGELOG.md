@@ -8,13 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ✓ means ready to try
 
+# [v0.3.9] - 2025-12-01
+
+- adds CORS headers for HTTP SSE which went missing from 0.2.x -> 0.3.x transition
+- refactor basic security for client using a BasicSecurity class instead of supplying plain username and password
+- minor bug fixes in state machine
+
 ## [v0.3.8] - 2025-11-15
 
 - supports structlog for logging, with colored logs and updated log statements
 - SAST with bandit & gitleaks integrated into CI/CD pipelines
 - uses pytest instead of unittests
-- code improvements with isort, refactors & optimizations etc.
-- fixes minor bugs & cleans up HTTP headers
 
 ## [v0.3.7] - 2025-10-30
 
