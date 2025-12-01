@@ -64,6 +64,7 @@ class HTTPServer(BaseProtocolServer):
     """
 
     address = IPAddress(default="0.0.0.0", doc="IP address")  # type: str
+    # SAST(id='hololinked.server.http.HTTPServer.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
     """IP address, especially to bind to all interfaces or not"""
 
     ssl_context = ClassSelector(
@@ -126,7 +127,7 @@ class HTTPServer(BaseProtocolServer):
         self,
         *,
         port: int = 8080,
-        address: str = "0.0.0.0",
+        address: str = "0.0.0.0",  # SAST(id='hololinked.server.http.HTTPServer.__init__.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
         things: list[Thing] | None = None,
         # host: Optional[str] = None,
         logger: logging.Logger | None = None,
@@ -712,6 +713,7 @@ class ApplicationRouter:
         if not use_localhost:
             return f"{protocol}://{socket.gethostname()}{port}"
         if self.server.address == "0.0.0.0" or self.server.address == "127.0.0.1":
+            # SAST(id='hololinked.server.http.ApplicationRouter.get_basepath', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
             return f"{protocol}://127.0.0.1{port}"
         elif self.server.address == "::":
             return f"{protocol}://[::1]{port}"

@@ -30,7 +30,7 @@ import decimal
 import inspect
 import io
 import json as pythonjson
-import pickle
+import pickle  # SAST(id='hololinked.serializers.serializers.pickle_import', description='B403:blacklist', tool='bandit')
 import uuid
 import warnings
 
@@ -207,6 +207,7 @@ class PickleSerializer(BaseSerializer):
 
         if global_config.ALLOW_PICKLE:
             return pickle.dumps(data)
+            # SAST(id='hololinked.serializers.serializers.PickleSerializer.dumps', description='B301:blacklist', tool='bandit')
         raise RuntimeError("Pickle serialization is not allowed by the global configuration")
 
     def loads(self, data) -> Any:
@@ -215,6 +216,7 @@ class PickleSerializer(BaseSerializer):
 
         if global_config.ALLOW_PICKLE:
             return pickle.loads(self.convert_to_bytes(data))
+            # SAST(id='hololinked.serializers.serializers.PickleSerializer.loads', description='B301:blacklist', tool='bandit')
         raise RuntimeError("Pickle deserialization is not allowed by the global configuration")
 
     @property
