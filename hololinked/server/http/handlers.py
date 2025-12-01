@@ -1,5 +1,4 @@
 import copy
-import uuid
 
 from typing import Any, Optional
 
@@ -34,18 +33,18 @@ from ...td import (
     PropertyAffordance,
 )
 from ...td.forms import Form
-from ...utils import format_exception_as_json, get_current_async_loop
+from ...utils import format_exception_as_json, get_current_async_loop, uuid_hex
 
 
 try:
     from ..security import BcryptBasicSecurity
 except ImportError:
-    BcryptBasicSecurity = None  # type: ignore
+    BcryptBasicSecurity = None
 
 try:
     from ..security import Argon2BasicSecurity
 except ImportError:
-    Argon2BasicSecurity = None  # type: ignore
+    Argon2BasicSecurity = None
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
@@ -102,8 +101,6 @@ class BaseHandler(RequestHandler):
         """
         if not self.allowed_clients and not self.security_schemes:
             return True
-        # a flag
-        authenticated = False
         # First check if the client is allowed to access the server
         origin = self.request.headers.get("Origin")
         if (
@@ -113,40 +110,44 @@ class BaseHandler(RequestHandler):
         ):
             self.set_status(401, "Unauthorized")
             return False
-        # Then check an authentication scheme either if the client is allowed or if there is no such list of allowed clients
+        # Then check an authentication scheme either if the client is allowed
+        # or if there is no such list of allowed clients
         if not self.security_schemes:
             self.logger.debug("no security schemes defined, allowing access")
-            authenticated = True
-        else:
-            try:
-                authorization_header = self.request.headers.get("Authorization", None)  # type: str
-                # will simply pass through if no such header is present
-                if authorization_header and "basic " in authorization_header.lower():
-                    for security_scheme in self.security_schemes:
-                        if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
-                            self.logger.info(
-                                f"authenticating client from {origin} with {security_scheme.__class__.__name__}"
-                            )
-                            authenticated = (
-                                security_scheme.validate_base64(authorization_header.split()[1])
-                                if security_scheme.expect_base64
-                                else security_scheme.validate(
-                                    username=authorization_header.split()[1].split(":", 1)[0],
-                                    password=authorization_header.split()[1].split(":", 1)[1],
-                                )
-                            )
-                            break
-            except Exception as ex:
-                self.set_status(500, "Authentication error")
-                self.logger.error(f"error while authenticating client - {str(ex)}")
-                self.logger.exception(ex)
-                return False
-        if authenticated:
+            return True
+        if self.is_authenticated:
             self.logger.info("client authenticated successfully")
             return True
         self.set_status(401, "Unauthorized")
         self.logger.info("client authentication failed or is not authorized to proceed")
         return False  # keep False always at the end
+
+    @property
+    def is_authenticated(self) -> bool:
+        """enforces authentication using the defined security schemes, freshly computed everytime"""
+        authorization_header = self.request.headers.get("Authorization", None)  # type: str
+        # will simply pass through if no such header is present
+        authenticated = False
+        if authorization_header and "basic " in authorization_header.lower():
+            for security_scheme in self.security_schemes:
+                if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
+                    try:
+                        self.logger.info(
+                            "authenticating client",
+                            origin=self.request.headers.get("Origin"),
+                            security_scheme=security_scheme.__class__.__name__,
+                        )
+                        if security_scheme.expect_base64:
+                            authenticated = security_scheme.validate_base64(authorization_header.split()[1])
+                        else:
+                            authenticated = security_scheme.validate_input(
+                                username=authorization_header.split()[1].split(":", 1)[0],
+                                password=authorization_header.split()[1].split(":", 1)[1],
+                            )
+                    except Exception as ex:
+                        self.logger.error(f"error while authenticating client - {str(ex)}")
+            return authenticated
+        return False
 
     def set_access_control_allow_headers(self) -> None:
         """
@@ -161,12 +162,18 @@ class BaseHandler(RequestHandler):
 
     def set_custom_default_headers(self) -> None:
         """
-        override this to set custom headers without having to reimplement entire handler
+        sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
+
+        ```yaml
+        Content-Type: application/json
+        Access-Control-Allow-Origin: <client>
+        ```
         """
-        raise NotImplementedError(
-            "implement set_custom_default_headers in child class to automatically call it"
-            + " while directing the request to Thing"
-        )
+        # Access-Control-Allow-Credentials: true # only for cookie auth
+        if self.server.config.cors:
+            # For credential login, access control allow origin cannot be '*',
+            # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+            self.set_header("Access-Control-Allow-Origin", "*")
 
     def get_execution_parameters(
         self,
@@ -301,27 +308,10 @@ class RPCHandler(BaseHandler):
             return False
         if self.message_id is not None and method.upper() == "GET":
             return True
-        if method not in self.metadata.get("http_methods", []):
-            self.set_status(405, "method not allowed")
-            return False
-        return True
-
-    def set_custom_default_headers(self) -> None:
-        """
-        sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
-
-        ```yaml
-        Content-Type: application/json
-        Access-Control-Allow-Credentials: true
-        Access-Control-Allow-Origin: <client>
-        ```
-        """
-        self.set_header("Access-Control-Allow-Credentials", "true")
-        if self.server.config.cors:
-            # For credential login, access control allow origin cannot be '*',
-            # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
-            self.logger.debug("setting Access-Control-Allow-Origin")
-            self.set_header("Access-Control-Allow-Origin", "*")
+        if method in self.metadata.get("http_methods", []):
+            return True
+        self.set_status(405, "method not allowed")
+        return False
 
     async def options(self) -> None:
         """
@@ -346,6 +336,7 @@ class RPCHandler(BaseHandler):
             `writeproperty`, `invokeaction`, `deleteproperty`
         """
         try:
+            self.set_custom_default_headers()
             server_execution_context, thing_execution_context, local_execution_context, additional_payload = (
                 self.get_execution_parameters()
             )
@@ -353,9 +344,7 @@ class RPCHandler(BaseHandler):
             payload = payload if payload.value else additional_payload
         except Exception as ex:
             self.set_status(400, f"error while decoding request - {str(ex)}")
-            self.set_custom_default_headers()
             self.logger.error(f"error while decoding request - {str(ex)}")
-            self.logger.exception(ex)
             return
         try:
             # TODO - add schema validation here, we are anyway validating at some point within the ZMQ server
@@ -389,25 +378,25 @@ class RPCHandler(BaseHandler):
                 response_payload = self.get_response_payload(response_message)
                 self.set_status(200, "ok")
                 self.set_header("Content-Type", response_payload.content_type or "application/json")
+            if response_payload.value:
+                self.write(response_payload.value)
         except ConnectionAbortedError as ex:
             self.set_status(503, f"lost connection to thing - {str(ex)}")
             # TODO handle reconnection
         except Exception as ex:
             self.logger.error(f"error while scheduling RPC call - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"error while scheduling RPC call - {str(ex)}")
             response_payload = SerializableData(
                 value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
                 content_type="application/json",
             )
             response_payload.serialize()
-        self.set_custom_default_headers()  # remaining headers are set here
-        if response_payload.value:
             self.write(response_payload.value)
 
     async def handle_no_block_response(self) -> None:
         """handles the no-block response for the noblock calls"""
         try:
+            self.set_custom_default_headers()
             self.logger.info("waiting for no-block response", message_id=self.message_id)
             response_message = await self.zmq_client_pool.async_recv_response(
                 thing_id=self.resource.thing_id,
@@ -418,7 +407,6 @@ class RPCHandler(BaseHandler):
             response_payload = self.get_response_payload(response_message)
             self.set_status(200, "ok")
             self.set_header("Content-Type", response_payload.content_type or "application/json")
-            self.set_custom_default_headers()
             if response_payload.value:
                 self.write(response_payload.value)
         except KeyError as ex:
@@ -430,7 +418,6 @@ class RPCHandler(BaseHandler):
             self.set_status(408, "timeout while waiting for response")
         except Exception as ex:
             self.logger.error(f"error while receiving no-block response - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"error while receiving no-block response - {str(ex)}")
             response_payload = SerializableData(
                 value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
@@ -549,7 +536,7 @@ class EventHandler(BaseHandler):
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
-        self.set_header("Access-Control-Allow-Credentials", "true")
+        super().set_custom_default_headers()
 
     async def get(self):
         """
@@ -585,7 +572,7 @@ class EventHandler(BaseHandler):
             else:
                 form = self.resource.retrieve_form(Operations.observeproperty)
             event_consumer = AsyncEventConsumer(
-                id=f"{self.resource.name}|HTTPEventTunnel|{uuid.uuid4().hex[:8]}",
+                id=f"{self.resource.name}|HTTPEventTunnel|{uuid_hex()}",
                 event_unique_identifier=f"{self.resource.thing_id}/{self.resource.name}",
                 access_point=form.href,
                 context=global_config.zmq_context(),
@@ -594,7 +581,6 @@ class EventHandler(BaseHandler):
             self.set_status(200)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"could not subscribe to event source from thing - {str(ex)}")
             self.write(Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
             return
@@ -613,9 +599,7 @@ class EventHandler(BaseHandler):
                 break
             except Exception as ex:
                 self.logger.error(f"error while pushing event - {str(ex)}")
-                self.logger.exception(ex)
                 self.write(self.data_header % Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
-        event_consumer.exit()
 
 
 class JPEGImageEventHandler(EventHandler):
@@ -678,11 +662,10 @@ class StopHandler(BaseHandler):
             eventloop.create_task(self.server.async_stop())
             # dont call it in sequence, its not clear whether its designed for that
             self.set_status(204, "ok")
-            self.set_header("Access-Control-Allow-Credentials", "true")
         except Exception as ex:
             self.logger.error(f"error while stopping HTTP server - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"error while stopping HTTP server - {str(ex)}")
+        self.set_custom_default_headers()
         self.finish()
 
 
@@ -697,7 +680,7 @@ class LivenessProbeHandler(BaseHandler):
 
     async def get(self):
         self.set_status(200, "ok")
-        self.set_header("Access-Control-Allow-Credentials", "true")
+        self.set_custom_default_headers()
         self.finish()
 
 
@@ -718,7 +701,6 @@ class ReadinessProbeHandler(BaseHandler):
             )
         except Exception as ex:
             self.logger.error(f"error while checking readiness - {str(ex)}")
-            self.logger.exception(ex)
             self.set_status(500, f"error while checking readiness - {str(ex)}")
         else:
             if not all(reply.body[0].deserialize() is None for thing_id, reply in replies.items()):
@@ -726,19 +708,12 @@ class ReadinessProbeHandler(BaseHandler):
             else:
                 self.set_status(200, "ok")
                 self.write({id: "ready" for id in replies.keys()})
-            self.set_header("Access-Control-Allow-Credentials", "true")
+        self.set_custom_default_headers()
         self.finish()
 
 
 class ThingDescriptionHandler(BaseHandler):
     """Thing Description generation handler"""
-
-    def set_custom_default_headers(self):
-        self.set_header("Access-Control-Allow-Credentials", "true")
-        if self.server.config.cors:
-            # For credential login, access control allow origin cannot be '*',
-            # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
-            self.set_header("Access-Control-Allow-Origin", "*")
 
     async def get(self):
         if self.has_access_control:
@@ -926,26 +901,20 @@ class ThingDescriptionHandler(BaseHandler):
         TD["forms"].append(writemultipleproperties.json())
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
-        from ...td.security_definitions import SecurityScheme
+        from ...td.security_definitions import BasicSecurityScheme, NoSecurityScheme
 
-        TD["securityDefinitions"] = {}
-        sec_names: list[str] = []
+        TD["securityDefinitions"] = dict()
 
-        schemes = getattr(self.server, "security_schemes", None)
-        if schemes:
-            for i, scheme in enumerate(schemes):
+        if self.server.security_schemes:
+            TD["security"] = []
+            for scheme in self.server.security_schemes:
                 if isinstance(scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
-                    name = f"basic_sc_{i}"
-                    TD["securityDefinitions"][name] = {
-                        "scheme": "basic",
-                        "in": "header",
-                    }
-                    sec_names.append(name)
-
-        if not sec_names:
-            nosec = SecurityScheme()
-            nosec.build()
-            TD["securityDefinitions"]["nosec"] = nosec.json()
-            TD["security"] = ["nosec"]
+                    sec = BasicSecurityScheme()
+                    sec.build()
+                    TD["securityDefinitions"][scheme.name] = sec.json()
+                    TD["security"].append(scheme.name)
         else:
-            TD["security"] = sec_names
+            nosec = NoSecurityScheme()
+            nosec.build()
+            TD["security"] = ["nosec"]
+            TD["securityDefinitions"]["nosec"] = nosec.json()

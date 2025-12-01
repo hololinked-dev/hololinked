@@ -281,8 +281,10 @@ class BoundFSM:
         ValueError:
             if the state is not found in the allowed states
         """
-
         if value in self.states:
+            given_state = self.descriptor._get_machine_compliant_state(value)
+            if given_state == self.current_state:
+                return
             previous_state = self.current_state
             next_state = self.descriptor._get_machine_compliant_state(value)
             self.owner._state_machine_state = next_state
@@ -366,6 +368,6 @@ def prepare_object_FSM(instance: Thing) -> None:
     if cls.state_machine and isinstance(cls.state_machine, StateMachine):
         cls.state_machine.validate(instance)
         instance.logger.info(
-            f"setup state machine, states={[state.name for state in cls.state_machine.states]}, "
+            f"setup state machine, states={[state.name if hasattr(state, 'name') else state for state in cls.state_machine.states]}, "
             + f"initial_state={cls.state_machine.initial_state}"
         )

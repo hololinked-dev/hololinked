@@ -64,6 +64,7 @@ class HTTPServer(BaseProtocolServer):
     """
 
     address = IPAddress(default="0.0.0.0", doc="IP address")  # type: str
+    # SAST(id='hololinked.server.http.HTTPServer.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
     """IP address, especially to bind to all interfaces or not"""
 
     ssl_context = ClassSelector(
@@ -126,7 +127,7 @@ class HTTPServer(BaseProtocolServer):
         self,
         *,
         port: int = 8080,
-        address: str = "0.0.0.0",
+        address: str = "0.0.0.0",  # SAST(id='hololinked.server.http.HTTPServer.__init__.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
         things: list[Thing] | None = None,
         # host: Optional[str] = None,
         logger: logging.Logger | None = None,
@@ -542,6 +543,8 @@ class ApplicationRouter:
         for action in actions:
             if action in self:
                 continue
+            elif action.name == "get_thing_model":
+                continue
             route = self.adapt_route(action.name)
             if action.thing_id is not None:
                 path = f"/{action.thing_id}{route}"
@@ -554,8 +557,15 @@ class ApplicationRouter:
                 path = f"/{event.thing_id}{route}"
             self.server.add_event(URL_path=path, event=event, handler=self.server.event_handler)
 
-        # thing description handler
+        # thing model handler
         get_thing_model_action = next((action for action in actions if action.name == "get_thing_model"), None)
+        self.server.add_action(
+            URL_path=f"/{thing_id}/resources/wot-tm" if thing_id else "/resources/wot-tm",
+            action=get_thing_model_action,
+            http_method=("GET",),
+        )
+
+        # thing description handler
         get_thing_description_action = deepcopy(get_thing_model_action)
         get_thing_description_action.override_defaults(name="get_thing_description")
         self.server.add_action(
@@ -703,6 +713,7 @@ class ApplicationRouter:
         if not use_localhost:
             return f"{protocol}://{socket.gethostname()}{port}"
         if self.server.address == "0.0.0.0" or self.server.address == "127.0.0.1":
+            # SAST(id='hololinked.server.http.ApplicationRouter.get_basepath', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
             return f"{protocol}://127.0.0.1{port}"
         elif self.server.address == "::":
             return f"{protocol}://[::1]{port}"

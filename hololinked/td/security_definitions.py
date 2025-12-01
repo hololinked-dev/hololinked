@@ -1,5 +1,7 @@
 from typing import Optional
 
+from pydantic import Field
+
 from .base import Schema
 
 
@@ -18,7 +20,23 @@ class SecurityScheme(Schema):
         super().__init__()
 
     def build(self):
+        raise NotImplementedError("Please implement specific security scheme builders")
+
+
+class NoSecurityScheme(SecurityScheme):
+    """No Security Scheme"""
+
+    def build(self):
         self.scheme = "nosec"
-        self.description = (
-            "currently no security scheme supported - use cookie auth directly on hololinked.server.HTTPServer object"
-        )
+        self.description = "currently no security scheme supported"
+
+
+class BasicSecurityScheme(SecurityScheme):
+    """Basic Security Scheme"""
+
+    in_: str = Field(default="header", alias="in")
+
+    def build(self):
+        self.scheme = "basic"
+        self.description = "HTTP Basic Authentication"
+        self.in_ = "header"

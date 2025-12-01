@@ -66,32 +66,13 @@ class HTTPConsumedAffordanceMixin:
             return body
         response.raise_for_status()
 
-    def _merge_auth_headers(self, base: dict | None = None):
-        headers = dict(base or {})
+    def _merge_auth_headers(self, base: dict[str, str]) -> dict[str, str]:
+        headers = base or {}
 
-        # Avoid truthiness on ObjectProxy
-        owner = getattr(self, "_owner_inst", None)
-        if owner is None:
-            owner = getattr(self, "owner", None)
-
-        auth = getattr(owner, "_auth_header", None) if owner is not None else None
-
-        # Normalize present header names (case-insensitive)
-        present = {k.lower() for k in headers}
-
-        if auth:
-            if isinstance(auth, dict):
-                # Merge key-by-key if caller stored a header dict
-                for k, v in auth.items():
-                    if k.lower() not in present:
-                        headers[k] = v
-            elif isinstance(auth, str):
-                # Caller stored just the value: "Basic abcd=="
-                if "authorization" not in present:
-                    headers["Authorization"] = auth
-            else:
-                # Ignore unexpected types instead of crashing
-                pass
+        if not self.owner_inst or self.owner_inst._security is None:
+            return headers
+        if not any(key.lower() == "authorization" for key in headers.keys()):
+            headers["Authorization"] = self.owner_inst._security.http_header
 
         return headers
 
@@ -347,7 +328,9 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
         try:
             with self._sync_http_client.stream(
-                method="GET", url=form.href, headers=self._merge_auth_headers({"Accept": "text/event-stream"})
+                method="GET",
+                url=form.href,
+                headers=self._merge_auth_headers({"Accept": "text/event-stream"}),
             ) as resp:
                 resp.raise_for_status()
                 interrupting_event = threading.Event()
@@ -383,7 +366,9 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
         try:
             async with self._async_http_client.stream(
-                method="GET", url=form.href, headers=self._merge_auth_headers({"Accept": "text/event-stream"})
+                method="GET",
+                url=form.href,
+                headers=self._merge_auth_headers({"Accept": "text/event-stream"}),
             ) as resp:
                 resp.raise_for_status()
                 interrupting_event = asyncio.Event()

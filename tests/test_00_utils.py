@@ -4,7 +4,11 @@ import pytest
 
 from pydantic import BaseModel, ValidationError
 
-from hololinked.utils import get_input_model_from_signature, issubklass, pydantic_validate_args_kwargs
+from hololinked.utils import (
+    get_input_model_from_signature,
+    issubklass,
+    pydantic_validate_args_kwargs,
+)
 
 
 def func_without_args():

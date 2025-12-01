@@ -266,7 +266,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def run_with_http_server(
         self,
         port: int = 8080,
-        address: str = "0.0.0.0",
+        address: str = "0.0.0.0",  # SAST(id='hololinked.core.thing.Thing.run_with_http_server.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
         # host: str = None,
         allowed_clients: str | list[str] | None = None,
         ssl_context: ssl.SSLContext | None = None,

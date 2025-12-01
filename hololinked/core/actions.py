@@ -159,7 +159,7 @@ class BoundAction:
         else:
             raise StateMachineError(
                 "Thing '{}' is in '{}' state, however action can be executed only in '{}' state".format(
-                    f"{self.owner.__class__}.{self.owner_inst.id}",
+                    self.owner_inst,
                     self.owner_inst.state,
                     self.execution_info.state,
                 )

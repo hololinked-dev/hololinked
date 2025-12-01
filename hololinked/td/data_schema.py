@@ -42,9 +42,8 @@ class DataSchema(Schema):
     const: Optional[bool] = None
     default: Optional[Any] = None
     readOnly: Optional[bool] = None
-    writeOnly: Optional[bool] = (
-        None  # write only can be considered as actions with no return value, so not used in this repository
-    )
+    writeOnly: Optional[bool] = None
+    # write only can be considered as actions with no return value, so not used in this repository
     format: Optional[str] = None
     unit: Optional[str] = None
     type: Optional[str] = None
@@ -376,6 +375,7 @@ class SelectorSchema(DataSchema):
             )
         for obj in objects:
             if any(types["type"] == JSONSchema._replacements.get(type(obj), None) for types in self.oneOf):
+                # just avoid duplicates of same type in oneOf
                 continue
             if isinstance(property, ClassSelector):
                 if not JSONSchema.is_allowed_type(obj):

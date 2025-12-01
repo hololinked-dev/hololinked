@@ -682,13 +682,17 @@ class RPCServer(BaseZMQServer):
                     "This server cannot generate TD for TCP protocol, consider using thing model directly."
                 )
             req_rep_socket_address = self.tcp_server.socket_address  # type: str
-            req_rep_socket_address = req_rep_socket_address.replace("*", socket.gethostname()).replace(
+            req_rep_socket_address = req_rep_socket_address.replace(
+                "*", socket.gethostname()
+            ).replace(
                 "0.0.0.0", socket.gethostname()
-            )
+            )  # SAST(id='hololinked.core.zmq.rpc_server.RPCServer.get_thing_description.req_rep_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
             pub_sub_socket_address = self.tcp_event_publisher.socket_address  # type: str
-            pub_sub_socket_address = pub_sub_socket_address.replace("*", socket.gethostname()).replace(
+            pub_sub_socket_address = pub_sub_socket_address.replace(
+                "*", socket.gethostname()
+            ).replace(
                 "0.0.0.0", socket.gethostname()
-            )
+            )  # SAST(id='hololinked.core.zmq.rpc_server.RPCServer.get_thing_description.pub_sub_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
         else:
             raise ValueError(f"Unsupported protocol '{protocol}' for ZMQ.")
 

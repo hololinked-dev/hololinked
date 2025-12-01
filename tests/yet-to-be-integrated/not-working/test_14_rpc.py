@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import multiprocessing
 import random
 import threading
@@ -23,14 +22,14 @@ class TestRPC(TestCase):
     def setUpClass(self):
         print("test RPC")
         self.thing_cls = TestThing
-        start_thing_forked(
-            thing_cls=self.thing_cls,
-            instance_name="test-rpc",
-            log_level=logging.WARN,
-            protocols=["IPC", "TCP"],
-            tcp_socket_address="tcp://*:58000",
-            http_server=True,
-        )
+        # start_thing_forked(
+        #     thing_cls=self.thing_cls,
+        #     instance_name="test-rpc",
+        #     log_level=logging.WARN,
+        #     protocols=["IPC", "TCP"],
+        #     tcp_socket_address="tcp://*:58000",
+        #     http_server=True,
+        # )
         self.thing_client = ObjectProxy("test-rpc")  # type: TestThing
 
     @classmethod
