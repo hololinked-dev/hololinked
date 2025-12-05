@@ -24,7 +24,7 @@ def prepare_object_storage(instance, **kwargs):
     if use_json_file:
         json_filename = kwargs.get(
             "json_filename",
-            f"{get_sanitized_filename_from_random_string(instance, extension='json')}",
+            f"{get_sanitized_filename_from_random_string(f'{instance.__class__.__name__}_{instance.id}', extension='json')}",
         )
         json_filename = os.path.join(global_config.TEMP_DIR_db, json_filename)
         instance.db_engine = ThingJSONStorage(filename=json_filename, instance=instance)

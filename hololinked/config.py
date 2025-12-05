@@ -30,11 +30,15 @@ import os
 import tracemalloc
 import warnings
 
+from pathlib import Path
 from typing import Any  # noqa: F401
 
 import zmq.asyncio
 
-from .utils import set_global_event_loop_policy
+from .utils import (
+    get_sanitized_filename_from_random_string,
+    set_global_event_loop_policy,
+)
 
 
 class Configuration:
@@ -98,6 +102,7 @@ class Configuration:
     """
 
     __slots__ = [
+        "app_name",
         # folders
         "TEMP_DIR",
         # TCP sockets
@@ -118,6 +123,10 @@ class Configuration:
         "DEBUG",
         # logging
         "LOG_LEVEL",
+        "USE_LOG_FILE",
+        "LOG_FILENAME",
+        "ROTATE_LOG_FILES",
+        "LOGFILE_BACKUP_COUNT",
         # "USE_STRUCTLOG",
         "COLORED_LOGS",
         # serializers
@@ -125,7 +134,8 @@ class Configuration:
         "ALLOW_UNKNOWN_SERIALIZATION",
     ]
 
-    def __init__(self, use_environment: bool = False):
+    def __init__(self, app_name: str | None = None, use_environment: bool = False):
+        self.app_name = app_name
         self.load_variables(use_environment)
         self.setup()
 
@@ -150,7 +160,11 @@ class Configuration:
         self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
         # self.USE_STRUCTLOG = True
         self.COLORED_LOGS = False
-        self.LOG_FILE = True
+        self.USE_LOG_FILE = True
+        self.LOG_FILENAME = os.path.join(self.TEMP_DIR_logs, self.MAIN_SCRIPT_FILENAME)
+        self.ROTATE_LOG_FILES = True
+        self.LOGFILE_BACKUP_COUNT = 14
+        # Add the filename of the main script importing this module
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
 
@@ -180,7 +194,12 @@ class Configuration:
         from .logger import setup_logging
 
         # if self.USE_STRUCTLOG:
-        setup_logging(log_level=self.LOG_LEVEL, colored_logs=self.COLORED_LOGS)
+        setup_logging(
+            log_level=self.LOG_LEVEL,
+            colored_logs=self.COLORED_LOGS,
+            log_file=self.LOG_FILENAME if self.USE_LOG_FILE else None,
+            rotate_log_files=self.ROTATE_LOG_FILES,
+        )
 
         set_global_event_loop_policy(self.USE_UVLOOP)
         if self.TRACE_MALLOC:
@@ -253,6 +272,20 @@ class Configuration:
     def TEMP_DIR_db(self) -> str:
         """returns the temporary directory path for database files"""
         return os.path.join(self.TEMP_DIR, "db")
+
+    @property
+    def MAIN_SCRIPT_FILENAME(self) -> str | None:
+        """returns the main script filename if available"""
+        if not self.app_name:
+            file = os.path.splitext(os.path.basename(__import__("__main__").__file__))
+            filename = file[0]
+            if not filename:
+                filename = Path.cwd().name
+        else:
+            filename = self.app_name
+        if filename:
+            return get_sanitized_filename_from_random_string(filename, extension="log")
+        return "hololinked.log"
 
 
 global_config = Configuration()

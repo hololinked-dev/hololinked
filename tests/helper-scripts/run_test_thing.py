@@ -1,6 +1,7 @@
 import os
 import ssl
 import sys
+import time
 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
@@ -60,10 +61,9 @@ mqtt_publisher.add_things(thing2)
 http_server.add_things(thing1)
 
 run(zmq_server, mqtt_publisher, http_server, forked=True)
-for i in range(100):
-    print(f"Running main thread iteration {i}")
-    import time
 
+for i in range(10):
+    print(f"Running main thread iteration {i}")
     time.sleep(1)
 
 stop()
