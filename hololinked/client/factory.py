@@ -20,7 +20,7 @@ from ..td.interaction_affordance import (
     EventAffordance,
     PropertyAffordance,
 )
-from ..utils import set_global_event_loop_policy, uuid_hex
+from ..utils import uuid_hex
 from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
 from .http.consumed_interactions import HTTPAction, HTTPEvent, HTTPProperty
 from .mqtt.consumed_interactions import MQTTConsumer  # only one type for now
@@ -33,9 +33,6 @@ from .zmq.consumed_interactions import (
     ZMQEvent,
     ZMQProperty,
 )
-
-
-set_global_event_loop_policy()
 
 
 class ClientFactory:

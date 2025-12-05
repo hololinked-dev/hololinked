@@ -27,52 +27,60 @@ SOFTWARE.
 import json
 import logging
 import os
-import tempfile
+import tracemalloc
 import warnings
 
 from typing import Any  # noqa: F401
 
 import zmq.asyncio
 
+from .utils import set_global_event_loop_policy
+
 
 class Configuration:
     """
     Allows to auto apply common settings used throughout the package,
-    instead of passing these settings as arguments. Import ``global_config`` variable
+    instead of passing these settings as arguments. Import `global_config` variable
     instead of instantitation this class.
 
     Supports loading configuration from a JSON file whose path is specified
     under environment variable HOLOLINKED_CONFIG.
 
-    Values are mutable in runtime and not type checked. Keys of JSON file
-    must correspond to supported value name. Supported values are -
+    Values are usually mutable in runtime, except logging setup and ZMQ context (which refreshes the global state)
+    and not type checked. Keys of JSON file must correspond to supported value name. Supported values are -
 
-    TEMP_DIR - system temporary directory to store temporary files like IPC sockets.
+    `TEMP_DIR` - system temporary directory to store temporary files like IPC sockets.
     default - tempfile.gettempdir().
 
-    TCP_SOCKET_SEARCH_START_PORT - starting port number for automatic port searching
+    `TCP_SOCKET_SEARCH_START_PORT` - starting port number for automatic port searching
     for TCP socket binding, used for event addresses. default 60000.
 
-    TCP_SOCKET_SEARCH_END_PORT - ending port number for automatic port searching
+    `TCP_SOCKET_SEARCH_END_PORT` - ending port number for automatic port searching
     for TCP socket binding, used for event addresses. default 65535.
 
-    DB_CONFIG_FILE - file path for database configuration. default None.
+    `DB_CONFIG_FILE` - file path for database configuration. default None.
 
-    SYSTEM_HOST - system view server qualified IP or name. default None.
+    `USE_UVLOOP` - signicantly faster event loop for Linux systems. Reads data from network faster. default False.
 
-    PWD_HASHER_TIME_COST - system view server password authentication time cost,
-    default 15. Refer argon2-cffi docs.
+    `TRACE_MALLOC` - whether to trace memory allocations using tracemalloc module. default False.
 
-    PWD_HASHER_MEMORY_COST - system view server password authentication memory cost.
-    Refer argon2-cffi docs.
+    `VALIDATE_SCHEMAS` - whether to validate JSON schema supplied for properties, actions and events
+    (not validation of payload, but validation of schema itself). default True.
 
-    USE_UVLOOP - signicantly faster event loop for Linux systems. Reads data from network faster. default False.
+    `DEBUG` - whether to print debug logs. default False.
+
+    `LOG_LEVEL` - logging level to use. default logging.INFO, logging.DEBUG if DEBUG is True.
+
+    `COLORED_LOGS` - whether to use colored logs in console. default False.
+
+    `ALLOW_PICKLE` - whether to allow pickle serialization/deserialization. default False.
+
+    `ALLOW_UNKNOWN_SERIALIZATION` - whether to allow unknown serialization formats, specifically from clients. default False.
 
     Parameters
     ----------
     use_environment: bool
         load files from JSON file specified under environment
-
     """
 
     __slots__ = [
@@ -82,21 +90,13 @@ class Configuration:
         "TCP_SOCKET_SEARCH_START_PORT",
         "TCP_SOCKET_SEARCH_END_PORT",
         # HTTP server
-        "COOKIE_SECRET",
         "ALLOW_CORS",
-        # credentials
-        "PWD_HASHER_TIME_COST",
-        "PWD_HASHER_MEMORY_COST",
-        # system view
-        "PRIMARY_HOST",
-        "LOCALHOST_PORT",
         # database
         "DB_CONFIG_FILE",
         # Eventloop
         "USE_UVLOOP",
         "TRACE_MALLOC",
-        # Schema
-        "VALIDATE_SCHEMA_ON_CLIENT",
+        # schema validation
         "VALIDATE_SCHEMAS",
         # ZMQ
         "ZMQ_CONTEXT",
@@ -104,7 +104,7 @@ class Configuration:
         "DEBUG",
         # logging
         "LOG_LEVEL",
-        "USE_STRUCTLOG",
+        # "USE_STRUCTLOG",
         "COLORED_LOGS",
         # serializers
         "ALLOW_PICKLE",
@@ -113,7 +113,7 @@ class Configuration:
 
     def __init__(self, use_environment: bool = False):
         self.load_variables(use_environment)
-        self.reset_actions()
+        self.setup()
 
     def load_variables(self, use_environment: bool = False):
         """
@@ -122,22 +122,22 @@ class Configuration:
         """
         # note that all variables have not been implemented yet,
         # things just come and go as of now
-        self.TEMP_DIR = f"{tempfile.gettempdir()}{os.sep}hololinked"
+        self.TEMP_DIR = os.path.join(os.path.expanduser("~"), ".hololinked")
         self.TCP_SOCKET_SEARCH_START_PORT = 60000
         self.TCP_SOCKET_SEARCH_END_PORT = 65535
-        self.PWD_HASHER_TIME_COST = 15
+        self.ALLOW_CORS = False
+        self.DB_CONFIG_FILE = None
         self.USE_UVLOOP = False
         self.TRACE_MALLOC = False
-        self.VALIDATE_SCHEMA_ON_CLIENT = False
+        # self.VALIDATE_SCHEMA_ON_CLIENT = False
         self.VALIDATE_SCHEMAS = True
         self.ZMQ_CONTEXT = zmq.asyncio.Context()
         self.DEBUG = False
+        self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
+        # self.USE_STRUCTLOG = True
+        self.COLORED_LOGS = False
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
-        self.ALLOW_CORS = False
-        self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
-        self.USE_STRUCTLOG = True
-        self.COLORED_LOGS = False
 
         if not use_environment:
             return
@@ -151,26 +151,39 @@ class Configuration:
         for item, value in config.items():
             setattr(self, item, value)
 
-    def reset_actions(self):
-        "actions to be done to reset configurations (not actions to be called)"
+    def setup(self):
+        """actions to be done to reset configurations (not actions to be called)"""
         try:
             os.mkdir(self.TEMP_DIR)
+            os.mkdir(os.path.join(self.TEMP_DIR, "sockets"))
+            os.mkdir(os.path.join(self.TEMP_DIR, "logs"))
+            os.mkdir(os.path.join(self.TEMP_DIR, "db"))
         except FileExistsError:
             pass
         from .logger import setup_logging
 
-        if self.USE_STRUCTLOG:
-            setup_logging(log_level=self.LOG_LEVEL, colored_logs=self.COLORED_LOGS)
+        # if self.USE_STRUCTLOG:
+        setup_logging(log_level=self.LOG_LEVEL, colored_logs=self.COLORED_LOGS)
+
+        set_global_event_loop_policy()
+        if self.TRACE_MALLOC:
+            tracemalloc.start()
 
     def copy(self):
-        "returns a copy of this config as another object"
+        """returns a copy of this config as another object"""
         other = object.__new__(Configuration)
         for item in self.__slots__:
             setattr(other, item, getattr(self, item))
         return other
 
+    def set(self, **kwargs):
+        """sets multiple config values at once"""
+        for item, value in kwargs.items():
+            setattr(self, item, value)
+        self.setup()
+
     def asdict(self):
-        "returns this config as a regular dictionary"
+        """returns this config as a regular dictionary"""
         return {item: getattr(self, item) for item in self.__slots__}
 
     def zmq_context(self) -> zmq.asyncio.Context:
