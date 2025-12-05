@@ -36,6 +36,8 @@ from typing import Any  # noqa: F401
 
 import zmq.asyncio
 
+import __main__
+
 from .utils import (
     get_sanitized_filename_from_random_string,
     set_global_event_loop_policy,
@@ -138,7 +140,6 @@ class Configuration:
     def __init__(self, app_name: str | None = None, use_environment: bool = False):
         self.app_name = app_name
         self.load_variables(use_environment)
-        self.setup()
 
     def load_variables(self, use_environment: bool = False):
         """
@@ -170,6 +171,7 @@ class Configuration:
         self.ALLOW_UNKNOWN_SERIALIZATION = False
 
         if not use_environment:
+            self.setup()
             return
         # environment variables overwrite config items
         file = os.environ.get("HOLOLINKED_CONFIG", None)
@@ -193,9 +195,13 @@ class Configuration:
             except PermissionError:
                 warnings.warn(f"permission denied to create directory {directory}", UserWarning)
 
+        set_global_event_loop_policy(self.USE_UVLOOP)
+        if self.TRACE_MALLOC:
+            tracemalloc.start()
+
         from .logger import setup_logging
 
-        # if self.USE_STRUCTLOG:
+        # if self.USE_STRUCTLOG: # no other option for now
         setup_logging(
             log_level=self.LOG_LEVEL,
             colored_logs=self.COLORED_LOGS,
@@ -203,10 +209,6 @@ class Configuration:
             rotate_log_files=self.ROTATE_LOG_FILES,
             logfile_backup_count=self.LOGFILE_BACKUP_COUNT,
         )
-
-        set_global_event_loop_policy(self.USE_UVLOOP)
-        if self.TRACE_MALLOC:
-            tracemalloc.start()
 
     def copy(self):
         """returns a copy of this config as another object"""
@@ -296,10 +298,12 @@ class Configuration:
     def _main_script_filename(self) -> str | None:
         """returns the main script filename if available"""
         if not self.app_name:
-            file = os.path.splitext(os.path.basename(__import__("__main__").__file__))
-            filename = file[0]
-            if not filename:
+            file = getattr(__main__, "__file__", None)
+            if not file:
                 filename = Path.cwd().name
+            else:
+                file = os.path.splitext(os.path.basename(file))
+                filename = file[0]
         else:
             filename = self.app_name
         if filename:

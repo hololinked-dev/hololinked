@@ -65,7 +65,7 @@ def setup_logging(
     iostream_handler.setFormatter(logging.Formatter("%(message)s"))
     handlers.append(iostream_handler)
 
-    logging.basicConfig(level=log_level, handlers=handlers)
+    logging.basicConfig(level=log_level, handlers=handlers, force=True)
 
     global default_label_formatter
     console_renderer = structlog.dev.ConsoleRenderer(colors=colored_logs)
