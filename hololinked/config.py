@@ -39,43 +39,57 @@ from .utils import set_global_event_loop_policy
 
 class Configuration:
     """
-    Allows to auto apply common settings used throughout the package,
-    instead of passing these settings as arguments. Import `global_config` variable
-    instead of instantitation this class.
+    Allows to auto apply common settings used throughout the package, instead of passing these settings as arguments.
+    Import `global_config` variable instead of instantitation this class.
 
-    Supports loading configuration from a JSON file whose path is specified
-    under environment variable HOLOLINKED_CONFIG.
+    ```python
+    from hololinked.config import global_config
 
-    Values are usually mutable in runtime, except logging setup and ZMQ context (which refreshes the global state)
-    and not type checked. Keys of JSON file must correspond to supported value name. Supported values are -
+    global_config.TEMP_DIR = "/my/temp/dir"
+    global_config.DEBUG = True
+
+    class MyThing(Thing):
+        ...
+    ```
+
+    Supports loading configuration from a JSON file whose path is specified under environment variable `HOLOLINKED_CONFIG`.
+    Values are not type checked and are usually mutable in runtime, except:
+
+    - logging setup
+    - ZMQ context
+    - global event loop policy
+
+    which refresh the global state. Keys of JSON file must correspond to supported value name.
+
+    Supported values are -
 
     `TEMP_DIR` - system temporary directory to store temporary files like IPC sockets.
-    default - tempfile.gettempdir().
+    default - `~/.hololinked` (`.hololinked` under home directory).
 
     `TCP_SOCKET_SEARCH_START_PORT` - starting port number for automatic port searching
-    for TCP socket binding, used for event addresses. default 60000.
+    for TCP socket binding, used for event addresses. default `60000`.
 
     `TCP_SOCKET_SEARCH_END_PORT` - ending port number for automatic port searching
-    for TCP socket binding, used for event addresses. default 65535.
+    for TCP socket binding, used for event addresses. default `65535`.
 
-    `DB_CONFIG_FILE` - file path for database configuration. default None.
+    `DB_CONFIG_FILE` - file path for database configuration. default `None`.
 
-    `USE_UVLOOP` - signicantly faster event loop for Linux systems. Reads data from network faster. default False.
+    `USE_UVLOOP` - signicantly faster event loop for Linux systems. Reads data from network faster. default `False`.
 
-    `TRACE_MALLOC` - whether to trace memory allocations using tracemalloc module. default False.
+    `TRACE_MALLOC` - whether to trace memory allocations using tracemalloc module. default `False`.
 
     `VALIDATE_SCHEMAS` - whether to validate JSON schema supplied for properties, actions and events
-    (not validation of payload, but validation of schema itself). default True.
+    (not validation of payload, but validation of schema itself). default `True`.
 
-    `DEBUG` - whether to print debug logs. default False.
+    `DEBUG` - whether to print debug logs. default `False`.
 
-    `LOG_LEVEL` - logging level to use. default logging.INFO, logging.DEBUG if DEBUG is True.
+    `LOG_LEVEL` - logging level to use. default `logging.INFO`, `logging.DEBUG` if `DEBUG` is `True`.
 
-    `COLORED_LOGS` - whether to use colored logs in console. default False.
+    `COLORED_LOGS` - whether to use colored logs in console. default `False`.
 
-    `ALLOW_PICKLE` - whether to allow pickle serialization/deserialization. default False.
+    `ALLOW_PICKLE` - whether to allow pickle serialization/deserialization. default `False`.
 
-    `ALLOW_UNKNOWN_SERIALIZATION` - whether to allow unknown serialization formats, specifically from clients. default False.
+    `ALLOW_UNKNOWN_SERIALIZATION` - whether to allow unknown serialization formats, specifically from clients. default `False`.
 
     Parameters
     ----------
@@ -118,7 +132,7 @@ class Configuration:
     def load_variables(self, use_environment: bool = False):
         """
         set default values & use the values from environment file.
-        Set use_environment to False to not use environment file.
+        Set `use_environment` to `False` to not use environment file. This method is called during `__init__`.
         """
         # note that all variables have not been implemented yet,
         # things just come and go as of now
@@ -136,6 +150,7 @@ class Configuration:
         self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
         # self.USE_STRUCTLOG = True
         self.COLORED_LOGS = False
+        self.LOG_FILE = True
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
 
@@ -148,11 +163,13 @@ class Configuration:
             return
         with open(file, "r") as file:
             config = json.load(file)  # type: dict[str, Any]
-        for item, value in config.items():
-            setattr(self, item, value)
+        self.set(**config)
 
     def setup(self):
-        """actions to be done to reset configurations (not actions to be called)"""
+        """
+        actions to be done to recreate global configuration state after changing config values.
+        Called after `load_variables` and `set` methods.
+        """
         try:
             os.mkdir(self.TEMP_DIR)
             os.mkdir(os.path.join(self.TEMP_DIR, "sockets"))
@@ -165,7 +182,7 @@ class Configuration:
         # if self.USE_STRUCTLOG:
         setup_logging(log_level=self.LOG_LEVEL, colored_logs=self.COLORED_LOGS)
 
-        set_global_event_loop_policy()
+        set_global_event_loop_policy(self.USE_UVLOOP)
         if self.TRACE_MALLOC:
             tracemalloc.start()
 
@@ -177,7 +194,11 @@ class Configuration:
         return other
 
     def set(self, **kwargs):
-        """sets multiple config values at once"""
+        """
+        sets multiple config values at once, and recreates necessary global states.
+        `load_variables` sets default values first, then overwrites with environment file values.
+        This method only overwrites the specified values.
+        """
         for item, value in kwargs.items():
             setattr(self, item, value)
         self.setup()
@@ -217,6 +238,21 @@ class Configuration:
 
     def __del__(self):
         self.ZMQ_CONTEXT.term()
+
+    @property
+    def TEMP_DIR_sockets(self) -> str:
+        """returns the temporary directory path for IPC sockets"""
+        return os.path.join(self.TEMP_DIR, "sockets")
+
+    @property
+    def TEMP_DIR_logs(self) -> str:
+        """returns the temporary directory path for log files"""
+        return os.path.join(self.TEMP_DIR, "logs")
+
+    @property
+    def TEMP_DIR_db(self) -> str:
+        """returns the temporary directory path for database files"""
+        return os.path.join(self.TEMP_DIR, "db")
 
 
 global_config = Configuration()

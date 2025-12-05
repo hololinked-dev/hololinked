@@ -21,6 +21,7 @@ from ...serializers.serializers import Serializers
 from ...utils import (
     format_exception_as_json,
     get_current_async_loop,
+    get_sanitized_filename_from_random_string,
     run_callable_somehow,
     uuid_hex,
 )
@@ -145,15 +146,11 @@ class BaseZMQ:
         if transport == ZMQ_TRANSPORTS.IPC or transport.lower() == "ipc":
             if socket_address is None or not socket_address.endswith(".ipc"):
                 if not socket_address:
-                    split_id = server_id.split("/")
+                    filename = get_sanitized_filename_from_random_string(server_id, "ipc")
                 elif not socket_address.endswith(".ipc"):
-                    split_id = socket_address.split("/")
-                socket_dir = os.sep + os.sep.join(split_id[:-1]) if len(split_id) > 1 else ""
-                directory = global_config.TEMP_DIR + socket_dir
-                if not os.path.exists(directory):
-                    os.makedirs(directory)
+                    filename = get_sanitized_filename_from_random_string(socket_address, "ipc")
                 # re-compute for IPC because it looks for a file in a directory
-                socket_address = "ipc://{}{}{}.ipc".format(directory, os.sep, split_id[-1])
+                socket_address = "ipc://{}{}{}".format(global_config.TEMP_DIR_sockets, os.sep, filename)
             if bind:
                 socket.bind(socket_address)
             else:
