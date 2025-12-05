@@ -39,7 +39,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         **kwargs
             Additional keyword arguments for server configuration. Usually:
 
-            - `logger`: `logging.Logger`, custom logger instance.
+            - `logger`: `structlog.stdlib.BoundLogger`, custom logger instance.
             - `poll_timeout`: `int`, polling timeout in milliseconds.
         """
         self.ipc_server = self.tcp_server = None

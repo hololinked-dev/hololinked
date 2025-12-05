@@ -229,17 +229,13 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
     )  # type: list[dict[str, Any]]
 
 
-def prepare_object_logger(instance: RemoteObject, log_level: int, log_file: str, remote_access: bool = False) -> None:
+def prepare_object_logger(instance: RemoteObject, remote_access: bool = False) -> None:
     """
     Setup logger for the object with default settings. If a logger is already present, it is not recreated.
     If remote access is present, it is not recreated. This is a single-shot method to be run at __init__.
 
     Parameters
     ----------
-    log_level: int
-        logging level.
-    log_file: str
-        log file path. A FileHandler is attached to the logger if this is not None.
     remote_access: bool
         if True, a RemoteAccessHandler is attached to the logger.
     """

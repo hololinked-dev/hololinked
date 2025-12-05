@@ -4,7 +4,6 @@ Classes that contain the client logic for the HTTP protocol.
 
 import asyncio
 import contextlib
-import logging
 import threading
 
 from copy import deepcopy
@@ -12,6 +11,7 @@ from typing import Any, AsyncIterator, Callable, Iterator
 
 import httpcore
 import httpx
+import structlog
 
 from ...constants import Operations
 from ...serializers import Serializers
@@ -103,7 +103,7 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
         owner_inst: Any = None,
-        logger: logging.Logger = None,
+        logger: structlog.stdlib.BoundLogger = None,
     ) -> None:
         ConsumedThingAction.__init__(self=self, resource=resource, owner_inst=owner_inst, logger=logger)
         HTTPConsumedAffordanceMixin.__init__(
@@ -188,7 +188,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
         owner_inst: Any = None,
-        logger: logging.Logger = None,
+        logger: structlog.stdlib.BoundLogger = None,
     ) -> None:
         ConsumedThingProperty.__init__(self=self, resource=resource, owner_inst=owner_inst, logger=logger)
         HTTPConsumedAffordanceMixin.__init__(
@@ -311,7 +311,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
         owner_inst: Any = None,
-        logger: logging.Logger = None,
+        logger: structlog.stdlib.BoundLogger = None,
     ) -> None:
         ConsumedThingEvent.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
         HTTPConsumedAffordanceMixin.__init__(

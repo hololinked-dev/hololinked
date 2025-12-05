@@ -1,7 +1,6 @@
-import logging
-
 from typing import Any, Optional
 
+import structlog
 import zmq.asyncio
 
 from ..config import global_config
@@ -18,7 +17,7 @@ async def consume_broker_queue(
     thing_id: str,
     access_point: str,
     context: Optional[zmq.asyncio.Context] = None,
-    logger: Optional[logging.Logger] = None,
+    logger: Optional[structlog.stdlib.BoundLogger] = None,
     poll_timeout: int = 1000,
 ) -> tuple[AsyncZMQClient, dict[str, Any]]:
     """
@@ -36,7 +35,7 @@ async def consume_broker_queue(
         The access point (e.g., "TCP", "WS", or a specific address).
     context : Optional[zmq.asyncio.Context], optional
         ZMQ context to use for the connection. If None, uses the global context.
-    logger : Optional[logging.Logger], optional
+    logger : Optional[structlog.stdlib.BoundLogger], optional
         Logger instance for logging events. If None, no logging is performed.
     poll_timeout : int, optional
         Poll timeout in milliseconds (default is 1000).

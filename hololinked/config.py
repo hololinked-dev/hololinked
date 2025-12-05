@@ -161,8 +161,8 @@ class Configuration:
         self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
         # self.USE_STRUCTLOG = True
         self.COLORED_LOGS = False
-        self.USE_LOG_FILE = True
-        self.LOG_FILENAME = os.path.join(self.TEMP_DIR_logs, self.MAIN_SCRIPT_FILENAME)
+        self.USE_LOG_FILE = False
+        self.LOG_FILENAME = os.path.join(self.TEMP_DIR_LOGS, self._main_script_filename)
         self.ROTATE_LOG_FILES = True
         self.LOGFILE_BACKUP_COUNT = 14
         # Add the filename of the main script importing this module
@@ -185,7 +185,7 @@ class Configuration:
         actions to be done to recreate global configuration state after changing config values.
         Called after `load_variables` and `set` methods.
         """
-        for directory in [self.TEMP_DIR, self.TEMP_DIR_sockets, self.TEMP_DIR_logs, self.TEMP_DIR_db]:
+        for directory in [self.TEMP_DIR, self.TEMP_DIR_SOCKETS, self.TEMP_DIR_LOGS, self.TEMP_DIR_DB]:
             try:
                 os.mkdir(directory)
             except FileExistsError:
@@ -201,6 +201,7 @@ class Configuration:
             colored_logs=self.COLORED_LOGS,
             log_file=self.LOG_FILENAME if self.USE_LOG_FILE else None,
             rotate_log_files=self.ROTATE_LOG_FILES,
+            logfile_backup_count=self.LOGFILE_BACKUP_COUNT,
         )
 
         set_global_event_loop_policy(self.USE_UVLOOP)
@@ -262,9 +263,9 @@ class Configuration:
         Cleans up temporary directories used by hololinked, all log files and IPC sockets are removed.
         If `cleanup_databases` is `True`, database files are also removed.
         """
-        directories = [self.TEMP_DIR_sockets, self.TEMP_DIR_logs]
+        directories = [self.TEMP_DIR_SOCKETS, self.TEMP_DIR_LOGS]
         if cleanup_databases:
-            directories.append(self.TEMP_DIR_db)
+            directories.append(self.TEMP_DIR_DB)
         for directory in directories:
             try:
                 shutil.rmtree(directory)
@@ -277,22 +278,22 @@ class Configuration:
         self.ZMQ_CONTEXT.term()
 
     @property
-    def TEMP_DIR_sockets(self) -> str:
+    def TEMP_DIR_SOCKETS(self) -> str:
         """returns the temporary directory path for IPC sockets"""
         return os.path.join(self.TEMP_DIR, "sockets")
 
     @property
-    def TEMP_DIR_logs(self) -> str:
+    def TEMP_DIR_LOGS(self) -> str:
         """returns the temporary directory path for log files"""
         return os.path.join(self.TEMP_DIR, "logs")
 
     @property
-    def TEMP_DIR_db(self) -> str:
+    def TEMP_DIR_DB(self) -> str:
         """returns the temporary directory path for database files"""
         return os.path.join(self.TEMP_DIR, "db")
 
     @property
-    def MAIN_SCRIPT_FILENAME(self) -> str | None:
+    def _main_script_filename(self) -> str | None:
         """returns the main script filename if available"""
         if not self.app_name:
             file = os.path.splitext(os.path.basename(__import__("__main__").__file__))

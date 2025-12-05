@@ -1,11 +1,12 @@
 import asyncio
-import logging
 import threading
 import traceback
 import uuid
 import warnings
 
 from typing import Any, Callable
+
+import structlog
 
 from ...client.abstractions import (
     SSE,
@@ -135,7 +136,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         sync_client: SyncZMQClient,
         async_client: AsyncZMQClient,
         owner_inst: Any,
-        logger: logging.Logger,
+        logger: structlog.stdlib.BoundLogger,
         **kwargs,
     ) -> None:
         """
@@ -149,7 +150,7 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             asynchronous ZMQ client for async calls
         owner_inst: Any
             the parent object that owns this action
-        logger: logging.Logger
+        logger: structlog.stdlib.BoundLogger
             logger instance
         """
         ConsumedThingAction.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
@@ -263,7 +264,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         sync_client: SyncZMQClient,
         async_client: AsyncZMQClient,
         owner_inst: Any,
-        logger: logging.Logger,
+        logger: structlog.stdlib.BoundLogger,
         **kwargs,
     ) -> None:
         """
@@ -277,7 +278,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
             asynchronous ZMQ client for async calls
         owner_inst: Any
             the parent object that owns this property
-        logger: logging.Logger
+        logger: structlog.stdlib.BoundLogger
             logger instance for logging
         """
         ConsumedThingProperty.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
@@ -420,7 +421,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
     def __init__(
         self,
         resource: EventAffordance,
-        logger: logging.Logger,
+        logger: structlog.stdlib.BoundLogger,
         owner_inst: Any,
         **kwargs,
     ) -> None:

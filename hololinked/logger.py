@@ -29,7 +29,7 @@ def setup_logging(
     log_level: int = logging.INFO,
     colored_logs: bool = False,
     log_file: str = None,
-    rotate_log_files: bool = True,
+    **kwargs,
 ) -> None:
     """
     Setup structured logging using structlog. Not a flexible setup, except the values configurable in `global_config`,
@@ -43,11 +43,20 @@ def setup_logging(
         whether to use colored logs in console, usually harder to pick it up in fluentd
     log_file: str
         optional log file to log into
+    **kwargs
+        additional keyword arguments
+
+        - `rotate_log_files`: `bool`, whether to rotate log files daily (default True)
+        - `logfile_backup_count`: `int`, number of backup log files to keep (default 14)
     """
     handlers = []
     if log_file:
-        if rotate_log_files:
-            filehandler = logging.handlers.TimedRotatingFileHandler(log_file, when="midnight", backupCount=14)
+        if kwargs.get("rotate_log_files", True):
+            filehandler = logging.handlers.TimedRotatingFileHandler(
+                log_file,
+                when="midnight",
+                backupCount=kwargs.get("logfile_backup_count", 14),
+            )
         else:
             filehandler = logging.FileHandler(log_file)
         filehandler.setFormatter(logging.Formatter("%(message)s"))

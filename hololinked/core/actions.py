@@ -9,7 +9,6 @@ import jsonschema
 
 from pydantic import BaseModel, RootModel
 
-from ..config import global_config
 from ..constants import JSON
 from ..param.parameterized import ParameterizedFunction
 from ..schema_validators.validators import JSONSchemaValidator, PydanticSchemaValidator
@@ -350,7 +349,7 @@ def action(
                     + "Considering filing a bug report if you think this should have worked correctly",
                     category=RuntimeWarning,
                 )
-        if global_config.VALIDATE_SCHEMAS and input_schema:
+        if input_schema:
             if isinstance(input_schema, dict):
                 execution_info_validator.schema_validator = JSONSchemaValidator(input_schema)
             elif issubklass(input_schema, (BaseModel, RootModel)):

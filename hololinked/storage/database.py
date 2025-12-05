@@ -31,7 +31,7 @@ class BaseDB:
         self.conf = BaseDB.load_conf(
             config_file,
             default_file_path=os.path.join(
-                global_config.TEMP_DIR_db,
+                global_config.TEMP_DIR_DB,
                 get_sanitized_filename_from_thing_instance(instance),
             ),
         )

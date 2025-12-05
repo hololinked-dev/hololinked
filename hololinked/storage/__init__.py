@@ -19,14 +19,14 @@ def prepare_object_storage(instance, **kwargs):
         "use_mongo_db",
         instance.__class__.use_mongo_db if hasattr(instance.__class__, "use_mongo_db") else False,
     )
-    db_config_file = kwargs.get("db_config_file", None)
+    db_config_file = kwargs.get("db_config_file", global_config.DB_CONFIG_FILE)
 
     if use_json_file:
         json_filename = os.path.join(
-            global_config.TEMP_DIR_db,
+            global_config.TEMP_DIR_DB,
             kwargs.get("json_filename", f"{get_sanitized_filename_from_thing_instance(instance, extension='json')}"),
         )
-        json_filename = os.path.join(global_config.TEMP_DIR_db, json_filename)
+        json_filename = os.path.join(global_config.TEMP_DIR_DB, json_filename)
         instance.db_engine = ThingJSONStorage(filename=json_filename, instance=instance)
         instance.logger.info(f"using JSON file storage at {json_filename}")
     elif use_mongo:

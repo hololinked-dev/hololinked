@@ -65,7 +65,7 @@ class ClientFactory:
         kwargs:
             Additional configuration options:
 
-            - `logger`: `logging.Logger`, optional.
+            - `logger`: `structlog.stdlib.BoundLogger`, optional.
                  A custom logger instance to use for logging
             - `ignore_TD_errors`: `bool`, default `False`.
                 Whether to ignore errors while fetching the Thing Description (TD)
@@ -201,10 +201,8 @@ class ClientFactory:
         kwargs:
             Additional configuration options:
 
-            - `logger`: `logging.Logger`, optional.
+            - `logger`: `structlog.stdlib.BoundLogger`, optional.
                 A custom logger instance to use for logging
-            - `log_level`: `int`, default `logging.INFO`.
-                The logging level to use for the client (e.g., logging.DEBUG, logging.INFO)
             - `ignore_TD_errors`: `bool`, default `False`.
                 Whether to ignore errors while fetching the Thing Description (TD)
             - `skip_interaction_affordances`: `list[str]`, default `[]`.
@@ -217,6 +215,8 @@ class ClientFactory:
                 The timeout for establishing a HTTP connection (in seconds)
             - `request_timeout`: `float`, optional, default `60.0`.
                 The timeout for completing a HTTP request (in seconds)
+            - `security`: `BasicSecurity`, optional.
+                The security scheme to use for authentication
             - `username`: `str`, optional.
                 The username for HTTP Basic Authentication
             - `password`: `str`, optional.
@@ -375,10 +375,8 @@ class ClientFactory:
         kwargs:
             Additional configuration options:
 
-            - `logger`: `logging.Logger`, optional.
+            - `logger`: `structlog.stdlib.BoundLogger`, optional.
                  A custom logger instance to use for logging
-            - `log_level`: `int`, default `logging.INFO`.
-                The logging level to use for the client (e.g., logging.DEBUG, logging.INFO
         """
         id = kwargs.get("id", f"mqtt-client|{hostname}:{port}|{uuid_hex()}")
         logger = kwargs.get("logger", structlog.get_logger()).bind(

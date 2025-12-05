@@ -1,8 +1,7 @@
-import logging
-
 from typing import Any, Callable
 
 import aiomqtt
+import structlog
 
 from paho.mqtt.client import Client as PahoMQTTClient
 from paho.mqtt.client import MQTTMessage
@@ -22,7 +21,7 @@ class MQTTConsumer(ConsumedThingEvent):
         async_client: aiomqtt.Client,
         resource: EventAffordance,
         qos: int,
-        logger: logging.Logger,
+        logger: structlog.stdlib.BoundLogger,
         owner_inst: Any,
     ) -> None:
         super().__init__(resource=resource, logger=logger, owner_inst=owner_inst)
