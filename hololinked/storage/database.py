@@ -1,4 +1,5 @@
 import base64
+import os
 import threading
 
 from dataclasses import asdict, dataclass
@@ -19,11 +20,13 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
+from ..config import global_config
 from ..constants import JSONSerializable
 from ..core.property import Property
 from ..param import Parameterized
 from ..serializers.serializers import BaseSerializer, Serializers
 from ..serializers.serializers import PythonBuiltinJSONSerializer as JSONSerializer
+from ..utils import get_sanitized_filename_from_random_string
 from .config_models import MongoDBConfig, SQLDBConfig, SQLiteConfig
 
 
@@ -83,7 +86,15 @@ class BaseDB:
 
     def __init__(self, instance: Parameterized, config_file: str | None = None) -> None:
         self.thing_instance = instance
-        self.conf = BaseDB.load_conf(config_file, default_file_path=f"{instance.id}.db")
+        self.conf = BaseDB.load_conf(
+            config_file,
+            default_file_path=os.path.join(
+                global_config.TEMP_DIR_db,
+                get_sanitized_filename_from_random_string(
+                    f"{instance.__class__.__name__}.{instance.id}", extension="db"
+                ),
+            ),
+        )
         self.URL = self.conf.URL
         self._batch_call_context = {}
 

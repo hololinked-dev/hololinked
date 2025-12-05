@@ -27,6 +27,7 @@ SOFTWARE.
 import json
 import logging
 import os
+import shutil
 import tracemalloc
 import warnings
 
@@ -184,13 +185,12 @@ class Configuration:
         actions to be done to recreate global configuration state after changing config values.
         Called after `load_variables` and `set` methods.
         """
-        try:
-            os.mkdir(self.TEMP_DIR)
-            os.mkdir(os.path.join(self.TEMP_DIR, "sockets"))
-            os.mkdir(os.path.join(self.TEMP_DIR, "logs"))
-            os.mkdir(os.path.join(self.TEMP_DIR, "db"))
-        except FileExistsError:
-            pass
+        for directory in [self.TEMP_DIR, self.TEMP_DIR_sockets, self.TEMP_DIR_logs, self.TEMP_DIR_db]:
+            try:
+                os.mkdir(directory)
+            except FileExistsError:
+                pass
+
         from .logger import setup_logging
 
         # if self.USE_STRUCTLOG:
@@ -254,6 +254,20 @@ class Configuration:
         from .core.zmq.message import default_thing_execution_context
 
         default_thing_execution_context.fetchExecutionLogs = fetch_execution_logs
+
+    def cleanup_temp_dirs(self, cleanup_databases: bool = False) -> None:
+        """
+        Cleans up temporary directories used by hololinked, all log files and IPC sockets are removed.
+        If `cleanup_databases` is `True`, database files are also removed.
+        """
+        directories = [self.TEMP_DIR_sockets, self.TEMP_DIR_logs]
+        if cleanup_databases:
+            directories.append(self.TEMP_DIR_db)
+        for directory in directories:
+            try:
+                shutil.rmtree(directory)
+            except FileNotFoundError:
+                pass
 
     def __del__(self):
         self.ZMQ_CONTEXT.term()

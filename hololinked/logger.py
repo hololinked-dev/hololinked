@@ -32,8 +32,8 @@ def setup_logging(
     rotate_log_files: bool = True,
 ) -> None:
     """
-    Setup structured logging using structlog. Not a flexible setup, override the entire function
-    if you want a different logging configuration or monkey patch this method.
+    Setup structured logging using structlog. Not a flexible setup, except the values configurable in `global_config`,
+    Override the entire function if you want a different logging configuration by monkey patching this method.
 
     Parameters
     ----------
