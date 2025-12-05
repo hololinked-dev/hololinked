@@ -150,6 +150,10 @@ class BaseZMQ:
                 elif not socket_address.endswith(".ipc"):
                     filename = get_sanitized_filename_from_random_string(socket_address, "ipc")
                 # re-compute for IPC because it looks for a file in a directory
+                filename = filename.replace(
+                    EventPublisher._standard_address_suffix,
+                    f".{EventPublisher._standard_address_suffix_filename_replacement}",
+                )
                 socket_address = "ipc://{}{}{}".format(global_config.TEMP_DIR_sockets, os.sep, filename)
             if bind:
                 socket.bind(socket_address)
@@ -2107,6 +2111,9 @@ class AsyncioEventPool:
 
 class EventPublisher(BaseZMQServer, BaseSyncZMQ):
     """Event publisher for broadcasting messages to all connected clients. Implements PUB-SUB pattern."""
+
+    _standard_address_suffix = "/event-publisher"
+    _standard_address_suffix_filename_replacement = "event-publisher"
 
     def __init__(
         self,

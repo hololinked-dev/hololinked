@@ -122,7 +122,7 @@ class RPCServer(BaseZMQServer):
             **kwargs,
         )
         self.event_publisher = EventPublisher(
-            id=f"{self.id}/event-publisher",
+            id=f"{self.id}{EventPublisher._standard_address_suffix}",
             context=self.context,
             access_point=access_point,
             **kwargs,

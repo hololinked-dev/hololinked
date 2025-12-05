@@ -190,6 +190,8 @@ class Configuration:
                 os.mkdir(directory)
             except FileExistsError:
                 pass
+            except PermissionError:
+                warnings.warn(f"permission denied to create directory {directory}", UserWarning)
 
         from .logger import setup_logging
 
@@ -268,6 +270,8 @@ class Configuration:
                 shutil.rmtree(directory)
             except FileNotFoundError:
                 pass
+            except PermissionError:
+                warnings.warn(f"permission denied to cleanup directory {directory}", UserWarning)
 
     def __del__(self):
         self.ZMQ_CONTEXT.term()

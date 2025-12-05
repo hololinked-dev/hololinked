@@ -29,7 +29,7 @@ class AppIDs:
     """A thing ID"""
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def cleanup_temp_files():
     """Fixture to cleanup temporary files after all tests are done"""
     global_config.cleanup_temp_dirs(cleanup_databases=True)
@@ -45,7 +45,6 @@ def event_loop():
     loop.close()
 
 
-@pytest.mark.usefixtures("cleanup_temp_files")
 @pytest.fixture(autouse=True, scope="module")
 def setup_test_environment():
     """Automatically setup test environment for each file"""

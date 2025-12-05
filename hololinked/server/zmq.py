@@ -79,7 +79,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             new_port = int(port) + 1  # try the next port for the event publisher
             tcp_socket_address = f"{host}:{new_port}"
             self.tcp_event_publisher = EventPublisher(
-                id=f"{self.id}/event-publisher",
+                id=f"{self.id}{EventPublisher._standard_address_suffix}",
                 context=self.context,
                 transport=ZMQ_TRANSPORTS.TCP,
                 access_point=tcp_socket_address,
@@ -93,7 +93,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 **kwargs,
             )
             self.ipc_event_publisher = EventPublisher(
-                id=f"{self.id}/event-publisher",
+                id=f"{self.id}{EventPublisher._standard_address_suffix}",
                 context=self.context,
                 access_point=ZMQ_TRANSPORTS.IPC,
                 **kwargs,
