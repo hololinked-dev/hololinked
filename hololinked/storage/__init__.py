@@ -1,9 +1,9 @@
 import os
 
 from ..config import global_config
-from ..utils import get_sanitized_filename_from_random_string
 from .database import MongoThingDB, ThingDB
 from .json_storage import ThingJSONStorage
+from .utils import get_sanitized_filename_from_thing_instance
 
 
 def prepare_object_storage(instance, **kwargs):
@@ -24,10 +24,7 @@ def prepare_object_storage(instance, **kwargs):
     if use_json_file:
         json_filename = os.path.join(
             global_config.TEMP_DIR_db,
-            kwargs.get(
-                "json_filename",
-                f"{get_sanitized_filename_from_random_string(f'{instance.__class__.__name__}.{instance.id}', extension='json')}",
-            ),
+            kwargs.get("json_filename", f"{get_sanitized_filename_from_thing_instance(instance, extension='json')}"),
         )
         json_filename = os.path.join(global_config.TEMP_DIR_db, json_filename)
         instance.db_engine = ThingJSONStorage(filename=json_filename, instance=instance)
