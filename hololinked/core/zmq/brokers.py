@@ -151,7 +151,7 @@ class BaseZMQ:
                     filename = get_sanitized_filename_from_random_string(socket_address, "ipc")
                 # re-compute for IPC because it looks for a file in a directory
                 filename = filename.replace(
-                    EventPublisher._standard_address_suffix,
+                    EventPublisher._standard_address_suffix.replace("/", "_"),
                     f".{EventPublisher._standard_address_suffix_filename_replacement}",
                 )
                 socket_address = "ipc://{}{}{}".format(global_config.TEMP_DIR_SOCKETS, os.sep, filename)

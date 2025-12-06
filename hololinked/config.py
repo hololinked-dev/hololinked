@@ -24,7 +24,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import json
 import logging
 import os
 import shutil
@@ -53,13 +52,13 @@ class Configuration:
     from hololinked.config import global_config
 
     global_config.TEMP_DIR = "/my/temp/dir"
-    global_config.DEBUG = True
+    global_config.ALLOW_CORS = True
+    global_config.setup()  # Important to call setup() after changing values
 
     class MyThing(Thing):
         ...
     ```
 
-    Supports loading configuration from a JSON file whose path is specified under environment variable `HOLOLINKED_CONFIG`.
     Values are not type checked and are usually mutable in runtime, except:
 
     - logging setup
@@ -137,11 +136,11 @@ class Configuration:
         "ALLOW_UNKNOWN_SERIALIZATION",
     ]
 
-    def __init__(self, app_name: str | None = None, use_environment: bool = False):
+    def __init__(self, app_name: str | None = None):
         self.app_name = app_name
-        self.load_variables(use_environment)
+        self.load_variables()
 
-    def load_variables(self, use_environment: bool = False):
+    def load_variables(self):
         """
         set default values & use the values from environment file.
         Set `use_environment` to `False` to not use environment file. This method is called during `__init__`.
@@ -170,17 +169,7 @@ class Configuration:
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
 
-        if not use_environment:
-            self.setup()
-            return
-        # environment variables overwrite config items
-        file = os.environ.get("HOLOLINKED_CONFIG", None)
-        if not file:
-            warnings.warn("no environment file found although asked to load from one", UserWarning)
-            return
-        with open(file, "r") as file:
-            config = json.load(file)  # type: dict[str, Any]
-        self.set(**config)
+        self.setup()
 
     def setup(self):
         """
@@ -200,6 +189,8 @@ class Configuration:
             tracemalloc.start()
 
         from .logger import setup_logging
+
+        self.LOG_LEVEL = logging.DEBUG if self.DEBUG else self.LOG_LEVEL
 
         # if self.USE_STRUCTLOG: # no other option for now
         setup_logging(

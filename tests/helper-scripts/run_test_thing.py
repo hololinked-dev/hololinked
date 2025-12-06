@@ -17,6 +17,8 @@ from hololinked.server.zmq import ZMQServer
 
 
 global_config.DEBUG = True
+global_config.USE_LOG_FILE = True
+global_config.setup()
 
 thing1 = TestThing(id="test-thing")
 thing2 = OceanOpticsSpectrometer(id="test-spectrometer", serial_number="simulation")
