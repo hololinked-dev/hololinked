@@ -1,7 +1,6 @@
 import copy
 import json
 import os
-import tempfile
 
 from dataclasses import dataclass
 from typing import Callable
@@ -171,13 +170,7 @@ def db_ops_tests() -> tuple[Callable, Callable]:
 
 
 def test_06_sqlalchemy_db_operations(db_ops_tests: tuple[Callable, Callable]):
-    thing_id = "test-db-operations"
-    file_path = f"{thing_id}.db"
-    try:
-        os.remove(file_path)
-    except (OSError, FileNotFoundError):
-        pass
-    assert not os.path.exists(file_path)
+    thing_id = f"test-db-operations-sqlalchemy-{uuid_hex()}"
 
     test_prekill, test_postkill = db_ops_tests
 
@@ -189,8 +182,7 @@ def test_06_sqlalchemy_db_operations(db_ops_tests: tuple[Callable, Callable]):
 
 
 def test_07_json_db_operations(db_ops_tests: tuple[Callable, Callable]):
-    with tempfile.NamedTemporaryFile(delete=False) as tf:
-        filename = tf.name
+    filename = f"filename-name-{uuid_hex()}.json"
 
     thing_id = f"test-db-operations-json-{uuid_hex()}"
     test_prekill, test_postkill = db_ops_tests
@@ -200,8 +192,6 @@ def test_07_json_db_operations(db_ops_tests: tuple[Callable, Callable]):
 
     thing = TestThing(id=thing_id, use_json_file=True, json_filename=filename)
     test_postkill(thing)
-
-    os.remove(filename)
 
 
 def test_08_db_config():

@@ -24,79 +24,100 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import json
 import logging
 import os
-import tempfile
+import shutil
+import tracemalloc
 import warnings
 
+from pathlib import Path
 from typing import Any  # noqa: F401
 
 import zmq.asyncio
 
+import __main__
+
+from .utils import (
+    get_sanitized_filename_from_random_string,
+    set_global_event_loop_policy,
+)
+
 
 class Configuration:
     """
-    Allows to auto apply common settings used throughout the package,
-    instead of passing these settings as arguments. Import ``global_config`` variable
-    instead of instantitation this class.
+    Allows to auto apply common settings used throughout the package, instead of passing these settings as arguments.
+    Import `global_config` variable instead of instantitation this class.
 
-    Supports loading configuration from a JSON file whose path is specified
-    under environment variable HOLOLINKED_CONFIG.
+    ```python
+    from hololinked.config import global_config
 
-    Values are mutable in runtime and not type checked. Keys of JSON file
-    must correspond to supported value name. Supported values are -
+    global_config.TEMP_DIR = "/my/temp/dir"
+    global_config.ALLOW_CORS = True
+    global_config.setup()  # Important to call setup() after changing values
 
-    TEMP_DIR - system temporary directory to store temporary files like IPC sockets.
-    default - tempfile.gettempdir().
+    class MyThing(Thing):
+        ...
+    ```
 
-    TCP_SOCKET_SEARCH_START_PORT - starting port number for automatic port searching
-    for TCP socket binding, used for event addresses. default 60000.
+    Values are not type checked and are usually mutable in runtime, except:
 
-    TCP_SOCKET_SEARCH_END_PORT - ending port number for automatic port searching
-    for TCP socket binding, used for event addresses. default 65535.
+    - logging setup
+    - ZMQ context
+    - global event loop policy
 
-    DB_CONFIG_FILE - file path for database configuration. default None.
+    which refresh the global state. Keys of JSON file must correspond to supported value name.
 
-    SYSTEM_HOST - system view server qualified IP or name. default None.
+    Supported values are -
 
-    PWD_HASHER_TIME_COST - system view server password authentication time cost,
-    default 15. Refer argon2-cffi docs.
+    `TEMP_DIR` - system temporary directory to store temporary files like IPC sockets.
+    default - `~/.hololinked` (`.hololinked` under home directory).
 
-    PWD_HASHER_MEMORY_COST - system view server password authentication memory cost.
-    Refer argon2-cffi docs.
+    `TCP_SOCKET_SEARCH_START_PORT` - starting port number for automatic port searching
+    for TCP socket binding, used for event addresses. default `60000`.
 
-    USE_UVLOOP - signicantly faster event loop for Linux systems. Reads data from network faster. default False.
+    `TCP_SOCKET_SEARCH_END_PORT` - ending port number for automatic port searching
+    for TCP socket binding, used for event addresses. default `65535`.
+
+    `DB_CONFIG_FILE` - file path for database configuration. default `None`.
+
+    `USE_UVLOOP` - signicantly faster event loop for Linux systems. Reads data from network faster. default `False`.
+
+    `TRACE_MALLOC` - whether to trace memory allocations using tracemalloc module. default `False`.
+
+    `VALIDATE_SCHEMAS` - whether to validate JSON schema supplied for properties, actions and events
+    (not validation of payload, but validation of schema itself). default `True`.
+
+    `DEBUG` - whether to print debug logs. default `False`.
+
+    `LOG_LEVEL` - logging level to use. default `logging.INFO`, `logging.DEBUG` if `DEBUG` is `True`.
+
+    `COLORED_LOGS` - whether to use colored logs in console. default `False`.
+
+    `ALLOW_PICKLE` - whether to allow pickle serialization/deserialization. default `False`.
+
+    `ALLOW_UNKNOWN_SERIALIZATION` - whether to allow unknown serialization formats, specifically from clients. default `False`.
 
     Parameters
     ----------
     use_environment: bool
         load files from JSON file specified under environment
-
     """
 
     __slots__ = [
+        "app_name",
         # folders
         "TEMP_DIR",
         # TCP sockets
         "TCP_SOCKET_SEARCH_START_PORT",
         "TCP_SOCKET_SEARCH_END_PORT",
         # HTTP server
-        "COOKIE_SECRET",
         "ALLOW_CORS",
-        # credentials
-        "PWD_HASHER_TIME_COST",
-        "PWD_HASHER_MEMORY_COST",
-        # system view
-        "PRIMARY_HOST",
-        "LOCALHOST_PORT",
         # database
         "DB_CONFIG_FILE",
         # Eventloop
         "USE_UVLOOP",
         "TRACE_MALLOC",
-        # Schema
-        "VALIDATE_SCHEMA_ON_CLIENT",
+        # schema validation
         "VALIDATE_SCHEMAS",
         # ZMQ
         "ZMQ_CONTEXT",
@@ -104,73 +125,101 @@ class Configuration:
         "DEBUG",
         # logging
         "LOG_LEVEL",
-        "USE_STRUCTLOG",
+        "USE_LOG_FILE",
+        "LOG_FILENAME",
+        "ROTATE_LOG_FILES",
+        "LOGFILE_BACKUP_COUNT",
+        # "USE_STRUCTLOG",
         "COLORED_LOGS",
         # serializers
         "ALLOW_PICKLE",
         "ALLOW_UNKNOWN_SERIALIZATION",
     ]
 
-    def __init__(self, use_environment: bool = False):
-        self.load_variables(use_environment)
-        self.reset_actions()
+    def __init__(self, app_name: str | None = None):
+        self.app_name = app_name
+        self.load_variables()
 
-    def load_variables(self, use_environment: bool = False):
+    def load_variables(self):
         """
         set default values & use the values from environment file.
-        Set use_environment to False to not use environment file.
+        Set `use_environment` to `False` to not use environment file. This method is called during `__init__`.
         """
         # note that all variables have not been implemented yet,
         # things just come and go as of now
-        self.TEMP_DIR = f"{tempfile.gettempdir()}{os.sep}hololinked"
+        self.TEMP_DIR = os.path.join(os.path.expanduser("~"), ".hololinked")
         self.TCP_SOCKET_SEARCH_START_PORT = 60000
         self.TCP_SOCKET_SEARCH_END_PORT = 65535
-        self.PWD_HASHER_TIME_COST = 15
+        self.ALLOW_CORS = False
+        self.DB_CONFIG_FILE = None
         self.USE_UVLOOP = False
         self.TRACE_MALLOC = False
-        self.VALIDATE_SCHEMA_ON_CLIENT = False
+        # self.VALIDATE_SCHEMA_ON_CLIENT = False
         self.VALIDATE_SCHEMAS = True
         self.ZMQ_CONTEXT = zmq.asyncio.Context()
         self.DEBUG = False
+        self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
+        # self.USE_STRUCTLOG = True
+        self.COLORED_LOGS = False
+        self.USE_LOG_FILE = False
+        self.LOG_FILENAME = os.path.join(self.TEMP_DIR_LOGS, self._main_script_filename)
+        self.ROTATE_LOG_FILES = True
+        self.LOGFILE_BACKUP_COUNT = 14
+        # Add the filename of the main script importing this module
         self.ALLOW_PICKLE = False
         self.ALLOW_UNKNOWN_SERIALIZATION = False
-        self.ALLOW_CORS = False
-        self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
-        self.USE_STRUCTLOG = True
-        self.COLORED_LOGS = False
 
-        if not use_environment:
-            return
-        # environment variables overwrite config items
-        file = os.environ.get("HOLOLINKED_CONFIG", None)
-        if not file:
-            warnings.warn("no environment file found although asked to load from one", UserWarning)
-            return
-        with open(file, "r") as file:
-            config = json.load(file)  # type: dict[str, Any]
-        for item, value in config.items():
-            setattr(self, item, value)
+        self.setup()
 
-    def reset_actions(self):
-        "actions to be done to reset configurations (not actions to be called)"
-        try:
-            os.mkdir(self.TEMP_DIR)
-        except FileExistsError:
-            pass
+    def setup(self):
+        """
+        actions to be done to recreate global configuration state after changing config values.
+        Called after `load_variables` and `set` methods.
+        """
+        for directory in [self.TEMP_DIR, self.TEMP_DIR_SOCKETS, self.TEMP_DIR_LOGS, self.TEMP_DIR_DB]:
+            try:
+                os.mkdir(directory)
+            except FileExistsError:
+                pass
+            except PermissionError:
+                warnings.warn(f"permission denied to create directory {directory}", UserWarning)
+
+        set_global_event_loop_policy(self.USE_UVLOOP)
+        if self.TRACE_MALLOC:
+            tracemalloc.start()
+
         from .logger import setup_logging
 
-        if self.USE_STRUCTLOG:
-            setup_logging(log_level=self.LOG_LEVEL, colored_logs=self.COLORED_LOGS)
+        self.LOG_LEVEL = logging.DEBUG if self.DEBUG else self.LOG_LEVEL
+
+        # if self.USE_STRUCTLOG: # no other option for now
+        setup_logging(
+            log_level=self.LOG_LEVEL,
+            colored_logs=self.COLORED_LOGS,
+            log_file=self.LOG_FILENAME if self.USE_LOG_FILE else None,
+            rotate_log_files=self.ROTATE_LOG_FILES,
+            logfile_backup_count=self.LOGFILE_BACKUP_COUNT,
+        )
 
     def copy(self):
-        "returns a copy of this config as another object"
+        """returns a copy of this config as another object"""
         other = object.__new__(Configuration)
         for item in self.__slots__:
             setattr(other, item, getattr(self, item))
         return other
 
+    def set(self, **kwargs):
+        """
+        sets multiple config values at once, and recreates necessary global states.
+        `load_variables` sets default values first, then overwrites with environment file values.
+        This method only overwrites the specified values.
+        """
+        for item, value in kwargs.items():
+            setattr(self, item, value)
+        self.setup()
+
     def asdict(self):
-        "returns this config as a regular dictionary"
+        """returns this config as a regular dictionary"""
         return {item: getattr(self, item) for item in self.__slots__}
 
     def zmq_context(self) -> zmq.asyncio.Context:
@@ -202,8 +251,55 @@ class Configuration:
 
         default_thing_execution_context.fetchExecutionLogs = fetch_execution_logs
 
+    def cleanup_temp_dirs(self, cleanup_databases: bool = False) -> None:
+        """
+        Cleans up temporary directories used by hololinked, all log files and IPC sockets are removed.
+        If `cleanup_databases` is `True`, database files are also removed.
+        """
+        directories = [self.TEMP_DIR_SOCKETS, self.TEMP_DIR_LOGS]
+        if cleanup_databases:
+            directories.append(self.TEMP_DIR_DB)
+        for directory in directories:
+            try:
+                shutil.rmtree(directory)
+            except FileNotFoundError:
+                pass
+            except PermissionError:
+                warnings.warn(f"permission denied to cleanup directory {directory}", UserWarning)
+
     def __del__(self):
         self.ZMQ_CONTEXT.term()
+
+    @property
+    def TEMP_DIR_SOCKETS(self) -> str:
+        """returns the temporary directory path for IPC sockets"""
+        return os.path.join(self.TEMP_DIR, "sockets")
+
+    @property
+    def TEMP_DIR_LOGS(self) -> str:
+        """returns the temporary directory path for log files"""
+        return os.path.join(self.TEMP_DIR, "logs")
+
+    @property
+    def TEMP_DIR_DB(self) -> str:
+        """returns the temporary directory path for database files"""
+        return os.path.join(self.TEMP_DIR, "db")
+
+    @property
+    def _main_script_filename(self) -> str | None:
+        """returns the main script filename if available"""
+        if not self.app_name:
+            file = getattr(__main__, "__file__", None)
+            if not file:
+                filename = Path.cwd().name
+            else:
+                file = os.path.splitext(os.path.basename(file))
+                filename = file[0]
+        else:
+            filename = self.app_name
+        if filename:
+            return get_sanitized_filename_from_random_string(filename, extension="log")
+        return "hololinked.log"
 
 
 global_config = Configuration()

@@ -204,13 +204,11 @@ def print_pending_tasks_in_current_loop():
         print(f"Task: {task}, Status: {task._state}")
 
 
-def set_global_event_loop_policy() -> None:
+def set_global_event_loop_policy(use_uvloop: bool = False) -> None:
     if sys.platform.lower().startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-    from .config import global_config
-
-    if global_config.USE_UVLOOP and sys.platform.lower() in [
+    if use_uvloop and sys.platform.lower() in [
         "linux",
         "darwin",
         "linux2",
@@ -342,18 +340,15 @@ def issubklass(obj: Any, cls: Any) -> bool:
         return False
 
 
-def get_a_filename_from_instance(thing: Any, extension: str = "json") -> str:
-    class_name = thing.__class__.__name__
-
+def get_sanitized_filename_from_random_string(a_string: str, extension: str) -> str:
     # Remove invalid characters from the instance name
-    safe_id = re.sub(r'[<>:"/\\|?*\x00-\x1F]+', "_", thing.id)
+    safe_id = re.sub(r'[<>:"/\\|?*\x00-\x1F]+', "_", a_string)
     # Collapse consecutive underscores into one
     safe_id = re.sub(r"_+", "_", safe_id)
     # Remove leading and trailing underscores
     safe_id = safe_id.strip("_")
 
-    filename = f"{class_name}-{safe_id or '_'}.{extension}"
-    return filename
+    return f"{safe_id}.{extension}"
 
 
 class SerializableDataclass:

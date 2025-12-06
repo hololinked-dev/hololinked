@@ -9,7 +9,6 @@ import jsonschema
 
 from pydantic import BaseModel, RootModel
 
-from ..config import global_config
 from ..constants import JSON
 from ..param.parameterized import ParameterizedFunction
 from ..schema_validators.validators import JSONSchemaValidator, PydanticSchemaValidator
@@ -345,13 +344,12 @@ def action(
             try:
                 input_schema = get_input_model_from_signature(obj, remove_first_positional_arg=True)
             except Exception as ex:
-                if global_config.VALIDATE_SCHEMAS:
-                    warnings.warn(
-                        f"Could not infer input schema for {obj.__name__} due to - {str(ex)}. "
-                        + "Considering filing a bug report if you think this should have worked correctly",
-                        category=RuntimeWarning,
-                    )
-        if global_config.VALIDATE_SCHEMAS and input_schema:
+                warnings.warn(
+                    f"Could not infer input schema for {obj.__name__} due to - {str(ex)}. "
+                    + "Considering filing a bug report if you think this should have worked correctly",
+                    category=RuntimeWarning,
+                )
+        if input_schema:
             if isinstance(input_schema, dict):
                 execution_info_validator.schema_validator = JSONSchemaValidator(input_schema)
             elif issubklass(input_schema, (BaseModel, RootModel)):

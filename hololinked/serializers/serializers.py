@@ -41,6 +41,8 @@ from typing import Any
 from msgspec import Struct, msgpack
 from msgspec import json as msgspecjson
 
+from ..config import global_config
+
 
 # default dytypes:
 try:
@@ -203,8 +205,6 @@ class PickleSerializer(BaseSerializer):
 
     def dumps(self, data) -> bytes:
         "method called by ZMQ message brokers to serialize data"
-        from ..config import global_config
-
         if global_config.ALLOW_PICKLE:
             return pickle.dumps(data)
             # SAST(id='hololinked.serializers.serializers.PickleSerializer.dumps', description='B301:blacklist', tool='bandit')
@@ -212,8 +212,6 @@ class PickleSerializer(BaseSerializer):
 
     def loads(self, data) -> Any:
         "method called by ZMQ message brokers to deserialize data"
-        from ..config import global_config
-
         if global_config.ALLOW_PICKLE:
             return pickle.loads(self.convert_to_bytes(data))
             # SAST(id='hololinked.serializers.serializers.PickleSerializer.loads', description='B301:blacklist', tool='bandit')

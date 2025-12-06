@@ -43,9 +43,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         default=None,
         allow_None=True,
         remote=False,
-        doc="""logging.Logger instance to track log messages. Default logger with a IO-stream handler 
+        doc="""structlog.stdlib.BoundLogger instance to track log messages. Default logger with a IO-stream handler 
             and network accessible handler is created if none supplied.""",
-    )  # type: logging.Logger
+    )  # type: structlog.stdlib.BoundLoggerBase
 
     state_machine = None  # type: "StateMachine" | None
 
@@ -73,7 +73,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self,
         *,
         id: str,
-        logger: logging.Logger | None = None,
+        logger: structlog.stdlib.BoundLogger | None = None,
         serializer: BaseSerializer | JSONSerializer | None = None,
         **kwargs: dict[str, Any],
     ) -> None:
@@ -85,8 +85,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             IDs are recommended to be unique. This value is used for many operations, for example -
             creating zmq socket address, tables in databases, and to identify the instance in a
             HTTP Server - (http(s)://{domain and sub domain}/{id}).
-        logger: logging.Logger, optional
-            `logging.Logger` instance to track log messages. Default logger with a IO-stream handler
+        logger: structlog.stdlib.BoundLogger, optional
+            `structlog.stdlib.BoundLogger` instance to track log messages. Default logger with a IO-stream handler
             and network accessible handler is created if None supplied.
         serializer: BaseSerializer | JSONSerializer, optional
             Default serializer to be used for serializing and deserializing data.
@@ -122,8 +122,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         prepare_object_logger(
             instance=self,
-            log_level=kwargs.get("log_level", None),
-            log_file=kwargs.get("log_file", None),
             remote_access=kwargs.get(
                 "remote_accessible_logger",
                 self.__class__.remote_accessible_logger

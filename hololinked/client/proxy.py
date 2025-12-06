@@ -48,10 +48,12 @@ class ObjectProxy:
 
             - `allow_foreign_attributes`: `bool`, default `False`.
                 allows local attributes for proxy apart from properties fetched from the server.
-            - `logger`: `logging.Logger`, default `None`.
+            - `logger`: `structlog.stdlib.BoundLogger`, default `None`.
                 logger instance
-            - `log_level`: `int`, default `logging.INFO`.
-                log level corresponding to logging.Logger when internally created
+            - `td`: `dict[str, Any]`, default `dict()`.
+                Thing Description of the consumed thing
+            - `security`: `BasicSecurity`, optional.
+                security scheme to be used for authentication
         """
         self.id = id
         self._allow_foreign_attributes = kwargs.get("allow_foreign_attributes", False)

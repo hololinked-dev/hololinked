@@ -1,6 +1,9 @@
-from ..utils import get_a_filename_from_instance
+import os
+
+from ..config import global_config
 from .database import MongoThingDB, ThingDB
 from .json_storage import ThingJSONStorage
+from .utils import get_sanitized_filename_from_thing_instance
 
 
 def prepare_object_storage(instance, **kwargs):
@@ -8,7 +11,6 @@ def prepare_object_storage(instance, **kwargs):
         "use_json_file",
         instance.__class__.use_json_file if hasattr(instance.__class__, "use_json_file") else False,
     )
-    json_filename = kwargs.get("json_filename", f"{get_a_filename_from_instance(instance, extension='json')}")
     use_default_db = kwargs.get(
         "use_default_db",
         instance.__class__.use_default_db if hasattr(instance.__class__, "use_default_db") else False,
@@ -17,14 +19,18 @@ def prepare_object_storage(instance, **kwargs):
         "use_mongo_db",
         instance.__class__.use_mongo_db if hasattr(instance.__class__, "use_mongo_db") else False,
     )
-    db_config_file = kwargs.get("db_config_file", None)
+    db_config_file = kwargs.get("db_config_file", global_config.DB_CONFIG_FILE)
 
     if use_json_file:
+        json_filename = os.path.join(
+            global_config.TEMP_DIR_DB,
+            kwargs.get("json_filename", f"{get_sanitized_filename_from_thing_instance(instance, extension='json')}"),
+        )
+        json_filename = os.path.join(global_config.TEMP_DIR_DB, json_filename)
         instance.db_engine = ThingJSONStorage(filename=json_filename, instance=instance)
         instance.logger.info(f"using JSON file storage at {json_filename}")
     elif use_mongo:
-        config_file = kwargs.get("db_config_file", None)
-        instance.db_engine = MongoThingDB(instance=instance, config_file=config_file)
+        instance.db_engine = MongoThingDB(instance=instance, config_file=db_config_file)
         instance.logger.info("using MongoDB storage")
     elif use_default_db or db_config_file:
         instance.db_engine = ThingDB(instance=instance, config_file=db_config_file)

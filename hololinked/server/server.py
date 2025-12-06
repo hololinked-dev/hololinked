@@ -5,7 +5,7 @@ import structlog
 from pydantic import BaseModel, model_validator
 
 from ..core import Action, Event, Property, Thing
-from ..core.properties import ClassSelector, Integer, Selector, TypedList
+from ..core.properties import ClassSelector, Integer, TypedList
 from ..param import Parameterized
 from ..td.interaction_affordance import (
     ActionAffordance,
@@ -41,22 +41,6 @@ class BaseProtocolServer(Parameterized):
         allow_None=True,
     )  # type: logging.Logger | structlog.stdlib.BoundLogger
     """Logger instance"""
-
-    log_level = Selector(
-        objects=[
-            logging.DEBUG,
-            logging.INFO,
-            logging.ERROR,
-            logging.WARN,
-            logging.CRITICAL,
-            logging.ERROR,
-        ],
-        default=logging.INFO,
-    )  # type: int
-    """
-    alternative to logger, this creates an internal logger with the specified log level 
-    along with a IO stream handler.
-    """
 
     things = TypedList(default=None, allow_None=True, item_type=Thing)  # type: list[Thing]
     """List of things to serve"""

@@ -130,7 +130,7 @@ class HTTPServer(BaseProtocolServer):
         address: str = "0.0.0.0",  # SAST(id='hololinked.server.http.HTTPServer.__init__.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
         things: list[Thing] | None = None,
         # host: Optional[str] = None,
-        logger: logging.Logger | None = None,
+        logger: structlog.stdlib.BoundLogger | None = None,
         log_level: int = logging.INFO,
         ssl_context: ssl.SSLContext | None = None,
         security_schemes: list[Security] | None = None,
@@ -147,8 +147,8 @@ class HTTPServer(BaseProtocolServer):
         address: str, default 0.0.0.0
             IP address, use 0.0.0.0 to bind to all interfaces to expose the server to other devices in the network
             and 127.0.0.1 to bind only to localhost
-        logger: logging.Logger, optional
-            logging.Logger instance
+        logger: structlog.stdlib.BoundLogger, optional
+            structlog.stdlib.BoundLogger instance
         log_level: int
             alternative to logger, this creates an internal logger with the specified log level along with a IO stream handler.
         ssl_context: ssl.SSLContext

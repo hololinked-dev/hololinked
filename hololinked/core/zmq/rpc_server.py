@@ -5,7 +5,6 @@ import copy
 import logging
 import socket
 import threading
-import tracemalloc
 
 from collections import deque
 from typing import Any
@@ -21,7 +20,6 @@ from ...utils import (
     format_exception_as_json,
     get_all_sub_things_recusively,
     get_current_async_loop,
-    set_global_event_loop_policy,
 )
 from ..actions import BoundAction  # noqa: F401
 from ..exceptions import BreakInnerLoop, BreakLoop
@@ -39,11 +37,6 @@ from .message import (
     SerializableData,
 )
 
-
-if global_config.TRACE_MALLOC:
-    tracemalloc.start()
-
-set_global_event_loop_policy()
 
 Undefined = NotImplemented
 
@@ -129,7 +122,7 @@ class RPCServer(BaseZMQServer):
             **kwargs,
         )
         self.event_publisher = EventPublisher(
-            id=f"{self.id}/event-publisher",
+            id=f"{self.id}{EventPublisher._standard_address_suffix}",
             context=self.context,
             access_point=access_point,
             **kwargs,

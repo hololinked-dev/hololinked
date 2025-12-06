@@ -21,6 +21,7 @@ from ...serializers.serializers import Serializers
 from ...utils import (
     format_exception_as_json,
     get_current_async_loop,
+    get_sanitized_filename_from_random_string,
     run_callable_somehow,
     uuid_hex,
 )
@@ -145,15 +146,15 @@ class BaseZMQ:
         if transport == ZMQ_TRANSPORTS.IPC or transport.lower() == "ipc":
             if socket_address is None or not socket_address.endswith(".ipc"):
                 if not socket_address:
-                    split_id = server_id.split("/")
+                    filename = get_sanitized_filename_from_random_string(server_id, "ipc")
                 elif not socket_address.endswith(".ipc"):
-                    split_id = socket_address.split("/")
-                socket_dir = os.sep + os.sep.join(split_id[:-1]) if len(split_id) > 1 else ""
-                directory = global_config.TEMP_DIR + socket_dir
-                if not os.path.exists(directory):
-                    os.makedirs(directory)
+                    filename = get_sanitized_filename_from_random_string(socket_address, "ipc")
                 # re-compute for IPC because it looks for a file in a directory
-                socket_address = "ipc://{}{}{}.ipc".format(directory, os.sep, split_id[-1])
+                filename = filename.replace(
+                    EventPublisher._standard_address_suffix.replace("/", "_"),
+                    f".{EventPublisher._standard_address_suffix_filename_replacement}",
+                )
+                socket_address = "ipc://{}{}{}".format(global_config.TEMP_DIR_SOCKETS, os.sep, filename)
             if bind:
                 socket.bind(socket_address)
             else:
@@ -435,7 +436,6 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         kwargs: dict
             Additional arguments for `BaseZMQ` and `BaseAsyncZMQ` classes.
 
-            - `log_level`: logging level for the logger if `logger` is not supplied.
             - `logger`: logger instance to use. If None, a default logger is created.
         """
 
@@ -718,7 +718,6 @@ class ZMQServerPool(BaseZMQServer):
         kwargs: dict
             Additional arguments for `BaseZMQ` and `BaseAsyncZMQ` classes.
 
-            - `log_level`: logging level for the logger if `logger` is not supplied.
             - `logger`: logger instance to use. If None, a default logger is created.
         """
         self.context = global_config.zmq_context()
@@ -907,7 +906,6 @@ class BaseZMQClient(BaseZMQ):
         kwargs: dict
             Additional arguments:
 
-            - `log_level`: `int`, logging level for the logger if `logger` is not supplied.
             - `poll_timeout`: `int`, time in milliseconds to poll the socket for messages, default is 1000 ms.
         """
         super().__init__(id=id, **kwargs)
@@ -1031,7 +1029,6 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             - `poll_timeout`: `int`. The timeout for polling the socket (in milliseconds)
             - `handshake_timeout`: `int`. The timeout for the handshake process (in milliseconds) to complete.
                 If handshake does not complete within this time, an exception is raised. Only relevant if `handshake` is True.
-            - `log_level`: `int`. logging level for the logger if `logger` is not supplied.
             - `logger`: `logging.Logger`. logger instance to use. If None, a default logger is created.
         """
         super().__init__(id=id, server_id=server_id, **kwargs)
@@ -1279,7 +1276,6 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             - `poll_timeout`: `int`. The timeout for polling the socket (in milliseconds)
             - `handshake_timeout`: `int`. The timeout for the handshake process (in milliseconds) to complete.
                 If handshake does not complete within this time, an exception is raised. Only relevant if `handshake` is True.
-            - `log_level`: `int`. logging level for the logger if `logger` is not supplied.
             - `logger`: `logging.Logger`. logger instance to use. If None, a default logger is created.
         """
         super().__init__(id=id, server_id=server_id, **kwargs)
@@ -1561,7 +1557,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         **kwargs:
             Additional arguments:
 
-            - `log_level`: `int`, logging level for the logger if `logger` is not supplied.
             - `logger`: `logging.Logger`, logger instance to use. If None, a default logger is created.
         """
         super().__init__(id=id, server_id=None, **kwargs)
@@ -2111,6 +2106,9 @@ class AsyncioEventPool:
 class EventPublisher(BaseZMQServer, BaseSyncZMQ):
     """Event publisher for broadcasting messages to all connected clients. Implements PUB-SUB pattern."""
 
+    _standard_address_suffix = "/event-publisher"
+    _standard_address_suffix_filename_replacement = "event-publisher"
+
     def __init__(
         self,
         id: str,
@@ -2259,7 +2257,6 @@ class BaseEventConsumer(BaseZMQClient):
         **kwargs:
             additional arguments:
 
-            - `log_level`: `int`, logging level for the logger if `logger` is not supplied.
             - `logger`: `logging.Logger`, logger instance to use. If None, a default
             - `poll_timeout`: `int`, socket polling timeout in milliseconds greater than 0.
             - `server_id`: `str`, id of the PUB socket server, usually not necessary as `access_point` is sufficient.

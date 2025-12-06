@@ -25,11 +25,12 @@ SOFTWARE.
 
 import asyncio
 import builtins
-import logging
 import threading
 
 from dataclasses import dataclass
 from typing import Any, Callable
+
+import structlog
 
 from ..constants import Operations
 from ..td import ActionAffordance, EventAffordance, PropertyAffordance
@@ -45,7 +46,7 @@ class ConsumedThingAction:
         self,
         resource: ActionAffordance,
         owner_inst: Any,
-        logger: logging.Logger,
+        logger: structlog.stdlib.BoundLogger,
     ) -> None:
         """
         Parameters
@@ -54,7 +55,7 @@ class ConsumedThingAction:
             dataclass TD fragment representing the action (must have forms).
         owner_inst: Any
             instance of the owning consumed Thing or `ObjectProxy`
-        logger: logging.Logger
+        logger: structlog.stdlib.BoundLogger
             logger instance
         """
         self.resource = resource
@@ -172,7 +173,7 @@ class ConsumedThingProperty:
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
-    def __init__(self, resource: PropertyAffordance, owner_inst: Any, logger: logging.Logger) -> None:
+    def __init__(self, resource: PropertyAffordance, owner_inst: Any, logger: structlog.stdlib.BoundLogger) -> None:
         """
         Parameters
         ----------
@@ -180,7 +181,7 @@ class ConsumedThingProperty:
             dataclass object TD fragment representing the property (must have forms).
         owner_inst: Any
             instance of the owning consumed Thing or `ObjectProxy`
-        logger: logging.Logger
+        logger: structlog.stdlib.BoundLogger
             logger instance
         """
         self.resource = resource
@@ -320,7 +321,7 @@ class ConsumedThingEvent:
     def __init__(
         self,
         resource: EventAffordance,
-        logger: logging.Logger,
+        logger: structlog.stdlib.BoundLogger,
         owner_inst: Any,
     ) -> None:
         """
@@ -328,7 +329,7 @@ class ConsumedThingEvent:
         ----------
         resource: EventAffordance
             dataclass object representing the event
-        logger: logging.Logger
+        logger: structlog.stdlib.BoundLogger
             logger instance
         owner_inst: Any
             the parent object that owns this event
