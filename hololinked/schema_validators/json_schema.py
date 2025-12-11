@@ -51,7 +51,7 @@ class JSONSchema:
         if not JSONSchema.is_allowed_type(typ):
             raise TypeError(
                 f"Object for wot-td has invalid type for JSON conversion. Given type - {type(typ)}. "
-                + "Use JSONSchema.register_replacements on hololinked.wot.td.JSONSchema object to recognise the type."
+                + "Use JSONSchema.register_replacements on hololinked.schema_validators.JSONSchema object to recognise the type."
             )
         return JSONSchema._replacements[typ]
 
@@ -79,10 +79,6 @@ class JSONSchema:
         if json_schema_base_type in JSONSchema._allowed_types:
             JSONSchema._replacements[type] = json_schema_base_type
             if schema is not None:
-                if json_schema_base_type not in ("array", "object"):
-                    raise ValueError(
-                        f"schemas support only for array and object JSON schema types, your specified type - {type}."
-                    )
                 JSONSchema._schemas[type] = schema
         else:
             raise TypeError(
