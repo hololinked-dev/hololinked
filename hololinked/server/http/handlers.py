@@ -262,9 +262,12 @@ class BaseHandler(RequestHandler):
         if zmq_response is None:
             raise RuntimeError("No last response available. Did you make an operation?")
         if zmq_response.preserialized_payload.value != EMPTY_BYTE:
-            if zmq_response.payload.value:
+            if zmq_response.payload.value != b"null":
+                # our None return value comes like this, sufficient to check against that
                 self.logger.warning(
-                    "Multiple content types in response payload, only the latter will be written to the wire"
+                    "Multiple content types in response payload, only the latter will be written to the wire",
+                    content_type_1=zmq_response.payload.content_type,
+                    binary_value=zmq_response.payload.value,
                 )
             # multiple content types are not supported yet, so we return only one payload
             return zmq_response.preserialized_payload
@@ -718,39 +721,25 @@ class ThingDescriptionHandler(BaseHandler):
     async def get(self):
         if self.has_access_control:
             try:
+                self.set_custom_default_headers()
+
                 _, _, _, body = self.get_execution_parameters()
                 body = body.deserialize() or dict()
                 if not isinstance(body, dict):
-                    raise ValueError("request body must be a JSON object")
+                    raise ValueError("request body must be or convertable to JSON when supplied as path parameters")
 
-                response_message = await self.zmq_client_pool.async_execute(
-                    thing_id=self.resource.thing_id,
-                    objekt=self.resource.name,
-                    operation=Operations.invokeaction,
-                    payload=SerializableData(
-                        value=dict(
-                            ignore_errors=body.get("ignore_errors", False),
-                            skip_names=body.get("skip_names", []),
-                            protocol="INPROC",  # does not matter here
-                        ),
-                    ),
-                )
-                if response_message.type in __error_message_types__:
-                    raise RuntimeError(f"error while fetching TD from thing - got {response_message.type} response")
+                ignore_errors = body.get("ignore_errors", False)
+                skip_names = body.get("skip_names", [])
+                authority = body.get("authority", None)
+                use_localhost = body.get("use_localhost", False)
 
-                payload = self.get_response_payload(response_message)
-                if not isinstance(payload, SerializableData):
-                    raise ValueError("invalid payload received from thing")
+                ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
 
-                payload = payload.deserialize()
-                if not isinstance(payload, dict):
-                    raise ValueError("invalid payload received from thing")
-
-                TM = payload
                 TD = self.generate_td(
-                    TM,
-                    authority=body.get("authority", None),
-                    use_localhost=body.get("use_localhost", False),
+                    ZMQ_TD,
+                    authority=authority,
+                    ignore_errors=ignore_errors,
+                    use_localhost=use_localhost,
                 )
 
                 self.set_status(200, "ok")
@@ -758,37 +747,72 @@ class ThingDescriptionHandler(BaseHandler):
                 self.write(TD)
             except Exception as ex:
                 self.set_status(500, str(ex).replace("\n", " "))
-            self.set_custom_default_headers()
         self.finish()
 
-    def generate_td(
-        self, TM: dict[str, JSONSerializable], authority: str = None, use_localhost: bool = False
-    ) -> dict[str, JSONSerializable]:
-        TD = copy.deepcopy(TM)
-        # sanitize some things
+    async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
+        """fetch the TM or ZMQ in process queue TD"""
+        response_message = await self.zmq_client_pool.async_execute(
+            thing_id=self.resource.thing_id,
+            objekt=self.resource.name,
+            operation=Operations.invokeaction,
+            payload=SerializableData(value=dict(ignore_errors=ignore_errors, skip_names=skip_names, protocol="INPROC")),
+        )
+        if response_message.type in __error_message_types__:
+            raise RuntimeError(f"error while fetching TD from thing - got {response_message.type} response")
 
-        self.add_properties(TD, TM, authority=authority, use_localhost=use_localhost)
-        self.add_actions(TD, TM, authority=authority, use_localhost=use_localhost)
-        self.add_events(TD, TM, authority=authority, use_localhost=use_localhost)
+        payload = self.get_response_payload(response_message)
+        if not isinstance(payload, SerializableData):
+            raise ValueError("invalid payload received from thing")
+
+        payload = payload.deserialize()
+        if not isinstance(payload, dict):
+            raise ValueError("invalid payload received from thing")
+        return payload
+
+    def generate_td(
+        self,
+        ZMQ_TD: dict[str, JSONSerializable],
+        authority: str = None,
+        ignore_errors: bool = False,
+        use_localhost: bool = False,
+    ) -> dict[str, JSONSerializable]:
+        TD = copy.deepcopy(ZMQ_TD)
+
+        self.add_properties(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
+        self.add_actions(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
+        self.add_events(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
         self.add_top_level_forms(TD, authority=authority, use_localhost=use_localhost)
         self.add_security_definitions(TD)
 
         return TD
 
     def add_properties(
-        self, TD: dict[str, JSONSerializable], TM: dict[str, JSONSerializable], authority: str, use_localhost: bool
+        self,
+        TD: dict[str, JSONSerializable],
+        ZMQ_TD: dict[str, JSONSerializable],
+        authority: str,
+        ignore_errors: bool,
+        use_localhost: bool,
     ) -> dict[str, JSONSerializable]:
-        for name in TM.get("properties", []):
-            affordance = PropertyAffordance.from_TD(name, TM)
-            href = self.server.router.get_href_for_affordance(
-                affordance, authority=authority, use_localhost=use_localhost
-            )
+        for name in ZMQ_TD.get("properties", []):
+            affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
             TD["properties"][name]["forms"] = []
-            http_methods = (
-                self.server.router.get_target_kwargs_for_affordance(affordance)
-                .get("metadata", {})
-                .get("http_methods", [])
-            )
+            try:
+                href = self.server.router.get_href_for_affordance(
+                    affordance,
+                    authority=authority,
+                    use_localhost=use_localhost,
+                )
+                http_methods = (
+                    self.server.router.get_target_kwargs_for_affordance(affordance)
+                    .get("metadata", {})
+                    .get("http_methods", [])
+                )
+            except ValueError as ex:
+                if ignore_errors:
+                    self.logger.warning(f"could not get HTTP methods for property {name}, skipping...")
+                    continue
+                raise ex from None
             for http_method in http_methods:
                 if http_method.upper() == "DELETE":
                     # currently not in spec although we support it
@@ -816,19 +840,32 @@ class ThingDescriptionHandler(BaseHandler):
                 TD["properties"][name]["forms"].append(form.json())
 
     def add_actions(
-        self, TD: dict[str, JSONSerializable], TM: dict[str, JSONSerializable], authority: str, use_localhost: bool
+        self,
+        TD: dict[str, JSONSerializable],
+        ZMQ_TD: dict[str, JSONSerializable],
+        authority: str,
+        ignore_errors: bool,
+        use_localhost: bool,
     ) -> dict[str, JSONSerializable]:
-        for name in TM.get("actions", []):
-            affordance = ActionAffordance.from_TD(name, TM)
-            href = self.server.router.get_href_for_affordance(
-                affordance, authority=authority, use_localhost=use_localhost
-            )
+        for name in ZMQ_TD.get("actions", []):
+            affordance = ActionAffordance.from_TD(name, ZMQ_TD)
             TD["actions"][name]["forms"] = []
-            http_methods = (
-                self.server.router.get_target_kwargs_for_affordance(affordance)
-                .get("metadata", {})
-                .get("http_methods", [])
-            )
+            try:
+                href = self.server.router.get_href_for_affordance(
+                    affordance,
+                    authority=authority,
+                    use_localhost=use_localhost,
+                )
+                http_methods = (
+                    self.server.router.get_target_kwargs_for_affordance(affordance)
+                    .get("metadata", {})
+                    .get("http_methods", [])
+                )
+            except ValueError as ex:
+                if ignore_errors:
+                    self.logger.warning(f"could not get HTTP methods for action {name}, skipping...")
+                    continue
+                raise ex from None
             for http_method in http_methods:
                 form = affordance.retrieve_form(Operations.invokeaction)
                 if not form:
@@ -840,19 +877,32 @@ class ThingDescriptionHandler(BaseHandler):
                 TD["actions"][name]["forms"].append(form.json())
 
     def add_events(
-        self, TD: dict[str, JSONSerializable], TM: dict[str, JSONSerializable], authority: str, use_localhost: bool
+        self,
+        TD: dict[str, JSONSerializable],
+        ZMQ_TD: dict[str, JSONSerializable],
+        authority: str,
+        ignore_errors: bool,
+        use_localhost: bool,
     ) -> dict[str, JSONSerializable]:
-        for name in TM.get("events", []):
-            affordance = EventAffordance.from_TD(name, TM)
-            href = self.server.router.get_href_for_affordance(
-                affordance, authority=authority, use_localhost=use_localhost
-            )
+        for name in ZMQ_TD.get("events", []):
+            affordance = EventAffordance.from_TD(name, ZMQ_TD)
             TD["events"][name]["forms"] = []
-            http_methods = (
-                self.server.router.get_target_kwargs_for_affordance(affordance)
-                .get("metadata", dict(http_methods=["GET"]))
-                .get("http_methods", ["GET"])
-            )
+            try:
+                href = self.server.router.get_href_for_affordance(
+                    affordance,
+                    authority=authority,
+                    use_localhost=use_localhost,
+                )
+                http_methods = (
+                    self.server.router.get_target_kwargs_for_affordance(affordance)
+                    .get("metadata", dict(http_methods=["GET"]))
+                    .get("http_methods", ["GET"])
+                )
+            except ValueError as ex:
+                if ignore_errors:
+                    self.logger.warning(f"could not get HTTP methods for event {name}, skipping...")
+                    continue
+                raise ex from None
             for http_method in http_methods:
                 form = affordance.retrieve_form(Operations.subscribeevent)
                 if not form:
@@ -864,7 +914,12 @@ class ThingDescriptionHandler(BaseHandler):
                 form.subprotocol = "sse"
                 TD["events"][name]["forms"].append(form.json())
 
-    def add_top_level_forms(self, TD: dict[str, JSONSerializable], authority: str, use_localhost: bool) -> None:
+    def add_top_level_forms(
+        self,
+        TD: dict[str, JSONSerializable],
+        authority: str,
+        use_localhost: bool,
+    ) -> None:
         """adds top level forms for reading and writing multiple properties"""
 
         properties_end_point = f"{self.server.router.get_basepath(authority, use_localhost)}/{TD['id']}/properties"
