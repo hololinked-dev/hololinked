@@ -103,6 +103,18 @@ class HTTPServer(BaseProtocolServer):
     )  # type: RPCHandler | EventHandler
     """custom event handler for sending HTTP SSE"""
 
+    thing_description_handler = ClassSelector(
+        default=ThingDescriptionHandler,
+        class_=(ThingDescriptionHandler, BaseHandler),
+        isinstance=False,
+    )  # type: RPCHandler | ThingDescriptionHandler
+
+    RW_multiple_properties_handler = ClassSelector(
+        default=RWMultiplePropertiesHandler,
+        class_=(RWMultiplePropertiesHandler, BaseHandler),
+        isinstance=False,
+    )  # type: RWMultiplePropertiesHandler | BaseHandler
+
     security_schemes = TypedList(
         default=None,
         allow_None=True,
@@ -180,6 +192,8 @@ class HTTPServer(BaseProtocolServer):
             event_handler=kwargs.get("event_handler", EventHandler),
             allowed_clients=allowed_clients if allowed_clients is not None else [],
             config=config or dict(),
+            thing_description_handler=kwargs.get("thing_description_handler", ThingDescriptionHandler),
+            RW_multiple_properties_handler=kwargs.get("RW_multiple_properties_handler", RWMultiplePropertiesHandler),
         )
 
         self._IP = f"{self.address}:{self.port}"
@@ -206,7 +220,7 @@ class HTTPServer(BaseProtocolServer):
         self._disconnected_things = list()  # type: list[tuple[str, str, str]]
         self.add_things(*(things or []))
 
-    def setup(self) -> bool:
+    def setup(self) -> None:
         """check if all the requirements are met before starting the server, auto invoked by listen()"""
         # Add only those code here that needs to be redone always before restarting the server.
         # One time creation attributes/activities must be in init
@@ -245,7 +259,6 @@ class HTTPServer(BaseProtocolServer):
         self.tornado_event_loop = ioloop.IOLoop.current()
 
         self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)  # type: TornadoHTTP1Server
-        return True
 
     async def start(self) -> None:
         self.setup()
@@ -572,7 +585,7 @@ class ApplicationRouter:
             URL_path=f"/{thing_id}/resources/wot-td" if thing_id else "/resources/wot-td",
             action=get_thing_description_action,
             http_method=("GET",),
-            handler=ThingDescriptionHandler,
+            handler=self.server.thing_description_handler,
         )
 
         # RW multiple properties handler
@@ -584,7 +597,7 @@ class ApplicationRouter:
             URL_path=f"/{thing_id}/properties" if thing_id else "/properties",
             action=read_properties,
             http_method=("GET", "PUT", "PATCH"),
-            handler=RWMultiplePropertiesHandler,
+            handler=self.server.RW_multiple_properties_handler,
             read_properties_resource=read_properties,
             write_properties_resource=write_properties,
         )
@@ -654,6 +667,7 @@ class ApplicationRouter:
     ) -> None:
         """
         Process the pending rules and add them to the application router.
+        Rules become pending only when thing class is defined but no thing instance is available yet.
         """
         pending_rules = self._pending_rules
         self._pending_rules = []
@@ -705,6 +719,20 @@ class ApplicationRouter:
                 path = str(rule.matcher.regex.pattern).rstrip("$")
                 return f"{self.get_basepath(authority, use_localhost)}{path}"
 
+    def get_target_kwargs_for_affordance(self, affordance) -> dict:
+        """
+        Get the target kwargs for the affordance in the application router.
+        """
+        if affordance not in self:
+            raise ValueError(f"affordance {affordance} not found in the application router")
+        for rule in self.app.wildcard_router.rules:
+            if rule.target_kwargs.get("resource", None) == affordance:
+                return rule.target_kwargs
+        for rule in self._pending_rules:
+            if rule[2].get("resource", None) == affordance:
+                return rule[2]
+        raise ValueError(f"affordance {affordance} not found in the application router rules")
+
     def get_basepath(self, authority: str = None, use_localhost: bool = False) -> str:
         if authority:
             return authority
@@ -720,20 +748,6 @@ class ApplicationRouter:
         return f"{protocol}://localhost{port}"
 
     basepath = property(fget=get_basepath, doc="basepath of the server")
-
-    def get_target_kwargs_for_affordance(self, affordance) -> dict:
-        """
-        Get the target kwargs for the affordance in the application router.
-        """
-        if affordance not in self:
-            raise ValueError(f"affordance {affordance} not found in the application router")
-        for rule in self.app.wildcard_router.rules:
-            if rule.target_kwargs.get("resource", None) == affordance:
-                return rule.target_kwargs
-        for rule in self._pending_rules:
-            if rule[2].get("resource", None) == affordance:
-                return rule[2]
-        raise ValueError(f"affordance {affordance} not found in the application router rules")
 
     def adapt_route(self, interaction_affordance_name: str) -> str:
         if interaction_affordance_name == "get_thing_model":
