@@ -42,12 +42,12 @@ def run(*servers: BaseProtocolServer, forked: bool = False) -> None:
 
     threading.Thread(target=rpc_server.run).start()
 
-    shutdown_future = asyncio.Event()
-    run.shutdown_future = shutdown_future
+    shutdown_event = asyncio.Event()
+    run.shutdown_event = shutdown_event
 
     async def shutdown():
-        shutdown_future = run.shutdown_future
-        await shutdown_future.wait()
+        shutdown_event = run.shutdown_event
+        await shutdown_event.wait()
 
     loop = get_current_async_loop()
     for server in servers:
@@ -62,10 +62,13 @@ def run(*servers: BaseProtocolServer, forked: bool = False) -> None:
 
 def stop():
     """shutdown all running servers started with run()"""
-    if hasattr(run, "shutdown_future"):
-        run.shutdown_future.set()
+    if hasattr(run, "shutdown_event"):
+        run.shutdown_event.set()
         return
-    warnings.warn("No running servers found to shutdown", category=UserWarning)
+    warnings.warn(
+        "No running servers found to shutdown or possibly no shutdown event available (cannot stop)",
+        category=UserWarning,
+    )
 
 
 def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list[str]]]) -> list[BaseProtocolServer]:
