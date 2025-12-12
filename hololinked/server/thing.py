@@ -3,12 +3,80 @@ from typing import Any, Optional
 import structlog
 import zmq.asyncio
 
+from pydantic import BaseModel, model_validator
+
 from ..config import global_config
-from ..constants import Operations
 from ..core import Thing
-from ..core.zmq import AsyncEventConsumer, AsyncZMQClient
-from ..td.interaction_affordance import EventAffordance
+from ..core.zmq.brokers import (
+    AsyncEventConsumer,
+    AsyncZMQClient,
+    EventConsumer,
+    MessageMappedZMQClientPool,
+    PreserializedData,
+    PreserializedEmptyByte,
+    ResponseMessage,
+    SerializableData,
+    SerializableNone,
+    ServerExecutionContext,
+    ThingExecutionContext,
+    default_server_execution_context,
+    default_thing_execution_context,
+)
+from ..td.interaction_affordance import EventAffordance, PropertyAffordance
 from ..utils import uuid_hex
+
+
+class BrokerThing(BaseModel):
+    """Abstraction of a Thing over internal message broker"""
+
+    id: str
+    server_id: str
+    access_point: str
+
+    TD: dict[str, Any] | None = None
+
+    req_rep_client: AsyncZMQClient | MessageMappedZMQClientPool | None = None
+    event_client: EventConsumer | None = None
+
+    req_rep_socket_address: str = ""
+    pub_sub_socket_address: str = ""
+
+    @model_validator(mode="before")
+    def validate_access_point(cls, values):
+        """Validates the access point format before setting."""
+        access_point = values.get("access_point")
+        if access_point is not None and access_point.upper() not in ["TCP", "IPC", "INPROC"]:
+            raise ValueError("Access point must be 'TCP', 'IPC', or 'INPROC'")
+        return values
+
+    async def execute(
+        self,
+        objekt: str,
+        operation: str,
+        payload: SerializableData = SerializableNone,
+        preserialized_payload: PreserializedData = PreserializedEmptyByte,
+        server_execution_context: ServerExecutionContext = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+    ) -> ResponseMessage:
+        if self.req_rep_client is None:
+            raise RuntimeError("Not connected to broker")
+        return self.req_rep_client.async_execute(
+            thing_id=self.id,
+            objekt=objekt,
+            operation=operation,
+            payload=payload,
+            preserialized_payload=preserialized_payload,
+            server_execution_context=server_execution_context,
+            thing_execution_context=thing_execution_context,
+        )
+
+    def consume_broker_pubsub_per_event(self, resource: EventAffordance | PropertyAffordance) -> AsyncEventConsumer:
+        return AsyncEventConsumer(
+            id=f"{resource.name}|EventTunnel|{uuid_hex()}",
+            event_unique_identifier=f"{resource.thing_id}/{resource.name}",
+            access_point=self.pub_sub_socket_address or self.access_point,
+            context=global_config.zmq_context(),
+        )
 
 
 async def consume_broker_queue(
@@ -86,18 +154,5 @@ def consume_broker_pubsub(id: str = None, access_point: str = "INPROC") -> Async
         id=id or f"event-proxy-{uuid_hex()}",
         event_unique_identifier="",
         access_point=access_point,
-        context=global_config.zmq_context(),
-    )
-
-
-def consume_broker_pubsub_per_event(resource: EventAffordance) -> AsyncEventConsumer:
-    if isinstance(resource, EventAffordance):
-        form = resource.retrieve_form(Operations.subscribeevent)
-    else:
-        form = resource.retrieve_form(Operations.observeproperty)
-    return AsyncEventConsumer(
-        id=f"{resource.name}|EventTunnel|{uuid_hex()}",
-        event_unique_identifier=f"{resource.thing_id}/{resource.name}",
-        access_point=form.href,
         context=global_config.zmq_context(),
     )

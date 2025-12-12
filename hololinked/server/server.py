@@ -2,10 +2,8 @@ import logging
 
 import structlog
 
-from pydantic import BaseModel, model_validator
-
 from ..core import Action, Event, Property, Thing
-from ..core.properties import ClassSelector, Integer, TypedList
+from ..core.properties import ClassSelector, Integer, TypedDict, TypedList
 from ..param import Parameterized
 from ..td.interaction_affordance import (
     ActionAffordance,
@@ -13,20 +11,7 @@ from ..td.interaction_affordance import (
     PropertyAffordance,
 )
 from ..utils import forkable
-
-
-class BrokerThing(BaseModel):
-    server_id: str
-    thing_id: str
-    access_point: str
-
-    @model_validator(mode="before")
-    def validate_access_point(cls, values):
-        """Validates the access point format before setting."""
-        access_point = values.get("access_point")
-        if access_point is not None and access_point.upper() not in ["TCP", "IPC", "INPROC"]:
-            raise ValueError("Access point must be 'TCP', 'IPC', or 'INPROC'")
-        return values
+from .thing import BrokerThing
 
 
 class BaseProtocolServer(Parameterized):
@@ -42,24 +27,33 @@ class BaseProtocolServer(Parameterized):
     )  # type: logging.Logger | structlog.stdlib.BoundLogger
     """Logger instance"""
 
-    things = TypedList(default=None, allow_None=True, item_type=Thing)  # type: list[Thing]
-    """List of things to serve"""
-
-    _broker_things = TypedList(default=None, allow_None=True, item_type=BrokerThing)  # type: list[BrokerThing]
+    things = TypedDict(default=None, allow_None=True, item_type=BrokerThing, key_type=str)  # type: dict[str, BrokerThing]
     """List of things to be served through broker connections"""
+
+    _things = TypedList(default=None, allow_None=True, item_type=Thing)  # type: list[Thing] | None
+    """Internal list of things"""
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        if self.things is None:
+            self.things = {}
+            self._things = []
 
     def add_thing(self, thing: Thing) -> None:
         """Adds a thing to the list of things to serve."""
-        if self.things is None:
-            self.things = []
-            self._broker_things = []
-        self.things.append(thing)
+        # Post additional to the server, just when the the servers are started, an RPC server must be available.
+        # The following code needs to be implemented:
+        # if not thing.rpc_server:
+        #     raise ValueError("Thing must have an RPC server to be added to the protocol server")
+        # self.things[thing.id] = BrokerThing(
+        #     server_id=thing.rpc_server.id,
+        #     thing_id=thing.id,
+        #     access_point=thing.rpc_server.access_point,
+        # )
+        self._things.append(thing)
 
     def add_things(self, *things: Thing) -> None:
         """Adds multiple things to the list of things to serve."""
-        if self.things is None:
-            self.things = []
-            self._broker_things = []
         for thing in things:
             self.add_thing(thing)
 

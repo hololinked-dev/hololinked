@@ -32,7 +32,7 @@ from ...utils import (
 )
 from ..security import Security
 from ..server import BaseProtocolServer, BrokerThing
-from ..utils import consume_broker_queue
+from ..thing import consume_broker_pubsub, consume_broker_queue
 from .handlers import (
     ActionHandler,
     BaseHandler,
@@ -236,23 +236,14 @@ class HTTPServer(BaseProtocolServer):
         # self.zmq_client_pool.handshake(), NOTE - handshake better done upfront as we already poll_responses here
         # which will prevent handshake function to succeed (although handshake will be done)
         # 4. Expose via broker
-        for thing in self.things:
+        for thing in self._things:
             if not thing.rpc_server:
                 raise ValueError(f"You need to expose thing {thing.id} via a RPCServer before trying to serve it")
-            self.router.add_thing(thing)
             event_loop.create_task(
-                self.router.async_add_thing_instance_through_broker(
+                self.instantiate_broker(
                     thing.rpc_server.id,
                     thing.id,
                     "INPROC",
-                )
-            )
-        for thing in self._broker_things:
-            event_loop.create_task(
-                self.router.async_add_thing_instance_through_broker(
-                    thing.server_id,
-                    thing.thing_id,
-                    thing.access_point,
                 )
             )
         # 5. finally also get a reference of the same event loop from tornado
@@ -421,6 +412,46 @@ class HTTPServer(BaseProtocolServer):
         kwargs["owner_inst"] = self
         self.router.add_rule(affordance=event, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
+    def add_thing(self, thing: Thing) -> None:
+        return self.router.add_thing(thing)
+
+    async def _instantiate_broker(
+        self,
+        server_id: str,
+        thing_id: str,
+        access_point: str = None,
+    ) -> None:
+        try:
+            broker_thing = BrokerThing(server_id=server_id, thing_id=thing_id, access_point=access_point)
+            self._disconnected_things.append(broker_thing)
+
+            client, TD = await consume_broker_queue(
+                id=self._IP,
+                server_id=server_id,
+                thing_id=thing_id,
+                access_point=access_point,
+            )
+
+            event_consumer = await consume_broker_pubsub()
+
+            # add client to pool
+            self.zmq_client_pool.register(client, thing_id)
+            self._disconnected_things.remove(broker_thing)
+
+            broker_thing.req_rep_client = client
+            broker_thing.event_client = event_consumer
+            broker_thing.req_rep_socket_address = client.socket_address
+            broker_thing.pub_sub_socket_address = event_consumer.socket_address
+            broker_thing.TD = TD
+            self.things[thing_id] = broker_thing
+        except ConnectionError:
+            self.logger.warning(
+                f"could not connect to {thing_id} on server {server_id} with access_point {access_point}"
+            )
+        except Exception as ex:
+            self.logger.error(f"could not connect to {thing_id} on server {server_id} with access_point {access_point}")
+            self.logger.exception(ex)
+
     def __hash__(self):
         return hash(self._IP)
 
@@ -474,7 +505,7 @@ class ApplicationRouter:
                     + f" replacing it for {affordance.what} {affordance.name}",
                     category=UserWarning,
                 )
-        if getattr(affordance, "thing_id", None) and getattr(affordance, "forms", None):
+        if getattr(affordance, "thing_id", None):
             if not URL_path.startswith(f"/{affordance.thing_id}"):
                 warnings.warn(
                     f"URL path {URL_path} does not start with the thing id {affordance.thing_id},"
@@ -633,33 +664,6 @@ class ApplicationRouter:
             thing_id=thing.id,
         )
 
-    async def async_add_thing_instance_through_broker(
-        self,
-        server_id: str,
-        thing_id: str,
-        access_point: str = None,
-    ) -> None:
-        try:
-            broker_thing = BrokerThing(server_id=server_id, thing_id=thing_id, access_point=access_point)
-            self.server._disconnected_things.append(broker_thing)
-            client, _ = await consume_broker_queue(
-                id=self.server._IP,
-                server_id=server_id,
-                thing_id=thing_id,
-                access_point=access_point,
-            )
-
-            # add client to pool
-            self.server.zmq_client_pool.register(client, thing_id)
-            self.server._disconnected_things.remove(broker_thing)
-        except ConnectionError:
-            self.logger.warning(
-                f"could not connect to {thing_id} on server {server_id} with access_point {access_point}"
-            )
-        except Exception as ex:
-            self.logger.error(f"could not connect to {thing_id} on server {server_id} with access_point {access_point}")
-            self.logger.exception(ex)
-
     def _resolve_rules(
         self,
         thing_id: str,
@@ -676,7 +680,7 @@ class ApplicationRouter:
             if not affordance or affordance.owner != thing_cls:
                 self._pending_rules.append(rule)
                 continue
-            affordance.override_defaults(thing_cls=thing_cls)
+            affordance.override_defaults(thing_cls=thing_cls, thing_id=thing_id)
             URL_path, handler, kwargs = rule
             URL_path = f"/{thing_id}{URL_path}"
             rule = (URL_path, handler, kwargs)
