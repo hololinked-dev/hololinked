@@ -6,7 +6,7 @@ import msgspec
 
 from msgspec import DecodeError as MsgspecJSONDecodeError
 from tornado.iostream import StreamClosedError
-from tornado.web import RequestHandler, StaticFileHandler
+from tornado.web import RequestHandler
 
 from ...config import global_config
 from ...constants import JSONSerializable, Operations
@@ -55,13 +55,14 @@ class LocalExecutionContext(msgspec.Struct):
 
 class BaseHandler(RequestHandler):
     """
-    Base request handler for running operations on the Thing
+    Base request handler for running operations on the Thing.
+    Would be a Controller in layered architecture.
     """
 
     def initialize(
         self,
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
-        owner_inst=None,
+        owner_inst: Any = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         """
@@ -604,27 +605,6 @@ class PNGImageEventHandler(EventHandler):
     def initialize(self, resource, owner_inst=None) -> None:
         super().initialize(resource, owner_inst)
         self.data_header = b"data:image/png;base64,%s\n\n"
-
-
-class FileHandler(StaticFileHandler):
-    """serves static files from a directory"""
-
-    @classmethod
-    def get_absolute_path(cls, root: str, path: str) -> str:
-        """
-        Returns the absolute location of `path` relative to `root`.
-
-        `root` is the path configured for this `StaticFileHandler`
-        (in most cases the `static_path` `Application` setting).
-
-        This class method may be overridden in subclasses.  By default
-        it returns a filesystem path, but other strings may be used
-        as long as they are unique and understood by the subclass's
-        overridden `get_content`.
-
-        .. versionadded:: 3.1
-        """
-        return root + path
 
 
 class StopHandler(BaseHandler):
