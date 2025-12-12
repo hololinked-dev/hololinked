@@ -10,7 +10,7 @@ from tornado.web import RequestHandler, StaticFileHandler
 
 from ...config import global_config
 from ...constants import JSONSerializable, Operations
-from ...core.zmq.brokers import AsyncEventConsumer, EventConsumer
+from ...core.zmq.brokers import EventConsumer
 from ...core.zmq.message import (
     EMPTY_BYTE,
     ERROR,
@@ -23,7 +23,6 @@ from ...core.zmq.message import (
     default_server_execution_context,
     default_thing_execution_context,
 )
-from ...schema_validators import BaseSchemaValidator
 from ...serializers import Serializers
 from ...serializers.payloads import PreserializedData, SerializableData
 from ...td import (
@@ -33,7 +32,7 @@ from ...td import (
     PropertyAffordance,
 )
 from ...td.forms import Form
-from ...utils import format_exception_as_json, get_current_async_loop, uuid_hex
+from ...utils import format_exception_as_json, get_current_async_loop
 
 
 try:
@@ -81,6 +80,7 @@ class BaseHandler(RequestHandler):
         self.resource = resource
         self.schema_validator = None  # self.server.schema_validator # not supported yet
         self.server = owner_inst  # type: HTTPServer
+        self.thing = self.server._broker_things[resource.thing_id]
         self.zmq_client_pool = self.server.zmq_client_pool
         self.logger = self.server.logger.bind(
             resource=self.resource.name,
@@ -355,8 +355,7 @@ class RPCHandler(BaseHandler):
             #     self.schema_validator.validate(payload)
             if server_execution_context.oneway or local_execution_context.noblock:
                 # if oneway, we do not expect a response, so we just return None
-                message_id = await self.zmq_client_pool.async_send_request(
-                    thing_id=self.resource.thing_id,
+                message_id = await self.thing.schedule(
                     objekt=self.resource.name,
                     operation=operation,
                     payload=payload,
@@ -369,8 +368,7 @@ class RPCHandler(BaseHandler):
                 if local_execution_context.noblock:
                     self.set_header("X-Message-ID", message_id)
             else:
-                response_message = await self.zmq_client_pool.async_execute(
-                    thing_id=self.resource.thing_id,
+                response_message = await self.thing.execute(
                     objekt=self.resource.name,
                     operation=operation,
                     payload=payload,
@@ -401,8 +399,7 @@ class RPCHandler(BaseHandler):
         try:
             self.set_custom_default_headers()
             self.logger.info("waiting for no-block response", message_id=self.message_id)
-            response_message = await self.zmq_client_pool.async_recv_response(
-                thing_id=self.resource.thing_id,
+            response_message = await self.thing.recv_response(
                 message_id=self.message_id,
                 timeout=default_server_execution_context.invokationTimeout
                 + default_server_execution_context.executionTimeout,
@@ -568,19 +565,7 @@ class EventHandler(BaseHandler):
     async def handle_datastream(self) -> None:
         """called by GET method and handles the event publishing"""
         try:
-            # if not getattr(self.resource, 'zmq_socket_address', None) or not getattr(self.resource, 'zmq_unique_identifier', None):
-            #     raise ValueError("Event resource is not initialized properly, missing socket address or unique identifier")
-            if isinstance(self.resource, EventAffordance):
-                form = self.resource.retrieve_form(Operations.subscribeevent)
-            else:
-                form = self.resource.retrieve_form(Operations.observeproperty)
-            event_consumer = AsyncEventConsumer(
-                id=f"{self.resource.name}|HTTPEventTunnel|{uuid_hex()}",
-                event_unique_identifier=f"{self.resource.thing_id}/{self.resource.name}",
-                access_point=form.href,
-                context=global_config.zmq_context(),
-            )
-            event_consumer.subscribe()
+            event_consumer = self.thing.subscribe_event(self.resource)
             self.set_status(200)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
@@ -608,16 +593,16 @@ class EventHandler(BaseHandler):
 class JPEGImageEventHandler(EventHandler):
     """handles events with images with image data header"""
 
-    def initialize(self, resource, validator: BaseSchemaValidator, owner_inst=None) -> None:
-        super().initialize(resource, validator, owner_inst)
+    def initialize(self, resource, owner_inst=None) -> None:
+        super().initialize(resource, owner_inst)
         self.data_header = b"data:image/jpeg;base64,%s\n\n"
 
 
 class PNGImageEventHandler(EventHandler):
     """handles events with images with image data header"""
 
-    def initialize(self, resource, validator: BaseSchemaValidator, owner_inst=None) -> None:
-        super().initialize(resource, validator, owner_inst)
+    def initialize(self, resource, owner_inst=None) -> None:
+        super().initialize(resource, owner_inst)
         self.data_header = b"data:image/png;base64,%s\n\n"
 
 

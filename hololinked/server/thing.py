@@ -3,14 +3,13 @@ from typing import Any, Optional
 import structlog
 import zmq.asyncio
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from ..config import global_config
 from ..core import Thing
 from ..core.zmq.brokers import (
     AsyncEventConsumer,
     AsyncZMQClient,
-    EventConsumer,
     MessageMappedZMQClientPool,
     PreserializedData,
     PreserializedEmptyByte,
@@ -27,19 +26,26 @@ from ..utils import uuid_hex
 
 
 class BrokerThing(BaseModel):
-    """Abstraction of a Thing over internal message broker"""
+    """Repository Layer of a Thing over internal message broker"""
 
     id: str
+    """Thing ID"""
     server_id: str
+    """ZMQ Server ID"""
     access_point: str
+    """ZMQ Access Point"""
 
     TD: dict[str, Any] | None = None
+    """ZMQ Thing Description"""
 
-    req_rep_client: AsyncZMQClient | MessageMappedZMQClientPool | None = None
-    event_client: EventConsumer | None = None
-
+    req_rep_client: MessageMappedZMQClientPool | None = None
+    """req-rep queue client"""
+    event_client: AsyncEventConsumer | None = None
+    """pub-sub queue client"""
     req_rep_socket_address: str = ""
+    """req-rep socket address"""
     pub_sub_socket_address: str = ""
+    """pub-sub socket address"""
 
     @model_validator(mode="before")
     def validate_access_point(cls, values):
@@ -60,7 +66,7 @@ class BrokerThing(BaseModel):
     ) -> ResponseMessage:
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
-        return self.req_rep_client.async_execute(
+        return await self.req_rep_client.async_execute(
             thing_id=self.id,
             objekt=objekt,
             operation=operation,
@@ -70,13 +76,61 @@ class BrokerThing(BaseModel):
             thing_execution_context=thing_execution_context,
         )
 
-    def consume_broker_pubsub_per_event(self, resource: EventAffordance | PropertyAffordance) -> AsyncEventConsumer:
-        return AsyncEventConsumer(
+    async def schedule(
+        self,
+        objekt: str,
+        operation: str,
+        payload: SerializableData = SerializableNone,
+        preserialized_payload: PreserializedData = PreserializedEmptyByte,
+        server_execution_context: ServerExecutionContext = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+    ) -> str:
+        if self.req_rep_client is None:
+            raise RuntimeError("Not connected to broker")
+        return await self.req_rep_client.async_send_request(
+            thing_id=self.id,
+            objekt=objekt,
+            operation=operation,
+            payload=payload,
+            preserialized_payload=preserialized_payload,
+            server_execution_context=server_execution_context,
+            thing_execution_context=thing_execution_context,
+        )
+
+    async def recv_response(
+        self,
+        message_id: str,
+        timeout: int = 10000,
+    ) -> ResponseMessage:
+        if self.req_rep_client is None:
+            raise RuntimeError("Not connected to broker")
+        return await self.req_rep_client.async_recv_response(
+            thing_id=self.id,
+            message_id=message_id,
+            timeout=timeout,
+        )
+
+    def subscribe_event(self, resource: EventAffordance | PropertyAffordance) -> AsyncEventConsumer:
+        event_consumer = AsyncEventConsumer(
             id=f"{resource.name}|EventTunnel|{uuid_hex()}",
             event_unique_identifier=f"{resource.thing_id}/{resource.name}",
-            access_point=self.pub_sub_socket_address or self.access_point,
+            access_point=self.pub_sub_socket_address,
             context=global_config.zmq_context(),
         )
+        event_consumer.subscribe()
+        return event_consumer
+
+    def set_req_rep_client(self, client: AsyncZMQClient | MessageMappedZMQClientPool) -> None:
+        """Sets the req-rep client for this broker thing."""
+        self.req_rep_client = client
+        self.req_rep_socket_address = client.socket_address
+
+    def set_event_consumer(self, client: AsyncEventConsumer) -> None:
+        """Sets the pub-sub client for this broker thing."""
+        self.event_client = client
+        self.pub_sub_socket_address = client.socket_address
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 async def consume_broker_queue(
@@ -148,10 +202,10 @@ async def consume_broker_queue(
     return client, TD
 
 
-def consume_broker_pubsub(id: str = None, access_point: str = "INPROC") -> AsyncEventConsumer:
+def consume_broker_pubsub(id: str, access_point: str) -> AsyncEventConsumer:
     """Consume all events from ZMQ (usually INPROC) pubsub"""
     return AsyncEventConsumer(
-        id=id or f"event-proxy-{uuid_hex()}",
+        id=id or f"EventTunnel|{uuid_hex()}",
         event_unique_identifier="",
         access_point=access_point,
         context=global_config.zmq_context(),

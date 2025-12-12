@@ -31,8 +31,7 @@ from ...utils import (
     run_callable_somehow,
 )
 from ..security import Security
-from ..server import BaseProtocolServer, BrokerThing
-from ..thing import consume_broker_pubsub, consume_broker_queue
+from ..server import BaseProtocolServer
 from .handlers import (
     ActionHandler,
     BaseHandler,
@@ -217,7 +216,6 @@ class HTTPServer(BaseProtocolServer):
             handshake=False,
             poll_timeout=100,
         )
-        self._disconnected_things = list()  # type: list[tuple[str, str, str]]
         self.add_things(*(things or []))
 
     def setup(self) -> None:
@@ -236,11 +234,11 @@ class HTTPServer(BaseProtocolServer):
         # self.zmq_client_pool.handshake(), NOTE - handshake better done upfront as we already poll_responses here
         # which will prevent handshake function to succeed (although handshake will be done)
         # 4. Expose via broker
-        for thing in self._things:
+        for thing in self.things:
             if not thing.rpc_server:
                 raise ValueError(f"You need to expose thing {thing.id} via a RPCServer before trying to serve it")
             event_loop.create_task(
-                self.instantiate_broker(
+                self._instantiate_broker(
                     thing.rpc_server.id,
                     thing.id,
                     "INPROC",
@@ -413,44 +411,8 @@ class HTTPServer(BaseProtocolServer):
         self.router.add_rule(affordance=event, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_thing(self, thing: Thing) -> None:
-        return self.router.add_thing(thing)
-
-    async def _instantiate_broker(
-        self,
-        server_id: str,
-        thing_id: str,
-        access_point: str = None,
-    ) -> None:
-        try:
-            broker_thing = BrokerThing(server_id=server_id, thing_id=thing_id, access_point=access_point)
-            self._disconnected_things.append(broker_thing)
-
-            client, TD = await consume_broker_queue(
-                id=self._IP,
-                server_id=server_id,
-                thing_id=thing_id,
-                access_point=access_point,
-            )
-
-            event_consumer = await consume_broker_pubsub()
-
-            # add client to pool
-            self.zmq_client_pool.register(client, thing_id)
-            self._disconnected_things.remove(broker_thing)
-
-            broker_thing.req_rep_client = client
-            broker_thing.event_client = event_consumer
-            broker_thing.req_rep_socket_address = client.socket_address
-            broker_thing.pub_sub_socket_address = event_consumer.socket_address
-            broker_thing.TD = TD
-            self.things[thing_id] = broker_thing
-        except ConnectionError:
-            self.logger.warning(
-                f"could not connect to {thing_id} on server {server_id} with access_point {access_point}"
-            )
-        except Exception as ex:
-            self.logger.error(f"could not connect to {thing_id} on server {server_id} with access_point {access_point}")
-            self.logger.exception(ex)
+        self.router.add_thing(thing)
+        super().add_thing(thing)
 
     def __hash__(self):
         return hash(self._IP)
@@ -642,18 +604,18 @@ class ApplicationRouter:
         # Prepare affordance lists with error handling (single loop)
         if not isinstance(thing, Thing):
             raise TypeError(f"thing should be of type Thing, unknown type given - {type(thing)}")
-        TD = thing.rpc_server.get_thing_description(thing, protocol="INPROC", ignore_errors=True)
+        TM = thing.get_thing_model(ignore_errors=True).json()
         properties, actions, events = [], [], []
-        for prop in TD.get("properties", dict()).keys():
-            affordance = PropertyAffordance.from_TD(prop, TD)
+        for prop in TM.get("properties", dict()).keys():
+            affordance = PropertyAffordance.from_TD(prop, TM)
             affordance.override_defaults(thing_id=thing.id, thing_cls=thing.__class__, owner=thing)
             properties.append(affordance)
-        for action in TD.get("actions", dict()).keys():
-            affordance = ActionAffordance.from_TD(action, TD)
+        for action in TM.get("actions", dict()).keys():
+            affordance = ActionAffordance.from_TD(action, TM)
             affordance.override_defaults(thing_id=thing.id, thing_cls=thing.__class__, owner=thing)
             actions.append(affordance)
-        for event in TD.get("events", dict()).keys():
-            affordance = EventAffordance.from_TD(event, TD)
+        for event in TM.get("events", dict()).keys():
+            affordance = EventAffordance.from_TD(event, TM)
             affordance.override_defaults(thing_id=thing.id, thing_cls=thing.__class__, owner=thing)
             events.append(affordance)
         self._resolve_rules(thing.id, thing.__class__)
