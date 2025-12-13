@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "generated_at": "2025-11-22T19:54:06Z",
+  "generated_at": "2025-12-13T20:18:40Z",
   "metrics": {
     "_totals": {
       "CONFIDENCE.HIGH": 2,
@@ -11,7 +11,7 @@
       "SEVERITY.LOW": 1,
       "SEVERITY.MEDIUM": 7,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 22117,
+      "loc": 22624,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -37,7 +37,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 2,
+      "loc": 3,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -50,7 +50,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 448,
+      "loc": 444,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -63,7 +63,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 3,
+      "loc": 8,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -76,7 +76,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 454,
+      "loc": 451,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -102,7 +102,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 410,
+      "loc": 408,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -128,7 +128,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 83,
+      "loc": 84,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -141,7 +141,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 494,
+      "loc": 490,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/client/security.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 13,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -167,7 +180,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 496,
+      "loc": 499,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -180,7 +193,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 157,
+      "loc": 232,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -193,7 +206,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 90,
+      "loc": 86,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -206,7 +219,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 5,
+      "loc": 6,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -219,7 +232,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 340,
+      "loc": 338,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -245,7 +258,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 119,
+      "loc": 123,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/core/exceptions.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 30,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -258,7 +284,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 262,
+      "loc": 257,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -271,7 +297,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 773,
+      "loc": 769,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -284,7 +310,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 2315,
+      "loc": 2312,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -297,7 +323,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 303,
+      "loc": 297,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -310,7 +336,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 316,
+      "loc": 317,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -323,7 +349,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 1,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 332,
+      "loc": 326,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -375,20 +401,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 2,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 774,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/exceptions.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 30,
+      "loc": 828,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -401,7 +414,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 69,
+      "loc": 97,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -427,7 +440,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 44,
+      "loc": 43,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -479,7 +492,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 1788,
+      "loc": 1786,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -544,7 +557,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 87,
+      "loc": 81,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -596,7 +609,7 @@
       "SEVERITY.LOW": 1,
       "SEVERITY.MEDIUM": 1,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 540,
+      "loc": 556,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -609,11 +622,50 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 91,
+      "loc": 4,
       "nosec": 0,
       "skipped_tests": 0
     },
     "hololinked/server/http/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 15,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/server/http/config.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 12,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/server/http/controllers.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 635,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/server/http/server.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 3,
@@ -622,11 +674,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 3,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 684,
+      "loc": 659,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/server/http/handlers.py": {
+    "hololinked/server/http/services.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -635,11 +687,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 809,
+      "loc": 237,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/server/mqtt.py": {
+    "hololinked/server/mqtt/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -648,7 +700,46 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 170,
+      "loc": 2,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/server/mqtt/controllers.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 77,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/server/mqtt/server.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 134,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/server/mqtt/services.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 70,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -661,7 +752,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 127,
+      "loc": 136,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -674,11 +765,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 82,
+      "loc": 189,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/server/utils.py": {
+    "hololinked/server/thing.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -687,11 +778,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 88,
+      "loc": 217,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/server/zmq.py": {
+    "hololinked/server/zmq/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -700,7 +791,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 175,
+      "loc": 1,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/server/zmq/server.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 177,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -713,11 +817,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 28,
+      "loc": 33,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/storage/config_models.py": {
+    "hololinked/storage/config.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -739,7 +843,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 569,
+      "loc": 539,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -752,7 +856,33 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 144,
+      "loc": 146,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/storage/models.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 46,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/storage/utils.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 3,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -778,7 +908,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 40,
+      "loc": 37,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -791,7 +921,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 392,
+      "loc": 390,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -817,7 +947,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 404,
+      "loc": 403,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -856,7 +986,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 18,
+      "loc": 28,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -869,7 +999,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 124,
+      "loc": 128,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -895,14 +1025,14 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 536,
+      "loc": 520,
       "nosec": 0,
       "skipped_tests": 0
     }
   },
   "results": [
     {
-      "code": "268         port: int = 8080,\n269         address: str = \"0.0.0.0\",\n270         # host: str = None,\n271         allowed_clients: str | typing.Iterable[str] | None = None,\n272         ssl_context: ssl.SSLContext | None = None,\n273         # protocol_version : int = 1,\n274         # network_interface : str = 'Ethernet',\n275         forked: bool = False,  # used by forkable decorator\n276         **kwargs: typing.Dict[str, typing.Any],\n277     ) -> None:\n278         \"\"\"\n279         Quick-start to serve `Thing` over HTTP. This method is fully blocking.\n",
+      "code": "266         port: int = 8080,\n267         address: str = \"0.0.0.0\",  # SAST(id='hololinked.core.thing.Thing.run_with_http_server.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n268         # host: str = None,\n269         allowed_clients: str | list[str] | None = None,\n270         ssl_context: ssl.SSLContext | None = None,\n271         # protocol_version : int = 1,\n272         # network_interface : str = 'Ethernet',\n273         forked: bool = False,  # used by forkable decorator\n274         **kwargs: dict[str, Any],\n275     ) -> None:\n276         \"\"\"\n277         Quick-start to serve `Thing` over HTTP. This method is fully blocking.\n",
       "col_offset": 23,
       "end_col_offset": 32,
       "filename": "hololinked/core/thing.py",
@@ -913,8 +1043,10 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 269,
+      "line_number": 267,
       "line_range": [
+        265,
+        266,
         267,
         268,
         269,
@@ -922,16 +1054,14 @@
         271,
         272,
         273,
-        274,
-        275,
-        276
+        274
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "681             req_rep_socket_address = req_rep_socket_address.replace(\"*\", socket.gethostname()).replace(\n682                 \"0.0.0.0\", socket.gethostname()\n683             )\n684             pub_sub_socket_address = self.tcp_event_publisher.socket_address  # type: str\n685             pub_sub_socket_address = pub_sub_socket_address.replace(\"*\", socket.gethostname()).replace(\n",
+      "code": "690             ).replace(\n691                 \"0.0.0.0\", socket.gethostname()\n692             )  # SAST(id='hololinked.core.zmq.rpc_server.RPCServer.get_thing_description.req_rep_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n693             pub_sub_socket_address = self.tcp_event_publisher.socket_address  # type: str\n694             pub_sub_socket_address = pub_sub_socket_address.replace(\n695                 \"*\", socket.gethostname()\n696             ).replace(\n",
       "col_offset": 16,
       "end_col_offset": 25,
       "filename": "hololinked/core/zmq/rpc_server.py",
@@ -942,18 +1072,20 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 682,
+      "line_number": 691,
       "line_range": [
-        681,
-        682,
-        683
+        688,
+        689,
+        690,
+        691,
+        692
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "685             pub_sub_socket_address = pub_sub_socket_address.replace(\"*\", socket.gethostname()).replace(\n686                 \"0.0.0.0\", socket.gethostname()\n687             )\n688         else:\n689             raise ValueError(f\"Unsupported protocol '{protocol}' for ZMQ.\")\n",
+      "code": "696             ).replace(\n697                 \"0.0.0.0\", socket.gethostname()\n698             )  # SAST(id='hololinked.core.zmq.rpc_server.RPCServer.get_thing_description.pub_sub_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n699         else:\n700             raise ValueError(f\"Unsupported protocol '{protocol}' for ZMQ.\")\n701 \n702         for name in TM.get(\"properties\", []):\n",
       "col_offset": 16,
       "end_col_offset": 25,
       "filename": "hololinked/core/zmq/rpc_server.py",
@@ -964,18 +1096,20 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 686,
+      "line_number": 697,
       "line_range": [
-        685,
-        686,
-        687
+        694,
+        695,
+        696,
+        697,
+        698
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "34 # serializers:\n35 import pickle\n36 import typing\n",
+      "code": "32 import json as pythonjson\n33 import pickle  # SAST(id='hololinked.serializers.serializers.pickle_import', description='B403:blacklist', tool='bandit')\n34 import uuid\n",
       "col_offset": 0,
       "end_col_offset": 13,
       "filename": "hololinked/serializers/serializers.py",
@@ -986,16 +1120,16 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Consider possible security implications associated with pickle module.",
-      "line_number": 35,
+      "line_number": 33,
       "line_range": [
-        35
+        33
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/blacklists/blacklist_imports.html#b403-import-pickle",
       "test_id": "B403",
       "test_name": "blacklist"
     },
     {
-      "code": "216         if global_config.ALLOW_PICKLE:\n217             return pickle.loads(self.convert_to_bytes(data))\n218         raise RuntimeError(\"Pickle deserialization is not allowed by the global configuration\")\n",
+      "code": "215         if global_config.ALLOW_PICKLE:\n216             return pickle.loads(self.convert_to_bytes(data))\n217             # SAST(id='hololinked.serializers.serializers.PickleSerializer.loads', description='B301:blacklist', tool='bandit')\n",
       "col_offset": 19,
       "end_col_offset": 60,
       "filename": "hololinked/serializers/serializers.py",
@@ -1006,19 +1140,19 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Pickle and modules that wrap it can be unsafe when used to deserialize untrusted data, possible security issue.",
-      "line_number": 217,
+      "line_number": 216,
       "line_range": [
-        217
+        216
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/blacklists/blacklist_calls.html#b301-pickle",
       "test_id": "B301",
       "test_name": "blacklist"
     },
     {
-      "code": "63 \n64     address = IPAddress(default=\"0.0.0.0\", doc=\"IP address\")  # type: str\n65     \"\"\"IP address, especially to bind to all interfaces or not\"\"\"\n",
+      "code": "54 \n55     address = IPAddress(default=\"0.0.0.0\", doc=\"IP address\")  # type: str\n56     # SAST(id='hololinked.server.http.HTTPServer.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n",
       "col_offset": 32,
       "end_col_offset": 41,
-      "filename": "hololinked/server/http/__init__.py",
+      "filename": "hololinked/server/http/server.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 605,
@@ -1026,19 +1160,19 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 64,
+      "line_number": 55,
       "line_range": [
-        64
+        55
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "126         port: int = 8080,\n127         address: str = \"0.0.0.0\",\n128         things: typing.Optional[typing.List[Thing]] = None,\n129         # host: typing.Optional[str] = None,\n130         logger: typing.Optional[logging.Logger] = None,\n131         log_level: int = logging.INFO,\n132         ssl_context: typing.Optional[ssl.SSLContext] = None,\n133         security_schemes: typing.Optional[typing.List[Security]] = None,\n134         # protocol_version : int = 1, network_interface : str = 'Ethernet',\n135         allowed_clients: typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,\n136         config: typing.Optional[dict[str, typing.Any]] = None,\n137         **kwargs,\n138     ) -> None:\n139         \"\"\"\n140         Parameters\n141         ----------\n",
+      "code": "130         port: int = 8080,\n131         address: str = \"0.0.0.0\",  # SAST(id='hololinked.server.http.HTTPServer.__init__.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n132         things: list[Thing] | None = None,\n133         # host: Optional[str] = None,\n134         logger: structlog.stdlib.BoundLogger | None = None,\n135         log_level: int = logging.INFO,\n136         ssl_context: ssl.SSLContext | None = None,\n137         security_schemes: list[Security] | None = None,\n138         # protocol_version : int = 1, network_interface : str = 'Ethernet',\n139         allowed_clients: str | Iterable[str] | None = None,\n140         config: dict[str, Any] | None = None,\n141         **kwargs,\n142     ) -> None:\n143         \"\"\"\n144         Parameters\n145         ----------\n",
       "col_offset": 23,
       "end_col_offset": 32,
-      "filename": "hololinked/server/http/__init__.py",
+      "filename": "hololinked/server/http/server.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 605,
@@ -1046,12 +1180,8 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 127,
+      "line_number": 131,
       "line_range": [
-        124,
-        125,
-        126,
-        127,
         128,
         129,
         130,
@@ -1061,17 +1191,21 @@
         134,
         135,
         136,
-        137
+        137,
+        138,
+        139,
+        140,
+        141
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "702             return f\"{protocol}://{socket.gethostname()}{port}\"\n703         if self.server.address == \"0.0.0.0\" or self.server.address == \"127.0.0.1\":\n704             return f\"{protocol}://127.0.0.1{port}\"\n",
+      "code": "694             return f\"{protocol}://{socket.gethostname()}{port}\"\n695         if self.server.address == \"0.0.0.0\" or self.server.address == \"127.0.0.1\":\n696             # SAST(id='hololinked.server.http.ApplicationRouter.get_basepath', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n",
       "col_offset": 34,
       "end_col_offset": 43,
-      "filename": "hololinked/server/http/__init__.py",
+      "filename": "hololinked/server/http/server.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 605,
@@ -1079,9 +1213,9 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 703,
+      "line_number": 695,
       "line_range": [
-        703
+        695
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
