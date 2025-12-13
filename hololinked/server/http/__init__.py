@@ -32,7 +32,7 @@ from ...utils import (
 from ..security import Security
 from ..server import BaseProtocolServer
 from .config import HandlerMetadata, RuntimeConfig
-from .handlers import (
+from .controllers import (
     ActionHandler,
     BaseHandler,
     EventHandler,

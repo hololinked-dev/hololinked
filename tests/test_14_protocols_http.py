@@ -29,7 +29,7 @@ from hololinked.serializers import (
 )
 from hololinked.server import stop
 from hololinked.server.http import HTTPServer
-from hololinked.server.http.handlers import RPCHandler
+from hololinked.server.http.controllers import RPCHandler
 from hololinked.server.security import (
     Argon2BasicSecurity,
     BcryptBasicSecurity,
