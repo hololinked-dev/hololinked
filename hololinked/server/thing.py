@@ -167,7 +167,8 @@ class BrokerThing(BaseModel):
             if zmq_response.payload.value != b"null":
                 # our None return value comes like this, sufficient to check against that
                 self.logger.warning(
-                    "Multiple content types in response payload, only the latter will be written to the wire",
+                    "Multiple content types in response payload (multipart payloads) are currently not supported"
+                    + " only the preserialized payload will be written to the wire",
                     content_type=zmq_response.payload.content_type,
                     binary_value=zmq_response.payload.value,
                 )
