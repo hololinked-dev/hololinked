@@ -33,6 +33,8 @@ from ...td import (
 )
 from ...td.forms import Form
 from ...utils import format_exception_as_json, get_current_async_loop
+from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
+from .service import Thing as ThingService
 
 
 try:
@@ -56,7 +58,8 @@ class LocalExecutionContext(msgspec.Struct):
 class BaseHandler(RequestHandler):
     """
     Base request handler for running operations on the Thing.
-    Would be a Controller in layered architecture.
+
+    Would be both a Controller in layered architecture.
     """
 
     def initialize(
@@ -78,20 +81,19 @@ class BaseHandler(RequestHandler):
         """
         from . import HTTPServer  # noqa: F401
 
-        self.resource = resource
-        self.schema_validator = None  # self.server.schema_validator # not supported yet
         self.server = owner_inst  # type: HTTPServer
-        self.thing = self.server._broker_things[resource.thing_id]
-        self.zmq_client_pool = self.server.zmq_client_pool
+        self.config = self.server.config  # type: RuntimeConfig
+        self.thing = ThingService(resource)
         self.logger = self.server.logger.bind(
-            resource=self.resource.name,
-            what=self.resource.what,
-            thing_id=self.resource.thing_id,
+            resource=resource.name,
+            what=resource.what,
+            thing_id=resource.thing_id,
             path=self.request.path,
+            layer="controller",
         )
         self.allowed_clients = self.server.allowed_clients
         self.security_schemes = self.server.security_schemes
-        self.metadata = metadata or {}
+        self.metadata = metadata or HandlerMetadata()  # type: HandlerMetadata
 
     @property
     def has_access_control(self) -> bool:
@@ -147,8 +149,8 @@ class BaseHandler(RequestHandler):
                             )
                     except Exception as ex:
                         self.logger.error(f"error while authenticating client - {str(ex)}")
-            return authenticated
-        return False
+                    break  # stop at first matching security scheme
+        return authenticated
 
     def set_access_control_allow_headers(self) -> None:
         """
@@ -171,61 +173,61 @@ class BaseHandler(RequestHandler):
         ```
         """
         # Access-Control-Allow-Credentials: true # only for cookie auth
-        if self.server.config.cors:
+        if self.config.cors:
             # For credential login, access control allow origin cannot be '*',
             # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
             self.set_header("Access-Control-Allow-Origin", "*")
 
     def get_execution_parameters(
         self,
-    ) -> tuple[ServerExecutionContext, ThingExecutionContext, LocalExecutionContext, SerializableData]:
+    ) -> tuple[
+        ServerExecutionContext,
+        ThingExecutionContext,
+        LocalExecutionContext,
+        SerializableData,
+    ]:
         """
         merges all arguments to a single JSON body and retrieves execution context (like oneway calls, fetching executing
         logs) and timeouts, payloads in URL query parameters etc.
         """
         arguments = dict()
-        if len(self.request.query_arguments) >= 1:
-            for key, value in self.request.query_arguments.items():
-                if len(value) == 1:
-                    try:
-                        arguments[key] = Serializers.json.loads(value[0])
-                    except MsgspecJSONDecodeError:
-                        arguments[key] = value[0].decode("utf-8")
-                else:
-                    final_value = []
-                    for val in value:
-                        try:
-                            final_value.append(Serializers.json.loads(val))
-                        except MsgspecJSONDecodeError:
-                            final_value.append(val.decode("utf-8"))
-                    arguments[key] = final_value
-            thing_execution_context = ThingExecutionContext(
-                fetchExecutionLogs=bool(arguments.pop("fetchExecutionLogs", False))
+        if len(self.request.query_arguments) == 0:
+            return (
+                default_server_execution_context,
+                default_thing_execution_context,
+                LocalExecutionContext(),
+                SerializableNone,
             )
-            server_execution_context = ServerExecutionContext(
-                invokationTimeout=arguments.pop(
-                    "invokationTimeout", default_server_execution_context.invokationTimeout
-                ),
-                executionTimeout=arguments.pop("executionTimeout", default_server_execution_context.executionTimeout),
-                oneway=arguments.pop("oneway", default_server_execution_context.oneway),
-            )
-            local_execution_context = LocalExecutionContext(
-                noblock=arguments.pop("noblock", None),
-                messageID=arguments.pop("messageID", None),
-            )
-            if not arguments:
-                additional_payload = SerializableNone
+        for key, value in self.request.query_arguments.items():
+            if len(value) == 1:
+                try:
+                    arguments[key] = Serializers.json.loads(value[0])
+                except MsgspecJSONDecodeError:
+                    arguments[key] = value[0].decode("utf-8")
             else:
-                additional_payload = SerializableData(arguments, content_type="application/json")
-            # if self.resource.request_as_argument:
-            #     arguments['request'] = self.request # find some way to pass the request object to the thing
-            return server_execution_context, thing_execution_context, local_execution_context, additional_payload
-        return (
-            default_server_execution_context,
-            default_thing_execution_context,
-            LocalExecutionContext(),
-            SerializableNone,
+                final_value = []
+                for val in value:
+                    try:
+                        final_value.append(Serializers.json.loads(val))
+                    except MsgspecJSONDecodeError:
+                        final_value.append(val.decode("utf-8"))
+                arguments[key] = final_value
+        # if self.resource.request_as_argument:
+        #     arguments['request'] = self.request # find some way to pass the request object to the thing
+        thing_execution_context = ThingExecutionContext(
+            fetchExecutionLogs=bool(arguments.pop("fetchExecutionLogs", False))
         )
+        server_execution_context = ServerExecutionContext(
+            invokationTimeout=arguments.pop("invokationTimeout", default_server_execution_context.invokationTimeout),
+            executionTimeout=arguments.pop("executionTimeout", default_server_execution_context.executionTimeout),
+            oneway=arguments.pop("oneway", default_server_execution_context.oneway),
+        )
+        local_execution_context = LocalExecutionContext(
+            noblock=arguments.pop("noblock", None),
+            messageID=arguments.pop("messageID", None),
+        )
+        additional_payload = SerializableNone if not arguments else SerializableData(arguments)  # application/json
+        return server_execution_context, thing_execution_context, local_execution_context, additional_payload
 
     @property
     def message_id(self) -> str:
@@ -312,7 +314,7 @@ class RPCHandler(BaseHandler):
             return False
         if self.message_id is not None and method.upper() == "GET":
             return True
-        if method in self.metadata.get("http_methods", []):
+        if method in self.metadata.http_methods:
             return True
         self.set_status(405, "method not allowed")
         return False
@@ -326,7 +328,7 @@ class RPCHandler(BaseHandler):
             self.set_status(204)
             self.set_custom_default_headers()
             self.set_access_control_allow_headers()
-            self.set_header("Access-Control-Allow-Methods", ", ".join(self.metadata.get("http_methods", [])))
+            self.set_header("Access-Control-Allow-Methods", ", ".join(self.metadata.http_methods))
         self.finish()
 
     async def handle_through_thing(self, operation: str) -> None:
@@ -340,7 +342,6 @@ class RPCHandler(BaseHandler):
             `writeproperty`, `invokeaction`, `deleteproperty`
         """
         try:
-            self.set_custom_default_headers()
             server_execution_context, thing_execution_context, local_execution_context, additional_payload = (
                 self.get_execution_parameters()
             )
@@ -351,26 +352,28 @@ class RPCHandler(BaseHandler):
             self.logger.error(f"error while decoding request - {str(ex)}")
             return
         try:
-            # TODO - add schema validation here, we are anyway validating at some point within the ZMQ server
-            # if self.schema_validator is not None and global_config.VALIDATE_SCHEMA_ON_CLIENT:
-            #     self.schema_validator.validate(payload)
-            if server_execution_context.oneway or local_execution_context.noblock:
+            if server_execution_context.oneway:
                 # if oneway, we do not expect a response, so we just return None
-                message_id = await self.thing.schedule(
-                    objekt=self.resource.name,
+                await self.thing.oneway(
                     operation=operation,
                     payload=payload,
                     preserialized_payload=preserialized_payload,
                     server_execution_context=server_execution_context,
                     thing_execution_context=thing_execution_context,
                 )
-                response_payload = SerializableData(value=None)
                 self.set_status(204, "ok")
-                if local_execution_context.noblock:
-                    self.set_header("X-Message-ID", message_id)
+            if local_execution_context.noblock:
+                message_id = await self.thing.schedule(
+                    operation=operation,
+                    payload=payload,
+                    preserialized_payload=preserialized_payload,
+                    server_execution_context=server_execution_context,
+                    thing_execution_context=thing_execution_context,
+                )
+                self.set_status(204, "ok")
+                self.set_header("X-Message-ID", message_id)
             else:
                 response_message = await self.thing.execute(
-                    objekt=self.resource.name,
                     operation=operation,
                     payload=payload,
                     preserialized_payload=preserialized_payload,
@@ -380,8 +383,8 @@ class RPCHandler(BaseHandler):
                 response_payload = self.get_response_payload(response_message)
                 self.set_status(200, "ok")
                 self.set_header("Content-Type", response_payload.content_type or "application/json")
-            if response_payload.value:
-                self.write(response_payload.value)
+                if response_payload.value:
+                    self.write(response_payload.value)
         except ConnectionAbortedError as ex:
             self.set_status(503, f"lost connection to thing - {str(ex)}")
             # TODO handle reconnection
@@ -398,7 +401,6 @@ class RPCHandler(BaseHandler):
     async def handle_no_block_response(self) -> None:
         """handles the no-block response for the noblock calls"""
         try:
-            self.set_custom_default_headers()
             self.logger.info("waiting for no-block response", message_id=self.message_id)
             response_message = await self.thing.recv_response(
                 message_id=self.message_id,
@@ -433,6 +435,7 @@ class PropertyHandler(RPCHandler):
 
     async def get(self) -> None:
         if self.is_method_allowed("GET"):
+            self.set_custom_default_headers()
             if self.message_id is not None:
                 await self.handle_no_block_response()
             else:
@@ -441,16 +444,19 @@ class PropertyHandler(RPCHandler):
 
     async def post(self) -> None:
         if self.is_method_allowed("POST"):
+            self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def put(self) -> None:
         if self.is_method_allowed("PUT"):
+            self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def delete(self) -> None:
         if self.is_method_allowed("DELETE"):
+            self.set_custom_default_headers()
             await self.handle_through_thing(Operations.deleteproperty)
         self.finish()
 
@@ -460,6 +466,7 @@ class ActionHandler(RPCHandler):
 
     async def get(self) -> None:
         if self.is_method_allowed("GET"):
+            self.set_custom_default_headers()
             if self.message_id is not None:
                 await self.handle_no_block_response()
             else:
@@ -468,44 +475,50 @@ class ActionHandler(RPCHandler):
 
     async def post(self) -> None:
         if self.is_method_allowed("POST"):
+            self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def put(self) -> None:
         if self.is_method_allowed("PUT"):
+            self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def delete(self) -> None:
         if self.is_method_allowed("DELETE"):
+            self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
 
 class RWMultiplePropertiesHandler(ActionHandler):
     def initialize(self, resource, owner_inst=None, metadata=None, **kwargs) -> None:
-        self.read_properties_resource = kwargs.pop("read_properties_resource", None)
-        self.write_properties_resource = kwargs.pop("write_properties_resource", None)
         return super().initialize(resource, owner_inst, metadata)
 
     async def get(self) -> None:
         if self.is_method_allowed("GET"):
-            self.resource = self.read_properties_resource
+            self.set_custom_default_headers()
             if self.message_id is not None:
                 await self.handle_no_block_response()
             else:
                 await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
+    async def post(self) -> None:
+        if self.is_method_allowed("POST"):
+            self.set_status(405, "method not allowed, PUT instead")
+        self.finish()
+
     async def put(self) -> None:
         if self.is_method_allowed("PUT"):
-            self.resource = self.write_properties_resource
+            self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def patch(self) -> None:
         if self.is_method_allowed("PATCH"):
-            self.resource = self.write_properties_resource
+            self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 

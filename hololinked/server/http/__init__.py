@@ -32,6 +32,7 @@ from ...utils import (
 )
 from ..security import Security
 from ..server import BaseProtocolServer
+from .config import RuntimeConfig
 from .handlers import (
     ActionHandler,
     BaseHandler,
@@ -44,16 +45,6 @@ from .handlers import (
     StopHandler,
     ThingDescriptionHandler,
 )
-
-
-class RuntimeConfig(BaseModel):
-    """Runtime configuration for HTTP server and handlers."""
-
-    cors: bool = False
-    """
-    Set CORS headers for the HTTP server. If set to False, CORS headers are not set.
-    This is useful when the server is used in a controlled environment where CORS is not needed.
-    """
 
 
 class HTTPServer(BaseProtocolServer):

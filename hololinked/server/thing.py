@@ -26,7 +26,7 @@ from ..utils import uuid_hex
 
 
 class BrokerThing(BaseModel):
-    """Repository Layer of a Thing over internal message broker"""
+    """Repository Layer of a Thing over the internal message broker"""
 
     id: str
     """Thing ID"""
