@@ -675,7 +675,7 @@ class ApplicationRouter:
                 path = str(rule.matcher.regex.pattern).rstrip("$")
                 return f"{self.get_basepath(authority, use_localhost)}{path}"
 
-    def get_target_kwargs_for_affordance(self, affordance) -> dict:
+    def get_injected_dependencies(self, affordance) -> dict[str, Any]:
         """
         Get the target kwargs for the affordance in the application router.
         """

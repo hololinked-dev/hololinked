@@ -14,5 +14,5 @@ class RuntimeConfig(BaseModel):
 class HandlerMetadata(BaseModel):
     """Specific metadata when a request handler has been initialized"""
 
-    http_methods: tuple[str | None, ...] = tuple()
+    http_methods: tuple[str, ...] = tuple()
     """HTTP methods supported by the handler."""
