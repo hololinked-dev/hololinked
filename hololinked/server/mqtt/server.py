@@ -32,15 +32,16 @@ class MQTTPublisher(BaseProtocolServer):
     ssl_context = ClassSelector(class_=ssl.SSLContext, allow_None=True, default=None)
     """The SSL context to use for secure connections, or None for no SSL"""
 
-    topic_publisher = ClassSelector(class_=TopicPublisher, allow_None=False, default=TopicPublisher)
-    """The TopicPublisher class to use for publishing messages"""
+    topic_publisher = ClassSelector(class_=TopicPublisher, allow_None=False, default=TopicPublisher, isinstance=False)
+    """The `TopicPublisher` class to use for publishing messages"""
 
     thing_description_publisher = ClassSelector(
         class_=ThingDescriptionPublisher,
         allow_None=False,
+        isinstance=False,
         default=ThingDescriptionPublisher,
     )
-    """The ThingDescriptionPublisher class to use for publishing Thing Descriptions"""
+    """The `ThingDescriptionPublisher` class to use for publishing Thing Descriptions"""
 
     def __init__(
         self,

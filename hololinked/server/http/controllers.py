@@ -631,6 +631,7 @@ class StopHandler(BaseHandler):
         from . import HTTPServer  # noqa: F401
 
         self.server = owner_inst  # type: HTTPServer
+        self.config = self.server.config
         self.allowed_clients = self.server.allowed_clients
         self.security_schemes = self.server.security_schemes
         self.logger = self.server.logger.bind(path=self.request.path)
@@ -661,6 +662,7 @@ class LivenessProbeHandler(BaseHandler):
         from . import HTTPServer  # noqa: F401
 
         self.server = owner_inst  # type: HTTPServer
+        self.config = self.server.config
         self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):
@@ -670,10 +672,11 @@ class LivenessProbeHandler(BaseHandler):
 
 
 class ReadinessProbeHandler(BaseHandler):
-    def initialize(self, owner_inst=None) -> None:
+    def initialize(self, owner_inst: Any = None) -> None:
         from . import HTTPServer  # noqa: F401
 
         self.server = owner_inst  # type: HTTPServer
+        self.config = self.server.config
         self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):

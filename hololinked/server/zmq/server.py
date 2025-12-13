@@ -107,6 +107,10 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 **kwargs,
             )
 
+    def add_thing(self, thing: Thing) -> None:
+        """Adds a thing to the list of things to serve."""
+        return RPCServer.add_thing(self, thing)
+
     def run_zmq_request_listener(self) -> None:
         # doc in parent class
         eventloop = get_current_async_loop()

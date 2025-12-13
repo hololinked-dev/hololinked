@@ -285,7 +285,7 @@ class HTTPServer(BaseProtocolServer):
         self,
         URL_path: str,
         property: Property | PropertyAffordance,
-        http_methods: str | tuple[str | None, str | None, str | None] = ("GET", "PUT", None),
+        http_methods: str | tuple[str, str, str] = ("GET", "PUT"),
         handler: BaseHandler | PropertyHandler = PropertyHandler,
         **kwargs,
     ) -> None:
