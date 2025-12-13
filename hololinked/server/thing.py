@@ -35,8 +35,6 @@ class BrokerThing(BaseModel):
     """ZMQ Server ID"""
     access_point: str
     """ZMQ Access Point"""
-    logger: structlog.stdlib.BoundLogger
-    """Logger instance"""
 
     TD: dict[str, Any] | None = None
     """ZMQ Thing Description"""
@@ -49,6 +47,8 @@ class BrokerThing(BaseModel):
     """req-rep socket address"""
     pub_sub_socket_address: str = ""
     """pub-sub socket address"""
+    logger: structlog.stdlib.BoundLogger | None = None
+    """Logger instance"""
 
     @model_validator(mode="before")
     def validate_access_point(cls, values):
@@ -154,7 +154,6 @@ class BrokerThing(BaseModel):
         self.event_client = client
         self.pub_sub_socket_address = client.socket_address
 
-    @classmethod
     def get_response_payload(self, zmq_response: ResponseMessage) -> PreserializedData | SerializableData:
         """
         Retrieves the payload from the ZMQ response message, does not necessarily deserialize it.
@@ -167,7 +166,7 @@ class BrokerThing(BaseModel):
             if zmq_response.payload.value != b"null":
                 # our None return value comes like this, sufficient to check against that
                 self.logger.warning(
-                    "Multiple content types in response payload (multipart payloads) are currently not supported"
+                    "Multiple content types in response payload (multipart payloads) are currently not supported,"
                     + " only the preserialized payload will be written to the wire",
                     content_type=zmq_response.payload.content_type,
                     binary_value=zmq_response.payload.value,
