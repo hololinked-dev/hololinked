@@ -32,6 +32,16 @@ class MQTTPublisher(BaseProtocolServer):
     ssl_context = ClassSelector(class_=ssl.SSLContext, allow_None=True, default=None)
     """The SSL context to use for secure connections, or None for no SSL"""
 
+    topic_publisher = ClassSelector(class_=TopicPublisher, allow_None=False, default=TopicPublisher)
+    """The TopicPublisher class to use for publishing messages"""
+
+    thing_description_publisher = ClassSelector(
+        class_=ThingDescriptionPublisher,
+        allow_None=False,
+        default=ThingDescriptionPublisher,
+    )
+    """The ThingDescriptionPublisher class to use for publishing Thing Descriptions"""
+
     def __init__(
         self,
         hostname: str,
@@ -66,6 +76,8 @@ class MQTTPublisher(BaseProtocolServer):
         self.username = username
         self.password = password
         self.publishers = dict()  # type: dict[str, TopicPublisher]
+        self.topic_publisher = kwargs.get("topic_publisher", TopicPublisher)
+        self.thing_description_publisher = kwargs.get("thing_description_publisher", ThingDescriptionPublisher)
         self.logger = kwargs.get("logger", structlog.get_logger()).bind(component="mqtt-publisher", hostname=endpoint)
         self.ssl_context = kwargs.get("ssl_context", None)
         self.add_things(*(things or []))
@@ -105,7 +117,7 @@ class MQTTPublisher(BaseProtocolServer):
 
             for event_name in td.get("events", {}).keys():
                 event_affordance = EventAffordance.from_TD(event_name, td)
-                topic_publisher = TopicPublisher(
+                topic_publisher = self.topic_publisher(
                     client=self.client,
                     resource=event_affordance,
                     logger=self.logger,
@@ -118,7 +130,7 @@ class MQTTPublisher(BaseProtocolServer):
                 property_affordance = PropertyAffordance.from_TD(prop_name, td)
                 if not property_affordance.observable:
                     continue
-                topic_publisher = TopicPublisher(
+                topic_publisher = self.topic_publisher(
                     client=self.client,
                     resource=property_affordance,
                     logger=self.logger,
@@ -128,7 +140,7 @@ class MQTTPublisher(BaseProtocolServer):
                 eventloop.create_task(topic_publisher.publish())
                 self.logger.info(f"MQTT will publish observable property changes for {prop_name} of thing {thing.id}")
             # TD publisher
-            td_publisher = ThingDescriptionPublisher(client=self.client, logger=self.logger, ZMQ_TD=td)
+            td_publisher = self.thing_description_publisher(client=self.client, logger=self.logger, ZMQ_TD=td)
             self.publishers[td_publisher.topic] = td_publisher
             eventloop.create_task(td_publisher.publish(td))
 
