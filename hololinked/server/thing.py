@@ -35,6 +35,8 @@ class BrokerThing(BaseModel):
     """ZMQ Server ID"""
     access_point: str
     """ZMQ Access Point"""
+    logger: structlog.stdlib.BoundLogger
+    """Logger instance"""
 
     TD: dict[str, Any] | None = None
     """ZMQ Thing Description"""
@@ -154,19 +156,21 @@ class BrokerThing(BaseModel):
 
     @classmethod
     def get_response_payload(self, zmq_response: ResponseMessage) -> PreserializedData | SerializableData:
-        """retrieves the payload from the ZMQ response message, does not necessarily deserialize it"""
+        """
+        Retrieves the payload from the ZMQ response message, does not necessarily deserialize it.
+        Multipart responses are not supported yet for protocol controllers (except ZMQ), so only one payload is returned
+        """
         # print("zmq_response - ", zmq_response)
         if zmq_response is None:
             raise RuntimeError("No last response available. Did you make an operation?")
         if zmq_response.preserialized_payload.value != EMPTY_BYTE:
             if zmq_response.payload.value != b"null":
                 # our None return value comes like this, sufficient to check against that
-                # self.logger.warning(
-                #     "Multiple content types in response payload, only the latter will be written to the wire",
-                #     content_type=zmq_response.payload.content_type,
-                #     binary_value=zmq_response.payload.value,
-                # )
-                pass
+                self.logger.warning(
+                    "Multiple content types in response payload, only the latter will be written to the wire",
+                    content_type=zmq_response.payload.content_type,
+                    binary_value=zmq_response.payload.value,
+                )
             # multiple content types are not supported yet, so we return only one payload
             return zmq_response.preserialized_payload
             # return payload, preserialized_payload

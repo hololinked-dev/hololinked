@@ -75,9 +75,10 @@ class BaseProtocolServer(Parameterized):
         server_id: str,
         thing_id: str,
         access_point: str = "INPROC",
-    ) -> BrokerThing:
+    ) -> None:
         try:
             broker_thing = BrokerThing(server_id=server_id, id=thing_id, access_point=access_point)
+
             self._disconnected_things.append(broker_thing)
 
             client, TD = await consume_broker_queue(
@@ -97,13 +98,18 @@ class BaseProtocolServer(Parameterized):
             broker_thing.set_req_rep_client(client)
             broker_thing.set_event_consumer(event_consumer)
             broker_thing.TD = TD
+            broker_thing.logger = structlog.get_logger().bind(
+                layer="repository",
+                impl=broker_thing.__class__.__name__,
+                thing_id=thing_id,
+            )
 
-            thing_repository[thing_id] = broker_thing
             if self.zmq_client_pool:
                 self.zmq_client_pool.register(client, thing_id)
                 broker_thing.req_rep_client = self.zmq_client_pool
 
-            return broker_thing
+            thing_repository[thing_id] = broker_thing
+
         except ConnectionError:
             self.logger.warning(
                 f"could not connect to {thing_id} on server {server_id} with access_point {access_point}"
@@ -198,6 +204,7 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
         raise TypeError("access_points must be provided as a list of tuples.")
 
     servers = []
+
     for protocol, params in access_points:
         if protocol.upper() == "HTTP":
             if isinstance(params, int):
@@ -232,4 +239,5 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
             servers.append(mqtt_publisher)
         else:
             warnings.warn(f"Unsupported protocol: {protocol}", category=UserWarning)
+
     return servers

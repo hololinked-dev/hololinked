@@ -39,7 +39,7 @@ class ThingDescriptionService:
         self.resource = resource  # type: InteractionAffordance
         self.thing = thing_repository[self.resource.thing_id]
         self.server = server  # type: HTTPServer
-        self.logger = self.server.logger.bind(service="ThingDescriptionService")
+        self.logger = self.server.logger.bind(layer="service", impl=self.__class__.__name__)
 
     async def generate(
         self,

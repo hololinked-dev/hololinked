@@ -82,6 +82,7 @@ class BaseHandler(RequestHandler):
             thing_id=resource.thing_id,
             path=self.request.path,
             layer="controller",
+            impl=self.__class__.__name__,
         )
         self.allowed_clients = self.server.allowed_clients
         self.security_schemes = self.server.security_schemes

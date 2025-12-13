@@ -1,6 +1,6 @@
 import ssl
 
-from typing import Optional
+from typing import Optional, Type  # noqa: F401
 
 import aiomqtt
 import structlog
@@ -32,7 +32,12 @@ class MQTTPublisher(BaseProtocolServer):
     ssl_context = ClassSelector(class_=ssl.SSLContext, allow_None=True, default=None)
     """The SSL context to use for secure connections, or None for no SSL"""
 
-    topic_publisher = ClassSelector(class_=TopicPublisher, allow_None=False, default=TopicPublisher, isinstance=False)
+    topic_publisher = ClassSelector(
+        class_=TopicPublisher,
+        allow_None=False,
+        default=TopicPublisher,
+        isinstance=False,
+    )  # type: Type[TopicPublisher]
     """The `TopicPublisher` class to use for publishing messages"""
 
     thing_description_publisher = ClassSelector(
@@ -40,7 +45,7 @@ class MQTTPublisher(BaseProtocolServer):
         allow_None=False,
         isinstance=False,
         default=ThingDescriptionPublisher,
-    )
+    )  # type: Type[ThingDescriptionPublisher]
     """The `ThingDescriptionPublisher` class to use for publishing Thing Descriptions"""
 
     def __init__(
@@ -112,11 +117,10 @@ class MQTTPublisher(BaseProtocolServer):
             raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
 
         await self._instantiate_broker(server_id=thing.rpc_server.id, thing_id=thing.id, access_point="INPROC")
-        broker_thing = thing_repository[thing.id]
-        td = broker_thing.TD
+        TD = thing_repository[thing.id].TD
 
-        for event_name in td.get("events", {}).keys():
-            event_affordance = EventAffordance.from_TD(event_name, td)
+        for event_name in TD.get("events", {}).keys():
+            event_affordance = EventAffordance.from_TD(event_name, TD)
             topic_publisher = self.topic_publisher(
                 client=self.client,
                 resource=event_affordance,
@@ -126,8 +130,8 @@ class MQTTPublisher(BaseProtocolServer):
             self.publishers[topic_publisher.topic] = topic_publisher
             eventloop.create_task(topic_publisher.publish())
             self.logger.info(f"MQTT will publish events for {event_name} of thing {thing.id}")
-        for prop_name in td.get("properties", {}).keys():
-            property_affordance = PropertyAffordance.from_TD(prop_name, td)
+        for prop_name in TD.get("properties", {}).keys():
+            property_affordance = PropertyAffordance.from_TD(prop_name, TD)
             if not property_affordance.observable:
                 continue
             topic_publisher = self.topic_publisher(
@@ -140,9 +144,9 @@ class MQTTPublisher(BaseProtocolServer):
             eventloop.create_task(topic_publisher.publish())
             self.logger.info(f"MQTT will publish observable property changes for {prop_name} of thing {thing.id}")
         # TD publisher
-        td_publisher = self.thing_description_publisher(client=self.client, logger=self.logger, ZMQ_TD=td)
+        td_publisher = self.thing_description_publisher(client=self.client, logger=self.logger, ZMQ_TD=TD)
         self.publishers[td_publisher.topic] = td_publisher
-        eventloop.create_task(td_publisher.publish(td))
+        eventloop.create_task(td_publisher.publish(TD))
 
     async def setup(self) -> None:
         eventloop = get_current_async_loop()

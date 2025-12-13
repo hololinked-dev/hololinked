@@ -14,7 +14,7 @@ class ThingDescriptionService:
     def __init__(self, hostname: str, port: int, logger: structlog.stdlib.BoundLogger, ssl: bool = True) -> None:
         self.hostname = hostname
         self.port = port
-        self.logger = logger
+        self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
         self.ssl = ssl
 
     async def generate(

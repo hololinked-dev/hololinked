@@ -22,7 +22,7 @@ class TopicPublisher:
     ) -> None:
         self.client = client
         self.thing = thing_repository[resource.thing_id]
-        self.logger = logger
+        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
         self.qos = qos
         self.resource = resource
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
@@ -48,7 +48,7 @@ class TopicPublisher:
                 message = await consumer.receive()  # type: EventMessage | None
                 if message is None:
                     continue
-                payload = message.oneof_valid_payload
+                payload = self.thing.get_response_payload(message)
                 await self.client.publish(
                     topic=self.topic,
                     payload=payload.value,
@@ -66,7 +66,7 @@ class ThingDescriptionPublisher:
 
     def __init__(self, client: aiomqtt.Client, logger: structlog.stdlib.BoundLogger, ZMQ_TD: dict[str, Any]) -> None:
         self.client = client
-        self.logger = logger
+        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
         self.topic = f"{ZMQ_TD['id']}/thing-description"
         self.thing = thing_repository[ZMQ_TD["id"]]
         self.thing_description = ThingDescriptionService(
