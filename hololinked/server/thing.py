@@ -97,6 +97,27 @@ class BrokerThing(BaseModel):
             thing_execution_context=thing_execution_context,
         )
 
+    async def oneway(
+        self,
+        objekt: str,
+        operation: str,
+        payload: SerializableData = SerializableNone,
+        preserialized_payload: PreserializedData = PreserializedEmptyByte,
+        server_execution_context: ServerExecutionContext = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+    ) -> str:
+        if self.req_rep_client is None:
+            raise RuntimeError("Not connected to broker")
+        await self.req_rep_client.async_send_request(
+            thing_id=self.id,
+            objekt=objekt,
+            operation=operation,
+            payload=payload,
+            preserialized_payload=preserialized_payload,
+            server_execution_context=server_execution_context,
+            thing_execution_context=thing_execution_context,
+        )
+
     async def recv_response(
         self,
         message_id: str,
@@ -131,6 +152,9 @@ class BrokerThing(BaseModel):
         self.pub_sub_socket_address = client.socket_address
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+thing_repository = dict()  # type: dict[str, BrokerThing]
 
 
 async def consume_broker_queue(

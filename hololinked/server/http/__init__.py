@@ -8,7 +8,6 @@ from typing import Any, Iterable, Type
 
 import structlog
 
-from pydantic import BaseModel
 from tornado import ioloop
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.web import Application
@@ -32,7 +31,7 @@ from ...utils import (
 )
 from ..security import Security
 from ..server import BaseProtocolServer
-from .config import RuntimeConfig
+from .config import HandlerMetadata, RuntimeConfig
 from .handlers import (
     ActionHandler,
     BaseHandler,
@@ -329,7 +328,7 @@ class HTTPServer(BaseProtocolServer):
             raise ValueError("delete method should be DELETE")
         kwargs["resource"] = property
         kwargs["owner_inst"] = self
-        kwargs["metadata"] = dict(http_methods=http_methods)
+        kwargs["metadata"] = HandlerMetadata(http_methods=http_methods)
         self.router.add_rule(affordance=property, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_action(
@@ -365,7 +364,7 @@ class HTTPServer(BaseProtocolServer):
             action = action.to_affordance()  # type: ActionAffordance
         kwargs["resource"] = action
         kwargs["owner_inst"] = self
-        kwargs["metadata"] = dict(http_methods=http_methods)
+        kwargs["metadata"] = HandlerMetadata(http_methods=http_methods)
         self.router.add_rule(affordance=action, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_event(

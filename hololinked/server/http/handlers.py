@@ -33,8 +33,8 @@ from ...td import (
 )
 from ...td.forms import Form
 from ...utils import format_exception_as_json, get_current_async_loop
+from ..thing import thing_repository
 from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
-from .service import Thing as ThingService
 
 
 try:
@@ -66,7 +66,7 @@ class BaseHandler(RequestHandler):
         self,
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
         owner_inst: Any = None,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: HandlerMetadata | None = None,
     ) -> None:
         """
         Parameters
@@ -76,14 +76,15 @@ class BaseHandler(RequestHandler):
             ZMQ Request object
         owner_inst: HTTPServer
             owning `hololinked.server.HTTPServer` instance
-        metadata: dict[str, Any] | None,
+        metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
         """
         from . import HTTPServer  # noqa: F401
 
+        self.resource = resource  # type: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
+        self.thing = thing_repository[self.resource.thing_id]
         self.server = owner_inst  # type: HTTPServer
         self.config = self.server.config  # type: RuntimeConfig
-        self.thing = ThingService(resource)
         self.logger = self.server.logger.bind(
             resource=resource.name,
             what=resource.what,
@@ -303,7 +304,11 @@ class BaseHandler(RequestHandler):
 
 class RPCHandler(BaseHandler):
     """
-    Handler for property read-write and method calls
+    Handler for property read-write and method calls.
+
+    Merges both Controller and Service layer in layered architecture.
+    Subclassed from controller for reducing boilerplate code as the service layer is too thin when implemented separately.
+    Uses Repository layer directly.
     """
 
     def is_method_allowed(self, method: str) -> bool:
@@ -355,6 +360,7 @@ class RPCHandler(BaseHandler):
             if server_execution_context.oneway:
                 # if oneway, we do not expect a response, so we just return None
                 await self.thing.oneway(
+                    objekt=self.resource.name,
                     operation=operation,
                     payload=payload,
                     preserialized_payload=preserialized_payload,
@@ -364,6 +370,7 @@ class RPCHandler(BaseHandler):
                 self.set_status(204, "ok")
             if local_execution_context.noblock:
                 message_id = await self.thing.schedule(
+                    objekt=self.resource.name,
                     operation=operation,
                     payload=payload,
                     preserialized_payload=preserialized_payload,
@@ -374,6 +381,7 @@ class RPCHandler(BaseHandler):
                 self.set_header("X-Message-ID", message_id)
             else:
                 response_message = await self.thing.execute(
+                    objekt=self.resource.name,
                     operation=operation,
                     payload=payload,
                     preserialized_payload=preserialized_payload,
@@ -529,8 +537,8 @@ class EventHandler(BaseHandler):
     def initialize(
         self,
         resource: InteractionAffordance | EventAffordance,
-        owner_inst=None,
-        metadata: dict[str, Any] | None = None,
+        owner_inst: Any = None,
+        metadata: HandlerMetadata | None = None,
     ) -> None:
         super().initialize(resource, owner_inst, metadata)
         self.data_header = b"data: %s\n\n"
@@ -607,23 +615,33 @@ class EventHandler(BaseHandler):
 class JPEGImageEventHandler(EventHandler):
     """handles events with images with image data header"""
 
-    def initialize(self, resource, owner_inst=None) -> None:
-        super().initialize(resource, owner_inst)
+    def initialize(
+        self,
+        resource: InteractionAffordance | EventAffordance,
+        owner_inst: Any = None,
+        metadata: HandlerMetadata | None = None,
+    ) -> None:
+        super().initialize(resource, owner_inst, metadata)
         self.data_header = b"data:image/jpeg;base64,%s\n\n"
 
 
 class PNGImageEventHandler(EventHandler):
     """handles events with images with image data header"""
 
-    def initialize(self, resource, owner_inst=None) -> None:
-        super().initialize(resource, owner_inst)
+    def initialize(
+        self,
+        resource: InteractionAffordance | EventAffordance,
+        owner_inst: Any = None,
+        metadata: HandlerMetadata | None = None,
+    ) -> None:
+        super().initialize(resource, owner_inst, metadata)
         self.data_header = b"data:image/png;base64,%s\n\n"
 
 
 class StopHandler(BaseHandler):
     """Stops the tornado HTTP server"""
 
-    def initialize(self, owner_inst=None) -> None:
+    def initialize(self, owner_inst: Any = None) -> None:
         from . import HTTPServer  # noqa: F401
 
         self.server = owner_inst  # type: HTTPServer
@@ -635,25 +653,25 @@ class StopHandler(BaseHandler):
         if not self.has_access_control:
             return
         try:
+            self.set_custom_default_headers()
             # Stop the Tornado server
             origin = self.request.headers.get("Origin")
-            eventloop = get_current_async_loop()
             self.logger.info(f"stopping HTTP server as per client request from {origin}, scheduling a stop message...")
             # create a task in current loop
+            eventloop = get_current_async_loop()
             eventloop.create_task(self.server.async_stop())
             # dont call it in sequence, its not clear whether its designed for that
             self.set_status(204, "ok")
         except Exception as ex:
             self.logger.error(f"error while stopping HTTP server - {str(ex)}")
             self.set_status(500, f"error while stopping HTTP server - {str(ex)}")
-        self.set_custom_default_headers()
         self.finish()
 
 
 class LivenessProbeHandler(BaseHandler):
     """Liveness probe handler"""
 
-    def initialize(self, owner_inst=None) -> None:
+    def initialize(self, owner_inst: Any = None) -> None:
         from . import HTTPServer  # noqa: F401
 
         self.server = owner_inst  # type: HTTPServer
@@ -673,6 +691,7 @@ class ReadinessProbeHandler(BaseHandler):
         self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):
+        self.set_custom_default_headers()
         try:
             if len(self.server._disconnected_things) > 0:
                 raise RuntimeError("some things are disconnected, retry later")
@@ -689,7 +708,6 @@ class ReadinessProbeHandler(BaseHandler):
             else:
                 self.set_status(200, "ok")
                 self.write({id: "ready" for id in replies.keys()})
-        self.set_custom_default_headers()
         self.finish()
 
 
@@ -697,34 +715,36 @@ class ThingDescriptionHandler(BaseHandler):
     """Thing Description generation handler"""
 
     async def get(self):
-        if self.has_access_control:
-            try:
-                self.set_custom_default_headers()
+        if not self.has_access_control:
+            self.finish()
 
-                _, _, _, body = self.get_execution_parameters()
-                body = body.deserialize() or dict()
-                if not isinstance(body, dict):
-                    raise ValueError("request body must be or convertable to JSON when supplied as path parameters")
+            return
+        self.set_custom_default_headers()
+        try:
+            _, _, _, body = self.get_execution_parameters()
+            body = body.deserialize() or dict()
+            if not isinstance(body, dict):
+                raise ValueError("request body must be or convertable to JSON when supplied as path parameters")
 
-                ignore_errors = body.get("ignore_errors", False)
-                skip_names = body.get("skip_names", [])
-                authority = body.get("authority", None)
-                use_localhost = body.get("use_localhost", False)
+            ignore_errors = body.get("ignore_errors", False)
+            skip_names = body.get("skip_names", [])
+            authority = body.get("authority", None)
+            use_localhost = body.get("use_localhost", False)
 
-                ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
+            ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
 
-                TD = self.generate_td(
-                    ZMQ_TD,
-                    authority=authority,
-                    ignore_errors=ignore_errors,
-                    use_localhost=use_localhost,
-                )
+            TD = self.generate_td(
+                ZMQ_TD,
+                authority=authority,
+                ignore_errors=ignore_errors,
+                use_localhost=use_localhost,
+            )
 
-                self.set_status(200, "ok")
-                self.set_header("Content-Type", "application/json")
-                self.write(TD)
-            except Exception as ex:
-                self.set_status(500, str(ex).replace("\n", " "))
+            self.set_status(200, "ok")
+            self.set_header("Content-Type", "application/json")
+            self.write(TD)
+        except Exception as ex:
+            self.set_status(500, str(ex).replace("\n", " "))
         self.finish()
 
     async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
