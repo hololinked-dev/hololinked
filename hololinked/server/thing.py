@@ -106,7 +106,7 @@ class BrokerThing(BaseModel):
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
-    ) -> str:
+    ) -> None:
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
         await self.req_rep_client.async_send_request(

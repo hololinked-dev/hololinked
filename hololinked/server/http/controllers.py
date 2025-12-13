@@ -341,7 +341,7 @@ class RPCHandler(BaseHandler):
                     thing_execution_context=thing_execution_context,
                 )
                 self.set_status(204, "ok")
-            if local_execution_context.noblock:
+            elif local_execution_context.noblock:
                 message_id = await self.thing.schedule(
                     objekt=self.resource.name,
                     operation=operation,
@@ -399,7 +399,7 @@ class RPCHandler(BaseHandler):
             self.set_status(404, "message id not found")
         except TimeoutError as ex:
             self.logger.error(f"timeout while waiting for no-block response - {str(ex)}")
-            self.set_status(408, "timeout while waiting for response")
+            self.set_status(408, "timeout while waiting for response, ask later")
         except Exception as ex:
             self.logger.error(f"error while receiving no-block response - {str(ex)}")
             self.set_status(500, f"error while receiving no-block response - {str(ex)}")
