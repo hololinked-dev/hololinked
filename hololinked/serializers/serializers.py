@@ -448,7 +448,7 @@ class Serializers(metaclass=MappableSingleton):
             the id of the Thing or the Thing that owns the property, action or event
         thing_cls: str | Any
             the class name of the Thing or the Thing that owns the property, action or event
-        objekt: str | Property | Action | Event
+        objekt: str
             the name of the property, action or event
 
         Returns
@@ -466,9 +466,36 @@ class Serializers(metaclass=MappableSingleton):
                 return cls.object_serializer_map[thing].get(thing, cls.default)
             if thing in cls.object_content_type_map:
                 if objekt in cls.object_content_type_map[thing]:
-                    return cls.content_types[cls.object_content_type_map[thing][objekt]]
-                return cls.content_types[cls.object_content_type_map[thing].get(thing, cls.default_content_type)]
+                    return cls.content_types.get(cls.object_content_type_map[thing][objekt], cls.default)
+                return cls.content_types.get(
+                    cls.object_content_type_map[thing].get(thing, cls.default_content_type),
+                    cls.default,
+                )
         return cls.default  # JSON is default serializer
+
+    @classmethod
+    def get_content_type_for_object(self, thing_id: str, thing_cls: str, objekt: str) -> str:
+        """
+        Retrieve a content type for a given property, action or event
+
+        Parameters
+        ----------
+        thing_id: str | Any
+            the id of the Thing or the Thing that owns the property, action or event
+        thing_cls: str | Any
+            the class name of the Thing or the Thing that owns the property, action or event
+        objekt: str
+            the name of the property, action or event
+        """
+
+        if len(self.object_serializer_map) == 0 and len(self.object_content_type_map) == 0:
+            return self.default_content_type
+        for thing in [thing_id, thing_cls]:  # first thing id, then thing cls
+            if thing in self.object_content_type_map:
+                if objekt in self.object_content_type_map[thing]:
+                    return self.object_content_type_map[thing][objekt]
+                return self.object_content_type_map[thing].get(thing, self.default_content_type)
+        return self.default_content_type  # JSON is default serializer
 
     # @validate_call
     @classmethod
@@ -521,8 +548,6 @@ class Serializers(metaclass=MappableSingleton):
         ValueError
             if the object is not a Property, Action or Event
         """
-        if content_type not in cls.content_types:
-            raise ValueError("content type {} unsupported".format(content_type))
         from ..core import Action, Event, Property, Thing
 
         if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
@@ -544,7 +569,10 @@ class Serializers(metaclass=MappableSingleton):
     # @validate_call
     @classmethod
     def register_content_type_for_object_per_thing_instance(
-        cls, thing_id: str, objekt: str | Any, content_type: str
+        cls,
+        thing_id: str,
+        objekt: str | Any,
+        content_type: str,
     ) -> None:
         """
         Register an existing content type for a property, action or event to use a specific serializer. Other option is
@@ -559,8 +587,6 @@ class Serializers(metaclass=MappableSingleton):
         content_type: str
             the content type to be used
         """
-        if content_type not in cls.content_types:
-            raise ValueError("content type {} unsupported".format(content_type))
         from ..core import Action, Event, Property
 
         if not isinstance(objekt, (Property, Action, Event, str)):
@@ -583,8 +609,6 @@ class Serializers(metaclass=MappableSingleton):
         content_type: str
             the content type to be used
         """
-        if content_type not in cls.content_types:
-            raise ValueError("content type {} unsupported".format(content_type))
         cls.object_content_type_map[thing_id][thing_id] = content_type
         # remember, its a redundant key, TODO
 
@@ -634,18 +658,13 @@ class Serializers(metaclass=MappableSingleton):
 
     @allowed_content_types.getter
     def get_allowed_content_types(cls) -> list[str]:
-        """
-        Get a list of all allowed content types for serialization.
-        """
+        """Get a list of all allowed content types for serialization"""
         try:
             return cls._allowed_content_types
         except AttributeError:
-            from ..config import global_config
-
             cls._allowed_content_types = list(cls.content_types.keys())
             cls._allowed_content_types.remove(cls.pickle.content_type)
-            if global_config.ALLOW_PICKLE:
-                cls._allowed_content_types.append(cls.pickle.content_type)
+            cls._allowed_content_types.append(cls.pickle.content_type)
             return cls._allowed_content_types
 
 

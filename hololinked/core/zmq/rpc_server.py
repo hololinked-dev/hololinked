@@ -379,7 +379,16 @@ class RPCServer(BaseZMQServer):
 
                 # handle return value
                 serializer = Serializers.for_object(thing_id, instance.__class__.__name__, objekt)
-                rpayload, rpreserialized_payload = self.format_return_value(return_value, serializer=serializer)
+                content_type_if_no_serializer = Serializers.get_content_type_for_object(
+                    thing_id,
+                    instance.__class__.__name__,
+                    objekt,
+                )
+                rpayload, rpreserialized_payload = self.format_return_value(
+                    return_value,
+                    serializer=serializer,
+                    content_type_if_no_serializer=content_type_if_no_serializer,
+                )
 
                 # complete thing execution context
                 if fetch_execution_logs:
@@ -506,6 +515,7 @@ class RPCServer(BaseZMQServer):
         self,
         return_value: Any,
         serializer: BaseSerializer,
+        content_type_if_no_serializer: str = "",
     ) -> tuple[SerializableData, PreserializedData]:
         if (
             isinstance(return_value, tuple)
@@ -514,10 +524,10 @@ class RPCServer(BaseZMQServer):
         ):
             payload = SerializableData(return_value[0], serializer=serializer, content_type=serializer.content_type)
             if isinstance(return_value[1], bytes):
-                preserialized_payload = PreserializedData(return_value[1])
+                preserialized_payload = PreserializedData(return_value[1], content_type=content_type_if_no_serializer)
         elif isinstance(return_value, bytes):
             payload = SerializableData(None, content_type="application/json")
-            preserialized_payload = PreserializedData(return_value)
+            preserialized_payload = PreserializedData(return_value, content_type=content_type_if_no_serializer)
         elif isinstance(return_value, PreserializedData):
             payload = SerializableData(None, content_type="application/json")
             preserialized_payload = return_value
@@ -690,51 +700,97 @@ class RPCServer(BaseZMQServer):
             raise ValueError(f"Unsupported protocol '{protocol}' for ZMQ.")
 
         for name in TM.get("properties", []):
-            affordance = PropertyAffordance.from_TD(name, TM)
-            if not TD["properties"][name].get("forms", None):
-                TD["properties"][name]["forms"] = []
+            try:
+                affordance = PropertyAffordance.from_TD(name, TM)
+                if not TD["properties"][name].get("forms", None):
+                    TD["properties"][name]["forms"] = []
 
-            form = Form()
-            form.href = req_rep_socket_address
-            form.op = Operations.readproperty
-            form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
-            TD["properties"][name]["forms"].append(form.json())
-
-            if not affordance.readOnly:
                 form = Form()
                 form.href = req_rep_socket_address
-                form.op = Operations.writeproperty
-                form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+                form.op = Operations.readproperty
+
+                content_type = Serializers.get_content_type_for_object(instance.id, instance.__class__.__name__, name)
+                if not content_type:
+                    content_type = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+                form.contentType = content_type
+
                 TD["properties"][name]["forms"].append(form.json())
 
-            if affordance.observable:
-                form = Form()
-                form.href = pub_sub_socket_address
-                form.op = Operations.observeproperty
-                form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
-                TD["properties"][name]["forms"].append(form.json())
+                if not affordance.readOnly:
+                    form = Form()
+                    form.href = req_rep_socket_address
+                    form.op = Operations.writeproperty
+                    content_type = Serializers.get_content_type_for_object(
+                        instance.id,
+                        instance.__class__.__name__,
+                        name,
+                    )
+                    if not content_type:
+                        content_type = Serializers.for_object(
+                            instance.id,
+                            instance.__class__.__name__,
+                            name,
+                        ).content_type
+                    form.contentType = content_type
+                    TD["properties"][name]["forms"].append(form.json())
+
+                if affordance.observable:
+                    form = Form()
+                    form.href = pub_sub_socket_address
+                    form.op = Operations.observeproperty
+                    content_type = Serializers.get_content_type_for_object(
+                        instance.id, instance.__class__.__name__, name
+                    )
+                    if not content_type:
+                        content_type = Serializers.for_object(
+                            instance.id,
+                            instance.__class__.__name__,
+                            name,
+                        ).content_type
+                    form.contentType = content_type
+                    TD["properties"][name]["forms"].append(form.json())
+            except Exception as ex:
+                if not ignore_errors:
+                    raise ex from None
+                instance.logger.warning("error while generating TD forms for property", name=name, error=str(ex))
 
         for name in TM.get("actions", []):
-            affordance = ActionAffordance.from_TD(name, TM)
-            if not TD["actions"][name].get("forms", None):
-                TD["actions"][name]["forms"] = []
+            try:
+                affordance = ActionAffordance.from_TD(name, TM)
+                if not TD["actions"][name].get("forms", None):
+                    TD["actions"][name]["forms"] = []
 
-            form = Form()
-            form.href = req_rep_socket_address
-            form.op = Operations.invokeaction
-            form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
-            TD["actions"][name]["forms"].append(form.json())
+                form = Form()
+                form.href = req_rep_socket_address
+                form.op = Operations.invokeaction
+                content_type = Serializers.get_content_type_for_object(instance.id, instance.__class__.__name__, name)
+                if not content_type:
+                    content_type = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+                form.contentType = content_type
+                TD["actions"][name]["forms"].append(form.json())
+            except Exception as ex:
+                if not ignore_errors:
+                    raise ex from None
+                instance.logger.warning("error while generating TD forms for action", name=name, error=str(ex))
 
         for name in TM.get("events", []):
-            affordance = EventAffordance.from_TD(name, TM)
-            if not TD["events"][name].get("forms", None):
-                TD["events"][name]["forms"] = []
+            try:
+                affordance = EventAffordance.from_TD(name, TM)
+                if not TD["events"][name].get("forms", None):
+                    TD["events"][name]["forms"] = []
 
-            form = Form()
-            form.href = pub_sub_socket_address
-            form.op = Operations.subscribeevent
-            form.contentType = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
-            TD["events"][name]["forms"].append(form.json())
+                form = Form()
+                form.href = pub_sub_socket_address
+                form.op = Operations.subscribeevent
+                content_type = Serializers.get_content_type_for_object(instance.id, instance.__class__.__name__, name)
+                if not content_type:
+                    content_type = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+                form.contentType = content_type
+                TD["events"][name]["forms"].append(form.json())
+            except Exception as ex:
+                if not ignore_errors:
+                    raise ex from None
+                instance.logger.warning("error while generating TD forms for event", name=name, error=str(ex))
 
         return TD
 

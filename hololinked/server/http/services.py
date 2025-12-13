@@ -1,0 +1,268 @@
+import copy
+
+from typing import Any
+
+from ...constants import JSONSerializable, Operations
+from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
+from ...serializers import Serializers
+from ...serializers.payloads import SerializableData
+from ...td import (
+    ActionAffordance,
+    EventAffordance,
+    InteractionAffordance,
+    PropertyAffordance,
+)
+from ...td.forms import Form
+from ..thing import thing_repository
+from .config import HandlerMetadata
+
+
+try:
+    from ..security import Argon2BasicSecurity
+except ImportError:
+    Argon2BasicSecurity = None
+try:
+    from ..security import BcryptBasicSecurity
+except ImportError:
+    BcryptBasicSecurity = None
+
+
+__error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
+
+
+class ThingDescriptionService:
+    """Service layer to generate HTTP TD"""
+
+    def __init__(self, resource: InteractionAffordance, server: Any) -> None:
+        from . import HTTPServer  # noqa: F401
+
+        self.resource = resource  # type: InteractionAffordance
+        self.thing = thing_repository[self.resource.thing_id]
+        self.server = server  # type: HTTPServer
+        self.logger = self.server.logger.bind(layer="service", impl=self.__class__.__name__)
+
+    async def generate(
+        self,
+        ignore_errors: bool = False,
+        skip_names: list[str] = [],
+        use_localhost: bool = False,
+        authority: str = None,
+    ) -> dict[str, JSONSerializable]:
+        ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
+        TD = copy.deepcopy(ZMQ_TD)
+
+        self.add_properties(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
+        self.add_actions(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
+        self.add_events(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
+        self.add_top_level_forms(TD, authority=authority, use_localhost=use_localhost)
+        self.add_security_definitions(TD)
+
+        return TD
+
+    def add_properties(
+        self,
+        TD: dict[str, JSONSerializable],
+        ZMQ_TD: dict[str, JSONSerializable],
+        authority: str,
+        ignore_errors: bool,
+        use_localhost: bool,
+    ) -> dict[str, JSONSerializable]:
+        for name in ZMQ_TD.get("properties", []):
+            affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
+            TD["properties"][name]["forms"] = []
+            try:
+                href = self.server.router.get_href_for_affordance(
+                    affordance,
+                    authority=authority,
+                    use_localhost=use_localhost,
+                )
+                http_methods = (
+                    self.server.router.get_injected_dependencies(affordance)
+                    .get("metadata", HandlerMetadata())
+                    .http_methods
+                )  # type: tuple[str]
+            except ValueError as ex:
+                if ignore_errors:
+                    self.logger.warning(f"could not get HTTP methods for property {name}, skipping...")
+                    continue
+                raise ex from None
+            for http_method in http_methods:
+                if http_method.upper() == "DELETE":
+                    # currently not in spec although we support it
+                    continue
+                if affordance.readOnly and http_method.upper() != "GET":
+                    break
+                op = Operations.readproperty if http_method.upper() == "GET" else Operations.writeproperty
+                form = affordance.retrieve_form(op)
+                if not form:
+                    form = Form()
+                    form.op = op
+                    form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
+                form.href = href
+                form.htv_methodName = http_method
+                TD["properties"][name]["forms"].append(form.json())
+            if affordance.observable:
+                form = affordance.retrieve_form(Operations.observeproperty)
+                if not form:
+                    form = Form()
+                    form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
+                    form.op = Operations.observeproperty
+                form.href = f"{href}/change-event"
+                form.htv_methodName = "GET"
+                form.subprotocol = "sse"
+                TD["properties"][name]["forms"].append(form.json())
+
+    def add_actions(
+        self,
+        TD: dict[str, JSONSerializable],
+        ZMQ_TD: dict[str, JSONSerializable],
+        authority: str,
+        ignore_errors: bool,
+        use_localhost: bool,
+    ) -> dict[str, JSONSerializable]:
+        for name in ZMQ_TD.get("actions", []):
+            affordance = ActionAffordance.from_TD(name, ZMQ_TD)
+            TD["actions"][name]["forms"] = []
+            try:
+                href = self.server.router.get_href_for_affordance(
+                    affordance,
+                    authority=authority,
+                    use_localhost=use_localhost,
+                )
+                http_methods = (
+                    self.server.router.get_injected_dependencies(affordance)
+                    .get("metadata", HandlerMetadata())
+                    .http_methods
+                )  # type: tuple[str]
+            except ValueError as ex:
+                if ignore_errors:
+                    self.logger.warning(f"could not get HTTP methods for action {name}, skipping...")
+                    continue
+                raise ex from None
+            for http_method in http_methods:
+                form = affordance.retrieve_form(Operations.invokeaction)
+                if not form:
+                    form = Form()
+                    form.op = Operations.invokeaction
+                    form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
+                form.href = href
+                form.htv_methodName = http_method
+                TD["actions"][name]["forms"].append(form.json())
+
+    def add_events(
+        self,
+        TD: dict[str, JSONSerializable],
+        ZMQ_TD: dict[str, JSONSerializable],
+        authority: str,
+        ignore_errors: bool,
+        use_localhost: bool,
+    ) -> dict[str, JSONSerializable]:
+        for name in ZMQ_TD.get("events", []):
+            affordance = EventAffordance.from_TD(name, ZMQ_TD)
+            TD["events"][name]["forms"] = []
+            try:
+                href = self.server.router.get_href_for_affordance(
+                    affordance,
+                    authority=authority,
+                    use_localhost=use_localhost,
+                )
+                http_methods = (
+                    self.server.router.get_injected_dependencies(affordance)
+                    .get("metadata", HandlerMetadata(http_methods=["GET"]))
+                    .http_methods
+                )  # type: tuple[str]
+            except ValueError as ex:
+                if ignore_errors:
+                    self.logger.warning(f"could not get HTTP methods for event {name}, skipping...")
+                    continue
+                raise ex from None
+            for http_method in http_methods:
+                form = affordance.retrieve_form(Operations.subscribeevent)
+                if not form:
+                    form = Form()
+                    form.op = Operations.subscribeevent
+                    form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
+                form.href = href
+                form.htv_methodName = http_method
+                form.subprotocol = "sse"
+                TD["events"][name]["forms"].append(form.json())
+
+    def add_top_level_forms(
+        self,
+        TD: dict[str, JSONSerializable],
+        authority: str,
+        use_localhost: bool,
+    ) -> None:
+        """adds top level forms for reading and writing multiple properties"""
+
+        properties_end_point = f"{self.server.router.get_basepath(authority, use_localhost)}/{TD['id']}/properties"
+
+        if TD.get("forms", None) is None:
+            TD["forms"] = []
+
+        readallproperties = Form()
+        readallproperties.href = properties_end_point
+        readallproperties.op = "readallproperties"
+        readallproperties.htv_methodName = "GET"
+        readallproperties.contentType = "application/json"
+        TD["forms"].append(readallproperties.json())
+
+        writeallproperties = Form()
+        writeallproperties.href = properties_end_point
+        writeallproperties.op = "writeallproperties"
+        writeallproperties.htv_methodName = "PUT"
+        writeallproperties.contentType = "application/json"
+        TD["forms"].append(writeallproperties.json())
+
+        readmultipleproperties = Form()
+        readmultipleproperties.href = properties_end_point
+        readmultipleproperties.op = "readmultipleproperties"
+        readmultipleproperties.htv_methodName = "GET"
+        readmultipleproperties.contentType = "application/json"
+        TD["forms"].append(readmultipleproperties.json())
+
+        writemultipleproperties = Form()
+        writemultipleproperties.href = properties_end_point
+        writemultipleproperties.op = "writemultipleproperties"
+        writemultipleproperties.htv_methodName = "PATCH"
+        writemultipleproperties.contentType = "application/json"
+        TD["forms"].append(writemultipleproperties.json())
+
+    def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
+        from ...td.security_definitions import BasicSecurityScheme, NoSecurityScheme
+
+        TD["securityDefinitions"] = dict()
+
+        if not self.server.security_schemes:
+            nosec = NoSecurityScheme()
+            nosec.build()
+            TD["security"] = ["nosec"]
+            TD["securityDefinitions"]["nosec"] = nosec.json()
+            return
+
+        TD["security"] = []
+        for scheme in self.server.security_schemes:
+            if isinstance(scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
+                sec = BasicSecurityScheme()
+                sec.build()
+                TD["securityDefinitions"][scheme.name] = sec.json()
+                TD["security"].append(scheme.name)
+
+    async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
+        """fetch the TM or ZMQ in process queue TD"""
+        response_message = await self.thing.execute(
+            objekt=self.resource.name,
+            operation=Operations.invokeaction,
+            payload=SerializableData(value=dict(ignore_errors=ignore_errors, skip_names=skip_names, protocol="INPROC")),
+        )
+        if response_message.type in __error_message_types__:
+            raise RuntimeError(f"error while fetching TD from thing - got {response_message.type} response")
+
+        payload = self.thing.get_response_payload(response_message)
+        if not isinstance(payload, SerializableData):
+            raise ValueError("invalid payload received from thing")
+
+        payload = payload.deserialize()
+        if not isinstance(payload, dict):
+            raise ValueError("invalid payload received from thing")
+        return payload

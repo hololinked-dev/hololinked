@@ -28,8 +28,7 @@ from hololinked.serializers import (
     PickleSerializer,
 )
 from hololinked.server import stop
-from hololinked.server.http import HTTPServer
-from hololinked.server.http.handlers import RPCHandler
+from hololinked.server.http import HTTPServer, RPCHandler
 from hololinked.server.security import (
     Argon2BasicSecurity,
     BcryptBasicSecurity,

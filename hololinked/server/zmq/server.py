@@ -2,12 +2,12 @@ import structlog
 import zmq
 import zmq.asyncio
 
-from ..constants import ZMQ_TRANSPORTS
-from ..core.thing import Thing
-from ..core.zmq.brokers import AsyncEventConsumer, AsyncZMQServer, EventPublisher
-from ..core.zmq.rpc_server import RPCServer
-from ..utils import get_current_async_loop
-from .server import BaseProtocolServer
+from ...constants import ZMQ_TRANSPORTS
+from ...core.thing import Thing
+from ...core.zmq.brokers import AsyncEventConsumer, AsyncZMQServer, EventPublisher
+from ...core.zmq.rpc_server import RPCServer
+from ...utils import get_current_async_loop
+from ..server import BaseProtocolServer
 
 
 class ZMQServer(RPCServer, BaseProtocolServer):
@@ -106,6 +106,10 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 context=self.context,
                 **kwargs,
             )
+
+    def add_thing(self, thing: Thing) -> None:
+        """Adds a thing to the list of things to serve."""
+        return RPCServer.add_thing(self, thing)
 
     def run_zmq_request_listener(self) -> None:
         # doc in parent class
