@@ -522,12 +522,8 @@ class ApplicationRouter:
             self.server.add_property(
                 URL_path=path,
                 property=property,
-                http_methods=("GET")
-                if property.readOnly
-                else (
-                    "GET",
-                    "PUT",
-                ),  # if prop.fdel is None else ('GET', 'PUT', 'DELETE'),
+                http_methods=("GET",) if property.readOnly else ("GET", "PUT"),
+                # if prop.fdel is None else ('GET', 'PUT', 'DELETE')
                 handler=self.server.property_handler,
             )
             if property.observable:

@@ -228,19 +228,20 @@ class ThingDescriptionService:
 
         TD["securityDefinitions"] = dict()
 
-        if self.server.security_schemes:
-            TD["security"] = []
-            for scheme in self.server.security_schemes:
-                if isinstance(scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
-                    sec = BasicSecurityScheme()
-                    sec.build()
-                    TD["securityDefinitions"][scheme.name] = sec.json()
-                    TD["security"].append(scheme.name)
-        else:
+        if not self.server.security_schemes:
             nosec = NoSecurityScheme()
             nosec.build()
             TD["security"] = ["nosec"]
             TD["securityDefinitions"]["nosec"] = nosec.json()
+            return
+
+        TD["security"] = []
+        for scheme in self.server.security_schemes:
+            if isinstance(scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
+                sec = BasicSecurityScheme()
+                sec.build()
+                TD["securityDefinitions"][scheme.name] = sec.json()
+                TD["security"].append(scheme.name)
 
     async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
         """fetch the TM or ZMQ in process queue TD"""

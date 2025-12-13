@@ -474,12 +474,23 @@ class ActionHandler(RPCHandler):
 
 
 class RWMultiplePropertiesHandler(ActionHandler):
-    def initialize(self, resource, owner_inst=None, metadata=None, **kwargs) -> None:
+    """handles read-write of multiple properties via an action"""
+
+    def initialize(
+        self,
+        resource: ActionAffordance,
+        owner_inst: Any = None,
+        metadata: HandlerMetadata | None = None,
+        **kwargs,
+    ) -> None:
+        self.read_properties_resource = kwargs.get("read_properties_resource", None)
+        self.write_properties_resource = kwargs.get("write_properties_resource", None)
         return super().initialize(resource, owner_inst, metadata)
 
     async def get(self) -> None:
         if self.is_method_allowed("GET"):
             self.set_custom_default_headers()
+            self.resource = self.read_properties_resource
             if self.message_id is not None:
                 await self.handle_no_block_response()
             else:
@@ -494,12 +505,14 @@ class RWMultiplePropertiesHandler(ActionHandler):
     async def put(self) -> None:
         if self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
+            self.resource = self.write_properties_resource
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def patch(self) -> None:
         if self.is_method_allowed("PATCH"):
             self.set_custom_default_headers()
+            self.resource = self.write_properties_resource
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
