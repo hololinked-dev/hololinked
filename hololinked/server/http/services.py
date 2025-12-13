@@ -3,11 +3,7 @@ import copy
 from typing import Any
 
 from ...constants import JSONSerializable, Operations
-from ...core.zmq.message import (
-    ERROR,
-    INVALID_MESSAGE,
-    TIMEOUT,
-)
+from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
 from ...serializers import Serializers
 from ...serializers.payloads import SerializableData
 from ...td import ActionAffordance, EventAffordance, InteractionAffordance, PropertyAffordance
@@ -40,14 +36,14 @@ class ThingDescriptionService:
         self.server = server  # type: HTTPServer
         self.logger = self.server.logger.bind(service="ThingDescriptionService")
 
-    def generate(
+    async def generate(
         self,
         ignore_errors: bool = False,
         skip_names: list[str] = [],
         use_localhost: bool = False,
         authority: str = None,
     ) -> dict[str, JSONSerializable]:
-        ZMQ_TD = self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
+        ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
         TD = copy.deepcopy(ZMQ_TD)
 
         self.add_properties(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
@@ -256,7 +252,7 @@ class ThingDescriptionService:
         if response_message.type in __error_message_types__:
             raise RuntimeError(f"error while fetching TD from thing - got {response_message.type} response")
 
-        payload = self.get_response_payload(response_message)
+        payload = self.thing.get_response_payload(response_message)
         if not isinstance(payload, SerializableData):
             raise ValueError("invalid payload received from thing")
 

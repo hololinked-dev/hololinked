@@ -10,8 +10,6 @@ from ...config import global_config
 from ...constants import Operations
 from ...core.zmq.brokers import EventConsumer
 from ...core.zmq.message import (
-    EMPTY_BYTE,
-    ResponseMessage,
     SerializableNone,
     ServerExecutionContext,
     ThingExecutionContext,
@@ -253,24 +251,6 @@ class BaseHandler(RequestHandler):
                 # This error will be raised only when a specified content type is not supported.
         return payload, preserialized_payload
 
-    def get_response_payload(self, zmq_response: ResponseMessage) -> PreserializedData | SerializableData:
-        """retrieves the payload from the ZMQ response message, does not necessarily deserialize it"""
-        # print("zmq_response - ", zmq_response)
-        if zmq_response is None:
-            raise RuntimeError("No last response available. Did you make an operation?")
-        if zmq_response.preserialized_payload.value != EMPTY_BYTE:
-            if zmq_response.payload.value != b"null":
-                # our None return value comes like this, sufficient to check against that
-                self.logger.warning(
-                    "Multiple content types in response payload, only the latter will be written to the wire",
-                    content_type_1=zmq_response.payload.content_type,
-                    binary_value=zmq_response.payload.value,
-                )
-            # multiple content types are not supported yet, so we return only one payload
-            return zmq_response.preserialized_payload
-            # return payload, preserialized_payload
-        return zmq_response.payload  # dont deseriablize, there is no need, just pass it on to the client
-
     async def get(self) -> None:
         """runs property or action if accessible by 'GET' method. Default for property reads"""
         raise NotImplementedError("implement GET request method in child handler class")
@@ -381,7 +361,7 @@ class RPCHandler(BaseHandler):
                     server_execution_context=server_execution_context,
                     thing_execution_context=thing_execution_context,
                 )
-                response_payload = self.get_response_payload(response_message)
+                response_payload = self.thing.get_response_payload(response_message)
                 self.set_status(200, "ok")
                 self.set_header("Content-Type", response_payload.content_type or "application/json")
                 if response_payload.value:
@@ -408,7 +388,7 @@ class RPCHandler(BaseHandler):
                 timeout=default_server_execution_context.invokationTimeout
                 + default_server_execution_context.executionTimeout,
             )
-            response_payload = self.get_response_payload(response_message)
+            response_payload = self.thing.get_response_payload(response_message)
             self.set_status(200, "ok")
             self.set_header("Content-Type", response_payload.content_type or "application/json")
             if response_payload.value:
@@ -592,7 +572,7 @@ class EventHandler(BaseHandler):
             try:
                 event_message = await event_consumer.receive(timeout=10000)
                 if event_message:
-                    payload = self.get_response_payload(event_message)
+                    payload = self.thing.get_response_payload(event_message)
                     self.write(self.data_header % payload.value)
                     self.logger.debug(f"new data scheduled to flush - {self.resource.name}")
                 else:
@@ -692,15 +672,14 @@ class ReadinessProbeHandler(BaseHandler):
                 objekt="ping",
                 operation="invokeaction",
             )
-        except Exception as ex:
-            self.logger.error(f"error while checking readiness - {str(ex)}")
-            self.set_status(500, f"error while checking readiness - {str(ex)}")
-        else:
             if not all(reply.body[0].deserialize() is None for thing_id, reply in replies.items()):
                 self.set_status(500, "not all things are ready")
             else:
                 self.set_status(200, "ok")
                 self.write({id: "ready" for id in replies.keys()})
+        except Exception as ex:
+            self.logger.error(f"error while checking readiness - {str(ex)}")
+            self.set_status(500, f"error while checking readiness - {str(ex)}")
         self.finish()
 
 

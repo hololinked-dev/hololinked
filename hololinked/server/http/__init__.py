@@ -402,7 +402,7 @@ class HTTPServer(BaseProtocolServer):
 
     def add_thing(self, thing: Thing) -> None:
         self.router.add_thing(thing)
-        super().add_thing(thing)
+        self.things.append(thing)
 
     def __hash__(self):
         return hash(self._IP)

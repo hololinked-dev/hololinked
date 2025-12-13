@@ -21,6 +21,7 @@ from ..core.zmq.brokers import (
     default_server_execution_context,
     default_thing_execution_context,
 )
+from ..core.zmq.message import EMPTY_BYTE
 from ..td.interaction_affordance import EventAffordance, PropertyAffordance
 from ..utils import uuid_hex
 
@@ -150,6 +151,26 @@ class BrokerThing(BaseModel):
         """Sets the pub-sub client for this broker thing."""
         self.event_client = client
         self.pub_sub_socket_address = client.socket_address
+
+    @classmethod
+    def get_response_payload(self, zmq_response: ResponseMessage) -> PreserializedData | SerializableData:
+        """retrieves the payload from the ZMQ response message, does not necessarily deserialize it"""
+        # print("zmq_response - ", zmq_response)
+        if zmq_response is None:
+            raise RuntimeError("No last response available. Did you make an operation?")
+        if zmq_response.preserialized_payload.value != EMPTY_BYTE:
+            if zmq_response.payload.value != b"null":
+                # our None return value comes like this, sufficient to check against that
+                # self.logger.warning(
+                #     "Multiple content types in response payload, only the latter will be written to the wire",
+                #     content_type=zmq_response.payload.content_type,
+                #     binary_value=zmq_response.payload.value,
+                # )
+                pass
+            # multiple content types are not supported yet, so we return only one payload
+            return zmq_response.preserialized_payload
+            # return payload, preserialized_payload
+        return zmq_response.payload  # dont deseriablize, there is no need, just pass it on to the client
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
