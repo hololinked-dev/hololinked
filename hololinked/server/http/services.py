@@ -6,7 +6,12 @@ from ...constants import JSONSerializable, Operations
 from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
 from ...serializers import Serializers
 from ...serializers.payloads import SerializableData
-from ...td import ActionAffordance, EventAffordance, InteractionAffordance, PropertyAffordance
+from ...td import (
+    ActionAffordance,
+    EventAffordance,
+    InteractionAffordance,
+    PropertyAffordance,
+)
 from ...td.forms import Form
 from ..thing import thing_repository
 from .config import HandlerMetadata

@@ -106,48 +106,48 @@ class MQTTPublisher(BaseProtocolServer):
         # better to do later
         await self.setup()
 
+    async def start_publishers(self, thing: CoreThing) -> None:
+        eventloop = get_current_async_loop()
+        if not thing.rpc_server:
+            raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
+
+        await self._instantiate_broker(server_id=thing.rpc_server.id, thing_id=thing.id, access_point="INPROC")
+        broker_thing = thing_repository[thing.id]
+        td = broker_thing.TD
+
+        for event_name in td.get("events", {}).keys():
+            event_affordance = EventAffordance.from_TD(event_name, td)
+            topic_publisher = self.topic_publisher(
+                client=self.client,
+                resource=event_affordance,
+                logger=self.logger,
+                qos=self.qos,
+            )
+            self.publishers[topic_publisher.topic] = topic_publisher
+            eventloop.create_task(topic_publisher.publish())
+            self.logger.info(f"MQTT will publish events for {event_name} of thing {thing.id}")
+        for prop_name in td.get("properties", {}).keys():
+            property_affordance = PropertyAffordance.from_TD(prop_name, td)
+            if not property_affordance.observable:
+                continue
+            topic_publisher = self.topic_publisher(
+                client=self.client,
+                resource=property_affordance,
+                logger=self.logger,
+                qos=self.qos,
+            )
+            self.publishers[topic_publisher.topic] = topic_publisher
+            eventloop.create_task(topic_publisher.publish())
+            self.logger.info(f"MQTT will publish observable property changes for {prop_name} of thing {thing.id}")
+        # TD publisher
+        td_publisher = self.thing_description_publisher(client=self.client, logger=self.logger, ZMQ_TD=td)
+        self.publishers[td_publisher.topic] = td_publisher
+        eventloop.create_task(td_publisher.publish(td))
+
     async def setup(self) -> None:
-        async def start_publishers(thing: CoreThing):
-            eventloop = get_current_async_loop()
-            if not thing.rpc_server:
-                raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
-
-            await self._instantiate_broker(server_id=thing.rpc_server.id, thing_id=thing.id, access_point="INPROC")
-            broker_thing = thing_repository[thing.id]
-            td = broker_thing.TD
-
-            for event_name in td.get("events", {}).keys():
-                event_affordance = EventAffordance.from_TD(event_name, td)
-                topic_publisher = self.topic_publisher(
-                    client=self.client,
-                    resource=event_affordance,
-                    logger=self.logger,
-                    qos=self.qos,
-                )
-                self.publishers[topic_publisher.topic] = topic_publisher
-                eventloop.create_task(topic_publisher.publish())
-                self.logger.info(f"MQTT will publish events for {event_name} of thing {thing.id}")
-            for prop_name in td.get("properties", {}).keys():
-                property_affordance = PropertyAffordance.from_TD(prop_name, td)
-                if not property_affordance.observable:
-                    continue
-                topic_publisher = self.topic_publisher(
-                    client=self.client,
-                    resource=property_affordance,
-                    logger=self.logger,
-                    qos=self.qos,
-                )
-                self.publishers[topic_publisher.topic] = topic_publisher
-                eventloop.create_task(topic_publisher.publish())
-                self.logger.info(f"MQTT will publish observable property changes for {prop_name} of thing {thing.id}")
-            # TD publisher
-            td_publisher = self.thing_description_publisher(client=self.client, logger=self.logger, ZMQ_TD=td)
-            self.publishers[td_publisher.topic] = td_publisher
-            eventloop.create_task(td_publisher.publish(td))
-
         eventloop = get_current_async_loop()
         for thing in self.things:
-            eventloop.create_task(start_publishers(thing))
+            eventloop.create_task(self.start_publishers(thing))
 
     def stop(self):
         """stop publishing, the client is not closed automatically"""

@@ -8,6 +8,7 @@ from .controllers import (  # noqa: F401
     PropertyHandler,
     ReadinessProbeHandler,
     RPCHandler,
+    RWMultiplePropertiesHandler,
     StopHandler,
     ThingDescriptionHandler,
 )

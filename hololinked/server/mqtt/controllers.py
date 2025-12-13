@@ -7,7 +7,7 @@ from ...core.zmq.message import EventMessage  # noqa: F401
 from ...serializers import Serializers
 from ...td import EventAffordance, PropertyAffordance
 from ..thing import thing_repository
-from .services import ThingDescriptionGenerator
+from .services import ThingDescriptionService
 
 
 class TopicPublisher:
@@ -69,7 +69,7 @@ class ThingDescriptionPublisher:
         self.logger = logger
         self.topic = f"{ZMQ_TD['id']}/thing-description"
         self.thing = thing_repository[ZMQ_TD["id"]]
-        self.thing_description = ThingDescriptionGenerator(
+        self.thing_description = ThingDescriptionService(
             hostname=self.client._hostname,
             port=self.client._port,
             logger=logger,

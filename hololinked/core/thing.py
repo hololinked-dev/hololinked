@@ -252,7 +252,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 ZMQ context object to be used for creating sockets. If not supplied, a global shared context is used.
                 For INPROC, either do not supply context or use the same context across all threads.
         """
-        from ..server import parse_params, run
+        from ..server.server import parse_params, run
 
         servers = parse_params(self.id, [("ZMQ", dict(access_points=access_points, logger=self.logger, **kwargs))])
 
@@ -300,8 +300,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             - `event_handler`: `BaseHandler` | `EventHandler`,
                 custom event handler for handling events
         """
-        from ..server import run
-        from ..server.http import HTTPServer
+        from ..server import HTTPServer, run
 
         http_server = HTTPServer(
             port=port,
@@ -334,8 +333,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             - `servers`: list[BaseProtocolServer]
                 list of instantiated servers to expose the object.
         """
-        from ..server import parse_params, run
-        from ..server.server import BaseProtocolServer  # noqa: F401
+        from ..server.server import BaseProtocolServer, parse_params, run  # noqa: F401
 
         access_points = kwargs.get("access_points", None)  # type: dict[str, dict | int | str | list[str]]
         servers = kwargs.get("servers", [])  # type: list[BaseProtocolServer] | None

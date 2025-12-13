@@ -8,7 +8,7 @@ from ...constants import Operations
 from ...td.interaction_affordance import EventAffordance, PropertyAffordance
 
 
-class ThingDescriptionGenerator:
+class ThingDescriptionService:
     """Generates Thing Descriptions for Things"""
 
     def __init__(self, hostname: str, port: int, logger: structlog.stdlib.BoundLogger, ssl: bool = True) -> None:
