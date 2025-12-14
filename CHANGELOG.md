@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ✓ means ready to try
 
+# [v0.3.10] - 2025-12-xx
+
+- adds a layered structure in `hololinked.server` for better organization
+- fixes bugs with image streaming and streaming arbitrary content types
+- update protocol handlers (like HTTP handler and MQTT topic publishers) from `__init__` of their servers
+- `ignore_errors` in TD generation works better and gaurantees atleast a partial TD generation
+- adds API key authentication for HTTP protocol binding
+
 # [v0.3.9] - 2025-12-01
 
 - adds CORS headers for HTTP SSE which went missing from 0.2.x -> 0.3.x transition

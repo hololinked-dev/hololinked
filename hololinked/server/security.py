@@ -3,9 +3,16 @@ Implementation of security schemes for a server.
 """
 
 import base64
+import json
+import os
+import secrets
+import string
+
+from datetime import datetime
 
 from pydantic import BaseModel, PrivateAttr
 
+from ..config import global_config
 from ..utils import uuid_hex
 
 
@@ -172,3 +179,97 @@ try:
 
 except ImportError:
     pass
+
+
+class APIKeySecurity(Security):
+    """
+    An API key based security scheme.
+
+    The request must supply an authorization header in of the following formats:
+
+    - `X-API-Key: apikey`
+
+    """
+
+    allowed_characters: str
+    size: int = 16
+    id_size: int = 5
+    name: str
+
+    _ph: argon2.PasswordHasher = PrivateAttr()
+
+    def __init__(
+        self,
+        name: str,
+        size: int = 16,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            name=name or f"api-key-{uuid_hex()}",
+            size=size,
+            id_size=kwargs.get("id_size", 5),
+            allowed_characters=kwargs.get("allowed_characters", string.ascii_letters + string.digits + "_"),
+        )
+        self._ph = argon2.PasswordHasher()
+
+    @classmethod
+    def create(self, validity_period_minutes: int | None = None) -> str:
+        """Create a new API key
+
+        Returns
+        -------
+        str
+            The generated API key
+        """
+        id = "".join(secrets.choice(self.allowed_characters) for _ in range(self.id_size))
+        secret = "".join(secrets.choice(self.allowed_characters) for _ in range(self.size))
+        return f"wotpat-{id}.{secret}"
+
+    @classmethod
+    def hash(self, api_key: str) -> str:
+        """Create a hash of the API key for storage
+
+        Returns
+        -------
+        str
+            The hashed API key
+        """
+        return self._ph.hash(api_key)
+
+    @classmethod
+    def save(
+        self,
+        apikey: str,
+        description: str = "API Key for WoT applications",
+        filename: str = "apikeys.json",
+    ) -> None:
+        """
+        Save the security scheme to persistent storage
+
+        This is a placeholder method and should be implemented to save the security scheme
+        to a database or file as needed.
+        """
+        data = dict(
+            name=self.name,
+            apikey=apikey,
+            created_at=datetime.now().isoformat(),
+            description=description,
+            id=apikey.split("-")[1].split(".")[0],
+        )
+        with open(os.path.join(global_config.TEMP_DIR_SECRETS, filename), "w") as f:
+            json.dump(data, f, indent=4)
+
+    def validate_input(self, apikey: str) -> bool:
+        """
+        Validate an API key against a stored hash
+
+        Returns
+        -------
+        bool
+            True if the API key is valid, False otherwise
+        """
+        try:
+            prehashed_apikey = ""
+            return self._ph.verify(prehashed_apikey, apikey)
+        except argon2.exceptions.VerifyMismatchError:
+            return False
