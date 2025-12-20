@@ -148,7 +148,7 @@ class HTTPServer(BaseProtocolServer):
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
             thing_repository=kwargs.get("thing_repository", ThingRepository),
         )
-        default_config.update(config)
+        default_config.update(config or dict())
         config = RuntimeConfig(**default_config)
         # need to be extended when more options are added
         super().__init__(
