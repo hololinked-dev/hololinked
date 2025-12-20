@@ -25,9 +25,6 @@ from ...td import (
     PropertyAffordance,
 )
 from ...utils import format_exception_as_json, get_current_async_loop
-from ..thing import thing_repository
-from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
-from .services import ThingDescriptionService
 
 
 try:
@@ -58,7 +55,7 @@ class BaseHandler(RequestHandler):
         self,
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
         owner_inst: Any = None,
-        metadata: HandlerMetadata | None = None,
+        metadata: Any = None,
     ) -> None:
         """
         Parameters
@@ -71,7 +68,9 @@ class BaseHandler(RequestHandler):
         metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
         """
+        from ..thing import thing_repository
         from . import HTTPServer  # noqa: F401
+        from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
 
         self.resource = resource  # type: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
         self.thing = thing_repository[self.resource.thing_id]
@@ -391,6 +390,7 @@ class RPCHandler(BaseHandler):
         except Exception as ex:
             self.logger.error(f"error while scheduling RPC call - {str(ex)}")
             self.set_status(500, f"error while scheduling RPC call - {str(ex)}")
+            self.set_header("Content-Type", "application/json")
             response_payload = SerializableData(
                 value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
                 content_type="application/json",
@@ -422,6 +422,7 @@ class RPCHandler(BaseHandler):
         except Exception as ex:
             self.logger.error(f"error while receiving no-block response - {str(ex)}")
             self.set_status(500, f"error while receiving no-block response - {str(ex)}")
+            self.set_header("Content-Type", "application/json")
             response_payload = SerializableData(
                 value=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
                 content_type="application/json",
@@ -499,7 +500,7 @@ class RWMultiplePropertiesHandler(ActionHandler):
         self,
         resource: ActionAffordance,
         owner_inst: Any = None,
-        metadata: HandlerMetadata | None = None,
+        metadata: Any = None,
         **kwargs,
     ) -> None:
         self.read_properties_resource = kwargs.get("read_properties_resource", None)
@@ -543,7 +544,7 @@ class EventHandler(BaseHandler):
         self,
         resource: InteractionAffordance | EventAffordance,
         owner_inst: Any = None,
-        metadata: HandlerMetadata | None = None,
+        metadata: Any = None,
     ) -> None:
         super().initialize(resource, owner_inst, metadata)
         self.data_header = b"data: %s\n\n"
@@ -624,7 +625,7 @@ class JPEGImageEventHandler(EventHandler):
         self,
         resource: InteractionAffordance | EventAffordance,
         owner_inst: Any = None,
-        metadata: HandlerMetadata | None = None,
+        metadata: Any = None,
     ) -> None:
         super().initialize(resource, owner_inst, metadata)
         self.data_header = b"data:image/jpeg;base64,%s\n\n"
@@ -637,7 +638,7 @@ class PNGImageEventHandler(EventHandler):
         self,
         resource: InteractionAffordance | EventAffordance,
         owner_inst: Any = None,
-        metadata: HandlerMetadata | None = None,
+        metadata: Any = None,
     ) -> None:
         super().initialize(resource, owner_inst, metadata)
         self.data_header = b"data:image/png;base64,%s\n\n"
@@ -648,9 +649,10 @@ class StopHandler(BaseHandler):
 
     def initialize(self, owner_inst: Any = None) -> None:
         from . import HTTPServer  # noqa: F401
+        from .config import RuntimeConfig  # noqa: F401
 
         self.server = owner_inst  # type: HTTPServer
-        self.config = self.server.config
+        self.config = self.server.config  # type: RuntimeConfig
         self.allowed_clients = self.server.allowed_clients
         self.security_schemes = self.server.security_schemes
         self.logger = self.server.logger.bind(path=self.request.path)
@@ -679,9 +681,10 @@ class LivenessProbeHandler(BaseHandler):
 
     def initialize(self, owner_inst: Any = None) -> None:
         from . import HTTPServer  # noqa: F401
+        from .config import RuntimeConfig  # noqa: F401
 
         self.server = owner_inst  # type: HTTPServer
-        self.config = self.server.config
+        self.config = self.server.config  # type: RuntimeConfig
         self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):
@@ -693,9 +696,10 @@ class LivenessProbeHandler(BaseHandler):
 class ReadinessProbeHandler(BaseHandler):
     def initialize(self, owner_inst: Any = None) -> None:
         from . import HTTPServer  # noqa: F401
+        from .config import RuntimeConfig  # noqa: F401
 
         self.server = owner_inst  # type: HTTPServer
-        self.config = self.server.config
+        self.config = self.server.config  # type: RuntimeConfig
         self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):
@@ -725,10 +729,10 @@ class ThingDescriptionHandler(BaseHandler):
         self,
         resource: InteractionAffordance | PropertyAffordance,
         owner_inst: Any = None,
-        metadata: HandlerMetadata | None = None,
+        metadata: Any = None,
     ) -> None:
         super().initialize(resource, owner_inst, metadata)
-        self.thing_description = ThingDescriptionService(resource, owner_inst)
+        self.thing_description = self.server.config.thing_description_service(resource, owner_inst)
 
     async def get(self):
         if not self.has_access_control:
