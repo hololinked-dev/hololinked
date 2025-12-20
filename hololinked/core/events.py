@@ -125,7 +125,8 @@ class EventDispatcher:
 
     def push(self, data: Any) -> None:
         """
-        publish the event.
+        publish the event. Multipart payloads are not supported. Supply either a serializable object or a
+        bytes object for binary data, not both.
 
         Parameters
         ----------

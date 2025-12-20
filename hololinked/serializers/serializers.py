@@ -361,7 +361,10 @@ class Serializers(metaclass=MappableSingleton):
     )  # type: BaseSerializer
 
     default = ClassSelector(
-        default=json.default, class_=BaseSerializer, class_member=True, doc="The default serialization to be used"
+        default=json.default,
+        class_=BaseSerializer,
+        class_member=True,
+        doc="The default serialization to be used",
     )  # type: BaseSerializer
 
     default_content_type = String(
@@ -404,7 +407,10 @@ class Serializers(metaclass=MappableSingleton):
     )  # type: dict[str, dict[str, BaseSerializer]]
 
     protocol_serializer_map = Parameter(
-        default=dict(), class_member=True, doc="A dictionary of serializer for a specific protocol", readonly=True
+        default=dict(),
+        class_member=True,
+        doc="A dictionary of serializer for a specific protocol",
+        readonly=True,
     )  # type: dict[str, BaseSerializer]
 
     @classmethod
@@ -438,7 +444,7 @@ class Serializers(metaclass=MappableSingleton):
         cls[name or serializer.__name__] = serializer
 
     @classmethod
-    def for_object(cls, thing_id: str, thing_cls: str, objekt: str) -> BaseSerializer:
+    def for_object(cls, thing_id: str, thing_cls: str, objekt: str) -> BaseSerializer | None:
         """
         Retrieve a serializer for a given property, action or event
 
@@ -463,14 +469,10 @@ class Serializers(metaclass=MappableSingleton):
             if thing in cls.object_serializer_map:
                 if objekt in cls.object_serializer_map[thing]:
                     return cls.object_serializer_map[thing][objekt]
-                return cls.object_serializer_map[thing].get(thing, cls.default)
             if thing in cls.object_content_type_map:
                 if objekt in cls.object_content_type_map[thing]:
-                    return cls.content_types.get(cls.object_content_type_map[thing][objekt], cls.default)
-                return cls.content_types.get(
-                    cls.object_content_type_map[thing].get(thing, cls.default_content_type),
-                    cls.default,
-                )
+                    return cls.content_types.get(cls.object_content_type_map[thing][objekt], None)
+                    # if said content type has no serializer, return None instead of default serializer
         return cls.default  # JSON is default serializer
 
     @classmethod
@@ -494,10 +496,8 @@ class Serializers(metaclass=MappableSingleton):
             if thing in self.object_content_type_map:
                 if objekt in self.object_content_type_map[thing]:
                     return self.object_content_type_map[thing][objekt]
-                return self.object_content_type_map[thing].get(thing, self.default_content_type)
         return self.default_content_type  # JSON is default serializer
 
-    # @validate_call
     @classmethod
     def register_for_object(cls, objekt: Any, serializer: BaseSerializer) -> None:
         """
@@ -659,13 +659,11 @@ class Serializers(metaclass=MappableSingleton):
     @allowed_content_types.getter
     def get_allowed_content_types(cls) -> list[str]:
         """Get a list of all allowed content types for serialization"""
-        try:
-            return cls._allowed_content_types
-        except AttributeError:
-            cls._allowed_content_types = list(cls.content_types.keys())
-            cls._allowed_content_types.remove(cls.pickle.content_type)
-            cls._allowed_content_types.append(cls.pickle.content_type)
-            return cls._allowed_content_types
+        _allowed_content_types = list(cls.content_types.keys())
+        _allowed_content_types.remove(cls.pickle.content_type)
+        if not global_config.ALLOW_PICKLE:
+            _allowed_content_types.append(cls.pickle.content_type)
+        return _allowed_content_types
 
 
 __all__ = [
