@@ -3,6 +3,8 @@ import logging
 import threading
 import warnings
 
+from io import StringIO
+
 import structlog
 
 from ..config import global_config
@@ -138,9 +140,9 @@ class BaseProtocolServer(Parameterized):
 
 
 @forkable
-def run(*servers: BaseProtocolServer, forked: bool = False) -> None:
+def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_message: bool = True) -> None:
     """run servers and serve your things"""
-    from .zmq import ZMQServer
+    from . import ZMQServer
 
     loop = get_current_async_loop()  # initialize an event loop if it does not exist
 
@@ -178,6 +180,9 @@ def run(*servers: BaseProtocolServer, forked: bool = False) -> None:
         if server == rpc_server:
             continue
         loop.create_task(server.start())
+
+    if print_welcome_message:
+        _print_welcome_message(servers)
 
     loop.run_until_complete(shutdown())
     rpc_server.stop()
@@ -241,3 +246,27 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
             warnings.warn(f"Unsupported protocol: {protocol}", category=UserWarning)
 
     return servers
+
+
+def _print_welcome_message(servers: list[BaseProtocolServer]) -> None:
+    """prints a welcome message to the console/log"""
+    from . import HTTPServer, MQTTPublisher
+
+    buffer = StringIO()
+    buffer.write("\n" + "=" * 60 + "\n")
+    buffer.write("🚀 Server Started!\n")
+    buffer.write("=" * 60 + "\n")
+    for server in servers:
+        if isinstance(server, HTTPServer):
+            buffer.write("\n📡 HTTP:\n")
+            for thing in server.things:
+                td_path = "/resources/wot-td?ignore_errors=true"
+                buffer.write(f"   ➜ Local:   {server.router.get_basepath(use_localhost=True)}/{thing.id}{td_path}\n")
+                buffer.write(f"   ➜ Network: {server.router.get_basepath()}/{thing.id}{td_path}\n")
+        elif isinstance(server, MQTTPublisher):
+            buffer.write("\n📡 MQTT:\n")
+            buffer.write(f" • Broker:   {server.hostname}:{server.port}\n")
+            for thing in server.things:
+                buffer.write(f"   ➜ Topic tree: {thing.id}/thing-description\n")
+    buffer.write("\n" + "=" * 60 + "\n")
+    print(buffer.getvalue())
