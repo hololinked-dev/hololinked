@@ -58,8 +58,10 @@ class ConsumedThingAction:
         logger: structlog.stdlib.BoundLogger
             logger instance
         """
+        from . import ObjectProxy  # noqa: F401
+
         self.resource = resource
-        self.owner_inst = owner_inst
+        self.owner_inst = owner_inst  # type: ObjectProxy
         self.logger = logger
         self.schema_validator = None  # schema_validator
 
@@ -184,8 +186,10 @@ class ConsumedThingProperty:
         logger: structlog.stdlib.BoundLogger
             logger instance
         """
+        from . import ObjectProxy  # noqa: F401
+
         self.resource = resource
-        self.owner_inst = owner_inst
+        self.owner_inst = owner_inst  # type: ObjectProxy
         self.logger = logger
 
     @property  # i.e. cannot have setter
@@ -334,9 +338,11 @@ class ConsumedThingEvent:
         owner_inst: Any
             the parent object that owns this event
         """
+        from . import ObjectProxy  # noqa: F401
+
         self.resource = resource
         self.logger = logger
-        self.owner_inst = owner_inst
+        self.owner_inst = owner_inst  # type: ObjectProxy
         self._subscribed = dict()
         # self._sync_callbacks = []
         # self._async_callbacks = []

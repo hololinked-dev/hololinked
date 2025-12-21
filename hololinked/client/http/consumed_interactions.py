@@ -46,6 +46,10 @@ class HTTPConsumedAffordanceMixin:
         self._sync_http_client = sync_client
         self._async_http_client = async_client
 
+        from .. import ObjectProxy  # noqa: F401
+
+        self.owner_inst: ObjectProxy
+
     def get_body_from_response(
         self,
         response: httpx.Response,
@@ -71,8 +75,8 @@ class HTTPConsumedAffordanceMixin:
 
         if not self.owner_inst or self.owner_inst._security is None:
             return headers
-        if not any(key.lower() == "authorization" for key in headers.keys()):
-            headers["Authorization"] = self.owner_inst._security.http_header
+        if not any(key.lower() == self.owner_inst._security.http_header_name.lower() for key in headers.keys()):
+            headers[self.owner_inst._security.http_header_name] = self.owner_inst._security.http_header
 
         return headers
 

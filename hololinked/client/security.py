@@ -1,12 +1,15 @@
 import base64
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 
 class BasicSecurity(BaseModel):
     """Basic Security Scheme with username and password"""
 
     credentials: str
+    http_header_name: str = "Authorization"
+
+    _credentials: str = PrivateAttr()
 
     def __init__(self, username: str, password: str, use_base64: bool = True):
         credentials = f"{username}:{password}"
@@ -17,3 +20,14 @@ class BasicSecurity(BaseModel):
     @property
     def http_header(self) -> str:
         return self._credentials
+
+
+class APIKeySecurity(BaseModel):
+    """API Key Security Scheme"""
+
+    apikey: str
+    http_header_name: str = "X-API-Key"
+
+    @property
+    def http_header(self) -> str:
+        return self.apikey
