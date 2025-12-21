@@ -176,7 +176,13 @@ class Configuration:
         actions to be done to recreate global configuration state after changing config values.
         Called after `load_variables` and `set` methods.
         """
-        for directory in [self.TEMP_DIR, self.TEMP_DIR_SOCKETS, self.TEMP_DIR_LOGS, self.TEMP_DIR_DB]:
+        for directory in [
+            self.TEMP_DIR,
+            self.TEMP_DIR_SOCKETS,
+            self.TEMP_DIR_LOGS,
+            self.TEMP_DIR_DB,
+            self.TEMP_DIR_SECRETS,
+        ]:
             try:
                 os.mkdir(directory)
             except FileExistsError:
@@ -284,6 +290,11 @@ class Configuration:
     def TEMP_DIR_DB(self) -> str:
         """returns the temporary directory path for database files"""
         return os.path.join(self.TEMP_DIR, "db")
+
+    @property
+    def TEMP_DIR_SECRETS(self) -> str:
+        """returns the temporary directory path for secret files"""
+        return os.path.join(self.TEMP_DIR, "secrets")
 
     @property
     def _main_script_filename(self) -> str | None:

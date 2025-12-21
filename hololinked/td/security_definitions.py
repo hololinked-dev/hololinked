@@ -40,3 +40,14 @@ class BasicSecurityScheme(SecurityScheme):
         self.scheme = "basic"
         self.description = "HTTP Basic Authentication"
         self.in_ = "header"
+
+
+class APIKeySecurityScheme(SecurityScheme):
+    """API Key Security Scheme"""
+
+    in_: str = Field(default="header", alias="in")
+
+    def build(self):
+        self.scheme = "apikey"
+        self.description = "API Key Authentication"
+        self.in_ = "header"

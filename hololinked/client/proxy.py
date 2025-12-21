@@ -3,6 +3,7 @@ from typing import Any, Callable
 import structlog
 
 from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
+from .security import APIKeySecurity, BasicSecurity  # noqa: F401
 
 
 class ObjectProxy:
@@ -52,14 +53,14 @@ class ObjectProxy:
                 logger instance
             - `td`: `dict[str, Any]`, default `dict()`.
                 Thing Description of the consumed thing
-            - `security`: `BasicSecurity`, optional.
+            - `security`: `BasicSecurity` | `APIKeySecurity`, optional.
                 security scheme to be used for authentication
         """
         self.id = id
         self._allow_foreign_attributes = kwargs.get("allow_foreign_attributes", False)
         self._noblock_messages = dict()  # type: dict[str, ConsumedThingAction | ConsumedThingProperty]
         self._schema_validator = kwargs.get("schema_validator", None)
-        self._security = kwargs.get("security", None)
+        self._security = kwargs.get("security", None)  # type: BasicSecurity | APIKeySecurity | None
         self.logger = kwargs.pop("logger", structlog.get_logger())
         self.td = kwargs.get("td", dict())  # type: dict[str, Any]
 

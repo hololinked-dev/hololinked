@@ -1,4 +1,5 @@
 import base64
+import datetime
 import itertools
 import random
 import sys
@@ -13,6 +14,7 @@ import pytest
 import requests
 
 from hololinked.client import ClientFactory, ObjectProxy
+from hololinked.client.security import APIKeySecurity as ClientAPIKeySecurity
 from hololinked.config import global_config
 from hololinked.core.zmq.message import (
     PreserializedData,
@@ -30,6 +32,7 @@ from hololinked.serializers import (
 from hololinked.server import stop
 from hololinked.server.http import HTTPServer, RPCHandler
 from hololinked.server.security import (
+    APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
     Security,
@@ -207,7 +210,10 @@ def test_02_add_interaction_affordance(server: HTTPServer):
 
 
 class TestableRPCHandler(RPCHandler):
-    """handler that tests RPC handler functionalities, without executing an operation on a Thing"""
+    """
+    handler that tests RPC handler functionalities, without executing an operation on a Thing
+    Needs to be replaced with a mock
+    """
 
     @dataclass
     class LatestRequestInfo:
@@ -469,20 +475,76 @@ def test_07_basic_security_end_to_end(session: requests.Session, port: int, secu
                         "Content-type": "application/json",
                         "Authorization": f"Basic {base64.b64encode(b'wronguser:somepassword').decode('utf-8')}",
                     },
+                    {
+                        "Content-type": "application/json",
+                        # no header
+                    },
                 ],
+            )
+
+
+def test_08_apikey_security_end_to_end(session: requests.Session, port: int):
+    """Test end-to-end with API Key Authentication."""
+    keyname = f"e2e-test-apikey-{uuid_hex()}"
+    apikey = APIKeySecurity(name=keyname).create(print_value=False)
+
+    security_scheme = APIKeySecurity(name=keyname)
+    with running_thing(id_prefix="test-sec", port=port, security_schemes=[security_scheme]) as thing:
+        endpoints = running_thing_endpoints(thing)
+        for method, path, body in endpoints:
+            do_authenticated_path_e2e(
+                session=session,
+                endpoint=(f"{method}", f"{hostname_prefix}:{port}{path}", body),
+                auth_headers={
+                    "Content-type": "application/json",
+                    "x-api-key": apikey,
+                },
+                wrong_auth_headers=[
+                    {
+                        "Content-type": "application/json",
+                        "x-api-key": "wrongapikey",
+                    },  # plainly wrong key
+                    {
+                        "Content-type": "application/json",
+                        "x-api-key": f"wotdat-{apikey.split('-')[1].split('.')[0]}.blablabla",
+                    },  # wrong key with right ID
+                    {
+                        "Content-type": "application/json",
+                        # no header
+                    },
+                ],
+            )
+        for method, path, body in endpoints:  # test key expiration
+            security_scheme.record.expiry_at = datetime.datetime.fromisoformat("2000-01-01T00:00:00")
+            do_a_path_invalid_auth_e2e(
+                session,
+                (f"{method}", f"{hostname_prefix}:{port}{path}", body),
+                headers={
+                    "Content-type": "application/json",
+                    "x-api-key": apikey,
+                },
             )
 
 
 @pytest.mark.parametrize(
     "security_scheme, headers",
     [
-        (None, {}),
-        (
+        pytest.param(None, {}, id="no-auth"),
+        pytest.param(
             BcryptBasicSecurity(username="someuser", password="somepassword"),
             {
                 "Content-type": "application/json",
                 "Authorization": f"Basic {base64.b64encode(b'someuser:somepassword').decode('utf-8')}",
             },
+            id="bcrypt-basic-auth",
+        ),
+        pytest.param(
+            APIKeySecurity(name="sse-apikey"),
+            {
+                "Content-type": "application/json",
+                "x-api-key": APIKeySecurity(name="sse-apikey").create(print_value=False, override=True),
+            },
+            id="apikey-auth",
         ),
     ],
 )
@@ -493,6 +555,8 @@ def test_09_sse(
     headers: dict[str, str],
 ) -> None:
     """Test Server-Sent Events (SSE)"""
+    if hasattr(security_scheme, "load"):
+        security_scheme.load()  # TODO refactor later, we should not do fixture based specific setup here
     with running_thing(
         id_prefix="test-sse",
         port=port,
@@ -543,10 +607,11 @@ async def test_11_object_proxy_basic(object_proxy: ObjectProxy) -> None:
 
 
 def test_12_object_proxy_with_basic_auth(port: int) -> None:
+    security_scheme = BcryptBasicSecurity(username="cliuser", password="clipass")
     with running_thing(
-        id_prefix="test-auth",
+        id_prefix="test-basic-auth-object-proxy",
         port=port,
-        security_schemes=[BcryptBasicSecurity(username="cliuser", password="clipass")],
+        security_schemes=[security_scheme],
     ) as thing:
         td_endpoint = f"{hostname_prefix}:{port}/{thing.id}/resources/wot-td"
         object_proxy = ClientFactory.http(
@@ -554,6 +619,33 @@ def test_12_object_proxy_with_basic_auth(port: int) -> None:
             username="cliuser",
             password="clipass",
         )
+        assert len(object_proxy.td["security"]) > 0
+        assert security_scheme.name in object_proxy.td["security"]
+        assert security_scheme.name in object_proxy.td["securityDefinitions"]
+
+        assert object_proxy.read_property("max_intensity") == 16384
+
+        pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)
+
+
+def test_13_object_proxy_with_apikey(port: int) -> None:
+    keyname = f"cli-test-apikey-{uuid_hex()}"
+    apikey = APIKeySecurity(name=keyname).create(print_value=False)
+    security_scheme = APIKeySecurity(name=keyname)
+    with running_thing(
+        id_prefix="test-apikey-object-proxy",
+        port=port,
+        security_schemes=[security_scheme],
+    ) as thing:
+        td_endpoint = f"{hostname_prefix}:{port}/{thing.id}/resources/wot-td"
+        object_proxy = ClientFactory.http(
+            url=td_endpoint,
+            security=ClientAPIKeySecurity(value=apikey),
+        )
+        assert len(object_proxy.td["security"]) > 0
+        assert security_scheme.name in object_proxy.td["security"]
+        assert security_scheme.name in object_proxy.td["securityDefinitions"]
+
         assert object_proxy.read_property("max_intensity") == 16384
 
         pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)

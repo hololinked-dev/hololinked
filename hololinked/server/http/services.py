@@ -18,9 +18,11 @@ from .config import HandlerMetadata
 
 
 try:
-    from ..security import Argon2BasicSecurity
+    from ..security import APIKeySecurity, Argon2BasicSecurity
 except ImportError:
     Argon2BasicSecurity = None
+    APIKeySecurity = None
+
 try:
     from ..security import BcryptBasicSecurity
 except ImportError:
@@ -229,7 +231,11 @@ class ThingDescriptionService:
         TD["forms"].append(writemultipleproperties.json())
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
-        from ...td.security_definitions import BasicSecurityScheme, NoSecurityScheme
+        from ...td.security_definitions import (
+            APIKeySecurityScheme,
+            BasicSecurityScheme,
+            NoSecurityScheme,
+        )
 
         TD["securityDefinitions"] = dict()
 
@@ -245,6 +251,10 @@ class ThingDescriptionService:
             if isinstance(scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
                 sec = BasicSecurityScheme()
                 sec.build()
+                TD["securityDefinitions"][scheme.name] = sec.json()
+                TD["security"].append(scheme.name)
+            if isinstance(scheme, APIKeySecurity):
+                sec = APIKeySecurityScheme()
                 TD["securityDefinitions"][scheme.name] = sec.json()
                 TD["security"].append(scheme.name)
 
