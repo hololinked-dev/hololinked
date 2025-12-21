@@ -36,9 +36,10 @@ except ImportError:
     BcryptBasicSecurity = None
 
 try:
-    from ..security import Argon2BasicSecurity
+    from ..security import APIKeySecurity, Argon2BasicSecurity
 except ImportError:
     Argon2BasicSecurity = None
+    APIKeySecurity = None
 
 
 class LocalExecutionContext(msgspec.Struct):
@@ -121,9 +122,9 @@ class BaseHandler(RequestHandler):
     @property
     def is_authenticated(self) -> bool:
         """enforces authentication using the defined security schemes, freshly computed everytime"""
-        authorization_header = self.request.headers.get("Authorization", None)  # type: str
-        # will simply pass through if no such header is present
         authenticated = False
+        # 1. Basic Authentication
+        authorization_header = self.request.headers.get("Authorization", None)  # type: str
         if authorization_header and "basic " in authorization_header.lower():
             for security_scheme in self.security_schemes:
                 if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
@@ -142,7 +143,24 @@ class BaseHandler(RequestHandler):
                             )
                     except Exception as ex:
                         self.logger.error(f"error while authenticating client - {str(ex)}")
-                    break  # stop at first matching security scheme
+                    if authenticated:
+                        return True
+        # 2. API Key Authentication
+        apikey = self.request.headers.get("X-API-Key", None)
+        if apikey:
+            for security_scheme in self.security_schemes:
+                if isinstance(security_scheme, APIKeySecurity):
+                    try:
+                        self.logger.info(
+                            "authenticating client with API key",
+                            origin=self.request.headers.get("Origin"),
+                            security_scheme=security_scheme.__class__.__name__,
+                        )
+                        authenticated = security_scheme.validate_input(apikey)
+                    except Exception as ex:
+                        self.logger.error(f"error while authenticating client with API key - {str(ex)}")
+                    if authenticated:
+                        return True
         return authenticated
 
     def set_access_control_allow_headers(self) -> None:

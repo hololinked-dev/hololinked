@@ -1,6 +1,4 @@
-"""
-Implementation of security schemes for a server.
-"""
+"""Implementation of security schemes for a server"""
 
 import base64
 import json
@@ -11,7 +9,7 @@ import string
 from datetime import datetime, timedelta
 from typing import Any
 
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel, PrivateAttr, field_serializer, field_validator
 
 from ..config import global_config
 from ..utils import uuid_hex
@@ -185,13 +183,28 @@ try:
     import argon2
 
     class APIKeyRecord(BaseModel):
+        """An API key record dataclass"""
+
         name: str
         id: str
         apikey_hash: str
         description: str
-        created_at: str
-        expiry_at: str
+        created_at: datetime
+        expiry_at: datetime
         hasher: str = "argon2"
+
+        @field_serializer("created_at", "expiry_at")
+        def serialize_datetime(self, dt: datetime, _info) -> str:
+            """Serialize datetime to ISO format string"""
+            return dt.isoformat()
+
+        @field_validator("created_at", "expiry_at", mode="before")
+        @classmethod
+        def parse_datetime(cls, value):
+            """Parse datetime from string or return datetime object"""
+            if isinstance(value, str):
+                return datetime.fromisoformat(value)
+            return value
 
     class APIKeySecurity(Security):
         """
@@ -213,9 +226,7 @@ try:
 
         name: str
         file: str
-        prehashed_apikey: str | None = None
-        prehashed_apikey_id: str | None = None
-        prehashed_apikey_expiry: datetime | None = None
+        record: APIKeyRecord | None = None
 
         _ph: argon2.PasswordHasher = PrivateAttr()
 
@@ -231,6 +242,7 @@ try:
             """
             super().__init__(name=name, file=os.path.join(global_config.TEMP_DIR_SECRETS, file))
             self._ph = hasher or argon2.PasswordHasher()
+            self.record = None
             self.load()
 
         def create(
@@ -268,7 +280,7 @@ try:
             allowed_characters: str
                 The characters to use for generating the API key, defaults to alphanumeric characters and underscore
             prefix: str
-                The prefix for the API key, defaults to "wotdat"
+                The prefix for the API key, defaults to "wotdat" (web of things device authentication token)
             print_value: bool
                 Whether to print the generated API key to the console once generated, defaults to `True`
             override: bool
@@ -339,9 +351,7 @@ try:
                     raise ValueError("Invalid API key storage format, expected a dictionary")
                 if not data.get(self.name, None):
                     return
-                self.prehashed_apikey_id = data[self.name]["id"]
-                self.prehashed_apikey = data[self.name]["apikey_hash"]
-                self.prehashed_apikey_expiry = datetime.fromisoformat(data[self.name]["expiry_at"])
+                self.record = APIKeyRecord.model_validate(data[self.name])
 
         def validate_input(self, apikey: str) -> bool:
             """
@@ -352,18 +362,18 @@ try:
             bool
                 True if the API key is valid, False otherwise
             """
-            if any(v is None for v in [self.prehashed_apikey, self.prehashed_apikey_id, self.prehashed_apikey_expiry]):
+            if self.record is None:
                 raise ValueError("No API key loaded for validation")
             try:
                 id = apikey.split(".", 1)[0].split("-", 1)[1]
-                if self.prehashed_apikey_id != id:
+                if self.record.id != id:
                     return False
             except IndexError:
                 return False
-            if datetime.now() > self.prehashed_apikey_expiry:
+            if datetime.now() > self.record.expiry_at:
                 return False
             try:
-                return self._ph.verify(self.prehashed_apikey, apikey)
+                return self._ph.verify(self.record.apikey_hash, apikey)
             except argon2.exceptions.VerifyMismatchError:
                 return False
 
