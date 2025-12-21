@@ -10,9 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 # [v0.3.10] - 2025-12-xx
 
-- adds a layered structure in `hololinked.server` for better organization
+- adds a layered architecture in `hololinked.server` for better organization
+- update protocol handlers (like HTTP handler and MQTT topic publishers) from `__init__` of their servers through improved dependency injection
 - fixes bugs with image streaming and streaming arbitrary content types
-- update protocol handlers (like HTTP handler and MQTT topic publishers) from `__init__` of their servers
 - `ignore_errors` in TD generation works better and gaurantees atleast a partial TD generation
 - adds API key authentication for HTTP protocol binding
 
