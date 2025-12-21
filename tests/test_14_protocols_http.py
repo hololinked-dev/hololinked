@@ -607,10 +607,11 @@ async def test_11_object_proxy_basic(object_proxy: ObjectProxy) -> None:
 
 
 def test_12_object_proxy_with_basic_auth(port: int) -> None:
+    security_scheme = BcryptBasicSecurity(username="cliuser", password="clipass")
     with running_thing(
         id_prefix="test-basic-auth-object-proxy",
         port=port,
-        security_schemes=[BcryptBasicSecurity(username="cliuser", password="clipass")],
+        security_schemes=[security_scheme],
     ) as thing:
         td_endpoint = f"{hostname_prefix}:{port}/{thing.id}/resources/wot-td"
         object_proxy = ClientFactory.http(
@@ -618,6 +619,10 @@ def test_12_object_proxy_with_basic_auth(port: int) -> None:
             username="cliuser",
             password="clipass",
         )
+        assert len(object_proxy.td["security"]) > 0
+        assert security_scheme.name in object_proxy.td["security"]
+        assert security_scheme.name in object_proxy.td["securityDefinitions"]
+
         assert object_proxy.read_property("max_intensity") == 16384
 
         pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)
@@ -637,6 +642,10 @@ def test_13_object_proxy_with_apikey(port: int) -> None:
             url=td_endpoint,
             security=ClientAPIKeySecurity(apikey=apikey),
         )
+        assert len(object_proxy.td["security"]) > 0
+        assert security_scheme.name in object_proxy.td["security"]
+        assert security_scheme.name in object_proxy.td["securityDefinitions"]
+
         assert object_proxy.read_property("max_intensity") == 16384
 
         pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)

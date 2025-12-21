@@ -6,12 +6,12 @@ from pydantic import BaseModel, PrivateAttr
 class BasicSecurity(BaseModel):
     """Basic Security Scheme with username and password"""
 
-    credentials: str
     http_header_name: str = "Authorization"
 
     _credentials: str = PrivateAttr()
 
     def __init__(self, username: str, password: str, use_base64: bool = True):
+        super().__init__()
         credentials = f"{username}:{password}"
         if use_base64:
             credentials = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
