@@ -8,7 +8,8 @@ import os
 import secrets
 import string
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Any
 
 from pydantic import BaseModel, PrivateAttr
 
@@ -180,96 +181,191 @@ try:
 except ImportError:
     pass
 
+try:
+    import argon2
 
-class APIKeySecurity(Security):
-    """
-    An API key based security scheme.
+    class APIKeyRecord(BaseModel):
+        name: str
+        id: str
+        apikey_hash: str
+        description: str
+        created_at: str
+        expiry_at: str
+        hasher: str = "argon2"
 
-    The request must supply an authorization header in of the following formats:
-
-    - `X-API-Key: apikey`
-
-    """
-
-    allowed_characters: str
-    size: int = 16
-    id_size: int = 5
-    name: str
-
-    _ph: argon2.PasswordHasher = PrivateAttr()
-
-    def __init__(
-        self,
-        name: str,
-        size: int = 16,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            name=name or f"api-key-{uuid_hex()}",
-            size=size,
-            id_size=kwargs.get("id_size", 5),
-            allowed_characters=kwargs.get("allowed_characters", string.ascii_letters + string.digits + "_"),
-        )
-        self._ph = argon2.PasswordHasher()
-
-    @classmethod
-    def create(self, validity_period_minutes: int | None = None) -> str:
-        """Create a new API key
-
-        Returns
-        -------
-        str
-            The generated API key
+    class APIKeySecurity(Security):
         """
-        id = "".join(secrets.choice(self.allowed_characters) for _ in range(self.id_size))
-        secret = "".join(secrets.choice(self.allowed_characters) for _ in range(self.size))
-        return f"wotpat-{id}.{secret}"
+        An API key based security scheme.
 
-    @classmethod
-    def hash(self, api_key: str) -> str:
-        """Create a hash of the API key for storage
+        Use API keys in place of username-password combinations when there is a requirement to keep track of different
+        clients and expire their keys after a definite period. More features will be added in future.
 
-        Returns
-        -------
-        str
-            The hashed API key
+        Before your application uses the API key, you need to create and store an API key using the `create()` method,
+        otherwise a `ValueError` will be raised when validating. This may be outside the scope of your application code.
+
+        Once created, create a new instance of this class and pass it to your server (currently only HTTP server).
+
+        Secrets are stored under the `global_config.TEMP_DIR` under a `secrets` directory in a JSON file.
+
+        The request must supply an authorization header in the format: `X-API-Key: <apikey>`
+
         """
-        return self._ph.hash(api_key)
 
-    @classmethod
-    def save(
-        self,
-        apikey: str,
-        description: str = "API Key for WoT applications",
-        filename: str = "apikeys.json",
-    ) -> None:
-        """
-        Save the security scheme to persistent storage
+        name: str
+        file: str
+        prehashed_apikey: str | None = None
+        prehashed_apikey_id: str | None = None
+        prehashed_apikey_expiry: datetime | None = None
 
-        This is a placeholder method and should be implemented to save the security scheme
-        to a database or file as needed.
-        """
-        data = dict(
-            name=self.name,
-            apikey=apikey,
-            created_at=datetime.now().isoformat(),
-            description=description,
-            id=apikey.split("-")[1].split(".")[0],
-        )
-        with open(os.path.join(global_config.TEMP_DIR_SECRETS, filename), "w") as f:
-            json.dump(data, f, indent=4)
+        _ph: argon2.PasswordHasher = PrivateAttr()
 
-    def validate_input(self, apikey: str) -> bool:
-        """
-        Validate an API key against a stored hash
+        def __init__(self, name: str, file: str = "apikeys.json", hasher: Any = None) -> None:
+            """
+            Parameters
+            ----------
+            name: str
+                The unique name for the security scheme found in the storage file
+            file: str
+                The file to load/store the API keys, defaults to 'apikeys.json' in the default secrets directory.
+                You need to overload both `global_config.TEMP_DIR` and this filename to use a different location.
+            """
+            super().__init__(name=name, file=os.path.join(global_config.TEMP_DIR_SECRETS, file))
+            self._ph = hasher or argon2.PasswordHasher()
+            self.load()
 
-        Returns
-        -------
-        bool
-            True if the API key is valid, False otherwise
-        """
-        try:
-            prehashed_apikey = ""
-            return self._ph.verify(prehashed_apikey, apikey)
-        except argon2.exceptions.VerifyMismatchError:
-            return False
+        def create(
+            self,
+            size: int = 24,
+            id_size: int = 5,
+            validity_period_minutes: int = 30 * 24 * 60,
+            description: str = "API Key for WoT applications",
+            file: str = "apikeys.json",
+            allowed_characters: str = string.ascii_letters + string.digits + "_",
+            prefix: str = "wotdat",
+            print_value: bool = True,
+            override: bool = False,
+        ) -> str:
+            """
+            Create a new API key. Use this method to generate and store a new API key before running your application.
+            The validity period, specified in minutes (default 30 days), is stored as validation metadata and not a part
+            of the key itself.
+
+            The format of the key is `<prefix>-<id>.<secret>`, where both id and secret are randomly generated strings.
+
+            Parameters
+            ----------
+            size: int
+                The size of the secret part of the API key, defaults to 16
+            id_size: int
+                The size of the ID part of the API key, defaults to 5
+            validity_period_minutes: int
+                The validity period of the API key in minutes, defaults to 30 days
+            description: str
+                A human readable description to indicate the purpose of the API key
+            file: str
+                The file to load/store the API keys, defaults to 'apikeys.json' in the default secrets directory.
+                You need to overload both `global_config.TEMP_DIR` and this filename to use a different location.
+            allowed_characters: str
+                The characters to use for generating the API key, defaults to alphanumeric characters and underscore
+            prefix: str
+                The prefix for the API key, defaults to "wotdat"
+            print_value: bool
+                Whether to print the generated API key to the console once generated, defaults to `True`
+            override: bool
+                Whether to override an existing API key with the same name, defaults to `False`
+
+            Returns
+            -------
+            str
+                The generated API key
+            """
+            id = "".join(secrets.choice(allowed_characters) for _ in range(id_size))
+            secret = "".join(secrets.choice(allowed_characters) for _ in range(size))
+            apikey = f"{prefix}-{id}.{secret}"
+            hash = self.hash(apikey)
+            record = APIKeyRecord(
+                name=self.name,
+                id=id,
+                apikey_hash=hash,
+                description=description,
+                created_at=datetime.now().isoformat(),
+                expiry_at=(datetime.now() + timedelta(minutes=validity_period_minutes)).isoformat(),
+                hasher="argon2",  # currently only argon2 is supported
+            )
+            self.save(record=record, filename=file, override=override)
+            if print_value:
+                print(
+                    f"API key created and saved successfully, your key is: {apikey}, "
+                    + "please store it securely as it cannot be retrieved later."
+                )
+            return apikey
+
+        def hash(self, apikey: str) -> str:
+            """
+            Create a hash of the API key for storage
+
+            Returns
+            -------
+            str
+                The hashed API key
+            """
+            return self._ph.hash(apikey)
+
+        def save(self, record: APIKeyRecord, filename: str = "apikeys.json", override: bool = False) -> None:
+            """
+            Save the security scheme to persistent storage
+
+            This is a placeholder method and should be implemented to save the security scheme
+            to a database or file as needed.
+            """
+            filepath = os.path.join(global_config.TEMP_DIR_SECRETS, filename)
+            existing_data = {}
+            if os.path.exists(filepath):
+                with open(filepath, "r") as file:
+                    existing_data = json.load(file)
+            if not override and existing_data.get(self.name, None):
+                raise ValueError(f"API key with name '{self.name}' already exists, use override=True to overwrite")
+            existing_data[self.name] = record.model_dump()
+            with open(filepath, "w") as file:
+                json.dump(existing_data, file, indent=4)
+
+        def load(self) -> None:
+            """load the security scheme data from persistent storage"""
+            if not os.path.exists(self.file):
+                return
+            with open(self.file, "r") as file:
+                data = json.load(file)
+                if not isinstance(data, dict):
+                    raise ValueError("Invalid API key storage format, expected a dictionary")
+                if not data.get(self.name, None):
+                    return
+                self.prehashed_apikey_id = data[self.name]["id"]
+                self.prehashed_apikey = data[self.name]["apikey_hash"]
+                self.prehashed_apikey_expiry = datetime.fromisoformat(data[self.name]["expiry_at"])
+
+        def validate_input(self, apikey: str) -> bool:
+            """
+            Validate an API key against a stored hash. API key ID, expiry and hash are all validated.
+
+            Returns
+            -------
+            bool
+                True if the API key is valid, False otherwise
+            """
+            if any(v is None for v in [self.prehashed_apikey, self.prehashed_apikey_id, self.prehashed_apikey_expiry]):
+                raise ValueError("No API key loaded for validation")
+            try:
+                id = apikey.split(".", 1)[0].split("-", 1)[1]
+                if self.prehashed_apikey_id != id:
+                    return False
+            except IndexError:
+                return False
+            if datetime.now() > self.prehashed_apikey_expiry:
+                return False
+            try:
+                return self._ph.verify(self.prehashed_apikey, apikey)
+            except argon2.exceptions.VerifyMismatchError:
+                return False
+
+except ImportError:
+    pass
