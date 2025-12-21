@@ -215,7 +215,7 @@ class ClientFactory:
                 The timeout for establishing a HTTP connection (in seconds)
             - `request_timeout`: `float`, optional, default `60.0`.
                 The timeout for completing a HTTP request (in seconds)
-            - `security`: `BasicSecurity`, optional.
+            - `security`: `BasicSecurity` | `APIKeySecurity`, optional.
                 The security scheme to use for authentication
             - `username`: `str`, optional.
                 The username for HTTP Basic Authentication
