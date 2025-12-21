@@ -61,7 +61,7 @@ try:
             expect_base64: bool
                 Whether to expect base64 encoded credentials in the authorization header. Default is True.
             name: str
-                An optional unique name for the security scheme
+                An optional unique name for the security scheme that will be used in TD security definitions.
             """
             super().__init__(
                 username=username,
@@ -133,6 +133,18 @@ try:
         _ph: argon2.PasswordHasher | None = PrivateAttr(default=None)
 
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
+            """
+            Parameters
+            ----------
+            username: str
+                username
+            password: str
+                password
+            expect_base64: bool
+                Whether to expect base64 encoded credentials in the authorization header. Default is True.
+            name: str
+                An optional unique name for the security scheme that will be used in TD security definitions.
+            """
             super().__init__(
                 username=username,
                 expect_base64=expect_base64,
@@ -216,12 +228,11 @@ try:
         Before your application uses the API key, you need to create and store an API key using the `create()` method,
         otherwise a `ValueError` will be raised when validating. This may be outside the scope of your application code.
 
-        Once created, create a new instance of this class and pass it to your server (currently only HTTP server).
+        Once created, instantiate this class once again with the name and pass it to your server (currently only HTTP server).
 
         Secrets are stored under the `global_config.TEMP_DIR` under a `secrets` directory in a JSON file.
 
-        The request must supply an authorization header in the format: `X-API-Key: <apikey>`
-
+        The request must supply an authorization header in the format: `X-API-Key: <value>`
         """
 
         name: str
@@ -235,7 +246,7 @@ try:
             Parameters
             ----------
             name: str
-                The unique name for the security scheme found in the storage file
+                The unique name for the security scheme found in the storage file & in TD security definitions
             file: str
                 The file to load/store the API keys, defaults to 'apikeys.json' in the default secrets directory.
                 You need to overload both `global_config.TEMP_DIR` and this filename to use a different location.
@@ -267,7 +278,7 @@ try:
             Parameters
             ----------
             size: int
-                The size of the secret part of the API key, defaults to 16
+                The size of the secret part of the API key, defaults to 24
             id_size: int
                 The size of the ID part of the API key, defaults to 5
             validity_period_minutes: int

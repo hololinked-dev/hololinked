@@ -514,7 +514,7 @@ def test_08_apikey_security_end_to_end(session: requests.Session, port: int):
                     },
                 ],
             )
-        for method, path, body in endpoints:
+        for method, path, body in endpoints:  # test key expiration
             security_scheme.record.expiry_at = datetime.datetime.fromisoformat("2000-01-01T00:00:00")
             do_a_path_invalid_auth_e2e(
                 session,
@@ -556,7 +556,7 @@ def test_09_sse(
 ) -> None:
     """Test Server-Sent Events (SSE)"""
     if hasattr(security_scheme, "load"):
-        security_scheme.load()
+        security_scheme.load()  # TODO refactor later, we should not do fixture based specific setup here
     with running_thing(
         id_prefix="test-sse",
         port=port,
@@ -640,7 +640,7 @@ def test_13_object_proxy_with_apikey(port: int) -> None:
         td_endpoint = f"{hostname_prefix}:{port}/{thing.id}/resources/wot-td"
         object_proxy = ClientFactory.http(
             url=td_endpoint,
-            security=ClientAPIKeySecurity(apikey=apikey),
+            security=ClientAPIKeySecurity(value=apikey),
         )
         assert len(object_proxy.td["security"]) > 0
         assert security_scheme.name in object_proxy.td["security"]

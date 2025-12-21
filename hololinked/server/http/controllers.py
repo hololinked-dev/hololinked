@@ -146,7 +146,7 @@ class BaseHandler(RequestHandler):
                     if authenticated:
                         return True
         # 2. API Key Authentication
-        apikey = self.request.headers.get("X-API-Key", None)
+        apikey = self.request.headers.get("X-API-Key", None)  # type: str
         if apikey:
             for security_scheme in self.security_schemes:
                 if isinstance(security_scheme, APIKeySecurity):

@@ -25,9 +25,9 @@ class BasicSecurity(BaseModel):
 class APIKeySecurity(BaseModel):
     """API Key Security Scheme"""
 
-    apikey: str
+    value: str
     http_header_name: str = "X-API-Key"
 
     @property
     def http_header(self) -> str:
-        return self.apikey
+        return self.value
