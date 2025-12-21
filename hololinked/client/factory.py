@@ -278,8 +278,8 @@ class ClientFactory:
         password = kwargs.pop("password", None)
         if not security and username and password:
             security = BasicSecurity(username=username, password=password)
-        if isinstance(security, BasicSecurity):
-            headers["Authorization"] = security.http_header
+        if security:
+            headers[security.http_header_name] = security.http_header
 
         response = req_rep_sync_client.get(url, headers=headers)  # type: httpx.Response
         response.raise_for_status()
