@@ -49,7 +49,7 @@ class RuntimeConfig(BaseModel):
     thing_repository: Any = thing_repository  # type: dict[str, BrokerThing]
     """repository layer thing model to be used by the HTTP server and handlers"""
 
-    allowed_clients: list[str] | None = Field(default_factory=list, default=None)
+    allowed_clients: list[str] | None = Field(default=None)
     """
     Serves request and sets CORS only from these clients, other clients are rejected with 401. 
     Unlike pure CORS, the server resource is not even executed if the client is not 
@@ -57,7 +57,7 @@ class RuntimeConfig(BaseModel):
     and more useful in private networks when the remote origin is known.
     """
 
-    security_schemes: list[Security] | None = Field(default_factory=list, default=None)
+    security_schemes: list[Security] | None = Field(default=None)
     """
     List of security schemes to be used by the server, 
     it is sufficient that one scheme passes for a request to be authorized.

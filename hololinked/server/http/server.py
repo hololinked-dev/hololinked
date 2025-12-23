@@ -542,6 +542,7 @@ class ApplicationRouter:
             action=get_thing_description_action,
             http_method=("GET",),
             handler=self.server.config.thing_description_handler,
+            owner_inst=self.server,
         )
 
         # RW multiple properties handler

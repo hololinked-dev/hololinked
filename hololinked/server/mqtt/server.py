@@ -9,8 +9,8 @@ from ...core import Thing as CoreThing
 from ...param.parameters import ClassSelector, String
 from ...td.interaction_affordance import EventAffordance, PropertyAffordance
 from ...utils import get_current_async_loop
+from ..repository import thing_repository
 from ..server import BaseProtocolServer
-from ..thing import thing_repository
 from .config import RuntimeConfig
 from .controllers import ThingDescriptionPublisher, TopicPublisher
 from .services import ThingDescriptionService

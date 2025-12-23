@@ -15,6 +15,7 @@ from ...td import (
     PropertyAffordance,
 )
 from ...td.forms import Form
+from ..repository import BrokerThing  # noqa: F401
 
 
 try:
@@ -48,7 +49,7 @@ class ThingDescriptionService:
         self.resource = resource  # type: InteractionAffordance
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
-        self.thing = self.config.thing_repository[self.resource.thing_id]
+        self.thing = self.config.thing_repository[self.resource.thing_id]  # type: BrokerThing
         self.server = server  # type: HTTPServer
 
     async def generate(
@@ -258,7 +259,7 @@ class ThingDescriptionService:
 
         TD["securityDefinitions"] = dict()
 
-        if not self.server.security_schemes:
+        if not self.server.config.security_schemes:
             nosec = NoSecurityScheme()
             nosec.build()
             TD["security"] = ["nosec"]
@@ -266,7 +267,7 @@ class ThingDescriptionService:
             return
 
         TD["security"] = []
-        for scheme in self.server.security_schemes:
+        for scheme in self.server.config.security_schemes:
             if isinstance(scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
                 sec = BasicSecurityScheme()
                 sec.build()

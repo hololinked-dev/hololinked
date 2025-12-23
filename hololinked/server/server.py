@@ -23,7 +23,7 @@ from ..utils import (
     get_current_async_loop,
     uuid_hex,
 )
-from .thing import (
+from .repository import (
     BrokerThing,
     consume_broker_pubsub,
     consume_broker_queue,
