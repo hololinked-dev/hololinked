@@ -71,7 +71,6 @@ class BaseHandler(RequestHandler):
         metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
         """
-        from . import HTTPServer  # noqa: F401
         from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
 
         self.resource = resource  # type: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
