@@ -21,7 +21,7 @@ from ...core.thing import Thing, ThingMeta
 from ...core.zmq.brokers import MessageMappedZMQClientPool
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
-from ...param.parameters import ClassSelector, IPAddress, TypedList
+from ...param.parameters import ClassSelector, IPAddress
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...utils import (
     get_current_async_loop,
@@ -29,9 +29,9 @@ from ...utils import (
     pep8_to_dashed_name,
     run_callable_somehow,
 )
+from ..repository import thing_repository
 from ..security import Security
 from ..server import BaseProtocolServer
-from ..thing import Thing as ThingRepository
 from .config import HandlerMetadata, RuntimeConfig
 from .controllers import (
     ActionHandler,
@@ -63,24 +63,6 @@ class HTTPServer(BaseProtocolServer):
         allow_None=True,
     )  # type: ssl.SSLContext | None
     """SSL context to provide encrypted communication"""
-
-    allowed_clients = TypedList(item_type=str)
-    """
-    Serves request and sets CORS only from these clients, other clients are rejected with 401. 
-    Unlike pure CORS, the server resource is not even executed if the client is not 
-    an allowed client. if None, any client is served. Not inherently a safety feature in public networks, 
-    and more useful in private networks when the remote origin is known.
-    """
-
-    security_schemes = TypedList(
-        default=None,
-        allow_None=True,
-        item_type=Security,
-    )  # type: list[Security] | None
-    """
-    List of security schemes to be used by the server, 
-    it is sufficient that one scheme passes for a request to be authorized.
-    """
 
     config = ClassSelector(
         class_=RuntimeConfig,
@@ -146,7 +128,9 @@ class HTTPServer(BaseProtocolServer):
             readiness_probe_handler=kwargs.get("readiness_handler", ReadinessProbeHandler),
             stop_handler=kwargs.get("stop_handler", StopHandler),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            thing_repository=kwargs.get("thing_repository", ThingRepository),
+            thing_repository=kwargs.get("thing_repository", thing_repository),
+            allowed_clients=allowed_clients,
+            security_schemes=security_schemes,
         )
         default_config.update(config or dict())
         config = RuntimeConfig(**default_config)
@@ -169,9 +153,21 @@ class HTTPServer(BaseProtocolServer):
         self.tornado_instance = None
         self.app = Application(
             handlers=[
-                (r"/stop", self.config.stop_handler, dict(owner_inst=self)),
-                (r"/liveness", self.config.liveness_probe_handler, dict(owner_inst=self)),
-                (r"/readiness", self.config.readiness_probe_handler, dict(owner_inst=self)),
+                (
+                    r"/stop",
+                    self.config.stop_handler,
+                    dict(config=self.config, logger=self.logger, owner_inst=self),
+                ),
+                (
+                    r"/liveness",
+                    self.config.liveness_probe_handler,
+                    dict(config=self.config, logger=self.logger, owner_inst=self),
+                ),
+                (
+                    r"/readiness",
+                    self.config.readiness_probe_handler,
+                    dict(config=self.config, logger=self.logger, owner_inst=self),
+                ),
             ]
         )
         self.router = ApplicationRouter(self.app, self)
@@ -304,7 +300,8 @@ class HTTPServer(BaseProtocolServer):
         if delete_http_method and delete_http_method != "DELETE":
             raise ValueError("delete method should be DELETE")
         kwargs["resource"] = property
-        kwargs["owner_inst"] = self
+        kwargs["logger"] = self.logger
+        kwargs["config"] = self.config
         kwargs["metadata"] = HandlerMetadata(http_methods=http_methods)
         self.router.add_rule(affordance=property, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
@@ -340,7 +337,8 @@ class HTTPServer(BaseProtocolServer):
         if isinstance(action, Action):
             action = action.to_affordance()  # type: ActionAffordance
         kwargs["resource"] = action
-        kwargs["owner_inst"] = self
+        kwargs["config"] = self.config
+        kwargs["logger"] = self.logger
         kwargs["metadata"] = HandlerMetadata(http_methods=http_methods)
         self.router.add_rule(affordance=action, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
@@ -374,7 +372,9 @@ class HTTPServer(BaseProtocolServer):
         if isinstance(event, Event):
             event = event.to_affordance()
         kwargs["resource"] = event
-        kwargs["owner_inst"] = self
+        kwargs["config"] = self.config
+        kwargs["logger"] = self.logger
+        kwargs["metadata"] = HandlerMetadata(http_methods=("GET",))
         self.router.add_rule(affordance=event, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_thing(self, thing: Thing) -> None:

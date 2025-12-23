@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 import msgspec
+import structlog
 
 from msgspec import DecodeError as MsgspecJSONDecodeError
 from tornado.iostream import StreamClosedError
@@ -25,6 +26,7 @@ from ...td import (
     PropertyAffordance,
 )
 from ...utils import format_exception_as_json, get_current_async_loop
+from ..repository import BrokerThing  # noqa: F401
 
 
 try:
@@ -54,7 +56,8 @@ class BaseHandler(RequestHandler):
     def initialize(
         self,
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
-        owner_inst: Any = None,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
         """
@@ -68,15 +71,12 @@ class BaseHandler(RequestHandler):
         metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
         """
-        from ..thing import thing_repository
         from . import HTTPServer  # noqa: F401
         from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
 
         self.resource = resource  # type: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
-        self.thing = thing_repository[self.resource.thing_id]
-        self.server = owner_inst  # type: HTTPServer
-        self.config = self.server.config  # type: RuntimeConfig
-        self.logger = self.server.logger.bind(
+        self.config = config  # type: RuntimeConfig
+        self.logger = logger.bind(
             resource=resource.name,
             what=resource.what,
             thing_id=resource.thing_id,
@@ -84,8 +84,9 @@ class BaseHandler(RequestHandler):
             layer="controller",
             impl=self.__class__.__name__,
         )
-        self.allowed_clients = self.server.allowed_clients
-        self.security_schemes = self.server.security_schemes
+        self.thing = self.config.thing_repository[self.resource.thing_id]  # type: BrokerThing
+        self.allowed_clients = self.config.allowed_clients
+        self.security_schemes = self.config.security_schemes
         self.metadata = metadata or HandlerMetadata()  # type: HandlerMetadata
 
     @property
@@ -499,13 +500,14 @@ class RWMultiplePropertiesHandler(ActionHandler):
     def initialize(
         self,
         resource: ActionAffordance,
-        owner_inst: Any = None,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
         **kwargs,
     ) -> None:
         self.read_properties_resource = kwargs.get("read_properties_resource", None)
         self.write_properties_resource = kwargs.get("write_properties_resource", None)
-        return super().initialize(resource, owner_inst, metadata)
+        return super().initialize(resource, config, logger, metadata)
 
     async def get(self) -> None:
         if self.is_method_allowed("GET"):
@@ -543,10 +545,11 @@ class EventHandler(BaseHandler):
     def initialize(
         self,
         resource: InteractionAffordance | EventAffordance,
-        owner_inst: Any = None,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
-        super().initialize(resource, owner_inst, metadata)
+        super().initialize(resource, config, logger, metadata)
         self.data_header = b"data: %s\n\n"
 
     def set_custom_default_headers(self) -> None:
@@ -624,10 +627,11 @@ class JPEGImageEventHandler(EventHandler):
     def initialize(
         self,
         resource: InteractionAffordance | EventAffordance,
-        owner_inst: Any = None,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
-        super().initialize(resource, owner_inst, metadata)
+        super().initialize(resource, config, logger, metadata)
         self.data_header = b"data:image/jpeg;base64,%s\n\n"
 
 
@@ -637,25 +641,31 @@ class PNGImageEventHandler(EventHandler):
     def initialize(
         self,
         resource: InteractionAffordance | EventAffordance,
-        owner_inst: Any = None,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
-        super().initialize(resource, owner_inst, metadata)
+        super().initialize(resource, config, logger, metadata)
         self.data_header = b"data:image/png;base64,%s\n\n"
 
 
 class StopHandler(BaseHandler):
     """Stops the tornado HTTP server"""
 
-    def initialize(self, owner_inst: Any = None) -> None:
+    def initialize(
+        self,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
+        owner_inst: Any,
+    ) -> None:
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
 
+        self.config = config  # type: RuntimeConfig
+        self.logger = logger.bind(path=self.request.path)
+        self.allowed_clients = self.config.allowed_clients
+        self.security_schemes = self.config.security_schemes
         self.server = owner_inst  # type: HTTPServer
-        self.config = self.server.config  # type: RuntimeConfig
-        self.allowed_clients = self.server.allowed_clients
-        self.security_schemes = self.server.security_schemes
-        self.logger = self.server.logger.bind(path=self.request.path)
 
     async def post(self):
         if not self.has_access_control:
@@ -679,13 +689,18 @@ class StopHandler(BaseHandler):
 class LivenessProbeHandler(BaseHandler):
     """Liveness probe handler"""
 
-    def initialize(self, owner_inst: Any = None) -> None:
+    def initialize(
+        self,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
+        owner_inst: Any = None,
+    ) -> None:
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
 
+        self.config = config  # type: RuntimeConfig
+        self.logger = logger.bind(path=self.request.path)
         self.server = owner_inst  # type: HTTPServer
-        self.config = self.server.config  # type: RuntimeConfig
-        self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):
         self.set_status(200, "ok")
@@ -694,13 +709,20 @@ class LivenessProbeHandler(BaseHandler):
 
 
 class ReadinessProbeHandler(BaseHandler):
-    def initialize(self, owner_inst: Any = None) -> None:
+    """Readiness probe handler"""
+
+    def initialize(
+        self,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
+        owner_inst: Any = None,
+    ) -> None:
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
 
+        self.config = config  # type: RuntimeConfig
+        self.logger = logger.bind(path=self.request.path)
         self.server = owner_inst  # type: HTTPServer
-        self.config = self.server.config  # type: RuntimeConfig
-        self.logger = self.server.logger.bind(path=self.request.path)
 
     async def get(self):
         self.set_custom_default_headers()
@@ -728,11 +750,23 @@ class ThingDescriptionHandler(BaseHandler):
     def initialize(
         self,
         resource: InteractionAffordance | PropertyAffordance,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
         owner_inst: Any = None,
         metadata: Any = None,
     ) -> None:
-        super().initialize(resource, owner_inst, metadata)
-        self.thing_description = self.server.config.thing_description_service(resource, owner_inst)
+        super().initialize(
+            resource=resource,
+            config=config,
+            logger=logger,
+            metadata=metadata,
+        )
+        self.thing_description = self.config.thing_description_service(
+            resource=resource,
+            config=config,
+            logger=logger,
+            server=owner_inst,
+        )
 
     async def get(self):
         if not self.has_access_control:

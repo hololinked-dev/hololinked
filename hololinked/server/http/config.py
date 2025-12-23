@@ -1,6 +1,9 @@
-from pydantic import BaseModel
+from typing import Any
 
-from ..thing import Thing
+from pydantic import BaseModel, Field
+
+from ..repository import BrokerThing, thing_repository  # noqa: F401
+from ..security import Security
 from .controllers import (
     ActionHandler,
     EventHandler,
@@ -40,10 +43,25 @@ class RuntimeConfig(BaseModel):
     stop_handler: type[StopHandler] = StopHandler
     """handler class to be used for stop server"""
 
-    thing_repository: type[Thing] = Thing
-    """repository layer thing model to be used by the HTTP server and handlers"""
     thing_description_service: type[ThingDescriptionService] = ThingDescriptionService
     """service class to be used for generating thing description"""
+
+    thing_repository: Any = thing_repository  # type: dict[str, BrokerThing]
+    """repository layer thing model to be used by the HTTP server and handlers"""
+
+    allowed_clients: list[str] | None = Field(default_factory=list, default=None)
+    """
+    Serves request and sets CORS only from these clients, other clients are rejected with 401. 
+    Unlike pure CORS, the server resource is not even executed if the client is not 
+    an allowed client. if None, any client is served. Not inherently a safety feature in public networks, 
+    and more useful in private networks when the remote origin is known.
+    """
+
+    security_schemes: list[Security] | None = Field(default_factory=list, default=None)
+    """
+    List of security schemes to be used by the server, 
+    it is sufficient that one scheme passes for a request to be authorized.
+    """
 
 
 class HandlerMetadata(BaseModel):

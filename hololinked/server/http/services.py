@@ -2,6 +2,8 @@ import copy
 
 from typing import Any
 
+import structlog
+
 from ...constants import JSONSerializable, Operations
 from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
 from ...serializers import Serializers
@@ -33,14 +35,21 @@ __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 class ThingDescriptionService:
     """Service layer to generate HTTP TD"""
 
-    def __init__(self, resource: InteractionAffordance, server: Any) -> None:
-        from ..thing import thing_repository
+    def __init__(
+        self,
+        resource: InteractionAffordance,
+        logger: structlog.stdlib.BoundLogger,
+        config: Any,
+        server: Any,
+    ) -> None:
         from . import HTTPServer  # noqa: F401
+        from .config import RuntimeConfig  # noqa: F401
 
         self.resource = resource  # type: InteractionAffordance
-        self.thing = thing_repository[self.resource.thing_id]
+        self.config = config  # type: RuntimeConfig
+        self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
+        self.thing = self.config.thing_repository[self.resource.thing_id]
         self.server = server  # type: HTTPServer
-        self.logger = self.server.logger.bind(layer="service", impl=self.__class__.__name__)
 
     async def generate(
         self,
