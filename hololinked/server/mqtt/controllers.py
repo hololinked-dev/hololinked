@@ -6,6 +6,7 @@ import structlog
 from ...core.zmq.message import EventMessage  # noqa: F401
 from ...serializers import Serializers
 from ...td import EventAffordance, PropertyAffordance
+from ..repository import BrokerThing  # noqa: F401
 
 
 class TopicPublisher:
@@ -15,8 +16,8 @@ class TopicPublisher:
         self,
         client: aiomqtt.Client,
         resource: EventAffordance | PropertyAffordance,
-        logger: structlog.stdlib.BoundLogger,
         config: Any,
+        logger: structlog.stdlib.BoundLogger,
     ) -> None:
         from .config import RuntimeConfig  # noqa: F401
 
@@ -25,7 +26,7 @@ class TopicPublisher:
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="controller", impl=self.__class__.__name__, topic=self.topic)
-        self.thing = self.config.thing_repository[resource.thing_id]
+        self.thing = self.config.thing_repository[resource.thing_id]  # type: BrokerThing
         self.qos = self.config.qos
         self._stop_publishing = False
 
@@ -68,9 +69,9 @@ class ThingDescriptionPublisher:
     def __init__(
         self,
         client: aiomqtt.Client,
+        config: Any,
         logger: structlog.stdlib.BoundLogger,
         ZMQ_TD: dict[str, Any],
-        config: Any,
     ) -> None:
         from .config import RuntimeConfig  # noqa: F401
 

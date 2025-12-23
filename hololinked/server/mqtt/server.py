@@ -40,6 +40,7 @@ class MQTTPublisher(BaseProtocolServer):
         port: int,
         username: str,
         password: str,
+        qos: int = 1,
         things: Optional[list[CoreThing]] = None,
         config: Optional[dict] = None,
         **kwargs,
@@ -65,7 +66,7 @@ class MQTTPublisher(BaseProtocolServer):
             thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
             thing_repository=kwargs.get("thing_repository", thing_repository),
-            qos=kwargs.get("qos", 1),
+            qos=qos,
         )
         default_config.update(config or dict())
         config = RuntimeConfig(**default_config)
