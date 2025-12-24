@@ -27,18 +27,12 @@ from ...td import (
 )
 from ...utils import format_exception_as_json, get_current_async_loop
 from ..repository import BrokerThing  # noqa: F401
-
-
-try:
-    from ..security import BcryptBasicSecurity
-except ImportError:
-    BcryptBasicSecurity = None
-
-try:
-    from ..security import APIKeySecurity, Argon2BasicSecurity
-except ImportError:
-    Argon2BasicSecurity = None
-    APIKeySecurity = None
+from ..security import (
+    APIKeySecurity,
+    Argon2BasicSecurity,
+    BcryptBasicSecurity,
+    KeycloakOAuth2Security,
+)
 
 
 class LocalExecutionContext(msgspec.Struct):
@@ -85,8 +79,7 @@ class BaseHandler(RequestHandler):
         self.security_schemes = self.config.security_schemes
         self.metadata = metadata or HandlerMetadata()  # type: HandlerMetadata
 
-    @property
-    def has_access_control(self) -> bool:
+    async def has_access_control(self) -> bool:
         """
         Checks if a client is an allowed client and enforces security schemes.
         Custom web request handlers can use this property to check if a client has access control on the server or `Thing`
@@ -108,15 +101,14 @@ class BaseHandler(RequestHandler):
         if not self.security_schemes:
             self.logger.debug("no security schemes defined, allowing access")
             return True
-        if self.is_authenticated:
+        if await self.is_authenticated():
             self.logger.info("client authenticated successfully")
             return True
         self.set_status(401, "Unauthorized")
         self.logger.info("client authentication failed or is not authorized to proceed")
         return False  # keep False always at the end
 
-    @property
-    def is_authenticated(self) -> bool:
+    async def is_authenticated(self) -> bool:
         """enforces authentication using the defined security schemes, freshly computed everytime"""
         authenticated = False
         # 1. Basic Authentication
@@ -155,6 +147,22 @@ class BaseHandler(RequestHandler):
                         authenticated = security_scheme.validate_input(apikey)
                     except Exception as ex:
                         self.logger.error(f"error while authenticating client with API key - {str(ex)}")
+                    if authenticated:
+                        return True
+        # 3. Keycloak JWT
+        if authorization_header and "bearer " in authorization_header.lower():
+            for security_scheme in self.security_schemes:
+                if isinstance(security_scheme, KeycloakOAuth2Security):
+                    try:
+                        self.logger.info(
+                            "authenticating client with Keycloak JWT",
+                            origin=self.request.headers.get("Origin"),
+                            security_scheme=security_scheme.__class__.__name__,
+                        )
+                        jwt = authorization_header.split(maxsplit=1)[1]
+                        authenticated = await security_scheme.async_validate_input(jwt)
+                    except Exception as ex:
+                        self.logger.error(f"error while authenticating client with Keycloak JWT - {str(ex)}")
                     if authenticated:
                         return True
         return authenticated
@@ -321,7 +329,7 @@ class RPCHandler(BaseHandler):
 
     # Merges both Controller and Service layer in layered architecture. Repository layer is used directly.
 
-    def is_method_allowed(self, method: str) -> bool:
+    async def is_method_allowed(self, method: str) -> bool:
         """
         Checks if the method is allowed for the property:
 
@@ -329,7 +337,7 @@ class RPCHandler(BaseHandler):
         - if the HTTP method is allowed for the resource.
         - if its GET method with message id for no-block response.
         """
-        if not self.has_access_control:
+        if not await self.has_access_control():
             return False
         if self.message_id is not None and method.upper() == "GET":
             return True
@@ -343,7 +351,7 @@ class RPCHandler(BaseHandler):
         Options for the resource. Main functionality is to inform the client is a specific HTTP method is supported by
         the property or the action (Access-Control-Allow-Methods).
         """
-        if self.has_access_control:
+        if await self.has_access_control():
             self.set_status(204)
             self.set_custom_default_headers()
             self.set_access_control_allow_headers()
@@ -458,7 +466,7 @@ class PropertyHandler(RPCHandler):
     """handles property requests"""
 
     async def get(self) -> None:
-        if self.is_method_allowed("GET"):
+        if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             if self.message_id is not None:
                 await self.handle_no_block_response()
@@ -467,19 +475,19 @@ class PropertyHandler(RPCHandler):
         self.finish()
 
     async def post(self) -> None:
-        if self.is_method_allowed("POST"):
+        if await self.is_method_allowed("POST"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def put(self) -> None:
-        if self.is_method_allowed("PUT"):
+        if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def delete(self) -> None:
-        if self.is_method_allowed("DELETE"):
+        if await self.is_method_allowed("DELETE"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.deleteproperty)
         self.finish()
@@ -489,7 +497,7 @@ class ActionHandler(RPCHandler):
     """handles action requests"""
 
     async def get(self) -> None:
-        if self.is_method_allowed("GET"):
+        if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             if self.message_id is not None:
                 await self.handle_no_block_response()
@@ -498,19 +506,19 @@ class ActionHandler(RPCHandler):
         self.finish()
 
     async def post(self) -> None:
-        if self.is_method_allowed("POST"):
+        if await self.is_method_allowed("POST"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def put(self) -> None:
-        if self.is_method_allowed("PUT"):
+        if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def delete(self) -> None:
-        if self.is_method_allowed("DELETE"):
+        if await self.is_method_allowed("DELETE"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
@@ -532,7 +540,7 @@ class RWMultiplePropertiesHandler(ActionHandler):
         return super().initialize(resource, config, logger, metadata)
 
     async def get(self) -> None:
-        if self.is_method_allowed("GET"):
+        if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             self.resource = self.read_properties_resource
             if self.message_id is not None:
@@ -542,19 +550,19 @@ class RWMultiplePropertiesHandler(ActionHandler):
         self.finish()
 
     async def post(self) -> None:
-        if self.is_method_allowed("POST"):
+        if await self.is_method_allowed("POST"):
             self.set_status(405, "method not allowed, PUT instead")
         self.finish()
 
     async def put(self) -> None:
-        if self.is_method_allowed("PUT"):
+        if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             self.resource = self.write_properties_resource
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def patch(self) -> None:
-        if self.is_method_allowed("PATCH"):
+        if await self.is_method_allowed("PATCH"):
             self.set_custom_default_headers()
             self.resource = self.write_properties_resource
             await self.handle_through_thing(Operations.invokeaction)
@@ -593,14 +601,14 @@ class EventHandler(BaseHandler):
 
     async def get(self):
         """events are support only with GET method"""
-        if self.has_access_control:
+        if await self.has_access_control():
             self.set_custom_default_headers()
             await self.handle_datastream()
         self.finish()
 
     async def options(self):
         """options for the resource"""
-        if self.has_access_control:
+        if await self.has_access_control():
             self.set_status(204)
             self.set_custom_default_headers()
             self.set_access_control_allow_headers()
@@ -686,7 +694,7 @@ class StopHandler(BaseHandler):
         self.server = owner_inst  # type: HTTPServer
 
     async def post(self):
-        if not self.has_access_control:
+        if not await self.has_access_control():
             return
         try:
             self.set_custom_default_headers()
@@ -787,7 +795,7 @@ class ThingDescriptionHandler(BaseHandler):
         )
 
     async def get(self):
-        if not self.has_access_control:
+        if not await self.has_access_control():
             self.finish()
             return
 

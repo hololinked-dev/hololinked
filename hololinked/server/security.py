@@ -102,7 +102,13 @@ try:
             return self.validate_input(username, password)
 
 except ImportError:
-    pass
+
+    class BcryptBasicSecurity(Security):
+        """Placeholder for BcryptBasicSecurity when bcrypt is not installed"""
+
+        def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
+            raise ImportError("bcrypt library is required for BcryptBasicSecurity")
+
 
 try:
     import argon2
@@ -187,7 +193,13 @@ try:
             return self.validate_input(username, password)
 
 except ImportError:
-    pass
+
+    class Argon2BasicSecurity(Security):
+        """Placeholder for Argon2BasicSecurity when argon2 is not installed"""
+
+        def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
+            raise ImportError("argon2-cffi library is required for Argon2BasicSecurity")
+
 
 try:
     import argon2
@@ -385,4 +397,79 @@ try:
                 return False
 
 except ImportError:
-    pass
+
+    class APIKeySecurity(Security):
+        """Placeholder for APIKeySecurity when argon2 is not installed"""
+
+        def __init__(self, name: str, file: str = "apikeys.json") -> None:
+            raise ImportError("argon2-cffi library is required for APIKeySecurity")
+
+
+try:
+    from keycloak import KeycloakAuthenticationError, KeycloakOpenID
+
+    class KeycloakOAuth2Security(Security):
+        """Placeholder for KeycloakOAuth2Security"""
+
+        oidc_server_url: str
+        """URL of the OIDC server"""
+
+        oidc_client_id: str
+        """Client ID registered with the OIDC server"""
+
+        oidc_realm: str
+        """Realm name in the OIDC server"""
+
+        verify_ssl: bool = True
+        """Whether to verify SSL certificates"""
+
+        _keycloak_client: KeycloakOpenID = PrivateAttr()
+
+        def __init__(
+            self,
+            oidc_server_url: str,
+            oidc_client_id: str,
+            oidc_realm: str,
+            verify_ssl: bool = True,
+        ) -> None:
+            super().__init__(
+                oidc_server_url=oidc_server_url,
+                oidc_client_id=oidc_client_id,
+                oidc_realm=oidc_realm,
+                verify_ssl=verify_ssl,
+            )
+            self._keycloak_client = KeycloakOpenID(
+                server_url=oidc_server_url,
+                client_id=oidc_client_id,
+                realm_name=oidc_realm,
+                verify=verify_ssl,
+            )
+
+        def validate_input(self, jwt: str) -> bool:
+            try:
+                self._keycloak_client.userinfo(token=jwt)
+                return True
+            except KeycloakAuthenticationError:
+                return False
+
+        async def async_validate_input(self, jwt: str) -> bool:
+            """Asynchronous validation is not implemented yet"""
+            try:
+                await self._keycloak_client.a_userinfo(token=jwt)
+                return True
+            except KeycloakAuthenticationError:
+                return False
+
+except ImportError:
+
+    class KeycloakOAuth2Security(Security):
+        """Placeholder for KeycloakOAuth2Security when keycloak library is not installed"""
+
+        def __init__(
+            self,
+            oidc_server_url: str,
+            oidc_client_id: str,
+            oidc_realm: str,
+            verify_ssl: bool = True,
+        ) -> None:
+            raise ImportError("keycloak library is required for KeycloakOAuth2Security")
