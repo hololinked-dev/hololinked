@@ -78,6 +78,7 @@ class BaseHandler(RequestHandler):
         self.allowed_clients = self.config.allowed_clients
         self.security_schemes = self.config.security_schemes
         self.metadata = metadata or HandlerMetadata()  # type: HandlerMetadata
+        self.userinfo = None  # type: Optional[dict[str, Any]]
 
     async def has_access_control(self) -> bool:
         """
@@ -101,9 +102,15 @@ class BaseHandler(RequestHandler):
         if not self.security_schemes:
             self.logger.debug("no security schemes defined, allowing access")
             return True
-        if await self.is_authenticated():
+        if not await self.is_authenticated():
             self.logger.info("client authenticated successfully")
-            return True
+            if not self.userinfo:
+                return True
+            if await self.is_authorized():
+                return True
+            self.set_status(403, "Forbidden")
+            self.logger.info("insufficient permissions")
+            return False
         self.set_status(401, "Unauthorized")
         self.logger.info("client authentication failed or is not authorized to proceed")
         return False  # keep False always at the end
@@ -160,12 +167,27 @@ class BaseHandler(RequestHandler):
                             security_scheme=security_scheme.__class__.__name__,
                         )
                         jwt = authorization_header.split(maxsplit=1)[1]
-                        authenticated = await security_scheme.async_validate_input(jwt)
+                        self.userinfo = await security_scheme.async_userinfo(jwt)
+                        if not self.userinfo:
+                            continue
+                        authenticated = True
                     except Exception as ex:
                         self.logger.error(f"error while authenticating client with Keycloak JWT - {str(ex)}")
                     if authenticated:
                         return True
         return authenticated
+
+    async def is_authorized(self) -> bool:
+        """
+        enforces authorization using the defined security schemes, freshly computed everytime.
+        Do not call this method without doing authentication first and having a userinfo property.
+        """
+        if not self.userinfo:
+            return False
+        for security_scheme in self.security_schemes:
+            if isinstance(security_scheme, KeycloakOAuth2Security):
+                return await security_scheme.async_user_has_role(self.userinfo)
+        return False
 
     def set_access_control_allow_headers(self) -> None:
         """
