@@ -661,7 +661,7 @@ class Serializers(metaclass=MappableSingleton):
         """Get a list of all allowed content types for serialization"""
         _allowed_content_types = list(cls.content_types.keys())
         _allowed_content_types.remove(cls.pickle.content_type)
-        if not global_config.ALLOW_PICKLE:
+        if global_config.ALLOW_PICKLE:
             _allowed_content_types.append(cls.pickle.content_type)
         return _allowed_content_types
 

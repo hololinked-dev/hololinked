@@ -130,10 +130,10 @@ class BaseProtocolServer(Parameterized):
         raise NotImplementedError("Not implemented for this protocol")
 
     @forkable
-    def run(self, forked: bool = False) -> None:
+    def run(self, forked: bool = False, print_welcome_message: bool = True) -> None:
         from . import run
 
-        run(self)
+        run(self, print_welcome_message=print_welcome_message)
 
     def stop(self):
         raise NotImplementedError("Not implemented for this protocol")
