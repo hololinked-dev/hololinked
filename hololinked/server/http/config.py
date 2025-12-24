@@ -10,6 +10,7 @@ from .controllers import (
     LivenessProbeHandler,
     PropertyHandler,
     ReadinessProbeHandler,
+    RPCHandler,
     RWMultiplePropertiesHandler,
     StopHandler,
     ThingDescriptionHandler,
@@ -26,24 +27,24 @@ class RuntimeConfig(BaseModel):
     This is useful when the server is used in a controlled environment where CORS is not needed.
     """
 
-    property_handler: type[PropertyHandler] = PropertyHandler
+    property_handler: type[RPCHandler] | Any = PropertyHandler
     """handler class to be used for property interactions"""
-    action_handler: type[ActionHandler] = ActionHandler
+    action_handler: type[RPCHandler] | Any = ActionHandler
     """handler class to be used for action interactions"""
-    event_handler: type[EventHandler] = EventHandler
+    event_handler: type[EventHandler] | Any = EventHandler
     """handler class to be used for event interactions"""
-    RW_multiple_properties_handler: type[RWMultiplePropertiesHandler] = RWMultiplePropertiesHandler
+    RW_multiple_properties_handler: type[RPCHandler] | Any = RWMultiplePropertiesHandler
     """handler class to be used for read/write multiple properties interactions"""
-    thing_description_handler: type[ThingDescriptionHandler] = ThingDescriptionHandler
+    thing_description_handler: type[ThingDescriptionHandler] | Any = ThingDescriptionHandler
     """handler class to be used for generating thing description"""
-    liveness_probe_handler: type[LivenessProbeHandler] = LivenessProbeHandler
+    liveness_probe_handler: type[LivenessProbeHandler] | Any = LivenessProbeHandler
     """handler class to be used for liveness probe"""
-    readiness_probe_handler: type[ReadinessProbeHandler] = ReadinessProbeHandler
+    readiness_probe_handler: type[ReadinessProbeHandler] | Any = ReadinessProbeHandler
     """handler class to be used for readiness probe"""
-    stop_handler: type[StopHandler] = StopHandler
+    stop_handler: type[StopHandler] | Any = StopHandler
     """handler class to be used for stop server"""
 
-    thing_description_service: type[ThingDescriptionService] = ThingDescriptionService
+    thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
     """service class to be used for generating thing description"""
 
     thing_repository: Any = thing_repository  # type: dict[str, BrokerThing]

@@ -13,12 +13,12 @@ class RuntimeConfig(BaseModel):
     qos: Annotated[int, Field(ge=0, le=2)] = 1
     """The MQTT QoS level to use for publishing messages"""
 
-    topic_publisher: type[TopicPublisher] = TopicPublisher
+    topic_publisher: type[TopicPublisher] | Any = TopicPublisher
     """handler class to be used for property interactions"""
-    thing_description_publisher: type[ThingDescriptionPublisher] = ThingDescriptionPublisher
+    thing_description_publisher: type[ThingDescriptionPublisher] | Any = ThingDescriptionPublisher
     """handler class to be used for action interactions"""
 
-    thing_description_service: type[ThingDescriptionService] = ThingDescriptionService
+    thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
     """handler class to be used for event interactions"""
 
     thing_repository: Any = thing_repository  # type: dict[str, BrokerThing]
