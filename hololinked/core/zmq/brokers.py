@@ -2185,9 +2185,9 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             data to be sent as payload of the event
         """
         # uncomment for type definitions
-        from ...core.events import EventDispatcher
+        # from ...core.events import EventDispatcher
+        # assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
 
-        assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
         try:
             self._send_lock.acquire()
             if event._unique_identifier in self.event_ids:
