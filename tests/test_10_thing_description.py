@@ -360,3 +360,7 @@ def test_09_pydantic_properties(thing):
 def test_10_thing_model_generation():
     thing = TestThing(id="test-thing-model", log_level=logging.ERROR + 10)
     assert isinstance(thing.get_thing_model(skip_names=["base_property"]).json(), dict)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

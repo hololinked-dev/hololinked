@@ -17,3 +17,7 @@ def access_point(request):
 @pytest.mark.asyncio(loop_scope="class")
 class TestZMQ_IPC_E2E(BaseRPC_E2E):
     pass
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

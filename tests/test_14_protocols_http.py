@@ -71,7 +71,7 @@ def port() -> int:
 @pytest.fixture(scope="function")
 def server(port) -> Generator[HTTPServer, None, None]:
     server = HTTPServer(port=port)
-    server.run(forked=True)
+    server.run(forked=True, print_welcome_message=False)
     wait_until_server_ready(port=port)
     yield server
     stop()
@@ -173,14 +173,14 @@ def sse_stream(url: str, chunk_size: int = 2048, **kwargs):
 
 async def test_01_init_run_and_stop(port: int):
     server = HTTPServer(port=port)
-    server.run(forked=True)
+    server.run(forked=True, print_welcome_message=False)
     wait_until_server_ready(port=port)
     await server.async_stop()
     stop()
     time.sleep(2)
 
     # stop remotely
-    server.run(forked=True)
+    server.run(forked=True, print_welcome_message=False)
     wait_until_server_ready(port=port)
     time.sleep(2)
     response = requests.post(f"{hostname_prefix}:{port}{stop_endpoint}")
@@ -649,3 +649,7 @@ def test_13_object_proxy_with_apikey(port: int) -> None:
         assert object_proxy.read_property("max_intensity") == 16384
 
         pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

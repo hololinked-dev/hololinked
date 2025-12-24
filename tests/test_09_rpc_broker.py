@@ -716,3 +716,7 @@ class TestRPCBroker:
         # still lingering on the socket. So the captured event must be at least the number of attempts.
         assert [res.data for res in results] == [expected_data] * len(results)
         event_client.unsubscribe()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

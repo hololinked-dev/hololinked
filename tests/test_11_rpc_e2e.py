@@ -310,3 +310,7 @@ class TestRPC_E2E:
     async def test_19_async_write_property(self, client, prop, payload):
         await client.async_write_property(prop, payload)
         assert await client.async_read_property(prop) == payload
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

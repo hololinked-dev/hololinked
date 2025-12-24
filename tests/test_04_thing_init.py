@@ -720,3 +720,7 @@ def test_17_inheritance_of_registries():
 # - Parameters that are subclass of Property are usually remote objects.
 # - DB operations are supported only at instance level.
 # """
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

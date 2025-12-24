@@ -69,3 +69,7 @@ def test_04_allow_cors():
     global_config.ALLOW_CORS = False
     server = HTTPServer(port=8080)
     assert not server.config.cors
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

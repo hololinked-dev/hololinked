@@ -53,3 +53,7 @@ def client(td_endpoint: str) -> "ObjectProxy":
 class TestHTTP_E2E(BaseRPC_E2E):
     def test_14_rw_multiple_properties(self, client: ObjectProxy):
         pass
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

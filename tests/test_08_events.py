@@ -1,3 +1,5 @@
+import pytest
+
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
 from hololinked.td.interaction_affordance import EventAffordance
@@ -69,3 +71,7 @@ def test_03_event_affordance():
     thing = TestThing(id=f"test-event-affordance-{uuid_hex()}")
     event = TestThing.test_event.to_affordance(thing)
     assert isinstance(event, EventAffordance)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])
