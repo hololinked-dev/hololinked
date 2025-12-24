@@ -2,6 +2,8 @@ import copy
 
 from typing import Any
 
+import structlog
+
 from ...constants import JSONSerializable, Operations
 from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
 from ...serializers import Serializers
@@ -13,8 +15,7 @@ from ...td import (
     PropertyAffordance,
 )
 from ...td.forms import Form
-from ..thing import thing_repository
-from .config import HandlerMetadata
+from ..repository import BrokerThing  # noqa: F401
 
 
 try:
@@ -35,13 +36,21 @@ __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 class ThingDescriptionService:
     """Service layer to generate HTTP TD"""
 
-    def __init__(self, resource: InteractionAffordance, server: Any) -> None:
+    def __init__(
+        self,
+        resource: InteractionAffordance,
+        logger: structlog.stdlib.BoundLogger,
+        config: Any,
+        server: Any,
+    ) -> None:
         from . import HTTPServer  # noqa: F401
+        from .config import RuntimeConfig  # noqa: F401
 
         self.resource = resource  # type: InteractionAffordance
-        self.thing = thing_repository[self.resource.thing_id]
+        self.config = config  # type: RuntimeConfig
+        self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
+        self.thing = self.config.thing_repository[self.resource.thing_id]  # type: BrokerThing
         self.server = server  # type: HTTPServer
-        self.logger = self.server.logger.bind(layer="service", impl=self.__class__.__name__)
 
     async def generate(
         self,
@@ -50,6 +59,7 @@ class ThingDescriptionService:
         use_localhost: bool = False,
         authority: str = None,
     ) -> dict[str, JSONSerializable]:
+        """generate the HTTP Thing Description"""
         ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
         TD = copy.deepcopy(ZMQ_TD)
 
@@ -58,6 +68,7 @@ class ThingDescriptionService:
         self.add_events(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
         self.add_top_level_forms(TD, authority=authority, use_localhost=use_localhost)
         self.add_security_definitions(TD)
+        self.add_links(TD)
 
         return TD
 
@@ -69,6 +80,9 @@ class ThingDescriptionService:
         ignore_errors: bool,
         use_localhost: bool,
     ) -> dict[str, JSONSerializable]:
+        """add forms to properties in the thing model"""
+        from .config import HandlerMetadata
+
         for name in ZMQ_TD.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
             TD["properties"][name]["forms"] = []
@@ -122,6 +136,9 @@ class ThingDescriptionService:
         ignore_errors: bool,
         use_localhost: bool,
     ) -> dict[str, JSONSerializable]:
+        """add forms to actions in the thing model"""
+        from .config import HandlerMetadata
+
         for name in ZMQ_TD.get("actions", []):
             affordance = ActionAffordance.from_TD(name, ZMQ_TD)
             TD["actions"][name]["forms"] = []
@@ -159,6 +176,9 @@ class ThingDescriptionService:
         ignore_errors: bool,
         use_localhost: bool,
     ) -> dict[str, JSONSerializable]:
+        """add forms to events in the thing model"""
+        from .config import HandlerMetadata
+
         for name in ZMQ_TD.get("events", []):
             affordance = EventAffordance.from_TD(name, ZMQ_TD)
             TD["events"][name]["forms"] = []
@@ -239,7 +259,7 @@ class ThingDescriptionService:
 
         TD["securityDefinitions"] = dict()
 
-        if not self.server.security_schemes:
+        if not self.server.config.security_schemes:
             nosec = NoSecurityScheme()
             nosec.build()
             TD["security"] = ["nosec"]
@@ -247,7 +267,7 @@ class ThingDescriptionService:
             return
 
         TD["security"] = []
-        for scheme in self.server.security_schemes:
+        for scheme in self.server.config.security_schemes:
             if isinstance(scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
                 sec = BasicSecurityScheme()
                 sec.build()
@@ -257,6 +277,10 @@ class ThingDescriptionService:
                 sec = APIKeySecurityScheme()
                 TD["securityDefinitions"][scheme.name] = sec.json()
                 TD["security"].append(scheme.name)
+
+    def add_links(self, TD: dict[str, JSONSerializable]) -> None:
+        """adds custom links to the TD, override this in subclass"""
+        pass
 
     async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
         """fetch the TM or ZMQ in process queue TD"""

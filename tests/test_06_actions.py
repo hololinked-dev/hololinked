@@ -453,3 +453,7 @@ def test_06_action_affordance(thing: TestThing):
     assert isinstance(affordance.input, dict)
     assert isinstance(affordance.output, dict)
     assert affordance.description is None
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

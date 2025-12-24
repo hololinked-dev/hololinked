@@ -6,12 +6,14 @@ import aiomqtt
 import structlog
 
 from ...core import Thing as CoreThing
-from ...param.parameters import ClassSelector, Selector, String
+from ...param.parameters import ClassSelector, String
 from ...td.interaction_affordance import EventAffordance, PropertyAffordance
 from ...utils import get_current_async_loop
+from ..repository import thing_repository
 from ..server import BaseProtocolServer
-from ..thing import thing_repository
+from .config import RuntimeConfig
 from .controllers import ThingDescriptionPublisher, TopicPublisher
+from .services import ThingDescriptionService
 
 
 class MQTTPublisher(BaseProtocolServer):
@@ -23,30 +25,14 @@ class MQTTPublisher(BaseProtocolServer):
     see [infrastructure project](https://github.com/hololinked-dev/daq-system-infrastructure).
     """
 
-    qos = Selector(objects=[0, 1, 2], default=0)
-    """The MQTT QoS level to use for publishing messages"""
-
     hostname = String(default="localhost")
     """The MQTT broker hostname"""
 
     ssl_context = ClassSelector(class_=ssl.SSLContext, allow_None=True, default=None)
     """The SSL context to use for secure connections, or None for no SSL"""
 
-    topic_publisher = ClassSelector(
-        class_=TopicPublisher,
-        allow_None=False,
-        default=TopicPublisher,
-        isinstance=False,
-    )  # type: Type[TopicPublisher]
-    """The `TopicPublisher` class to use for publishing messages"""
-
-    thing_description_publisher = ClassSelector(
-        class_=ThingDescriptionPublisher,
-        allow_None=False,
-        isinstance=False,
-        default=ThingDescriptionPublisher,
-    )  # type: Type[ThingDescriptionPublisher]
-    """The `ThingDescriptionPublisher` class to use for publishing Thing Descriptions"""
+    config = ClassSelector(class_=RuntimeConfig, default=None, allow_None=True)  # type: RuntimeConfig
+    """Runtime configuration for the MQTT publisher"""
 
     def __init__(
         self,
@@ -54,8 +40,9 @@ class MQTTPublisher(BaseProtocolServer):
         port: int,
         username: str,
         password: str,
-        things: Optional[list[CoreThing]] = None,
         qos: int = 1,
+        things: Optional[list[CoreThing]] = None,
+        config: Optional[dict] = None,
         **kwargs,
     ):
         """
@@ -69,21 +56,27 @@ class MQTTPublisher(BaseProtocolServer):
             The MQTT broker username
         password: str
             The MQTT broker password
-        qos: int
-            The MQTT QoS level to use for publishing messages
         kwargs: dict
             Additional keyword arguments
         """
         endpoint = f"{self.hostname}{f':{self.port}' if self.port else ''}"
 
+        default_config = dict(
+            topic_publisher=kwargs.get("topic_publisher", TopicPublisher),
+            thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
+            thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
+            thing_repository=kwargs.get("thing_repository", thing_repository),
+            qos=qos,
+        )
+        default_config.update(config or dict())
+        config = RuntimeConfig(**default_config)
+
         self.hostname = hostname
         self.port = port
-        self.qos = qos
+        self.config = config
         self.username = username
         self.password = password
         self.publishers = dict()  # type: dict[str, TopicPublisher]
-        self.topic_publisher = kwargs.get("topic_publisher", TopicPublisher)
-        self.thing_description_publisher = kwargs.get("thing_description_publisher", ThingDescriptionPublisher)
         self.logger = kwargs.get("logger", structlog.get_logger()).bind(component="mqtt-publisher", hostname=endpoint)
         self.ssl_context = kwargs.get("ssl_context", None)
         self.add_things(*(things or []))
@@ -94,7 +87,6 @@ class MQTTPublisher(BaseProtocolServer):
         All events are dispatched to their own async tasks. This method returns and
         creates side-effects only.
         """
-        self._stop_publishing = False
         self.client = aiomqtt.Client(
             hostname=self.hostname,
             port=self.port,
@@ -121,11 +113,11 @@ class MQTTPublisher(BaseProtocolServer):
 
         for event_name in TD.get("events", {}).keys():
             event_affordance = EventAffordance.from_TD(event_name, TD)
-            topic_publisher = self.topic_publisher(
+            topic_publisher = self.config.topic_publisher(
                 client=self.client,
                 resource=event_affordance,
                 logger=self.logger,
-                qos=self.qos,
+                config=self.config,
             )
             self.publishers[topic_publisher.topic] = topic_publisher
             eventloop.create_task(topic_publisher.publish())
@@ -134,17 +126,22 @@ class MQTTPublisher(BaseProtocolServer):
             property_affordance = PropertyAffordance.from_TD(prop_name, TD)
             if not property_affordance.observable:
                 continue
-            topic_publisher = self.topic_publisher(
+            topic_publisher = self.config.topic_publisher(
                 client=self.client,
                 resource=property_affordance,
                 logger=self.logger,
-                qos=self.qos,
+                config=self.config,
             )
             self.publishers[topic_publisher.topic] = topic_publisher
             eventloop.create_task(topic_publisher.publish())
             self.logger.info(f"MQTT will publish observable property changes for {prop_name} of thing {thing.id}")
         # TD publisher
-        td_publisher = self.thing_description_publisher(client=self.client, logger=self.logger, ZMQ_TD=TD)
+        td_publisher = self.config.thing_description_publisher(
+            client=self.client,
+            logger=self.logger,
+            ZMQ_TD=TD,
+            config=self.config,
+        )
         self.publishers[td_publisher.topic] = td_publisher
         eventloop.create_task(td_publisher.publish(TD))
 

@@ -359,3 +359,7 @@ async def test_03_02_mapped_verify_polling(message_mapped_client: MessageMappedZ
     await asyncio.gather(verify_poll_stopped(), stop_poll())
     await done
     assert message_mapped_client.poll_timeout == 1000
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

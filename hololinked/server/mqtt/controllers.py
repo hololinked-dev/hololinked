@@ -6,8 +6,7 @@ import structlog
 from ...core.zmq.message import EventMessage  # noqa: F401
 from ...serializers import Serializers
 from ...td import EventAffordance, PropertyAffordance
-from ..thing import thing_repository
-from .services import ThingDescriptionService
+from ..repository import BrokerThing  # noqa: F401
 
 
 class TopicPublisher:
@@ -17,15 +16,18 @@ class TopicPublisher:
         self,
         client: aiomqtt.Client,
         resource: EventAffordance | PropertyAffordance,
+        config: Any,
         logger: structlog.stdlib.BoundLogger,
-        qos: int,
     ) -> None:
+        from .config import RuntimeConfig  # noqa: F401
+
         self.client = client
-        self.thing = thing_repository[resource.thing_id]
-        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
-        self.qos = qos
         self.resource = resource
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
+        self.config = config  # type: RuntimeConfig
+        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__, topic=self.topic)
+        self.thing = self.config.thing_repository[resource.thing_id]  # type: BrokerThing
+        self.qos = self.config.qos
         self._stop_publishing = False
 
     def stop(self):
@@ -64,12 +66,21 @@ class TopicPublisher:
 class ThingDescriptionPublisher:
     """Publishes Thing Description over MQTT Topic"""
 
-    def __init__(self, client: aiomqtt.Client, logger: structlog.stdlib.BoundLogger, ZMQ_TD: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        client: aiomqtt.Client,
+        config: Any,
+        logger: structlog.stdlib.BoundLogger,
+        ZMQ_TD: dict[str, Any],
+    ) -> None:
+        from .config import RuntimeConfig  # noqa: F401
+
         self.client = client
-        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
         self.topic = f"{ZMQ_TD['id']}/thing-description"
-        self.thing = thing_repository[ZMQ_TD["id"]]
-        self.thing_description = ThingDescriptionService(
+        self.config = config  # type: RuntimeConfig
+        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
+        self.thing = self.config.thing_repository[ZMQ_TD["id"]]
+        self.thing_description = self.config.thing_description_service(
             hostname=self.client._hostname,
             port=self.client._port,
             logger=logger,

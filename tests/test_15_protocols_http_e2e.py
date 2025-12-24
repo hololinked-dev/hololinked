@@ -28,7 +28,13 @@ def port() -> int:
 def thing(port: int) -> Generator[TestThing, None, None]:
     thing = TestThing(id=f"test-thing-{uuid_hex()}", serial_number="simulation")
     print()  # TODO, can be removed when tornado logs respect level
-    thing.run_with_http_server(port=port, forked=True, config=dict(cors=True))
+    thing.run_with_http_server(
+        address="127.0.0.1",
+        port=port,
+        forked=True,
+        print_welcome_message=False,
+        config=dict(cors=True),
+    )
     wait_until_server_ready(port=port)
     yield thing
     stop()
@@ -53,3 +59,7 @@ def client(td_endpoint: str) -> "ObjectProxy":
 class TestHTTP_E2E(BaseRPC_E2E):
     def test_14_rw_multiple_properties(self, client: ObjectProxy):
         pass
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

@@ -143,3 +143,14 @@ def test_07_set_default():
     Serializers.default = old_default
     assert Serializers.default == old_default
     assert Serializers.default == Serializers.json  # because we know its JSON
+
+
+def test_08_unknown_content_types():
+    """test registration of unknown content types for objects"""
+    Serializers.register_content_type_for_object(TestThing.number_prop, "application/unknown")
+    assert Serializers.for_object(None, "TestThing", "number_prop") is None
+    assert Serializers.get_content_type_for_object(None, "TestThing", "number_prop") == "application/unknown"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

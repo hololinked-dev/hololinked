@@ -290,3 +290,7 @@ def test_08_db_config():
     ThingDB(thing, config_file="test_sqlite_config.json")
 
     os.remove("test_sqlite_config.json")
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

@@ -21,7 +21,7 @@ from ...core.thing import Thing, ThingMeta
 from ...core.zmq.brokers import MessageMappedZMQClientPool
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
-from ...param.parameters import ClassSelector, IPAddress, TypedList
+from ...param.parameters import ClassSelector, IPAddress
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...utils import (
     get_current_async_loop,
@@ -29,6 +29,7 @@ from ...utils import (
     pep8_to_dashed_name,
     run_callable_somehow,
 )
+from ..repository import thing_repository
 from ..security import Security
 from ..server import BaseProtocolServer
 from .config import HandlerMetadata, RuntimeConfig
@@ -39,11 +40,11 @@ from .controllers import (
     LivenessProbeHandler,
     PropertyHandler,
     ReadinessProbeHandler,
-    RPCHandler,
     RWMultiplePropertiesHandler,
     StopHandler,
     ThingDescriptionHandler,
 )
+from .services import ThingDescriptionService
 
 
 class HTTPServer(BaseProtocolServer):
@@ -62,57 +63,6 @@ class HTTPServer(BaseProtocolServer):
         allow_None=True,
     )  # type: ssl.SSLContext | None
     """SSL context to provide encrypted communication"""
-
-    allowed_clients = TypedList(item_type=str)
-    """
-    Serves request and sets CORS only from these clients, other clients are rejected with 401. 
-    Unlike pure CORS, the server resource is not even executed if the client is not 
-    an allowed client. if None, any client is served. Not inherently a safety feature in public networks, 
-    and more useful in private networks when the remote origin is known.
-    """
-
-    property_handler = ClassSelector(
-        default=PropertyHandler,
-        class_=(PropertyHandler, RPCHandler),
-        isinstance=False,
-    )  # type: RPCHandler | PropertyHandler
-    """custom web request handler for property read-write"""
-
-    action_handler = ClassSelector(
-        default=ActionHandler,
-        class_=(ActionHandler, RPCHandler),
-        isinstance=False,
-    )  # type: RPCHandler | ActionHandler
-    """custom web request handler for actions"""
-
-    event_handler = ClassSelector(
-        default=EventHandler,
-        class_=(EventHandler, RPCHandler),
-        isinstance=False,
-    )  # type: RPCHandler | EventHandler
-    """custom event handler for sending HTTP SSE"""
-
-    thing_description_handler = ClassSelector(
-        default=ThingDescriptionHandler,
-        class_=(ThingDescriptionHandler, BaseHandler),
-        isinstance=False,
-    )  # type: RPCHandler | ThingDescriptionHandler
-
-    RW_multiple_properties_handler = ClassSelector(
-        default=RWMultiplePropertiesHandler,
-        class_=(RWMultiplePropertiesHandler, BaseHandler),
-        isinstance=False,
-    )  # type: RWMultiplePropertiesHandler | BaseHandler
-
-    security_schemes = TypedList(
-        default=None,
-        allow_None=True,
-        item_type=Security,
-    )  # type: list[Security] | None
-    """
-    List of security schemes to be used by the server, 
-    it is sufficient that one scheme passes for a request to be authorized.
-    """
 
     config = ClassSelector(
         class_=RuntimeConfig,
@@ -167,22 +117,31 @@ class HTTPServer(BaseProtocolServer):
             - `event_handler`: `EventHandler` | `BaseHandler`, optional.
                 custom event handler for sending HTTP SSE
         """
-        config = RuntimeConfig(**(config or dict(cors=global_config.ALLOW_CORS)))
+        default_config = dict(
+            cors=global_config.ALLOW_CORS,
+            property_handler=kwargs.get("property_handler", PropertyHandler),
+            action_handler=kwargs.get("action_handler", ActionHandler),
+            event_handler=kwargs.get("event_handler", EventHandler),
+            thing_description_handler=kwargs.get("thing_description_handler", ThingDescriptionHandler),
+            RW_multiple_properties_handler=kwargs.get("RW_multiple_properties_handler", RWMultiplePropertiesHandler),
+            liveness_probe_handler=kwargs.get("liveness_handler", LivenessProbeHandler),
+            readiness_probe_handler=kwargs.get("readiness_handler", ReadinessProbeHandler),
+            stop_handler=kwargs.get("stop_handler", StopHandler),
+            thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
+            thing_repository=kwargs.get("thing_repository", thing_repository),
+            allowed_clients=allowed_clients,
+            security_schemes=security_schemes,
+        )
+        default_config.update(config or dict())
+        config = RuntimeConfig(**default_config)
         # need to be extended when more options are added
         super().__init__(
             port=port,
             address=address,
             logger=logger,
             log_level=log_level,
-            security_schemes=security_schemes,
             ssl_context=ssl_context,
-            property_handler=kwargs.get("property_handler", PropertyHandler),
-            action_handler=kwargs.get("action_handler", ActionHandler),
-            event_handler=kwargs.get("event_handler", EventHandler),
-            allowed_clients=allowed_clients if allowed_clients is not None else [],
-            config=config or dict(),
-            thing_description_handler=kwargs.get("thing_description_handler", ThingDescriptionHandler),
-            RW_multiple_properties_handler=kwargs.get("RW_multiple_properties_handler", RWMultiplePropertiesHandler),
+            config=config,
         )
 
         self._IP = f"{self.address}:{self.port}"
@@ -192,9 +151,21 @@ class HTTPServer(BaseProtocolServer):
         self.tornado_instance = None
         self.app = Application(
             handlers=[
-                (r"/stop", StopHandler, dict(owner_inst=self)),
-                (r"/liveness", LivenessProbeHandler, dict(owner_inst=self)),
-                (r"/readiness", ReadinessProbeHandler, dict(owner_inst=self)),
+                (
+                    r"/stop",
+                    self.config.stop_handler,
+                    dict(config=self.config, logger=self.logger, owner_inst=self),
+                ),
+                (
+                    r"/liveness",
+                    self.config.liveness_probe_handler,
+                    dict(config=self.config, logger=self.logger, owner_inst=self),
+                ),
+                (
+                    r"/readiness",
+                    self.config.readiness_probe_handler,
+                    dict(config=self.config, logger=self.logger, owner_inst=self),
+                ),
             ]
         )
         self.router = ApplicationRouter(self.app, self)
@@ -327,7 +298,8 @@ class HTTPServer(BaseProtocolServer):
         if delete_http_method and delete_http_method != "DELETE":
             raise ValueError("delete method should be DELETE")
         kwargs["resource"] = property
-        kwargs["owner_inst"] = self
+        kwargs["logger"] = self.logger
+        kwargs["config"] = self.config
         kwargs["metadata"] = HandlerMetadata(http_methods=http_methods)
         self.router.add_rule(affordance=property, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
@@ -363,7 +335,8 @@ class HTTPServer(BaseProtocolServer):
         if isinstance(action, Action):
             action = action.to_affordance()  # type: ActionAffordance
         kwargs["resource"] = action
-        kwargs["owner_inst"] = self
+        kwargs["config"] = self.config
+        kwargs["logger"] = self.logger
         kwargs["metadata"] = HandlerMetadata(http_methods=http_methods)
         self.router.add_rule(affordance=action, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
@@ -397,7 +370,9 @@ class HTTPServer(BaseProtocolServer):
         if isinstance(event, Event):
             event = event.to_affordance()
         kwargs["resource"] = event
-        kwargs["owner_inst"] = self
+        kwargs["config"] = self.config
+        kwargs["logger"] = self.logger
+        kwargs["metadata"] = HandlerMetadata(http_methods=("GET",))
         self.router.add_rule(affordance=event, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_thing(self, thing: Thing) -> None:
@@ -524,13 +499,13 @@ class ApplicationRouter:
                 property=property,
                 http_methods=("GET",) if property.readOnly else ("GET", "PUT"),
                 # if prop.fdel is None else ('GET', 'PUT', 'DELETE')
-                handler=self.server.property_handler,
+                handler=self.server.config.property_handler,
             )
             if property.observable:
                 self.server.add_event(
                     URL_path=f"{path}/change-event",
                     event=property,
-                    handler=self.server.event_handler,
+                    handler=self.server.config.event_handler,
                 )
         for action in actions:
             if action in self:
@@ -540,14 +515,14 @@ class ApplicationRouter:
             route = self.adapt_route(action.name)
             if action.thing_id is not None:
                 path = f"/{action.thing_id}{route}"
-            self.server.add_action(URL_path=path, action=action, handler=self.server.action_handler)
+            self.server.add_action(URL_path=path, action=action, handler=self.server.config.action_handler)
         for event in events:
             if event in self:
                 continue
             route = self.adapt_route(event.name)
             if event.thing_id is not None:
                 path = f"/{event.thing_id}{route}"
-            self.server.add_event(URL_path=path, event=event, handler=self.server.event_handler)
+            self.server.add_event(URL_path=path, event=event, handler=self.server.config.event_handler)
 
         # thing model handler
         get_thing_model_action = next((action for action in actions if action.name == "get_thing_model"), None)
@@ -564,7 +539,8 @@ class ApplicationRouter:
             URL_path=f"/{thing_id}/resources/wot-td" if thing_id else "/resources/wot-td",
             action=get_thing_description_action,
             http_method=("GET",),
-            handler=self.server.thing_description_handler,
+            handler=self.server.config.thing_description_handler,
+            owner_inst=self.server,
         )
 
         # RW multiple properties handler
@@ -576,7 +552,7 @@ class ApplicationRouter:
             URL_path=f"/{thing_id}/properties" if thing_id else "/properties",
             action=read_properties,
             http_method=("GET", "PUT", "PATCH"),
-            handler=self.server.RW_multiple_properties_handler,
+            handler=self.server.config.RW_multiple_properties_handler,
             read_properties_resource=read_properties,
             write_properties_resource=write_properties,
         )

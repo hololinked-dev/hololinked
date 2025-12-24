@@ -258,7 +258,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         for server in servers:
             server.add_thing(self)
-        run(*servers)
+        run(*servers, print_welcome_message=False)  # no welcome message for ZMQ
 
     @forkable  # noqa: F405
     def run_with_http_server(
@@ -271,6 +271,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # protocol_version : int = 1,
         # network_interface : str = 'Ethernet',
         forked: bool = False,  # used by forkable decorator
+        print_welcome_message: bool = True,
         **kwargs: dict[str, Any],
     ) -> None:
         """
@@ -311,11 +312,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             **kwargs,
         )
         http_server.add_thing(self)
-        run(http_server)
+        run(http_server, print_welcome_message=print_welcome_message)
 
     @forkable  # noqa: F405
     def run(
         self,
+        forked: bool = False,  # used by forkable decorator
+        print_welcome_message: bool = True,
         **kwargs: dict[str, Any],
     ) -> None:
         """
@@ -347,7 +350,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             servers = parse_params(self.id, access_points)
         for server in servers:
             server.add_thing(self)
-        run(*servers)
+        run(*servers, print_welcome_message=print_welcome_message)
 
     @action()
     def exit(self) -> None:

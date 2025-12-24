@@ -363,3 +363,7 @@ def test_08_model_func_with_annotated_args_and_kwargs_model():
     )
     assert len(model.model_fields) == 2
     assert model.model_config["extra"] == "forbid"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

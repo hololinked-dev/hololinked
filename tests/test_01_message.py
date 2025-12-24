@@ -1,5 +1,7 @@
 from uuid import UUID, uuid4
 
+import pytest
+
 from hololinked.core.zmq.message import (
     ERROR,
     EXIT,
@@ -195,3 +197,7 @@ def test_03_event_message(app_ids: AppIDs) -> None:
         preserialized_payload=PreserializedData(b"test"),
     )
     validate_event_message(event_message, app_ids)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])
