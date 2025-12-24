@@ -1,4 +1,3 @@
-import logging
 import typing
 
 from enum import IntEnum, StrEnum
@@ -22,11 +21,7 @@ UNSPECIFIED: str = "UNSPECIFIED"
 
 
 class ResourceTypes(StrEnum):
-    """
-    Exposed resource types. This repository does not rely on python's internal getattr, setattr and type checking,
-    to expose RPC operations, but rather segrates resource types and operates on them in predefined ways. This is to allow
-    addition or removal of resource types which may demand more integration with HTTP.
-    """
+    """Exposed resource types"""
 
     PROPERTY = "PROPERTY"
     ACTION = "ACTION"
@@ -52,22 +47,6 @@ class HTTP_METHODS(StrEnum):
     # OPTIONS = 'OPTIONS'
 
 
-http_methods = [member for member in HTTP_METHODS._member_map_]
-
-
-# Logging
-class LOGLEVEL(IntEnum):
-    """``logging.Logger`` log levels"""
-
-    DEBUG = logging.DEBUG
-    INFO = logging.INFO
-    CRITICAL = logging.CRITICAL
-    ERROR = logging.ERROR
-    WARN = logging.WARN
-    FATAL = logging.FATAL
-
-
-# ZMQ
 class ZMQ_TRANSPORTS(StrEnum):
     """
     supported ZMQ transport protocols - TCP, IPC, INPROC
@@ -103,14 +82,6 @@ for name in dir(zmq):
     if name.startswith("EVENT_"):
         value = getattr(zmq, name)
         ZMQ_EVENT_MAP[value] = name
-
-
-# Function to get the socket type name from the enum
-def get_socket_type_name(socket_type):
-    try:
-        return ZMQSocketType(socket_type).name
-    except ValueError:
-        return "UNKNOWN"
 
 
 class Operations(StrEnum):
