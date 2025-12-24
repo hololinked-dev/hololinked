@@ -70,7 +70,7 @@ def port() -> int:
 
 @pytest.fixture(scope="function")
 def server(port) -> Generator[HTTPServer, None, None]:
-    server = HTTPServer(port=port)
+    server = HTTPServer(address="127.0.0.1", port=port)
     server.run(forked=True, print_welcome_message=False)
     wait_until_server_ready(port=port)
     yield server
@@ -81,7 +81,13 @@ def server(port) -> Generator[HTTPServer, None, None]:
 def thing(port: int) -> Generator[OceanOpticsSpectrometer, None, None]:
     thing = OceanOpticsSpectrometer(id=f"test-thing-{uuid_hex()}", serial_number="simulation")
     print()  # TODO, can be removed when tornado logs respect level
-    thing.run_with_http_server(port=port, forked=True, config=dict(cors=True))
+    thing.run_with_http_server(
+        address="127.0.0.1",
+        port=port,
+        forked=True,
+        print_welcome_message=False,
+        config=dict(cors=True),
+    )
     wait_until_server_ready(port=port)
     yield thing
     stop()
@@ -98,7 +104,14 @@ def running_thing(
     port = port or next(count)
     thing = OceanOpticsSpectrometer(id=f"{id_prefix}-{uuid_hex()}", serial_number="simulation")
     print()  # TODO, can be removed when tornado logs respect level
-    thing.run_with_http_server(port=port, forked=True, config=dict(cors=True), **http_server_kwargs)
+    thing.run_with_http_server(
+        address="127.0.0.1",
+        port=port,
+        forked=True,
+        config=dict(cors=True),
+        print_welcome_message=False,
+        **http_server_kwargs,
+    )
     wait_until_server_ready(port=port)
     try:
         yield thing
@@ -172,7 +185,7 @@ def sse_stream(url: str, chunk_size: int = 2048, **kwargs):
 
 
 async def test_01_init_run_and_stop(port: int):
-    server = HTTPServer(port=port)
+    server = HTTPServer(address="127.0.0.1", port=port)
     server.run(forked=True, print_welcome_message=False)
     wait_until_server_ready(port=port)
     await server.async_stop()

@@ -140,9 +140,7 @@ class HTTPServer(BaseProtocolServer):
             address=address,
             logger=logger,
             log_level=log_level,
-            security_schemes=security_schemes,
             ssl_context=ssl_context,
-            allowed_clients=allowed_clients if allowed_clients is not None else [],
             config=config,
         )
 
