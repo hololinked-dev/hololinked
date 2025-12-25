@@ -8,4 +8,5 @@ from .security import (  # noqa: F401, isort: skip
     APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
+    KeycloakOAuth2Security,
 )

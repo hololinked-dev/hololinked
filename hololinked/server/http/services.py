@@ -16,18 +16,11 @@ from ...td import (
 )
 from ...td.forms import Form
 from ..repository import BrokerThing  # noqa: F401
-
-
-try:
-    from ..security import APIKeySecurity, Argon2BasicSecurity
-except ImportError:
-    Argon2BasicSecurity = None
-    APIKeySecurity = None
-
-try:
-    from ..security import BcryptBasicSecurity
-except ImportError:
-    BcryptBasicSecurity = None
+from ..security import (
+    APIKeySecurity,
+    Argon2BasicSecurity,
+    BcryptBasicSecurity,
+)
 
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]

@@ -183,7 +183,7 @@ class BaseHandler(RequestHandler):
         Do not call this method without doing authentication first and having a userinfo property.
         """
         if not self.userinfo:
-            return False
+            return True
         for security_scheme in self.security_schemes:
             if isinstance(security_scheme, KeycloakOAuth2Security):
                 return await security_scheme.async_user_has_role(self.userinfo)
