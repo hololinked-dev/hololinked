@@ -43,8 +43,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         default=None,
         allow_None=True,
         remote=False,
-        doc="""structlog.stdlib.BoundLogger instance to track log messages. Default logger with a IO-stream handler 
-            and network accessible handler is created if none supplied.""",
+        doc="""structlog.stdlib.BoundLogger instance to log messages. Default logger with a IO-stream handler 
+            is created if none supplied.""",
     )  # type: structlog.stdlib.BoundLoggerBase
 
     state_machine = None  # type: "StateMachine" | None
@@ -56,8 +56,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         readonly=True,
         observable=True,
         fget=lambda self: self.state_machine.current_state if self.state_machine else None,
-        doc="""current state machine's state if state machine present, `None` indicates absence of state machine.
-                State machine returned state is always a string even if specified as an Enum in the state machine.""",
+        doc="""Current state machine's state if state machine present, `None` indicates absence of state machine.
+            State machine returned state is always a string even if specified as an Enum in the state machine.""",
     )  # type: str | None
 
     # object_info = Property(doc="contains information about this object like the class name, script location etc.") # type: ThingInformation
@@ -86,21 +86,21 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             creating zmq socket address, tables in databases, and to identify the instance in a
             HTTP Server - (http(s)://{domain and sub domain}/{id}).
         logger: structlog.stdlib.BoundLogger, optional
-            `structlog.stdlib.BoundLogger` instance to track log messages. Default logger with a IO-stream handler
-            and network accessible handler is created if None supplied.
+            `structlog.stdlib.BoundLogger` instance to log messages. Default logger with a IO-stream handler
+            is created if None supplied.
         serializer: BaseSerializer | JSONSerializer, optional
             Default serializer to be used for serializing and deserializing data.
             If not supplied, a `msgspec` based JSON Serializer is used.
         **kwargs: dict[str, Any]
             - `remote_accessible_logger`: `bool`, Default `False`.
                 if `True`, the log records can be streamed by a remote client. `remote_accessible_logger` can also be set as a
-                class attribute.
+                class attribute. Use this a minimalistic replacement for fluentd or similar log collectors.
             - `use_default_db`: `bool`, Default `False`.
                 if `True`, default SQLite database is created where properties can be stored and loaded. There is no need to supply
                 any database credentials. `use_default_db` value can also be set as a class attribute.
             - `db_config_file`: `str`, optional.
                 if not using a default database, supply a JSON configuration file to create a database connection. Check documentaion
-                of `hololinked.core.database`.
+                of [`hololinked.core.database`](https://docs.hololinked.dev/api-reference/namespaces/).
             - `use_json_file`: `bool`, Default `False`
                 if `True`, a JSON file will be used as the property storage instead of a database. This value can also be
                 set as a class attribute.
@@ -192,11 +192,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         Parameters
         ----------
-        ignore_errors: bool, optional, Default `False`
+        ignore_errors: `bool`, optional, Default `False`
             if `True`, offending interaction affordances will be removed from the JSON
             (i.e. those who have wrong metadata or non-JSON metadata).
-            This is useful to build partial but always working ThingModel.
-        skip_names: list[str], optional
+            This is useful to build partial but always working `ThingModel`.
+        skip_names: `list[str]`, optional
             List of affordances names (of any type) to skip in the generated model.
 
         Returns
