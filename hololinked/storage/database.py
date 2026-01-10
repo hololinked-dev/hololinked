@@ -10,21 +10,23 @@ from pymongo import MongoClient
 from pymongo import errors as mongo_errors
 from sqlalchemy import create_engine, select
 from sqlalchemy import inspect as inspect_database
-from sqlalchemy.ext import asyncio as asyncio_ext
 from sqlalchemy.orm import sessionmaker
 
 from ..config import global_config
 from ..core.property import Property
 from ..param import Parameterized
-from ..serializers.serializers import BaseSerializer, Serializers
 from ..serializers.serializers import PythonBuiltinJSONSerializer as JSONSerializer
+from ..serializers.serializers import Serializers
 from .config import MongoDBConfig, SQLDBConfig, SQLiteConfig
 from .models import SerializedProperty, ThingInformation, ThingTableBase
 from .utils import get_sanitized_filename_from_thing_instance
 
 
 class BaseDB:
-    """Implements configuration file reader for all irrespective sync or async DB operation"""
+    """
+    Database base class irrespective of sync or async implementation.
+    Implements configuration file reader.
+    """
 
     def __init__(self, instance: Parameterized, config_file: str | None = None) -> None:
         self.thing_instance = instance
@@ -66,11 +68,14 @@ class BaseDB:
         return threading.get_ident() in self._batch_call_context
 
 
+"""
 class BaseAsyncDB(BaseDB):
-    """
-    Base class for an async database engine, implements configuration file reader,
-    sqlalchemy engine & session creation. Set `async_db_engine` boolean flag to True in `Thing` class
-    to use this engine. Database operations are then scheduled in the event loop instead of blocking the current thread.
+    Base class for an async database engine, creates sqlalchemy engine & session.
+
+    This class is not fully implemented yet. 
+    
+    Set `async_db_engine` boolean flag to True in `Thing` class to use this engine.
+    Database operations are then scheduled in the event loop instead of blocking the current thread.
     Scheduling happens after properties are set/written.
 
     Parameters
@@ -82,8 +87,7 @@ class BaseAsyncDB(BaseDB):
         property serializing before writing to database). Will be the same as zmq_serializer supplied to `Thing`.
     config_file: str
         absolute path to database server configuration file
-    """
-
+    
     def __init__(
         self,
         instance: Parameterized,
@@ -95,23 +99,20 @@ class BaseAsyncDB(BaseDB):
         self.async_session = sessionmaker(self.engine, expire_on_commit=True, class_=asyncio_ext.AsyncSession)
         if self.conf.provider == "sqlite":
             ThingTableBase.metadata.create_all(self.engine)
+"""
 
 
 class BaseSyncDB(BaseDB):
     """
-    Base class for an synchronous (blocking) database engine, implements configuration file reader, sqlalchemy engine
-    & session creation. Default DB engine for `Thing` & called immediately after properties are set/written.
+    Base class for a synchronous (blocking) database engine, implements sqlalchemy engine & session creation.
+    Default DB engine for `Thing` & called immediately after properties are set/written.
 
     Parameters
     ----------
-    database: str
-        The database to open in the database server specified in config_file (see below)
-    serializer: BaseSerializer
-        The serializer to use for serializing and deserializing data (for example
-        property serializing into database for storage). Will be the same as
-        zmq_serializer supplied to `Thing`.
+    instance: Parameterized
+        The `Thing` instance to which this database engine belongs
     config_file: str
-        absolute path to database server configuration file
+        path to database server configuration file
     """
 
     def __init__(self, instance: Parameterized, config_file: str | None = None) -> None:
@@ -124,15 +125,8 @@ class BaseSyncDB(BaseDB):
 
 class ThingDB(BaseSyncDB):
     """
-    Database engine composed within `Thing`, carries out database operations like storing object information, properties
-    etc.
-
-    Parameters
-    ----------
-    id: str
-        `id` of the `Thing`
-    config_file: str
-        configuration file of the database server
+    Synchronous database engine composed within `Thing`.
+    Carries out database operations like storing object information, properties etc.
     """
 
     def fetch_own_info(self):  # -> ThingInformation:
@@ -147,7 +141,8 @@ class ThingDB(BaseSyncDB):
             return
         with self.sync_session() as session:
             stmt = select(ThingInformation).filter_by(
-                thing_id=self.thing_instance.id, thing_class=self.thing_instance.__class__.__name__
+                thing_id=self.thing_instance.id,
+                thing_class=self.thing_instance.__class__.__name__,
             )
             data = session.execute(stmt)
             data = data.scalars().all()
@@ -162,7 +157,7 @@ class ThingDB(BaseSyncDB):
 
     def get_property(self, property: str | Property, deserialized: bool = True) -> Any:
         """
-        fetch a single property.
+        Fetch a single property.
 
         Parameters
         ----------
@@ -173,7 +168,7 @@ class ThingDB(BaseSyncDB):
 
         Returns
         -------
-        value: Any
+        Any
             property value
         """
         with self.sync_session() as session:
@@ -198,7 +193,7 @@ class ThingDB(BaseSyncDB):
 
     def set_property(self, property: str | Property, value: Any) -> None:
         """
-        change the value of an already existing property.
+        Change the value of an already existing property.
 
         Parameters
         ----------
@@ -249,16 +244,18 @@ class ThingDB(BaseSyncDB):
 
     def get_properties(self, properties: dict[str | Property, Any], deserialized: bool = True) -> dict[str, Any]:
         """
-        get multiple properties at once.
+        Get multiple properties at once.
 
         Parameters
         ----------
         properties: List[str | Property]
             string names or the descriptor of the properties as a list
+        deserialized: bool, default True
+            deserilize the properties if True
 
         Returns
         -------
-        value: Dict[str, Any]
+        dict[str, Any]
             property names and values as items
         """
         with self.sync_session() as session:
@@ -275,7 +272,9 @@ class ThingDB(BaseSyncDB):
             props = dict()
             for prop in unserialized_props:
                 serializer = Serializers.content_types.get(prop.content_type, None) or Serializers.for_object(
-                    self.thing_instance.id, self.thing_instance.__class__.__name__, prop.name
+                    self.thing_instance.id,
+                    self.thing_instance.__class__.__name__,
+                    prop.name,
                 )
                 props[prop.name] = (
                     prop.serialized_value if not deserialized else serializer.loads(prop.serialized_value)
@@ -284,7 +283,7 @@ class ThingDB(BaseSyncDB):
 
     def set_properties(self, properties: dict[str | Property, Any]) -> None:
         """
-        change the values of already existing few properties at once
+        Change the values of already existing properties at once
 
         Parameters
         ----------
@@ -340,12 +339,17 @@ class ThingDB(BaseSyncDB):
 
     def get_all_properties(self, deserialized: bool = True) -> dict[str, Any]:
         """
-        read all properties of the `Thing` instance.
+        Get all properties of the `Thing` instance.
 
         Parameters
         ----------
         deserialized: bool, default True
             deserilize the properties if True
+
+        Returns
+        -------
+        dict[str, Any]
+            property names and values as items
         """
         with self.sync_session() as session:
             stmt = select(SerializedProperty).filter_by(
@@ -364,15 +368,19 @@ class ThingDB(BaseSyncDB):
             return props
 
     def create_missing_properties(
-        self, properties: dict[str, Property], get_missing_property_names: bool = False
-    ) -> None:
+        self,
+        properties: dict[str, Property],
+        get_missing_property_names: bool = False,
+    ) -> None | list[str]:
         """
-        create any and all missing properties of `Thing` instance in database.
+        Create any and all missing properties of `Thing` instance in database.
 
         Parameters
         ----------
         properties: Dict[str, Property]
             descriptors of the properties
+        get_missing_property_names: bool, default False
+            whether to return the list of missing property names
 
         Returns
         -------
@@ -406,7 +414,7 @@ class ThingDB(BaseSyncDB):
 
     def create_db_init_properties(self, thing_id: str = None, thing_class: str = None, **properties: Any) -> None:
         """
-        Create properties that are initialized from database for a thing instance.
+        Create properties that are supposed to be initialized from database for a thing instance.
         Invoke this method once before running the thing instance to store its initial value in database.
 
         Parameters
@@ -415,7 +423,7 @@ class ThingDB(BaseSyncDB):
             ID of the thing instance to which these properties belong
         thing_class: str
             Class name of the thing instance to which these properties belong
-        properties: Dict[str, Any]
+        properties: dict[str, Any]
             property names and their initial values as dictionary pairs
         """
         with self.sync_session() as session:
@@ -594,4 +602,9 @@ class MongoThingDB:
             return missing_props
 
 
-__all__ = [BaseAsyncDB.__name__, BaseSyncDB.__name__, ThingDB.__name__, batch_db_commit.__name__]
+__all__ = [
+    # BaseAsyncDB.__name__,
+    BaseSyncDB.__name__,
+    ThingDB.__name__,
+    batch_db_commit.__name__,
+]
