@@ -62,6 +62,8 @@ class ZMQ_TRANSPORTS(StrEnum):
 
 
 class ZMQSocketType(IntEnum):
+    """General ZMQ socket types"""
+
     PAIR = zmq.PAIR
     PUB = zmq.PUB
     SUB = zmq.SUB
@@ -78,6 +80,8 @@ class ZMQSocketType(IntEnum):
 
 
 ZMQ_EVENT_MAP = {}
+"""Built-in ZMQ events"""
+
 for name in dir(zmq):
     if name.startswith("EVENT_"):
         value = getattr(zmq, name)
@@ -85,6 +89,8 @@ for name in dir(zmq):
 
 
 class Operations(StrEnum):
+    """WoT operations (both standard and non-standard)"""
+
     readproperty = "readproperty"
     writeproperty = "writeproperty"
     deleteproperty = "deleteproperty"

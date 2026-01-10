@@ -20,7 +20,8 @@ TypeDeclaration = Union[str, List[str]]
 
 
 def is_a_reference(d: JSONSchema) -> bool:
-    """Return True if a JSONSchema dict is a reference
+    """
+    Return True if a JSONSchema dict is a reference
 
     JSON Schema references are one-element dictionaries with
     a single key, `$ref`.  `pydantic` sometimes breaks this
@@ -30,7 +31,8 @@ def is_a_reference(d: JSONSchema) -> bool:
 
 
 def look_up_reference(reference: str, d: JSONSchema) -> JSONSchema:
-    """Look up a reference in a JSONSchema
+    """
+    Look up a reference in a JSONSchema
 
     This first asserts the reference is local (i.e. starts with #
     so it's relative to the current file), then looks up
@@ -66,7 +68,8 @@ def convert_object(d: JSONSchema) -> JSONSchema:
 
 
 def convert_anyof(d: JSONSchema) -> JSONSchema:
-    """Convert the anyof key to oneof
+    """
+    Convert the anyof key to oneof
 
     JSONSchema makes a distinction between "anyof" and "oneof", where the former
     means "any of these fields can be present" and the latter means "exactly one
@@ -82,7 +85,8 @@ def convert_anyof(d: JSONSchema) -> JSONSchema:
 
 
 def convert_prefixitems(d: JSONSchema) -> JSONSchema:
-    """Convert the prefixitems key to items
+    """
+    Convert the prefixitems key to items
 
     JSONSchema 2019 (as used by thing description) used
     `items` with a list of values in the same way that JSONSchema
@@ -128,7 +132,8 @@ def jsonschema_to_dataschema(
     recursion_depth: int = 0,
     recursion_limit: int = 99,
 ) -> JSONSchema:
-    """remove references and change field formats
+    """
+    Remove references and change field formats
 
     JSONSchema allows schemas to be replaced with `{"$ref": "#/path/to/schema"}`.
     Thing Description does not allow this. `dereference_jsonschema_dict` takes a
@@ -180,7 +185,8 @@ def jsonschema_to_dataschema(
 
 
 def type_to_dataschema(t: Union[type, BaseModel], **kwargs) -> dict:
-    """Convert a Python type to a Thing Description DataSchema
+    """
+    Convert a Python type to a Thing Description DataSchema
 
     This makes use of pydantic's `schema_of` function to create a
     json schema, then applies some fixes to make a DataSchema

@@ -57,8 +57,16 @@ class Form(Schema):
     def from_TD(cls, form_json: dict[str, Any]) -> "Form":
         """
         Create a Form instance from a Thing Description JSON object.
-        :param form_json: The JSON representation of the form.
-        :return: An instance of Form.
+
+        Parameters
+        ----------
+        form_json: dict[str, Any]
+            The JSON representation of the form.
+
+        Returns
+        -------
+        Form
+            An instance of Form.
         """
         form = cls()
         for field in cls.model_fields:

@@ -40,7 +40,11 @@ from .utils import generate_main_script_log_filename, set_global_event_loop_poli
 class Configuration:
     """
     Allows to auto apply common settings used throughout the package, instead of passing these settings as arguments.
-    Import `global_config` variable instead of instantiating this class.
+    Import `global_config` variable instead of instantiating this class. Please check `global_config` docstring for supported values
+    or [website documentation](https://docs.hololinked.dev/api-reference/global-config/).
+
+    This implementation needs to be improved in general. Consider opening an issue
+    if you have suggestions at [GitHub](https://github.com/hololinked-dev/hololinked/issues).
     """
 
     __slots__ = [
@@ -90,10 +94,7 @@ class Configuration:
         self.load_variables()
 
     def load_variables(self):
-        """
-        set default values & use the values from environment file.
-        Set `use_environment` to `False` to not use environment file. This method is called during `__init__`.
-        """
+        """Set default values. This method is called during `__init__`"""
         # note that all variables have not been implemented yet,
         # things just come and go as of now
         self.TEMP_DIR = os.path.join(os.path.expanduser("~"), ".hololinked")
@@ -122,8 +123,10 @@ class Configuration:
 
     def setup(self):
         """
-        actions to be done to recreate global configuration state after changing config values.
+        Actions to be done to recreate global configuration state after changing config values.
         Called after `load_variables` and `set` methods.
+
+        Please call this method after changing config values directly specific to logging or event loop policy
         """
         self.setup_temp_dirs()
 
@@ -230,7 +233,7 @@ class Configuration:
                 warnings.warn(f"permission denied to create directory {directory}", UserWarning)
 
     def set_temp_dir(self, path: str) -> None:
-        """sets the base temporary directory path"""
+        """sets the base directory path for temporary files and application data (sockets, logs, databases, secrets)"""
         self.TEMP_DIR = path
         self.setup_temp_dirs()
 

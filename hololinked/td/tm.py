@@ -52,7 +52,7 @@ class ThingModel(Schema):
         self.skip_names = skip_names or []
 
     def generate(self) -> "ThingModel":
-        """create thing model"""
+        """populate the thing model"""
         self.id = self.instance.id
         self.title = self.instance.__class__.__name__
         self.context = ["https://www.w3.org/2022/wot/td/v1.1"]
@@ -66,10 +66,13 @@ class ThingModel(Schema):
         return self
 
     def produce(self) -> Thing:
+        """produce a Thing instance from the Thing Model, not implemented yet"""
         raise NotImplementedError("This will be implemented in a future release for an API first approach")
 
     # not the best code and logic, but works for now
     skip_properties: list[str] = ["expose", "thing_description", "GUI", "object_info"]
+    """list of property names to skip when generating the TD"""
+
     skip_actions: list[str] = [
         Thing._add_property.name,
         Thing._get_properties.name,
@@ -78,7 +81,10 @@ class ThingModel(Schema):
         "get_postman_collection",
         "get_our_thing_model",
     ]
+    """list of action names to skip when generating the TD"""
+
     skip_events: list[str] = []
+    """list of event names to skip when generating the TD"""
 
     def add_interaction_affordances(self) -> None:
         """add interaction affordances to thing model"""
@@ -124,7 +130,7 @@ class ThingModel(Schema):
                 return value
 
         result = {}
-        for field in self.model_fields:
+        for field in self.__class__.model_fields:
             if field in self.skip_keys:
                 continue
             if not hasattr(self, field) or getattr(self, field) is None:
