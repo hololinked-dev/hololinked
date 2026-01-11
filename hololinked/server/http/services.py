@@ -59,7 +59,20 @@ class ThingDescriptionService:
         use_localhost: bool = False,
         authority: str = None,
     ) -> dict[str, JSONSerializable]:
-        """generate the HTTP Thing Description"""
+        """
+        generate the HTTP Thing Description
+
+        Parameters
+        ----------
+        ignore_errors: bool, default `False`
+            if `True`, errors while generating metadata for an affordances is ignored
+        skip_names: list[str], default `[]`
+            list of affordance names to skip while generating the TD
+        use_localhost: bool, default `False`
+            if `True`, localhost is used in the TD URLs instead of the server's hostname.
+        authority: str, optional
+            custom authority (protocol + host + port) to be used in the TD URLs. If None, the machine's hostname is used.
+        """
         ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
         TD = copy.deepcopy(ZMQ_TD)
 
@@ -79,8 +92,23 @@ class ThingDescriptionService:
         authority: str,
         ignore_errors: bool,
         use_localhost: bool,
-    ) -> dict[str, JSONSerializable]:
-        """add forms to properties in the thing model"""
+    ) -> None:
+        """
+        add properties to the TD with forms
+
+        Parameters
+        ----------
+        TD: dict[str, JSONSerializable]
+            The Thing Description to which properties are to be added
+        ZMQ_TD: dict[str, JSONSerializable]
+            The ZMQ Thing Description from which properties are to be read
+        authority: str
+            authority (protocol + host + port) to be used in the TD URLs
+        ignore_errors: bool
+            if `True`, errors while generating metadata for an affordances is ignored
+        use_localhost: bool
+            if `True`, localhost is used in the TD URLs instead of the server's hostname
+        """
         from .config import HandlerMetadata
 
         for name in ZMQ_TD.get("properties", []):
@@ -135,8 +163,23 @@ class ThingDescriptionService:
         authority: str,
         ignore_errors: bool,
         use_localhost: bool,
-    ) -> dict[str, JSONSerializable]:
-        """add forms to actions in the thing model"""
+    ) -> None:
+        """
+        add actions to the TD with forms
+
+        Parameters
+        ----------
+        TD: dict[str, JSONSerializable]
+            The Thing Description to which actions are to be added
+        ZMQ_TD: dict[str, JSONSerializable]
+            The ZMQ Thing Description from which actions are to be read
+        authority: str
+            authority (protocol + host + port) to be used in the TD URLs
+        ignore_errors: bool
+            if `True`, errors while generating metadata for an affordances is ignored
+        use_localhost: bool
+            if `True`, localhost is used in the TD URLs instead of the server's hostname
+        """
         from .config import HandlerMetadata
 
         for name in ZMQ_TD.get("actions", []):
@@ -175,8 +218,23 @@ class ThingDescriptionService:
         authority: str,
         ignore_errors: bool,
         use_localhost: bool,
-    ) -> dict[str, JSONSerializable]:
-        """add forms to events in the thing model"""
+    ) -> None:
+        """
+        add events to the TD with forms
+
+        Parameters
+        ----------
+        TD: dict[str, JSONSerializable]
+            The Thing Description to which events are to be added
+        ZMQ_TD: dict[str, JSONSerializable]
+            The ZMQ Thing Description from which events are to be read
+        authority: str
+            authority (protocol + host + port) to be used in the TD URLs
+        ignore_errors: bool
+            if `True`, errors while generating metadata for an affordances is ignored
+        use_localhost: bool
+            if `True`, localhost is used in the TD URLs instead of the server's hostname
+        """
         from .config import HandlerMetadata
 
         for name in ZMQ_TD.get("events", []):
@@ -251,6 +309,7 @@ class ThingDescriptionService:
         TD["forms"].append(writemultipleproperties.json())
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
+        """adds security definitions to the TD"""
         from ...td.security_definitions import (
             APIKeySecurityScheme,
             BasicSecurityScheme,

@@ -10,7 +10,10 @@ from ..repository import BrokerThing  # noqa: F401
 
 
 class TopicPublisher:
-    """Publishes an event to an MQTT topic"""
+    """
+    Publishes an event to an MQTT topic. Supply a different class in `MQTTPublisher` to use a different one.
+    This object would be a controller in layered architecture.
+    """
 
     def __init__(
         self,
@@ -19,6 +22,18 @@ class TopicPublisher:
         config: Any,
         logger: structlog.stdlib.BoundLogger,
     ) -> None:
+        """
+        Parameters
+        ----------
+        client: aiomqtt.Client
+            The MQTT client to use for publishing messages
+        resource: EventAffordance | PropertyAffordance
+            dataclass representation of observable property or event to be published
+        config: RuntimeConfig
+            The runtime configuration for the `MQTTPublisher`
+        logger: structlog.stdlib.BoundLogger
+            The logger to use for logging messages
+        """
         from .config import RuntimeConfig  # noqa: F401
 
         self.client = client
@@ -35,14 +50,7 @@ class TopicPublisher:
         self._stop_publishing = True
 
     async def publish(self):
-        """
-        Publishes an event to the MQTT broker.
-
-        Parameters
-        ----------
-        resource: EventAffordance
-            The event affordance for which the events are to be published
-        """
+        """Publishes events to the MQTT broker in an infinite loop"""
         consumer = self.thing.subscribe_event(self.resource)
         self.logger.info(f"Starting to publish events for {self.resource.name} to MQTT broker on topic {self.topic}")
         while not self._stop_publishing:
@@ -64,7 +72,10 @@ class TopicPublisher:
 
 
 class ThingDescriptionPublisher:
-    """Publishes Thing Description over MQTT Topic"""
+    """
+    Publishes Thing Description to an MQTT Topic. Supply a different class in `MQTTPublisher` to use a different one.
+    This object would be a controller in layered architecture.
+    """
 
     def __init__(
         self,
@@ -73,6 +84,18 @@ class ThingDescriptionPublisher:
         logger: structlog.stdlib.BoundLogger,
         ZMQ_TD: dict[str, Any],
     ) -> None:
+        """
+        Parameters
+        ----------
+        client: aiomqtt.Client
+            The MQTT client to use for publishing messages
+        config: RuntimeConfig
+            The runtime configuration for the MQTT publisher
+        logger: structlog.stdlib.BoundLogger
+            The logger to use for logging messages
+        ZMQ_TD: dict[str, Any]
+            The ZMQ Thing Description message received from ZMQ broker
+        """
         from .config import RuntimeConfig  # noqa: F401
 
         self.client = client
@@ -88,7 +111,7 @@ class ThingDescriptionPublisher:
         )
 
     async def publish(self, ZMQ_TD: dict[str, Any]) -> dict[str, Any]:
-        """Returns the Thing Description of the specified thing."""
+        """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True"""
         TD = await self.thing_description.generate(ZMQ_TD)
 
         await self.client.publish(

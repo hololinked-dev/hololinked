@@ -32,7 +32,14 @@ from .repository import (
 
 
 class BaseProtocolServer(Parameterized):
-    """Base class for protocol specific servers"""
+    """
+    Base class for protocol specific servers.
+
+    Protocol implementations follow a layered approach where each protocol server is split into their
+    message handlers (controllers), services (important logic), and repository (for example, `Thing` repository allows
+    execution of operations over the `Thing` class). This class (& its children) represent the protocol server itself
+    and is responsible for starting and stopping the protocol, deciding which `Thing`s to serve etc.
+    """
 
     port = Integer(default=9000, bounds=(1, 65535))
     """The protocol port"""
@@ -131,6 +138,16 @@ class BaseProtocolServer(Parameterized):
 
     @forkable
     def run(self, forked: bool = False, print_welcome_message: bool = True) -> None:
+        """
+        Run the server and serve your things
+
+        Parameters
+        ----------
+        forked: bool, default False
+            whether to run in a forked thread
+        print_welcome_message: bool, default True
+            whether to print a welcome message on startup, like the ports and access points
+        """
         from . import run
 
         run(self, print_welcome_message=print_welcome_message)
@@ -141,7 +158,18 @@ class BaseProtocolServer(Parameterized):
 
 @forkable
 def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_message: bool = True) -> None:
-    """run servers and serve your things"""
+    """
+    run servers and serve your things
+
+    Parameters
+    ----------
+    servers: BaseProtocolServer
+        one or more server instances to run
+    forked: bool, default False
+        whether to run in a forked thread
+    print_welcome_message: bool, default True
+        whether to print a welcome message on startup, like the ports and access points
+    """
     from . import ZMQServer
 
     loop = get_current_async_loop()  # initialize an event loop if it does not exist

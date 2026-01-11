@@ -35,7 +35,6 @@ try:
         - `Authorization: Basic (username:password)`
 
         The username and password are expected to be base64 encoded, by default.
-
         Set `expect_base64=False` if you want to use plain text credentials without base64 encoding.
 
         Use bcrypt when you are constrained in terms of memory. Use Argon2BasicSecurity
@@ -86,7 +85,7 @@ try:
         def validate_base64(self, b64_str: str) -> bool:
             """
             Validate a base64 encoded string containing username and password.
-            Please strip the 'Basic ' prefix before passing.
+            Please strip the 'Basic ' prefix before passing as argument.
 
             Returns
             -------
@@ -119,7 +118,6 @@ try:
         - `Authorization: Basic (username:password)`
 
         The username and password are expected to be base64 encoded, by default.
-
         Set `expect_base64=False` if you want to use plain text credentials without base64 encoding.
 
         Argon2 is the recommended password hashing security scheme.
@@ -226,9 +224,11 @@ try:
         clients and expire their keys after a definite period. More features will be added in future.
 
         Before your application uses the API key, you need to create and store an API key using the `create()` method,
-        otherwise a `ValueError` will be raised when validating. This may be outside the scope of your application code.
+        otherwise a `ValueError` will be raised when validating. This creation of API key may be outside the
+        scope of your application code.
 
-        Once created, instantiate this class once again with the name and pass it to your server (currently only HTTP server).
+        Once created, instantiate this class once again with the name and pass it to your server
+        (currently only HTTP server).
 
         Secrets are stored under the `global_config.TEMP_DIR` under a `secrets` directory in a JSON file.
 
@@ -271,16 +271,16 @@ try:
             """
             Create a new API key. Use this method to generate and store a new API key before running your application.
             The validity period, specified in minutes (default 30 days), is stored as validation metadata and not a part
-            of the key itself.
+            of the key itself. Nevertheless, this is checked during validation.
 
             The format of the key is `<prefix>-<id>.<secret>`, where both id and secret are randomly generated strings.
 
             Parameters
             ----------
             size: int
-                The size of the secret part of the API key, defaults to 24
+                The size of the secret part of the API key, defaults to 24 characters
             id_size: int
-                The size of the ID part of the API key, defaults to 5
+                The size of the ID part of the API key, defaults to 5 characters
             validity_period_minutes: int
                 The validity period of the API key in minutes, defaults to 30 days
             description: str
@@ -293,7 +293,8 @@ try:
             prefix: str
                 The prefix for the API key, defaults to "wotdat" (web of things device authentication token)
             print_value: bool
-                Whether to print the generated API key to the console once generated, defaults to `True`
+                Whether to print the generated API key to the console once generated, defaults to `True`. If set to
+                `False`, use the value returned by this method.
             override: bool
                 Whether to override an existing API key with the same name, defaults to `False`
 
@@ -335,12 +336,7 @@ try:
             return self._ph.hash(apikey)
 
         def save(self, record: APIKeyRecord, filename: str = "apikeys.json", override: bool = False) -> None:
-            """
-            Save the security scheme to persistent storage
-
-            This is a placeholder method and should be implemented to save the security scheme
-            to a database or file as needed.
-            """
+            """Save the security scheme data to persistent storage"""
             filepath = os.path.join(global_config.TEMP_DIR_SECRETS, filename)
             existing_data = {}
             if os.path.exists(filepath):
