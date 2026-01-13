@@ -37,8 +37,14 @@ from .zmq.consumed_interactions import (
 
 class ClientFactory:
     """
-    An factory class for creating clients to interact with Things over different protocols.
-    This object is not meant to be instantiated, but rather to provide class methods for creating clients.
+    A factory class for creating clients to interact with `Thing`s over different protocols.
+    This object is not meant to be instantiated, but rather provides class methods for creating clients.
+
+    ```python
+    zmq_client = ClientFactory.zmq(server_id="server1", thing_id="thing1", access_point="ipc:///tmp/thing1")
+    http_client = ClientFactory.http(url="https://example.com/thing-description")
+    mqtt_client = ClientFactory.mqtt(hostname="broker.example.com", port=8883, thing_id="thing1", username="user", password="pass")
+    ```
     """
 
     __wrapper_assignments__ = ("__name__", "__qualname__", "__doc__")
@@ -218,9 +224,9 @@ class ClientFactory:
             - `security`: `BasicSecurity` | `APIKeySecurity`, optional.
                 The security scheme to use for authentication
             - `username`: `str`, optional.
-                The username for HTTP Basic Authentication
+                The username for HTTP Basic Authentication, shortcut for creating a `BasicSecurity` instance
             - `password`: `str`, optional.
-                The password for HTTP Basic Authentication
+                The password for HTTP Basic Authentication, shortcut for creating a `BasicSecurity` instance
 
         Returns
         -------
@@ -366,12 +372,16 @@ class ClientFactory:
             The hostname of the MQTT broker
         port: int
             The port of the MQTT broker
+        thing_id: str
+            The ID of the thing to interact with
+        protocol_version: paho.mqtt.client.MQTTProtocolVersion
+            The MQTT protocol version (e.g., MQTTv5)
         qos: int
             The Quality of Service level for MQTT messages (0, 1, or 2)
         username: str, optional
-            The username for MQTT authentication
+            The username for authenticating with MQTT broker
         password: str, optional
-            The password for MQTT authentication
+            The password for authenticating with MQTT broker
         kwargs:
             Additional configuration options:
 
@@ -472,6 +482,7 @@ class ClientFactory:
 
     @classmethod
     def add_action(self, client, action: ConsumedThingAction) -> None:
+        """add action to client instance"""
         setattr(action, "__name__", action.resource.name)
         setattr(action, "__qualname__", f"{client.__class__.__name__}.{action.resource.name}")
         setattr(
@@ -483,6 +494,7 @@ class ClientFactory:
 
     @classmethod
     def add_property(self, client, property: ConsumedThingProperty) -> None:
+        """add property to client instance"""
         setattr(property, "__name__", property.resource.name)
         setattr(property, "__qualname__", f"{client.__class__.__name__}.{property.resource.name}")
         setattr(
@@ -495,6 +507,7 @@ class ClientFactory:
 
     @classmethod
     def add_event(cls, client, event: ConsumedThingEvent) -> None:
+        """add event to client instance"""
         setattr(event, "__name__", event.resource.name)
         setattr(event, "__qualname__", f"{client.__class__.__name__}.{event.resource.name}")
         setattr(
