@@ -18,7 +18,6 @@ from hololinked.core.properties import Parameter  # noqa: F401
 from hololinked.core.state_machine import BoundFSM
 from hololinked.core.zmq.brokers import EventPublisher
 from hololinked.core.zmq.rpc_server import RPCServer
-from hololinked.utils import get_default_logger
 
 
 """
