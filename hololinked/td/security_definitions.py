@@ -7,7 +7,7 @@ from .base import Schema
 
 class SecurityScheme(Schema):
     """
-    create security scheme.
+    Represents a security scheme.
     schema - https://www.w3.org/TR/wot-thing-description11/#sec-security-vocabulary-definition
     """
 
@@ -32,7 +32,7 @@ class NoSecurityScheme(SecurityScheme):
 
 
 class BasicSecurityScheme(SecurityScheme):
-    """Basic Security Scheme"""
+    """Basic Security Scheme, username and password"""
 
     in_: str = Field(default="header", alias="in")
 

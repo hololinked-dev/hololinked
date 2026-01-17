@@ -18,8 +18,8 @@ from .services import ThingDescriptionService
 
 class MQTTPublisher(BaseProtocolServer):
     """
-    MQTT Publisher for publishing messages to a specific topic.
-    All events defined on the Thing will be published to MQTT topics with topic name "{thing id}/{event name}"
+    MQTT Publisher. All events and observable properties defined on the Thing will be published to MQTT topics
+    with topic name "{thing id}/{event name}".
 
     For setting up an MQTT broker if one does not exist,
     see [infrastructure project](https://github.com/hololinked-dev/daq-system-infrastructure).
@@ -56,6 +56,13 @@ class MQTTPublisher(BaseProtocolServer):
             The MQTT broker username
         password: str
             The MQTT broker password
+        qos: int
+            The (global) MQTT QoS level to use for publishing messages
+        things: list[Thing]
+            The `Thing`s that need to publish their events/properties to MQTT broker
+        config: dict, optional
+            Additional runtime configuration for the MQTT publisher, see `RuntimeConfig` object under
+            `hololinked.server.mqtt.config`
         kwargs: dict
             Additional keyword arguments
         """
@@ -83,9 +90,9 @@ class MQTTPublisher(BaseProtocolServer):
 
     async def start(self):
         """
-        Sets up the MQTT client and starts publishing events from the configured things.
+        Sets up the MQTT client and starts publishing events from the `Thing`s.
         All events are dispatched to their own async tasks. This method returns and
-        creates side-effects only.
+        creates side-effects only & does not block. Use the `run()` method instead for a blocking call.
         """
         self.client = aiomqtt.Client(
             hostname=self.hostname,
@@ -104,6 +111,7 @@ class MQTTPublisher(BaseProtocolServer):
         await self.setup()
 
     async def start_publishers(self, thing: CoreThing) -> None:
+        """Start the publishers for a given `Thing`"""
         eventloop = get_current_async_loop()
         if not thing.rpc_server:
             raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
@@ -146,6 +154,7 @@ class MQTTPublisher(BaseProtocolServer):
         eventloop.create_task(td_publisher.publish(TD))
 
     async def setup(self) -> None:
+        """Setup MQTT publishers per `Thing` post connection to broker"""
         eventloop = get_current_async_loop()
         for thing in self.things:
             eventloop.create_task(self.start_publishers(thing))

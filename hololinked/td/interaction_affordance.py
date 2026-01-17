@@ -51,7 +51,10 @@ class InteractionAffordance(Schema):
 
     @property
     def owner(self) -> Thing:
-        """Owning `Thing` instance of the interaction affordance"""
+        """
+        Owning `Thing` instance or `Thing` class of the interaction affordance.
+        Depends on how this object was created, whether using an instance or a class.
+        """
         return self._owner
 
     @owner.setter
@@ -103,8 +106,8 @@ class InteractionAffordance(Schema):
         return self._name
 
     @property
-    def thing_id(self) -> str:
-        """ID of the `Thing` instance owning the interaction affordance"""
+    def thing_id(self) -> str | None:
+        """ID of the `Thing` instance owning the interaction affordance, if available, otherwise None"""
         return self._thing_id
 
     @property
@@ -166,14 +169,16 @@ class InteractionAffordance(Schema):
 
     @classmethod
     def generate(
-        cls, interaction: Property | Action | Event, owner: Thing
+        cls,
+        interaction: Property | Action | Event,
+        owner: Thing,
     ) -> "PropertyAffordance | ActionAffordance | EventAffordance":
         """
-        build the schema for the specific interaction affordance within the container object.
+        build the schema for the specific interaction affordance as an instance of this class.
         Use the `json()` method to get the JSON representation of the schema.
 
-        Note that this method is different from build() method as its supposed to be used as a classmethod.
-        Internally calls build(), however some additional steps are included.
+        Note that this method is different from build() method as its supposed to be used as a classmethod
+        to create an instance. Although, it internally calls build(), and some additional steps are included.
 
         Parameters
         ----------
@@ -191,14 +196,14 @@ class InteractionAffordance(Schema):
     @classmethod
     def from_TD(cls, name: str, TD: JSON) -> "PropertyAffordance | ActionAffordance | EventAffordance":
         """
-        populate the schema from the TD and return it as the container object
+        populate the schema from the TD and return it as an instance of this class.
 
         Parameters
         ----------
         name: str
             name of the interaction affordance used as key in the TD
         TD: JSON
-            Thing Description JSON dictionary (the entire one, not just the fragment of the affordance)
+            Thing Description JSON dictionary (the entire one, not just the component of the affordance)
 
         Returns
         -------
@@ -243,10 +248,7 @@ class InteractionAffordance(Schema):
         InteractionAffordance._custom_schema_generators[descriptor] = schema_generator
 
     def build_non_compliant_metadata(self) -> None:
-        """
-        If by chance, there is additional non standard metadata to be added (i.e. also that is outside LD, or
-        may not even be within the TD), they can be added here.
-        """
+        """If by chance, there is additional non standard metadata to be added, they can be added here"""
         pass
 
     def override_defaults(self, **kwargs):
@@ -267,7 +269,9 @@ class InteractionAffordance(Schema):
                 setattr(self, key, value)
 
     def __hash__(self):
-        return hash(self.thing_id + "" if not self.thing_cls else self.thing_cls.__name__ + self.name)
+        return hash(
+            self.thing_id if self.thing_id else "" + self.thing_cls.__name__ if self.thing_cls else "" + self.name
+        )
 
     def __str__(self):
         if self.thing_cls:

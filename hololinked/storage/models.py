@@ -13,7 +13,7 @@ from ..constants import JSONSerializable
 
 
 class ThingTableBase(DeclarativeBase):
-    """SQLAlchemy base table for all thing related tables"""
+    """SQLAlchemy base table for all Thing related tables"""
 
     pass
 

@@ -18,10 +18,22 @@ from .thing import Thing as RemoteObject
 log_message_schema = {
     "type": "object",
     "properties": {
-        "level": {"type": "string", "description": "log level, one of DEBUG, INFO, WARN, ERROR, CRITICAL"},
-        "timestamp": {"type": "string", "description": "timestamp of the log entry"},
-        "thread_id": {"type": "integer", "description": "ID of the thread that generated the log entry"},
-        "message": {"type": "string", "description": "log message"},
+        "level": {
+            "type": "string",
+            "description": "log level, one of DEBUG, INFO, WARN, ERROR, CRITICAL",
+        },
+        "timestamp": {
+            "type": "string",
+            "description": "timestamp of the log entry",
+        },
+        "thread_id": {
+            "type": "integer",
+            "description": "ID of the thread that generated the log entry",
+        },
+        "message": {
+            "type": "string",
+            "description": "log message",
+        },
     },
     "required": ["level", "timestamp", "thread_id", "message"],
     "additionalProperties": False,
@@ -32,8 +44,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
     """
     Log handler with remote access attached to `Thing`'s logger, capable of streaming the log entries as events.
     Set `remote_accessible_logger` to True in the `Thing` to enable this handler.
-    The schema of the pushed logs is an array of objects,
-    where each object has the following JSON schema:
+    The schema of the pushed logs is an array of objects, where each object is:
 
     ```json
     {
@@ -156,9 +167,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
 
     @remote_method()
     def stop_events(self) -> None:
-        """
-        stop pushing log events
-        """
+        """stop pushing log events"""
         self._push_events = False
         if self._events_thread:  # coroutine variant will resolve automatically
             self._events_thread.join()
@@ -236,6 +245,8 @@ def prepare_object_logger(instance: RemoteObject, remote_access: bool = False) -
 
     Parameters
     ----------
+    instance: Thing
+        the Thing instance for which logger is to be prepared
     remote_access: bool
         if True, a RemoteAccessHandler is attached to the logger.
     """
@@ -283,7 +294,6 @@ class LogHistoryHandler(logging.Handler):
         """
         Parameters
         ----------
-
         log_list: list, optional
             Initial set of log entries to start with. Optional, defaults to empty list.
         """

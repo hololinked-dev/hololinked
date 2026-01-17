@@ -7,8 +7,8 @@ from pydantic import BaseModel
 
 class Schema(BaseModel):
     """
-    Base dataclass for all WoT schema; Implements a custom asdict method which replaces dataclasses' asdict
-    utility function
+    Base pydantic model for all WoT schema components (as in, parts within the schema).
+    Call `model_dump` or `json` method to get the JSON representation of the schema.
     """
 
     skip_keys: ClassVar = []  # override this to skip some dataclass attributes in the schema

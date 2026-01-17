@@ -16,6 +16,7 @@ from ..schema_validators import BaseSchemaValidator
 from ..utils import issubklass
 
 
+# TODO, this class will be removed in future and merged directly into the corresponding object
 class RemoteResourceInfoValidator:
     """
     A validator class for saving remote access related information on a resource. Currently callables (functions,

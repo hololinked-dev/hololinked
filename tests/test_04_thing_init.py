@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+import structlog
 
 from things import OceanOpticsSpectrometer
 
@@ -18,7 +19,6 @@ from hololinked.core.properties import Parameter  # noqa: F401
 from hololinked.core.state_machine import BoundFSM
 from hololinked.core.zmq.brokers import EventPublisher
 from hololinked.core.zmq.rpc_server import RPCServer
-from hololinked.utils import get_default_logger
 
 
 """
@@ -64,7 +64,7 @@ def test_01_id(thing_cls: ThingMeta):
 def notest_02_logger(thing_cls: ThingMeta):
     """Test logger setup"""
     # req. 1. logger must have remote access handler if remote_accessible_logger is True
-    logger = get_default_logger("test_logger")
+    logger = structlog.get_logger("test_logger")
     thing = thing_cls(
         id="test_remote_accessible_logger",
         logger=logger,
@@ -73,7 +73,7 @@ def notest_02_logger(thing_cls: ThingMeta):
     assert thing.logger == logger
     assert any(isinstance(handler, RemoteAccessHandler) for handler in thing.logger.handlers)
     # Therefore also check the false condition
-    logger = get_default_logger("test_logger_2")
+    logger = structlog.get_logger("test_logger_no_remote_access")
     thing = thing_cls(
         id="test_logger_without_remote_access",
         logger=logger,

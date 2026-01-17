@@ -47,11 +47,9 @@ class LocalExecutionContext(msgspec.Struct):
 
 
 class BaseHandler(RequestHandler):
-    """
-    Base request handler for running operations on the Thing.
+    """Base request handler for running operations on the `Thing`"""
 
-    Would be both a Controller in layered architecture.
-    """
+    # Would be a Controller in layered architecture.
 
     def initialize(
         self,
@@ -64,8 +62,7 @@ class BaseHandler(RequestHandler):
         Parameters
         ----------
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
-            JSON representation of Thing's exposed object using a dataclass that can quickly convert to a
-            ZMQ Request object
+            dataclass representation of `Thing`'s exposed object that can quickly convert to a ZMQ Request object
         owner_inst: HTTPServer
             owning `hololinked.server.HTTPServer` instance
         metadata: HandlerMetadata | None,
@@ -93,7 +90,7 @@ class BaseHandler(RequestHandler):
         """
         Checks if a client is an allowed client and enforces security schemes.
         Custom web request handlers can use this property to check if a client has access control on the server or `Thing`
-        and automatically generate a 401/403.
+        and let this property automatically generate a 401/403.
         """
         if not self.allowed_clients and not self.security_schemes:
             return True
@@ -166,7 +163,6 @@ class BaseHandler(RequestHandler):
         """
         For credential login, access control allow headers cannot be a wildcard '*'.
         Some requests require exact list of allowed headers for the client to access the response.
-        Use this method in set_custom_default_headers() override if necessary.
         """
         headers = ", ".join(self.request.headers.keys())
         if self.request.headers.get("Access-Control-Request-Headers", None):
@@ -175,7 +171,7 @@ class BaseHandler(RequestHandler):
 
     def set_custom_default_headers(self) -> None:
         """
-        sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
+        sets general default headers, override in child classes to add more headers.
 
         ```yaml
         Content-Type: application/json
@@ -197,8 +193,29 @@ class BaseHandler(RequestHandler):
         SerializableData,
     ]:
         """
-        merges all arguments to a single JSON body and retrieves execution context (like oneway calls, fetching executing
-        logs) and timeouts, payloads in URL query parameters etc.
+        Aggregates all arguments to a standard dataclasses from the query parameters.
+        Retrieves execution context (like oneway calls, fetching executing
+        logs), timeouts, etc. Non recognized arguments are passed as additional payload to the `Thing`.
+
+        An example would be the following URL:
+
+        ```
+        http://localhost:8080/property/temperature?oneway=true&invokationTimeout=5&some_arg=42
+        ```
+
+        server execution context would have `oneway` set to true & `invokationTimeout` set to 5 seconds,
+        local execution context would be empty as no such arguments were passed,
+        and additional payload would have `{"some_arg": 42}` as its value.
+
+        Returns
+        -------
+        tuple[
+            ServerExecutionContext,
+            ThingExecutionContext,
+            LocalExecutionContext,
+            SerializableData,
+        ]
+            server execution context, thing execution context, local execution context and payload (if any)
         """
         arguments = dict()
         if len(self.request.query_arguments) == 0:
@@ -248,6 +265,7 @@ class BaseHandler(RequestHandler):
             message_id = self.request.headers.get("X-Message-ID", None)
             if not message_id:
                 _, _, local_execution_context, _ = self.get_execution_parameters()
+                # TODO avoid calling get_execution_parameters twice in the same request
                 message_id = local_execution_context.messageID
             self._message_id = message_id
             return message_id
@@ -297,14 +315,19 @@ class RPCHandler(BaseHandler):
     """
     Handler for property read-write and method calls.
 
-    Merges both Controller and Service layer in layered architecture.
     Subclassed from controller for reducing boilerplate code as the service layer is too thin when implemented separately.
     Uses Repository layer directly.
     """
 
+    # Merges both Controller and Service layer in layered architecture. Repository layer is used directly.
+
     def is_method_allowed(self, method: str) -> bool:
         """
-        checks if the method is allowed for the property.
+        Checks if the method is allowed for the property:
+
+        - Access control (authentication & authorization)
+        - if the HTTP method is allowed for the resource.
+        - if its GET method with message id for no-block response.
         """
         if not self.has_access_control:
             return False
@@ -329,7 +352,7 @@ class RPCHandler(BaseHandler):
 
     async def handle_through_thing(self, operation: str) -> None:
         """
-        handles the Thing operations and writes the reply to the HTTP client.
+        handles the `Thing` operations and writes the reply to the HTTP client.
 
         Parameters
         ----------
@@ -555,12 +578,12 @@ class EventHandler(BaseHandler):
         """
         sets default headers for event handling. The general headers are listed as follows:
 
-        ```yml
+        ```yaml
         Content-Type: text/event-stream
         Cache-Control: no-cache
         Connection: keep-alive
-        Access-Control-Allow-Credentials: true
-        Access-Control-Allow-Origin: <client>
+        Access-Control-Allow-Credentials: true # Possibly for cookie auth
+        Access-Control-Allow-Origin: <client> # if CORS is enabled
         ```
         """
         self.set_header("Content-Type", "text/event-stream")
@@ -569,18 +592,14 @@ class EventHandler(BaseHandler):
         super().set_custom_default_headers()
 
     async def get(self):
-        """
-        events are support only with GET method.
-        """
+        """events are support only with GET method"""
         if self.has_access_control:
             self.set_custom_default_headers()
             await self.handle_datastream()
         self.finish()
 
     async def options(self):
-        """
-        options for the resource.
-        """
+        """options for the resource"""
         if self.has_access_control:
             self.set_status(204)
             self.set_custom_default_headers()
@@ -621,7 +640,7 @@ class EventHandler(BaseHandler):
 
 
 class JPEGImageEventHandler(EventHandler):
-    """handles events with images with image data header"""
+    """handles events with images with JPEG image data header"""
 
     def initialize(
         self,
@@ -635,7 +654,7 @@ class JPEGImageEventHandler(EventHandler):
 
 
 class PNGImageEventHandler(EventHandler):
-    """handles events with images with image data header"""
+    """handles events with images with PNG image data header"""
 
     def initialize(
         self,
@@ -736,7 +755,7 @@ class ReadinessProbeHandler(BaseHandler):
                 self.set_status(500, "not all things are ready")
             else:
                 self.set_status(200, "ok")
-                self.write({id: "ready" for id in replies.keys()})
+                # self.write({id: "ready" for id in replies.keys()})
         except Exception as ex:
             self.logger.error(f"error while checking readiness - {str(ex)}")
             self.set_status(500, f"error while checking readiness - {str(ex)}")
@@ -744,7 +763,7 @@ class ReadinessProbeHandler(BaseHandler):
 
 
 class ThingDescriptionHandler(BaseHandler):
-    """Thing Description generation handler"""
+    """Thing Description handler"""
 
     def initialize(
         self,
@@ -772,8 +791,8 @@ class ThingDescriptionHandler(BaseHandler):
             self.finish()
             return
 
-        self.set_custom_default_headers()
         try:
+            self.set_custom_default_headers()
             _, _, _, body = self.get_execution_parameters()
             body = body.deserialize() or dict()
             if not isinstance(body, dict):

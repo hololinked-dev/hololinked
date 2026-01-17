@@ -1,4 +1,3 @@
-import logging
 import socket
 import ssl
 import warnings
@@ -50,7 +49,7 @@ from .services import ThingDescriptionService
 class HTTPServer(BaseProtocolServer):
     """
     HTTP(s) server to expose `Thing` over HTTP protocol. Supports HTTP 1.1.
-    Use `add_thing` or `add_property` or `add_action` or `add_event` methods to add things to the server.
+    Use `add_thing`, or `add_property` or `add_action` or `add_event` methods to add things to the server.
     """
 
     address = IPAddress(default="0.0.0.0", doc="IP address")  # type: str
@@ -69,10 +68,7 @@ class HTTPServer(BaseProtocolServer):
         default=None,
         allow_None=True,
     )  # type: RuntimeConfig
-    """
-    Set CORS headers for the HTTP server. If set to False, CORS headers are not set. 
-    This is useful when the server is used in a controlled environment where CORS is not needed
-    """
+    """Runtime configuration for the HTTP server. See `hololinked.server.http.config.RuntimeConfig` for details"""
 
     def __init__(
         self,
@@ -82,7 +78,6 @@ class HTTPServer(BaseProtocolServer):
         things: list[Thing] | None = None,
         # host: Optional[str] = None,
         logger: structlog.stdlib.BoundLogger | None = None,
-        log_level: int = logging.INFO,
         ssl_context: ssl.SSLContext | None = None,
         security_schemes: list[Security] | None = None,
         # protocol_version : int = 1, network_interface : str = 'Ethernet',
@@ -100,10 +95,10 @@ class HTTPServer(BaseProtocolServer):
             and 127.0.0.1 to bind only to localhost
         logger: structlog.stdlib.BoundLogger, optional
             structlog.stdlib.BoundLogger instance
-        log_level: int
-            alternative to logger, this creates an internal logger with the specified log level along with a IO stream handler.
         ssl_context: ssl.SSLContext
             SSL context to provide encrypted communication
+        security_schemes: list[Security], optional
+            list of security schemes to be used by the server. If None, no security scheme is used.
         allowed_clients: List[str]
             serves request and sets CORS only from these clients, other clients are reject with 403. Unlike pure CORS
             feature, the server resource is not even executed if the client is not an allowed client.
@@ -116,6 +111,8 @@ class HTTPServer(BaseProtocolServer):
                 custom web request handler for action
             - `event_handler`: `EventHandler` | `BaseHandler`, optional.
                 custom event handler for sending HTTP SSE
+
+            or RuntimeConfig attributes can be passed as keyword arguments.
         """
         default_config = dict(
             cors=global_config.ALLOW_CORS,
@@ -139,7 +136,6 @@ class HTTPServer(BaseProtocolServer):
             port=port,
             address=address,
             logger=logger,
-            log_level=log_level,
             ssl_context=ssl_context,
             config=config,
         )
@@ -237,8 +233,8 @@ class HTTPServer(BaseProtocolServer):
 
     async def async_stop(self) -> None:
         """
-        Stop the HTTP server. A stop handler at the path `/stop` with POST method is already implemented that invokes this
-        method for the clients.
+        Stop the HTTP server. A stop handler at the path `/stop` with POST method is already implemented
+        that invokes this method for the clients.
         """
         self.zmq_client_pool.stop_polling()
         if not self.tornado_instance:
@@ -261,7 +257,7 @@ class HTTPServer(BaseProtocolServer):
         **kwargs,
     ) -> None:
         """
-        Add a property to be accessible by HTTP
+        Add a property to be accessible by HTTP.
 
         Parameters
         ----------
@@ -393,7 +389,7 @@ class HTTPServer(BaseProtocolServer):
 
 class ApplicationRouter:
     """
-    Covering implementation (as in - a layer on top of it) of the application router to
+    Covering implementation (as in - a layer on top) of the application router to
     add rules to the tornado application. Not a real router, which is taken care of
     by the tornado application automatically.
     """
@@ -414,9 +410,20 @@ class ApplicationRouter:
         kwargs: dict[str, Any],
     ) -> None:
         """
-        Add rules to the application router. Note that this method will replace existing rules and can duplicate
+        Add rule to the application router. Note that this method will replace existing rules and can duplicate
         endpoints for an affordance without checks (i.e. you could technically add two different endpoints for the
         same affordance).
+
+        Parameters
+        ----------
+        affordance: PropertyAffordance | ActionAffordance | EventAffordance
+            the interaction affordance for which the rule is being added
+        URL_path: str
+            URL path to access the affordance
+        handler: Type[BaseHandler]
+            handler class to be used for the affordance
+        kwargs: dict[str, Any]
+            additional keyword arguments to be passed to the handler's __init__
         """
         for rule in self.app.wildcard_router.rules:
             if rule.matcher == URL_path:
@@ -488,6 +495,23 @@ class ApplicationRouter:
         events: Iterable[EventAffordance],
         thing_id: str = None,
     ) -> None:
+        """
+        Can add multiple properties, actions and events at once to the application router.
+        Calls `add_rule` method internally for each affordance.
+
+        Parameters
+        ----------
+        properties: Iterable[PropertyAffordance]
+            list of properties to be added
+        actions: Iterable[ActionAffordance]
+            list of actions to be added
+        events: Iterable[EventAffordance]
+            list of events to be added
+        thing_id: str, optional
+            thing id to be prefixed to the URL path of each property, action, and event.
+            If the thing_id is not provided, then the rule will be in pending state and not exposed
+            until a thing instance with the given thing_id is added to the server.
+        """
         for property in properties:
             if property in self:
                 continue
@@ -595,7 +619,8 @@ class ApplicationRouter:
     ) -> None:
         """
         Process the pending rules and add them to the application router.
-        Rules become pending only when thing class is defined but no thing instance is available yet.
+        Rules become pending only when a property, action or event has a thing class associated
+        but no thing instance.
         """
         pending_rules = self._pending_rules
         self._pending_rules = []
@@ -640,6 +665,23 @@ class ApplicationRouter:
         return False
 
     def get_href_for_affordance(self, affordance, authority: str = None, use_localhost: bool = False) -> str:
+        """
+        Get the full URL path for the affordance in the application router.
+
+        Parameters
+        ----------
+        affordance: PropertyAffordance | ActionAffordance | EventAffordance
+            the interaction affordance for which the URL path is to be retrieved
+        authority: str, optional
+            authority (protocol + host + port) to be used in the URL path. If None, the machine's hostname is used.
+        use_localhost: bool, default `False`
+            if `True`, localhost is used in the basepath instead of the server's hostname.
+
+        Returns
+        -------
+        str
+            full URL path for the affordance
+        """
         if affordance not in self:
             raise ValueError(f"affordance {affordance} not found in the application router")
         for rule in self.app.wildcard_router.rules:
@@ -648,9 +690,7 @@ class ApplicationRouter:
                 return f"{self.get_basepath(authority, use_localhost)}{path}"
 
     def get_injected_dependencies(self, affordance) -> dict[str, Any]:
-        """
-        Get the target kwargs for the affordance in the application router.
-        """
+        """Get the target kwargs for the affordance in the application router"""
         if affordance not in self:
             raise ValueError(f"affordance {affordance} not found in the application router")
         for rule in self.app.wildcard_router.rules:
@@ -662,6 +702,16 @@ class ApplicationRouter:
         raise ValueError(f"affordance {affordance} not found in the application router rules")
 
     def get_basepath(self, authority: str = None, use_localhost: bool = False) -> str:
+        """
+        Get the basepath of the server.
+
+        Parameters
+        ----------
+        authority: str, optional
+            authority (protocol + host + port) to be used in the basepath. If None, the machine's hostname is used.
+        use_localhost: bool, default `False`
+            if `True`, localhost is used in the basepath instead of the server's hostname.
+        """
         if authority:
             return authority
         protocol = "https" if self.server.ssl_context else "http"
@@ -678,6 +728,7 @@ class ApplicationRouter:
     basepath = property(fget=get_basepath, doc="basepath of the server")
 
     def adapt_route(self, interaction_affordance_name: str) -> str:
+        """adapt the URL path to default conventions"""
         if interaction_affordance_name == "get_thing_model":
             return "/resources/wot-tm"
         return f"/{pep8_to_dashed_name(interaction_affordance_name)}"

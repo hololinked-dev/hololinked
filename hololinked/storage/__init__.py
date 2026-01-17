@@ -7,6 +7,26 @@ from .utils import get_sanitized_filename_from_thing_instance
 
 
 def prepare_object_storage(instance, **kwargs):
+    """
+    Prepare the storage backend for a `Thing` instance
+
+    Parameters
+    ----------
+    instance:
+        The `Thing` instance to prepare storage for
+    kwargs:
+        Additional keyword arguments to configure storage backend
+
+        - `use_json_file`: `bool`, whether to use JSON file storage (default: False)
+        - `use_default_db`: `bool`, whether to use default SQLite database storage (default: False)
+        - `use_mongo_db`: `bool`, whether to use MongoDB storage (default: False)
+        - `db_config_file`: `str`, path to database configuration file (default: from `global_config.DB_CONFIG_FILE`)
+        - `json_filename`: `str`, filename for JSON file storage (default: derived from thing instance)
+
+    Returns
+    -------
+    None
+    """
     use_json_file = kwargs.get(
         "use_json_file",
         instance.__class__.use_json_file if hasattr(instance.__class__, "use_json_file") else False,

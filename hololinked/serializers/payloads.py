@@ -9,7 +9,7 @@ from .serializers import BaseSerializer, Serializers
 class SerializableData:
     """
     A container for data that can be serialized.
-    The content type decides the serializer to be used.
+    Either provide a serializer or a content type to pick a suitable already supported serializer.
     """
 
     value: Any
@@ -50,7 +50,7 @@ class SerializableData:
 class PreserializedData:
     """
     A container for data that is already serialized.
-    The content type may indicate the serializer used.
+    The content type is only a metadata here. The value is expected to be bytes.
     """
 
     value: bytes

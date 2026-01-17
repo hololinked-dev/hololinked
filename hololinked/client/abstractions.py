@@ -221,7 +221,8 @@ class ConsumedThingProperty:
 
     async def async_set(self, value: Any) -> None:
         """
-        Async set or write property value - asynchronous at the network level, may not necessarily be at the server level.
+        Async set or write property value - asynchronous at the network level,
+        may not necessarily be at the server level.
 
         Parameters
         ----------
@@ -232,7 +233,8 @@ class ConsumedThingProperty:
 
     async def async_get(self) -> Any:
         """
-        Async get or read property value - asynchronous at the network level, may not necessarily be at the server level.
+        Async get or read property value - asynchronous at the network level,
+        may not necessarily be at the server level.
 
         Returns
         -------
@@ -243,8 +245,8 @@ class ConsumedThingProperty:
 
     def noblock_get(self) -> str:
         """
-        Get or read property value without blocking, i.e. make a request and collect it later and the method returns immediately.
-        Server must return a message ID to identify the request.
+        Get or read property value without blocking, i.e. make a request and collect it later
+        and the method returns immediately. Server must return a message ID to identify the request.
 
         Returns
         -------
@@ -255,8 +257,8 @@ class ConsumedThingProperty:
 
     def noblock_set(self, value: Any) -> str:
         """
-        Set or write property value without blocking, i.e. make a request and collect it later and the method returns immediately.
-        Server must return a message ID to identify the request.
+        Set or write property value without blocking, i.e. make a request and collect it later
+        and the method returns immediately. Server must return a message ID to identify the request.
 
         Parameters
         ----------
@@ -366,7 +368,7 @@ class ConsumedThingEvent:
             whether to start an async(-io task) event listener instead of a threaded listener
         concurrent: bool
             - asyncio - if `True`, each callback is scheduled as a separate task, if `False` they are awaited sequentially.
-            - threading - if `True`, each callback is called in a separate thread, if `False` they are called sequentially
+            - threading - if `True`, each callback is called in a separate thread, if `False` they are called sequentially.
         deserialize: bool
             if `False`, event payload is passed to the callbacks as raw bytes, if `True` it is deserialized
         """
@@ -393,7 +395,19 @@ class ConsumedThingEvent:
 
     def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = True, deserialize: bool = True):
         """
-        listen to events and call the callbacks
+        Listen to events and call the callbacks. This method needs to be invoked by the `subscribe()` method
+        in threaded mode. Use `async_listen()` for asyncio mode.
+
+        Parameters
+        ----------
+        form: Form
+            form to use for event subscription
+        callbacks: list[Callable]
+            list of callbacks to call on event
+        concurrent: bool
+            whether to run each callback concurrently in a separate thread
+        deserialize: bool
+            whether to deserialize the event payload before passing to callbacks
         """
         raise NotImplementedError("implement listen per protocol")
 
@@ -401,16 +415,30 @@ class ConsumedThingEvent:
         self, form: Form, callbacks: list[Callable], concurrent: bool = True, deserialize: bool = True
     ):
         """
-        listen to events and call the callbacks
+        Listen to events and call the callbacks. This method needs to be invoked by the `subscribe()` method
+        in asyncio mode. Use `listen()` for threaded mode.
+
+        Parameters
+        ----------
+        form: Form
+            form to use for event subscription
+        callbacks: list[Callable]
+            list of callbacks to call on event
+        concurrent: bool
+            whether to run each callback concurrently as separate tasks
+        deserialize: bool
+            whether to deserialize the event payload before passing to callbacks
         """
         raise NotImplementedError("implement async_listen per protocol")
 
-    def schedule_callbacks(self, callbacks, event_data: Any, concurrent: bool = False) -> None:
+    def schedule_callbacks(self, callbacks: list[Callable], event_data: Any, concurrent: bool = False) -> None:
         """
         schedule the callbacks to be called with the event data
 
         Parameters
         ----------
+        callbacks: list[Callable]
+            list of callbacks to call
         event_data: Any
             event data to pass to the callbacks
         concurrent: bool
@@ -428,10 +456,12 @@ class ConsumedThingEvent:
 
     async def async_schedule_callbacks(self, callbacks, event_data: Any, concurrent: bool = False) -> None:
         """
-        schedule the callbacks to be called with the event data
+        async schedule the callbacks to be called with the event data
 
         Parameters
         ----------
+        callbacks: list[Callable]
+            list of callbacks to call
         event_data: Any
             event data to pass to the callbacks
         concurrent: bool
@@ -492,12 +522,10 @@ def raise_local_exception(error_message: dict[str, Any]) -> None:
         error_message["traceback"][0] = f"Server {error_message['traceback'][0]}"
         ex.__notes__ = error_message["traceback"][0:-1]
         raise ex from None
-    elif isinstance(error_message, str) and error_message in [
-        "invokation",
-        "execution",
-    ]:
+    elif isinstance(error_message, str) and error_message in ["invokation", "execution"]:
         raise TimeoutError(
-            f"{error_message[0].upper()}{error_message[1:]} timeout occured. Server did not respond within specified timeout"
+            f"{error_message[0].upper()}{error_message[1:]} timeout occured. "
+            + "Server did not respond within specified timeout"
         ) from None
     raise RuntimeError("unknown error occurred on server side") from None
 

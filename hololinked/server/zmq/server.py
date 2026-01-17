@@ -11,9 +11,7 @@ from ..server import BaseProtocolServer
 
 
 class ZMQServer(RPCServer, BaseProtocolServer):
-    """
-    Server to expose `Thing` over `ZeroMQ` protocol. Extends `RPCServer` to support `IPC` & `TCP`.
-    """
+    """Server to expose `Thing` over `ZeroMQ` protocol. Extends `RPCServer` to support `IPC` & `TCP`"""
 
     def __init__(
         self,
@@ -27,13 +25,13 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         """
         Parameters
         ----------
-        id : str
+        id: str
             Unique identifier for the server instance.
-        things : List[Thing]
+        things: list["Thing"]
             List of `Thing` instances to be managed by the server.
-        context : zmq.asyncio.Context, optional
+        context: zmq.asyncio.Context, optional
             ZeroMQ context for socket management. If `None`, a global context is used.
-        access_points : ZMQ_TRANSPORTS or List[ZMQ_TRANSPORTS], default ZMQ_TRANSPORTS.IPC
+        access_points: ZMQ_TRANSPORTS or list[ZMQ_TRANSPORTS], default ZMQ_TRANSPORTS.IPC
             Transport protocols for communication. Supported values are `ZMQ_TRANSPORTS.IPC`, `ZMQ_TRANSPORTS.TCP` or
             a TCP socket address `tcp://*:<port>`. Can be a single value or a list of values.
         **kwargs
@@ -108,7 +106,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             )
 
     def add_thing(self, thing: Thing) -> None:
-        """Adds a thing to the list of things to serve."""
+        """Adds a thing to the list of things to serve"""
         return RPCServer.add_thing(self, thing)
 
     def run_zmq_request_listener(self) -> None:
@@ -145,6 +143,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         self.logger.info("stopped tunneling events from inproc")
 
     def stop(self) -> None:
+        # doc in parent class
         if self.ipc_server is not None:
             self.ipc_server.stop_polling()
         if self.tcp_server is not None:
@@ -154,6 +153,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         super().stop()
 
     def exit(self) -> None:
+        # doc in parent class
         try:
             self.stop()
             if self.ipc_server is not None:
@@ -193,7 +193,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         return paths
 
     async def start(self) -> None:
-        raise NotImplementedError("Use the blocking run() method to start the ZMQServer")
+        raise NotImplementedError("Use the blocking run() method to start the ZMQServer.")
 
     async def setup(self) -> None:
         raise NotImplementedError("Use the blocking run() method to start the ZMQServer, no need to setup separately.")

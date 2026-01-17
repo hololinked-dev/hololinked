@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-import logging
+import os
 import re
 import sys
 import threading
@@ -12,12 +12,14 @@ from collections import OrderedDict
 from dataclasses import asdict
 from functools import wraps
 from inspect import Parameter, signature
+from pathlib import Path
 from typing import Any, Callable, Coroutine, Sequence, Type
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
 
 
-def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name=None) -> str:
+def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name: str | None = None) -> str:
     """
     Get IP address of specified interface. Generally necessary when connected to the network
     through multiple adapters and a server binds to only one adapter at a time.
@@ -25,7 +27,7 @@ def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name=None) -
     Parameters
     ----------
     interface_name: str
-        Ethernet, Wifi etc.
+        Ethernet, Wifi etc., system recognisable
     adapter_name: optional, str
         name of the adapter if available
 
@@ -52,76 +54,31 @@ def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name=None) -
 
 
 def uuid_hex() -> str:
-    """
-    generate a random UUID hex string
-    """
-    from uuid import uuid4
-
+    """generate a random UUID hex string of 8 characters"""
     return uuid4().hex[:8]
 
 
 def format_exception_as_json(exc: Exception) -> dict[str, Any]:
-    """
-    return exception as a JSON serializable dictionary
-    """
-    return {
-        "message": str(exc),
-        "type": repr(exc).split("(", 1)[0],
-        "traceback": traceback.format_exc().splitlines(),
-        "notes": exc.__notes__ if hasattr(exc, "__notes__") else None,
-    }
+    """return exception as a JSON serializable dictionary"""
+    return dict(
+        message=str(exc),
+        type=repr(exc).split("(", 1)[0],
+        traceback=traceback.format_exc().splitlines(),
+        notes=exc.__notes__ if hasattr(exc, "__notes__") else None,
+    )
 
 
 def pep8_to_dashed_name(word: str) -> str:
     """
-    Make an underscored, lowercase form from the expression in the string.
+    Make an dashed, lowercase form from the expression in the string.
+
     Example::
+
         >>> pep8_to_dashed_URL("device_type")
         'device-type'
     """
     val = re.sub(r"_+", "-", word.lstrip("_").rstrip("_"))
     return val.replace(" ", "-")
-
-
-def get_default_logger(
-    name: str,
-    log_level: int = logging.INFO,
-    log_file: str = None,
-    format: str = "%(levelname)-8s - %(asctime)s:%(msecs)03d - %(name)s - %(message)s",
-) -> logging.Logger:
-    """
-    the default logger used by most of hololinked package, when arguments are not modified.
-    StreamHandler is always created, pass log_file for a FileHandler as well.
-
-    Parameters
-    ----------
-    name: str
-        name of logger
-    log_level: int
-        log level
-    log_file: str
-        valid path to file
-    format: str
-        log format
-
-    Returns
-    -------
-    logging.Logger:
-        created logger
-    """
-    from .config import global_config
-
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG if global_config.DEBUG else log_level)
-    if not any(isinstance(handler, logging.StreamHandler) for handler in logger.handlers):
-        default_handler = logging.StreamHandler(sys.stdout)
-        default_handler.setFormatter(logging.Formatter(format, datefmt="%Y-%m-%dT%H:%M:%S"))
-        logger.addHandler(default_handler)
-    if log_file:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(logging.Formatter(format, datefmt="%Y-%m-%dT%H:%M:%S"))
-        logger.addHandler(file_handler)
-    return logger
 
 
 def get_current_async_loop() -> asyncio.AbstractEventLoop:
@@ -130,7 +87,6 @@ def get_current_async_loop() -> asyncio.AbstractEventLoop:
         loop = asyncio.get_event_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
-        # set_event_loop_policy() - why not?
         asyncio.set_event_loop(loop)
     return loop
 
@@ -140,16 +96,17 @@ def run_coro_sync(coro: Coroutine) -> Any:
     eventloop = get_current_async_loop()
     if eventloop.is_running():
         raise RuntimeError(
-            f"asyncio event loop is already running, cannot setup coroutine {coro.__name__} to run sync, please await it."
+            "asyncio event loop is already running, cannot setup coroutine "
+            + f"{coro.__name__} to run sync, please await it."
         )
-        # not the same as RuntimeError catch above.
     else:
         return eventloop.run_until_complete(coro)
 
 
 def run_callable_somehow(method: Callable | Coroutine) -> Any:
     """
-    run method if synchronous, or when async, either schedule a coroutine or run it until its complete
+    run method if synchronous, or when async, either schedule a coroutine
+    or run it until its complete
     """
     if inspect.isawaitable(method):
         coro = method  # already a coroutine/awaitable object
@@ -171,16 +128,14 @@ def run_callable_somehow(method: Callable | Coroutine) -> Any:
 
 
 def complete_pending_tasks_in_current_loop() -> None:
-    """
-    Complete all pending tasks in the current asyncio event loop.
-    """
-    get_current_async_loop().run_until_complete(asyncio.gather(*asyncio.all_tasks(get_current_async_loop())))
+    """Complete all pending tasks in the current asyncio event loop"""
+    get_current_async_loop().run_until_complete(
+        asyncio.gather(*asyncio.all_tasks(get_current_async_loop())),
+    )
 
 
 async def complete_pending_tasks_in_current_loop_async() -> None:
-    """
-    Complete all pending tasks in the current asyncio event loop.
-    """
+    """Complete all pending tasks in the current asyncio event loop"""
     await asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
 
 
@@ -193,9 +148,7 @@ def cancel_pending_tasks_in_current_loop():
 
 
 def print_pending_tasks_in_current_loop():
-    """
-    Print all pending tasks in the current asyncio event loop.
-    """
+    """Print all pending tasks in the current asyncio event loop"""
     tasks = asyncio.all_tasks(get_current_async_loop())
     if not tasks:
         print("No pending tasks in the current event loop.")
@@ -205,6 +158,7 @@ def print_pending_tasks_in_current_loop():
 
 
 def set_global_event_loop_policy(use_uvloop: bool = False) -> None:
+    """set global event loop policy, optionally using uvloop if available and on linux/macos"""
     if sys.platform.lower().startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -248,7 +202,8 @@ def get_signature(callable: Callable) -> tuple[list[str], list[type]]:
 def getattr_without_descriptor_read(instance: Any, key: str) -> Any:
     """
     supply to inspect._get_members (not inspect.get_members) to avoid calling
-    __get__ on hardware attributes
+    __get__ on descriptors, especially whey they are hardware attributes that would
+    invoke a hardware read.
     """
     if key in instance.__dict__:
         return instance.__dict__[key]
@@ -270,7 +225,6 @@ def isclassmethod(method: Callable) -> bool:
     """
     Returns `True` if the method is a classmethod, `False` otherwise.
     https://stackoverflow.com/questions/19227724/check-if-a-function-uses-classmethod
-
     """
     if isinstance(method, classmethod):
         return True
@@ -341,6 +295,7 @@ def issubklass(obj: Any, cls: Any) -> bool:
 
 
 def get_sanitized_filename_from_random_string(a_string: str, extension: str) -> str:
+    """Generate a sanitized filename from a given string and extension"""
     # Remove invalid characters from the instance name
     safe_id = re.sub(r'[<>:"/\\|?*\x00-\x1F]+', "_", a_string)
     # Collapse consecutive underscores into one
@@ -351,11 +306,26 @@ def get_sanitized_filename_from_random_string(a_string: str, extension: str) -> 
     return f"{safe_id}.{extension}"
 
 
+def generate_main_script_log_filename(self, app_name: str | None = None) -> str | None:
+    """returns the main script filename if available"""
+    import __main__
+
+    if not app_name:
+        file = getattr(__main__, "__file__", None)
+        if not file:
+            filename = Path.cwd().name
+        else:
+            file = os.path.splitext(os.path.basename(file))
+            filename = file[0]
+    else:
+        filename = app_name
+    if filename:
+        return get_sanitized_filename_from_random_string(filename, extension="log")
+    return "hololinked.log"
+
+
 class SerializableDataclass:
-    """
-    Presents uniform serialization for serializers using getstate and setstate and json
-    serialization.
-    """
+    """Presents uniform serialization for pickle and JSON for dataclasses"""
 
     def json(self):
         return asdict(self)
@@ -369,7 +339,7 @@ class SerializableDataclass:
 
 
 class Singleton(type):
-    """enforces a Singleton"""
+    """Enforces a Singleton behavior on a class"""
 
     _instances = {}
 
@@ -406,12 +376,11 @@ def get_input_model_from_signature(
     func: Callable
         The function for which to create the pydantic model.
     remove_first_positional_arg: bool, optional
-        Remove the first argument from the model (this is appropriate for methods,
+        Remove the first argument from the model. This is appropriate for methods,
         as the first argument, self, is baked in when it's called, but is present
-        in the signature).
+        in the signature.
     ignore: Sequence[str], optional
-        Ignore arguments that have the specified name. This is useful for e.g.
-        dependencies that are injected by LabThings.
+        Ignore arguments that have the specified name.
     model_for_empty_annotations: bool, optional
         If True, create a model even if there are no annotations.
 
@@ -608,16 +577,9 @@ def json_schema_merge_args_to_kwargs(schema: dict, args: tuple = tuple(), kwargs
     return data
 
 
-def get_all_sub_things_recusively(thing) -> list:
-    sub_things = [thing]
-    for sub_thing in thing.sub_things.values():
-        sub_things.extend(get_all_sub_things_recusively(sub_thing))
-    return sub_things
-
-
 def forkable(func):
     """
-    Decorator to make a function forkable.
+    Decorator to make a function forkable into a separate thread.
     This is useful for functions that need to be run in a separate thread.
     """
 
@@ -634,11 +596,27 @@ def forkable(func):
     return wrapper
 
 
+def get_all_sub_things_recusively(thing) -> list:
+    """get all sub things recursively from a thing"""
+    sub_things = [thing]
+    for sub_thing in thing.sub_things.values():
+        sub_things.extend(get_all_sub_things_recusively(sub_thing))
+    return sub_things
+
+
+def get_socket_type_name(socket_type):
+    from .constants import ZMQSocketType
+
+    try:
+        return ZMQSocketType(socket_type).name
+    except ValueError:
+        return "UNKNOWN"
+
+
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
     pep8_to_dashed_name.__name__,
-    get_default_logger.__name__,
     run_coro_sync.__name__,
     run_callable_somehow.__name__,
     complete_pending_tasks_in_current_loop.__name__,
@@ -652,4 +630,5 @@ __all__ = [
     get_return_type_from_signature.__name__,
     getattr_without_descriptor_read.__name__,
     forkable.__name__,
+    get_socket_type_name.__name__,
 ]

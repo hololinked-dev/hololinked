@@ -8,22 +8,39 @@ from paho.mqtt.client import MQTTMessage
 
 from ...serializers import BaseSerializer, Serializers  # noqa: F401
 from ...td.forms import Form
-from ...td.interaction_affordance import EventAffordance
+from ...td.interaction_affordance import EventAffordance, PropertyAffordance
 from ..abstractions import SSE, ConsumedThingEvent
 
 
 class MQTTConsumer(ConsumedThingEvent):
-    # An MQTT event consumer
+    # An MQTT event consumer, both sync and async,
+    # please dont add classdoc
 
     def __init__(
         self,
         sync_client: PahoMQTTClient,
         async_client: aiomqtt.Client,
-        resource: EventAffordance,
+        resource: EventAffordance | PropertyAffordance,
         qos: int,
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any,
     ) -> None:
+        """
+        Parameters
+        ----------
+        sync_client: PahoMQTTClient
+            synchronous MQTT client
+        async_client: aiomqtt.Client
+            asynchronous MQTT client
+        resource: EventAffordance | PropertyAffordance
+            the event affordance to consume
+        qos: int
+            The MQTT QoS level to use
+        logger: structlog.stdlib.BoundLogger
+            Logger instance
+        owner_inst: Any
+            The parent object that owns this consumer
+        """
         super().__init__(resource=resource, logger=logger, owner_inst=owner_inst)
         self.qos = qos
         self.sync_client = sync_client

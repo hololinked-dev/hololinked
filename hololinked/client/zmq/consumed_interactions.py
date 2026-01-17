@@ -425,12 +425,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         owner_inst: Any,
         **kwargs,
     ) -> None:
-        ConsumedThingEvent.__init__(
-            self,
-            resource=resource,
-            logger=logger,
-            owner_inst=owner_inst,
-        )
+        ConsumedThingEvent.__init__(self, resource=resource, logger=logger, owner_inst=owner_inst)
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=None, async_client=None, **kwargs)
 
     def listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:

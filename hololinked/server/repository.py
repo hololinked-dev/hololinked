@@ -67,6 +67,24 @@ class BrokerThing(BaseModel):
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> ResponseMessage:
+        """
+        Executes a request-response operation on a `Thing`.
+
+        Parameters
+        ----------
+        objekt: str
+            The target object of the operation - name of property or action.
+        operation: str
+            The operation to perform (e.g., "readproperty", "writeproperty", "invokeaction")
+        payload: SerializableData, optional
+            The payload to send with the request
+        preserialized_payload: PreserializedData, optional
+            The preserialized payload to send with the request
+        server_execution_context: ServerExecutionContext, optional
+            The server execution context
+        thing_execution_context: ThingExecutionContext, optional
+            The thing execution context
+        """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
         return await self.req_rep_client.async_execute(
@@ -88,6 +106,29 @@ class BrokerThing(BaseModel):
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> str:
+        """
+        Schedules a request-response operation on a `Thing` and returns a message ID.
+
+        Parameters
+        ----------
+        objekt: str
+            The target object of the operation - name of property or action.
+        operation: str
+            The operation to perform (e.g., "readproperty", "writeproperty", "invokeaction")
+        payload: SerializableData, optional
+            The payload to send with the request
+        preserialized_payload: PreserializedData, optional
+            The preserialized payload to send with the request
+        server_execution_context: ServerExecutionContext, optional
+            The server execution context
+        thing_execution_context: ThingExecutionContext, optional
+            The thing execution context
+
+        Returns
+        -------
+        str
+            The message ID of the scheduled request
+        """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
         return await self.req_rep_client.async_send_request(
@@ -109,6 +150,24 @@ class BrokerThing(BaseModel):
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> None:
+        """
+        Sends a oneway request(no-response) operation on a `Thing`.
+
+        Parameters
+        ----------
+        objekt: str
+            The target object of the operation - name of property or action.
+        operation: str
+            The operation to perform (e.g., "readproperty", "writeproperty", "invokeaction")
+        payload: SerializableData, optional
+            The payload to send with the request
+        preserialized_payload: PreserializedData, optional
+            The preserialized payload to send with the request
+        server_execution_context: ServerExecutionContext, optional
+            The server execution context
+        thing_execution_context: ThingExecutionContext, optional
+            The thing execution context
+        """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
         await self.req_rep_client.async_send_request(
@@ -126,6 +185,21 @@ class BrokerThing(BaseModel):
         message_id: str,
         timeout: int = 10000,
     ) -> ResponseMessage:
+        """
+        Receives a response for a previously scheduled request.
+
+        Parameters
+        ----------
+        message_id: str
+            The message ID of the scheduled request
+        timeout: int, optional
+            The timeout in milliseconds to wait for the response (default is 10000)
+
+        Returns
+        -------
+        ResponseMessage
+            The response message received
+        """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
         return await self.req_rep_client.async_recv_response(
@@ -135,6 +209,19 @@ class BrokerThing(BaseModel):
         )
 
     def subscribe_event(self, resource: EventAffordance | PropertyAffordance) -> AsyncEventConsumer:
+        """
+        Subscribe to events from a `Thing` through the internal pub-sub broker.
+
+        Parameters
+        ----------
+        resource: EventAffordance | PropertyAffordance
+            The event or observable property to subscribe to
+
+        Returns
+        -------
+        AsyncEventConsumer
+            The event consumer for the subscribed events
+        """
         event_consumer = AsyncEventConsumer(
             id=f"{resource.name}|EventTunnel|{uuid_hex()}",
             event_unique_identifier=f"{resource.thing_id}/{resource.name}",
@@ -157,7 +244,18 @@ class BrokerThing(BaseModel):
     def get_response_payload(self, zmq_response: ResponseMessage) -> PreserializedData | SerializableData:
         """
         Retrieves the payload from the ZMQ response message, does not necessarily deserialize it.
-        Multipart responses are not supported yet for protocol controllers (except ZMQ), so only one payload is returned
+        Use this method to extract the payload from a response message.
+        Multipart responses are not supported yet for protocol controllers (except ZMQ), so only one payload is returned.
+
+        Parameters
+        ----------
+        zmq_response: ResponseMessage
+            The ZMQ response message to extract the payload from
+
+        Returns
+        -------
+        PreserializedData | SerializableData
+            The extracted payload, either preserialized or serialized
         """
         # print("zmq_response - ", zmq_response)
         if zmq_response is None:
@@ -196,19 +294,19 @@ async def consume_broker_queue(
 
     Parameters
     ----------
-    id : str
+    id: str
         Unique identifier for the client.
-    server_id : str
+    server_id: str
         The server ID to connect to.
-    thing_id : str
+    thing_id: str
         The Thing ID whose Thing Description (TD) is to be fetched.
-    access_point : str
+    access_point: str
         The access point (e.g., "TCP", "WS", or a specific address).
-    context : Optional[zmq.asyncio.Context], optional
+    context: Optional[zmq.asyncio.Context], optional
         ZMQ context to use for the connection. If None, uses the global context.
-    logger : Optional[structlog.stdlib.BoundLogger], optional
+    logger: Optional[structlog.stdlib.BoundLogger], optional
         Logger instance for logging events. If None, no logging is performed.
-    poll_timeout : int, optional
+    poll_timeout: int, optional
         Poll timeout in milliseconds (default is 1000).
 
     Returns
@@ -252,7 +350,16 @@ async def consume_broker_queue(
 
 
 def consume_broker_pubsub(id: str, access_point: str) -> AsyncEventConsumer:
-    """Consume all events from ZMQ (usually INPROC) pubsub"""
+    """
+    Consume all events from the broker's pub-sub queue.
+
+    Parameters
+    ----------
+    id: str
+        Unique identifier for the event consumer
+    access_point: str
+        The qualified ZMQ address (`tcp://`, `ipc://`, `inproc://`) of the pub-sub broker
+    """
     return AsyncEventConsumer(
         id=id or f"EventTunnel|{uuid_hex()}",
         event_unique_identifier="",

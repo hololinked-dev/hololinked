@@ -8,18 +8,21 @@ from .services import ThingDescriptionService
 
 
 class RuntimeConfig(BaseModel):
-    """Runtime configuration for HTTP server and handlers."""
+    """
+    Runtime configuration for MQTT publishers, initialized in `MQTTPublisher` object.
+    Pass the attributes of this class as a dictionary to the `config` argument of `MQTTPublisher`.
+    """
 
     qos: Annotated[int, Field(ge=0, le=2)] = 1
-    """The MQTT QoS level to use for publishing messages"""
+    """The (global) MQTT QoS level to use for publishing messages"""
 
     topic_publisher: type[TopicPublisher] | Any = TopicPublisher
-    """handler class to be used for property interactions"""
+    """handler class to be used for publishing to topics (global)"""
     thing_description_publisher: type[ThingDescriptionPublisher] | Any = ThingDescriptionPublisher
-    """handler class to be used for action interactions"""
+    """handler class to be used for publishing thing descriptions"""
 
     thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
-    """handler class to be used for event interactions"""
+    """Thing Description generation service, used by `ThingDescriptionPublisher` to generate the Thing Description"""
 
     thing_repository: Any = thing_repository  # type: dict[str, BrokerThing]
-    """repository layer thing model to be used by the HTTP server and handlers"""
+    """repository layer `Thing`s to be used by the MQTT publishers"""

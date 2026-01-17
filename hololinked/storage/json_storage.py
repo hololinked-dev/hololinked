@@ -10,7 +10,7 @@ from ..serializers import JSONSerializer
 
 class ThingJSONStorage:
     """
-    JSON-based storage engine composed within ``Thing``. Carries out property operations such as storing and
+    JSON-based storage engine composed within `Thing`. Carries out property operations such as storing and
     retrieving values from a plain JSON file.
 
     Parameters
@@ -18,10 +18,10 @@ class ThingJSONStorage:
     filename : str
         Path to the JSON file to use for storage.
     instance : Parameterized
-        The ``Thing`` instance which uses this storage. Required to read default property values when
+        The `Thing` instance which uses this storage. Required to read default property values when
         creating missing properties.
     serializer : JSONSerializer, optional
-        Serializer used for encoding and decoding JSON data. Defaults to an instance of ``JSONSerializer``.
+        Serializer used for encoding and decoding JSON data. Defaults to an instance of `JSONSerializer`.
     """
 
     def __init__(self, filename: str, instance: Parameterized, serializer: Any = None):
@@ -38,8 +38,8 @@ class ThingJSONStorage:
 
         Returns
         -------
-        value: dict
-        A dictionary of all stored properties. Empty if the file does not exist or cannot be decoded.
+        dict[str, Any]
+            A dictionary of all stored properties. Empty if the file does not exist or cannot be decoded.
         """
         if not os.path.exists(self.filename) or os.path.getsize(self.filename) == 0:
             return {}
@@ -53,9 +53,7 @@ class ThingJSONStorage:
             return {}
 
     def _save(self):
-        """
-        Encode and write data to the JSON file.
-        """
+        """Encode and write data to the JSON file"""
         raw_bytes = self._serializer.dumps(self._data)
         with open(self.filename, "wb") as f:
             f.write(raw_bytes)
@@ -82,7 +80,7 @@ class ThingJSONStorage:
 
     def set_property(self, property: str | Property, value: Any) -> None:
         """
-        change the value of an already existing property.
+        Change the value of an already existing property.
 
         Parameters
         ----------
@@ -98,7 +96,7 @@ class ThingJSONStorage:
 
     def get_properties(self, properties: dict[str | Property, Any]) -> dict[str, Any]:
         """
-        get multiple properties at once.
+        Get multiple properties at once.
 
         Parameters
         ----------
@@ -116,7 +114,7 @@ class ThingJSONStorage:
 
     def set_properties(self, properties: dict[str | Property, Any]) -> None:
         """
-        change the values of already existing few properties at once
+        Change the values of already existing properties at once.
 
         Parameters
         ----------
@@ -130,9 +128,7 @@ class ThingJSONStorage:
             self._save()
 
     def get_all_properties(self) -> dict[str, Any]:
-        """
-        read all properties of the ``Thing`` instance.
-        """
+        """Read all properties of the `Thing` instance"""
         with self._lock:
             return dict(self._data)
 
@@ -142,12 +138,14 @@ class ThingJSONStorage:
         get_missing_property_names: bool = False,
     ) -> list[str] | None:
         """
-        create any and all missing properties of ``Thing`` instance
+        Create any and all missing properties of `Thing` instance
 
         Parameters
         ----------
         properties: Dict[str, Property]
             descriptors of the properties
+        get_missing_property_names: bool, default False
+            whether to return the list of missing property names
 
         Returns
         -------

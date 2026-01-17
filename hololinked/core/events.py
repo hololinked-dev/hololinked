@@ -9,15 +9,12 @@ from ..param.parameterized import Parameterized, ParameterizedMetaclass
 
 class Event:
     """
-    Asynchronously push arbitrary messages to clients. Apart from default events created by the package (like state
-    change event, observable properties etc.), events are supposed to be created at class level or at `__init__`
-    as a instance attribute, otherwise their publishing socket is unbound and will lead to `AttributeError`.
+    Asynchronously push arbitrary messages to clients (as-in messages that cannot be properly timed) without
+    the client requesting the data every time. Events are pushed from the server to the clients
+    that have subscribed to them.
     """
 
-    # security: Any
-    #     security necessary to access this event.
-
-    __slots__ = ["name", "_internal_name", "_publisher", "_observable", "doc", "schema", "security", "label", "owner"]
+    __slots__ = ["name", "_internal_name", "_publisher", "_observable", "doc", "schema", "label", "owner"]
 
     def __init__(
         self,
@@ -31,17 +28,14 @@ class Event:
         doc: str
             docstring for the event
         schema: JSON
-            schema of the event, if the event is JSON complaint. HTTP clients can validate the data with this schema. There
-            is no validation on server side.
+            schema of the event
         label: str
             a descriptive label for the event, to be shown in a GUI for example.
         """
-
         self.doc = doc
         if global_config.VALIDATE_SCHEMAS and schema:
             jsonschema.Draft7Validator.check_schema(schema)
         self.schema = schema
-        # self.security = security
         self.label = label
         self._observable = False
 
@@ -70,7 +64,7 @@ class Event:
                 "Event object not yet initialized, please dont access now." + " Access after Thing is running."
             )
 
-    def to_affordance(self, owner_inst=None):
+    def to_affordance(self, owner_inst: Any = None):
         """
         Generates a `EventAffordance` TD fragment for this Event
 
@@ -137,7 +131,7 @@ class EventDispatcher:
 
     def receive_acknowledgement(self, timeout: float | int | None) -> bool:
         """
-        Unimplemented.
+        Not Implemented.
 
         Receive acknowledgement for an event that was just pushed.
         """
@@ -146,7 +140,9 @@ class EventDispatcher:
 
     def _set_acknowledgement(self, *args, **kwargs) -> None:
         """
-        Method to be called by RPC server when an acknowledgement is received. Not for user to be set.
+        Not Implemented.
+
+        Once an acknowledgement is received from the client, this function is called to set the event.
         """
         raise NotImplementedError("Event acknowledgement is not implemented yet.")
         self._synchronize_event.set()

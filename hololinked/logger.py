@@ -15,6 +15,8 @@ default_label_formatter = None
 
 
 def normalize_component_name(_, __, event_dict: dict[str, Any]) -> dict[str, Any]:
+    """cast component name to upper case and format event message with it"""
+
     global default_label_formatter
     component = event_dict.pop("component", "")
     if default_label_formatter:
@@ -116,14 +118,3 @@ def setup_logging(
         tornado.log.gen_log = tornado_log
     except ImportError:
         pass
-
-    # logger = structlog.get_logger().bind()
-
-    # if not any(isinstance(handler, logging.StreamHandler) for handler in logger._logger.handlers):
-    #     default_handler = logging.StreamHandler(sys.stdout)
-    #     default_handler.setFormatter(logging.Formatter("%(message)s"))
-    #     logger._logger.addHandler(default_handler)
-    # if log_file:
-    #     file_handler = logging.FileHandler(log_file)
-    #     file_handler.setFormatter(logging.Formatter("%(message)s"))
-    #     logger._logger.addHandler(file_handler)

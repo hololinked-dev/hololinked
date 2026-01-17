@@ -6,6 +6,11 @@ from .base import Schema
 
 
 class Link(Schema):
+    """
+    Represents a link in the link section of the TD
+    schema - https://www.w3.org/TR/wot-thing-description11/#link
+    """
+
     href: str
     anchor: Optional[str]
     rel: Optional[str]
@@ -14,7 +19,7 @@ class Link(Schema):
 
 class VersionInfo(Schema):
     """
-    create version info.
+    Represents version info.
     schema - https://www.w3.org/TR/wot-thing-description11/#versioninfo
     """
 

@@ -65,10 +65,10 @@ from ..utils import MappableSingleton, format_exception_as_json, issubklass
 class BaseSerializer(object):
     """
     Base class for (de)serializer implementations. All serializers must inherit this class
-    and overload dumps() and loads() to be usable by the ZMQ message brokers. Any serializer
+    and overload dumps() and loads() to be usable. Any serializer
     that returns bytes when serialized and a python object on deserialization will be accepted.
     Serialization and deserialization errors will be passed as invalid message type
-    (see ZMQ messaging contract) from server side and a exception will be raised on the client.
+    from server side and a exception will be raised on the client.
     """
 
     def __init__(self) -> None:
@@ -76,14 +76,15 @@ class BaseSerializer(object):
         self.type = None
 
     def loads(self, data) -> Any:
-        "method called by ZMQ message brokers to deserialize data"
+        """deserialize data"""
         raise NotImplementedError("implement loads()/deserialization in subclass")
 
     def dumps(self, data) -> bytes:
-        "method called by ZMQ message brokers to serialize data"
+        """serialize data"""
         raise NotImplementedError("implement dumps()/serialization in subclass")
 
     def convert_to_bytes(self, data) -> bytes:
+        """convert data to bytes if it is bytearray or memoryview"""
         if isinstance(data, bytes):
             return data
         if isinstance(data, bytearray):
@@ -96,6 +97,7 @@ class BaseSerializer(object):
 
     @property
     def content_type(self) -> str:
+        """content type of the serializer"""
         raise NotImplementedError("serializer must implement a content type")
 
 
@@ -103,7 +105,7 @@ dict_keys = type(dict().keys())
 
 
 class JSONSerializer(BaseSerializer):
-    "(de)serializer that wraps the msgspec JSON serialization protocol, default serializer for all clients."
+    """(de)serializer that wraps the msgspec JSON serialization protocol, default serializer for hololinked"""
 
     _type_replacements = {}
 
@@ -112,16 +114,14 @@ class JSONSerializer(BaseSerializer):
         self.type = msgspecjson
 
     def loads(self, data: bytearray | memoryview | bytes) -> JSONSerializable:
-        "method called by ZMQ message brokers to deserialize data"
         return msgspecjson.decode(self.convert_to_bytes(data))
 
     def dumps(self, data) -> bytes:
-        "method called by ZMQ message brokers to serialize data"
         return msgspecjson.encode(data, enc_hook=self.default)
 
     @classmethod
     def default(cls, obj) -> JSONSerializable:
-        "method called if no serialization option was found."
+        """method called if no serialization option was found"""
         if hasattr(obj, "model_dump"):
             return obj.model_dump()
         if hasattr(obj, "json"):
@@ -159,7 +159,7 @@ class JSONSerializer(BaseSerializer):
 
     @classmethod
     def register_type_replacement(cls, object_type, replacement_function) -> None:
-        "register custom serialization function for a particular type"
+        """register custom serialization function for a particular type"""
         if object_type is type or not inspect.isclass(object_type):
             raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
         cls._type_replacements[object_type] = replacement_function
@@ -170,48 +170,44 @@ class JSONSerializer(BaseSerializer):
 
 
 class PythonBuiltinJSONSerializer(JSONSerializer):
-    "(de)serializer that wraps the python builtin JSON serialization protocol."
+    """(de)serializer that wraps the python builtin JSON serialization protocol"""
 
     def __init__(self) -> None:
         super().__init__()
         self.type = pythonjson
 
     def loads(self, data: bytearray | memoryview | bytes) -> Any:
-        "method called by ZMQ message brokers to deserialize data"
         return pythonjson.loads(self.convert_to_bytes(data))
 
     def dumps(self, data) -> bytes:
-        "method called by ZMQ message brokers to serialize data"
         data = pythonjson.dumps(data, ensure_ascii=False, allow_nan=True, default=self.default)
         return data.encode("utf-8")
 
     @classmethod
     def dump(cls, data: dict[str, Any], file_desc) -> None:
-        "write JSON to file"
+        """write JSON to file"""
         pythonjson.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=cls.default)
 
     @classmethod
     def load(cls, file_desc) -> JSONSerializable:
-        "load JSON from file"
+        """load JSON from file"""
         return pythonjson.load(file_desc)
 
 
 class PickleSerializer(BaseSerializer):
-    "(de)serializer that wraps the pickle serialization protocol, use with encryption for safety."
+    """(de)serializer that wraps the pickle serialization protocol, use with encryption for safety."""
 
     def __init__(self) -> None:
         super().__init__()
         self.type = pickle
 
     def dumps(self, data) -> bytes:
-        "method called by ZMQ message brokers to serialize data"
         if global_config.ALLOW_PICKLE:
             return pickle.dumps(data)
             # SAST(id='hololinked.serializers.serializers.PickleSerializer.dumps', description='B301:blacklist', tool='bandit')
         raise RuntimeError("Pickle serialization is not allowed by the global configuration")
 
     def loads(self, data) -> Any:
-        "method called by ZMQ message brokers to deserialize data"
         if global_config.ALLOW_PICKLE:
             return pickle.loads(self.convert_to_bytes(data))
             # SAST(id='hololinked.serializers.serializers.PickleSerializer.loads', description='B301:blacklist', tool='bandit')
@@ -224,9 +220,8 @@ class PickleSerializer(BaseSerializer):
 
 class MsgpackSerializer(BaseSerializer):
     """
-    (de)serializer that wraps the msgspec MessagePack serialization protocol, recommended serializer for ZMQ based
-    high speed applications. Set an instance of this serializer to both ``Thing.zmq_serializer`` and
-    ``hololinked.client.ObjectProxy``. Unfortunately, MessagePack is currently not supported for HTTP clients.
+    (de)serializer that wraps the msgspec MessagePack serialization protocol, recommended serializer for
+    highspeed applications.
     """
 
     def __init__(self) -> None:
@@ -292,16 +287,14 @@ try:
             self.type = serpent
 
         def dumps(self, data) -> bytes:
-            "method called by ZMQ message brokers to serialize data"
             return serpent.dumps(data, module_in_classname=True)
 
         def loads(self, data) -> Any:
-            "method called by ZMQ message brokers to deserialize data"
             return serpent.loads(self.convert_to_bytes(data))
 
         @classmethod
         def register_type_replacement(cls, object_type, replacement_function) -> None:
-            "register custom serialization function for a particular type"
+            """register custom serialization function for a particular type"""
 
             def custom_serializer(obj, serpent_serializer, outputstream, indentlevel):
                 replaced = replacement_function(obj)
@@ -322,11 +315,7 @@ except ImportError:
 class Serializers(metaclass=MappableSingleton):
     """
     A singleton class that holds all serializers and provides a registry for content types.
-    All members are class attributes and settings are applied process-wide.
-
-    - For property, the value is serialized using the serializer registered for the property.
-    - For action, the return value is serialized using the serializer registered for the action.
-    - For event, the payload is serialized using the serializer registered for the event.
+    All members are class attributes and settings are applied process-wide (python process).
 
     Registration of serializer is not mandatory for any property, action or event.
     The default serializer is `JSONSerializer`, which will be provided to any unregistered object.
@@ -338,6 +327,7 @@ class Serializers(metaclass=MappableSingleton):
         class_member=True,
         doc="The default serializer for all properties, actions and events",
     )  # type: BaseSerializer
+    """JSON serializer"""
 
     pickle = ClassSelector(
         default=PickleSerializer(),
@@ -345,6 +335,7 @@ class Serializers(metaclass=MappableSingleton):
         class_member=True,
         doc="pickle serializer, unsafe without encryption but useful for faster & flexible serialization of python specific types",
     )  # type: BaseSerializer
+    """Pickle serializer, use global_config.ALLOW_PICKE to enable it"""
 
     msgpack = ClassSelector(
         default=MsgpackSerializer(),
@@ -352,6 +343,7 @@ class Serializers(metaclass=MappableSingleton):
         class_member=True,
         doc="MessagePack serializer, efficient binary format that is both fast & interoperable between languages ",
     )  # type: BaseSerializer
+    """MessagePack serializer"""
 
     text = ClassSelector(
         default=TextSerializer(),
@@ -359,6 +351,7 @@ class Serializers(metaclass=MappableSingleton):
         class_member=True,
         doc="Text serializer, converts string or string compatible types to bytes and vice versa",
     )  # type: BaseSerializer
+    """Text serializer"""
 
     default = ClassSelector(
         default=json.default,
@@ -366,6 +359,7 @@ class Serializers(metaclass=MappableSingleton):
         class_member=True,
         doc="The default serialization to be used",
     )  # type: BaseSerializer
+    """The default serializer, change value to set a different default serializer"""
 
     default_content_type = String(
         fget=lambda self: self.default.content_type,
@@ -384,6 +378,7 @@ class Serializers(metaclass=MappableSingleton):
         readonly=True,
         class_member=True,
     )  # type: dict[str, BaseSerializer]
+    """A dictionary of content types and their serializers"""
 
     allowed_content_types = Parameter(
         default=None,
@@ -391,6 +386,10 @@ class Serializers(metaclass=MappableSingleton):
         doc="A list of content types that are usually considered safe and will be supported by default without any configuration",
         readonly=True,
     )  # type: list[str]
+    """
+    A list of content types that are usually considered safe 
+    and will be supported by default without any configuration
+    """
 
     object_content_type_map = Parameter(
         default=dict(),
@@ -398,6 +397,7 @@ class Serializers(metaclass=MappableSingleton):
         doc="A dictionary of content types for specific properties, actions and events",
         readonly=True,
     )  # type: dict[str, dict[str, str]]
+    """A dictionary of content types for specific properties, actions and events"""
 
     object_serializer_map = Parameter(
         default=dict(),
@@ -405,6 +405,7 @@ class Serializers(metaclass=MappableSingleton):
         doc="A dictionary of serializer for specific properties, actions and events",
         readonly=True,
     )  # type: dict[str, dict[str, BaseSerializer]]
+    """A dictionary of serializer for specific properties, actions and events"""
 
     protocol_serializer_map = Parameter(
         default=dict(),
@@ -412,12 +413,15 @@ class Serializers(metaclass=MappableSingleton):
         doc="A dictionary of serializer for a specific protocol",
         readonly=True,
     )  # type: dict[str, BaseSerializer]
+    """A dictionary of default serializer for a specific protocol, currently unimplemented"""
 
     @classmethod
     def register(cls, serializer: BaseSerializer, name: str | None = None, override: bool = False) -> None:
         """
         Register a new serializer. It is recommended to implement a content type property/attribute for the serializer
-        to facilitate automatic deserialization on client side, otherwise deserialization is not gauranteed by this implementation.
+        to facilitate automatic deserialization on client side, otherwise deserialization is not gauranteed.
+        Moreover, the said serializer must be defined on both client and server side if running in a distributed
+        environment.
 
         Parameters
         ----------
@@ -427,8 +431,9 @@ class Serializers(metaclass=MappableSingleton):
             the name of the serializer to be accessible under the object namespace. If not provided, the name of the
             serializer class is used.
         override: bool, optional
-            whether to override the serializer if the content type is already registered, by default False & raises ValueError
-            for duplicate content type.
+            whether to override the serializer if the content type is already registered,
+            by default False & raises ValueError for duplicate content type. For example, registering
+            a custom JSON serializer will conflict with the default JSONSerializer, so set `override=True`.
 
         Raises
         ------
@@ -488,6 +493,12 @@ class Serializers(metaclass=MappableSingleton):
             the class name of the Thing or the Thing that owns the property, action or event
         objekt: str
             the name of the property, action or event
+
+        Returns
+        -------
+        str
+            the content type for the property, action or event. If no content type is found, the default content type is
+            returned.
         """
 
         if len(self.object_serializer_map) == 0 and len(self.object_content_type_map) == 0:
@@ -535,6 +546,7 @@ class Serializers(metaclass=MappableSingleton):
     def register_content_type_for_object(cls, objekt: Any, content_type: str) -> None:
         """
         Register content type for a property, action, event, or a `Thing` class to use a specific serializer.
+        If no serializer is found, content type could still be used as metadata.
 
         Parameters
         ----------
@@ -575,8 +587,9 @@ class Serializers(metaclass=MappableSingleton):
         content_type: str,
     ) -> None:
         """
-        Register an existing content type for a property, action or event to use a specific serializer. Other option is
-        to register a serializer directly, the effects are similar.
+        Register a content type for a property, action or event to use a specific serializer. Other option is
+        to register a serializer directly, the effects are similar. If no serializer is found,
+        content type could still be used as metadata.
 
         Parameters
         ----------
@@ -616,6 +629,7 @@ class Serializers(metaclass=MappableSingleton):
     def register_for_object_per_thing_instance(cls, thing_id: str, objekt: str, serializer: BaseSerializer) -> None:
         """
         Register a serializer for a property, action or event for a specific Thing instance.
+        If no serializer is found, content type could still be used as metadata.
 
         Parameters
         ----------
@@ -648,9 +662,7 @@ class Serializers(metaclass=MappableSingleton):
 
     @classmethod
     def reset(cls) -> None:
-        """
-        Reset the serializer registry.
-        """
+        """Reset the serializer registry"""
         cls.object_content_type_map.clear()
         cls.object_serializer_map.clear()
         cls.protocol_serializer_map.clear()

@@ -20,6 +20,7 @@ tests/run-unittest.bat
 .vscode/launch.json
 .vs/
 todo
+openapi.yaml
 
 # zmq 
 *.ipc 

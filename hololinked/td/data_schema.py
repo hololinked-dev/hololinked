@@ -29,10 +29,11 @@ from .utils import get_summary
 
 class DataSchema(Schema):
     """
-    implements data schema
+    Implements Data Schema, usually used to represent payloads of properties, actions and events in a
+    WoT Thing Description.
 
-    [Schema](https://www.w3.org/TR/wot-thing-description11/#sec-data-schema-vocabulary-definition)
-    [Supported Fields](https://www.w3.org/TR/wot-thing-description11/#data-schema-fields)
+    - [Vocabulary Definitions](https://www.w3.org/TR/wot-thing-description11/#sec-data-schema-vocabulary-definition)
+    - [Supported Fields](https://www.w3.org/TR/wot-thing-description11/#data-schema-fields)
     """
 
     title: str = None
@@ -56,7 +57,7 @@ class DataSchema(Schema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property: Property) -> None:
-        """populates schema information from descriptor object"""
+        """populates schema information from property descriptor object"""
         self.title = get_summary(property.doc)
         if property.constant:
             self.const = property.constant
@@ -86,7 +87,7 @@ class DataSchema(Schema):
     # you dont know what you are building, whether the data schema or something else when viewed from property affordance
     def ds_build_from_property(self, property: Property) -> None:
         """
-        generates the schema specific to the type,
+        generates the schema specific to the property type,
         calls `ds_build_fields_from_property()` after choosing the right type
         """
         if self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
@@ -134,7 +135,7 @@ class DataSchema(Schema):
                 setattr(self, field_name, field_value)
 
     def _move_own_type_to_oneOf(self):
-        """move type to oneOf"""
+        """move a type to oneOf"""
         pass
 
 
@@ -198,7 +199,7 @@ class StringSchema(DataSchema):
 class NumberSchema(DataSchema):
     """
     number schema - https://www.w3.org/TR/wot-thing-description11/#numberschema
-    used by String, Filename, Foldername, Path descriptors
+    used by Number and Integer descriptors
     """
 
     minimum: Optional[int | float] = None
@@ -304,7 +305,7 @@ class ArraySchema(DataSchema):
 class ObjectSchema(DataSchema):
     """
     object schema - https://www.w3.org/TR/wot-thing-description11/#objectschema
-    Used by TypedDict
+    Used by TypedDict where the key type must be a string
     """
 
     properties: Optional[JSON] = None
@@ -417,7 +418,7 @@ class SelectorSchema(DataSchema):
 
 class EnumSchema(SelectorSchema):
     """
-    custom schema to fill enum field of property affordance correctly
+    custom schema to fill enum field correctly
     https://www.w3.org/TR/wot-thing-description11/#dataschema
     """
 

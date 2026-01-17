@@ -30,77 +30,21 @@ import shutil
 import tracemalloc
 import warnings
 
-from pathlib import Path
 from typing import Any  # noqa: F401
 
 import zmq.asyncio
 
-import __main__
-
-from .utils import (
-    get_sanitized_filename_from_random_string,
-    set_global_event_loop_policy,
-)
+from .utils import generate_main_script_log_filename, set_global_event_loop_policy
 
 
 class Configuration:
     """
     Allows to auto apply common settings used throughout the package, instead of passing these settings as arguments.
-    Import `global_config` variable instead of instantitation this class.
+    Import `global_config` variable instead of instantiating this class. Please check `global_config` docstring for supported values
+    or [website documentation](https://docs.hololinked.dev/api-reference/global-config/).
 
-    ```python
-    from hololinked.config import global_config
-
-    global_config.TEMP_DIR = "/my/temp/dir"
-    global_config.ALLOW_CORS = True
-    global_config.setup()  # Important to call setup() after changing values
-
-    class MyThing(Thing):
-        ...
-    ```
-
-    Values are not type checked and are usually mutable in runtime, except:
-
-    - logging setup
-    - ZMQ context
-    - global event loop policy
-
-    which refresh the global state. Keys of JSON file must correspond to supported value name.
-
-    Supported values are -
-
-    `TEMP_DIR` - system temporary directory to store temporary files like IPC sockets.
-    default - `~/.hololinked` (`.hololinked` under home directory).
-
-    `TCP_SOCKET_SEARCH_START_PORT` - starting port number for automatic port searching
-    for TCP socket binding, used for event addresses. default `60000`.
-
-    `TCP_SOCKET_SEARCH_END_PORT` - ending port number for automatic port searching
-    for TCP socket binding, used for event addresses. default `65535`.
-
-    `DB_CONFIG_FILE` - file path for database configuration. default `None`.
-
-    `USE_UVLOOP` - signicantly faster event loop for Linux systems. Reads data from network faster. default `False`.
-
-    `TRACE_MALLOC` - whether to trace memory allocations using tracemalloc module. default `False`.
-
-    `VALIDATE_SCHEMAS` - whether to validate JSON schema supplied for properties, actions and events
-    (not validation of payload, but validation of schema itself). default `True`.
-
-    `DEBUG` - whether to print debug logs. default `False`.
-
-    `LOG_LEVEL` - logging level to use. default `logging.INFO`, `logging.DEBUG` if `DEBUG` is `True`.
-
-    `COLORED_LOGS` - whether to use colored logs in console. default `False`.
-
-    `ALLOW_PICKLE` - whether to allow pickle serialization/deserialization. default `False`.
-
-    `ALLOW_UNKNOWN_SERIALIZATION` - whether to allow unknown serialization formats, specifically from clients. default `False`.
-
-    Parameters
-    ----------
-    use_environment: bool
-        load files from JSON file specified under environment
+    This implementation needs to be improved in general. Consider opening an issue
+    if you have suggestions at [GitHub](https://github.com/hololinked-dev/hololinked/issues).
     """
 
     __slots__ = [
@@ -134,17 +78,23 @@ class Configuration:
         # serializers
         "ALLOW_PICKLE",
         "ALLOW_UNKNOWN_SERIALIZATION",
+        # internal
+        "_sockets_folder",
+        "_secrets_folder",
+        "_logs_folder",
+        "_db_folder",
     ]
 
     def __init__(self, app_name: str | None = None):
         self.app_name = app_name
+        self._sockets_folder = "sockets"
+        self._secrets_folder = "secrets"
+        self._logs_folder = "logs"
+        self._db_folder = "db"
         self.load_variables()
 
     def load_variables(self):
-        """
-        set default values & use the values from environment file.
-        Set `use_environment` to `False` to not use environment file. This method is called during `__init__`.
-        """
+        """Set default values. This method is called during `__init__`"""
         # note that all variables have not been implemented yet,
         # things just come and go as of now
         self.TEMP_DIR = os.path.join(os.path.expanduser("~"), ".hololinked")
@@ -162,7 +112,7 @@ class Configuration:
         # self.USE_STRUCTLOG = True
         self.COLORED_LOGS = False
         self.USE_LOG_FILE = False
-        self.LOG_FILENAME = os.path.join(self.TEMP_DIR_LOGS, self._main_script_filename)
+        self.LOG_FILENAME = os.path.join(self.TEMP_DIR_LOGS, generate_main_script_log_filename(self.app_name))
         self.ROTATE_LOG_FILES = True
         self.LOGFILE_BACKUP_COUNT = 14
         # Add the filename of the main script importing this module
@@ -173,22 +123,12 @@ class Configuration:
 
     def setup(self):
         """
-        actions to be done to recreate global configuration state after changing config values.
+        Actions to be done to recreate global configuration state after changing config values.
         Called after `load_variables` and `set` methods.
+
+        Please call this method after changing config values directly specific to logging or event loop policy
         """
-        for directory in [
-            self.TEMP_DIR,
-            self.TEMP_DIR_SOCKETS,
-            self.TEMP_DIR_LOGS,
-            self.TEMP_DIR_DB,
-            self.TEMP_DIR_SECRETS,
-        ]:
-            try:
-                os.mkdir(directory)
-            except FileExistsError:
-                pass
-            except PermissionError:
-                warnings.warn(f"permission denied to create directory {directory}", UserWarning)
+        self.setup_temp_dirs()
 
         set_global_event_loop_policy(self.USE_UVLOOP)
         if self.TRACE_MALLOC:
@@ -257,6 +197,66 @@ class Configuration:
 
         default_thing_execution_context.fetchExecutionLogs = fetch_execution_logs
 
+    @property
+    def TEMP_DIR_SOCKETS(self) -> str:
+        """returns the temporary directory path for IPC sockets"""
+        return os.path.join(self.TEMP_DIR, self._sockets_folder)
+
+    @property
+    def TEMP_DIR_LOGS(self) -> str:
+        """returns the temporary directory path for log files"""
+        return os.path.join(self.TEMP_DIR, self._logs_folder)
+
+    @property
+    def TEMP_DIR_DB(self) -> str:
+        """returns the temporary directory path for database files"""
+        return os.path.join(self.TEMP_DIR, self._db_folder)
+
+    @property
+    def TEMP_DIR_SECRETS(self) -> str:
+        """returns the temporary directory path for secret files"""
+        return os.path.join(self.TEMP_DIR, self._secrets_folder)
+
+    def setup_temp_dirs(self) -> None:
+        for directory in [
+            self.TEMP_DIR,
+            self.TEMP_DIR_SOCKETS,
+            self.TEMP_DIR_LOGS,
+            self.TEMP_DIR_DB,
+            self.TEMP_DIR_SECRETS,
+        ]:
+            try:
+                os.mkdir(directory)
+            except FileExistsError:
+                pass
+            except PermissionError:
+                warnings.warn(f"permission denied to create directory {directory}", UserWarning)
+
+    def set_temp_dir(self, path: str) -> None:
+        """sets the base directory path for temporary files and application data (sockets, logs, databases, secrets)"""
+        self.TEMP_DIR = path
+        self.setup_temp_dirs()
+
+    def set_sockets_folders(self, path: str) -> None:
+        """sets the temporary directory path for IPC sockets"""
+        self._sockets_folder = path
+        self.setup_temp_dirs()
+
+    def set_logs_folder(self, path: str) -> None:
+        """sets the temporary directory path for log files"""
+        self._logs_folder = path
+        self.setup_temp_dirs()
+
+    def set_db_folder(self, path: str) -> None:
+        """sets the temporary directory path for database files"""
+        self._db_folder = path
+        self.setup_temp_dirs()
+
+    def set_secrets_folder(self, path: str) -> None:
+        """sets the temporary directory path for secret files"""
+        self._secrets_folder = path
+        self.setup_temp_dirs()
+
     def cleanup_temp_dirs(self, cleanup_databases: bool = False) -> None:
         """
         Cleans up temporary directories used by hololinked, all log files and IPC sockets are removed.
@@ -276,43 +276,60 @@ class Configuration:
     def __del__(self):
         self.ZMQ_CONTEXT.term()
 
-    @property
-    def TEMP_DIR_SOCKETS(self) -> str:
-        """returns the temporary directory path for IPC sockets"""
-        return os.path.join(self.TEMP_DIR, "sockets")
-
-    @property
-    def TEMP_DIR_LOGS(self) -> str:
-        """returns the temporary directory path for log files"""
-        return os.path.join(self.TEMP_DIR, "logs")
-
-    @property
-    def TEMP_DIR_DB(self) -> str:
-        """returns the temporary directory path for database files"""
-        return os.path.join(self.TEMP_DIR, "db")
-
-    @property
-    def TEMP_DIR_SECRETS(self) -> str:
-        """returns the temporary directory path for secret files"""
-        return os.path.join(self.TEMP_DIR, "secrets")
-
-    @property
-    def _main_script_filename(self) -> str | None:
-        """returns the main script filename if available"""
-        if not self.app_name:
-            file = getattr(__main__, "__file__", None)
-            if not file:
-                filename = Path.cwd().name
-            else:
-                file = os.path.splitext(os.path.basename(file))
-                filename = file[0]
-        else:
-            filename = self.app_name
-        if filename:
-            return get_sanitized_filename_from_random_string(filename, extension="log")
-        return "hololinked.log"
-
 
 global_config = Configuration()
+"""
+Allows to auto apply common settings used throughout the package, instead of passing these settings as arguments.
+Import `global_config` variable instead of instantiating this class.
+
+```python
+from hololinked.config import global_config
+
+global_config.TEMP_DIR = "/my/temp/dir"
+global_config.ALLOW_CORS = True
+global_config.setup()  # Important to call setup() after changing values
+
+class MyThing(Thing):
+    ...
+```
+
+Values are not type checked and are usually mutable in runtime, except:
+
+- logging setup
+- ZMQ context
+- global event loop policy
+
+which refresh the global state. Keys of JSON file must correspond to supported value name.
+
+Supported values are -
+
+`TEMP_DIR` - system temporary directory to store temporary files like IPC sockets.
+default - `~/.hololinked` (`.hololinked` under home directory).
+
+`TCP_SOCKET_SEARCH_START_PORT` - starting port number for automatic port searching
+for TCP socket binding, used for event addresses. default `60000`.
+
+`TCP_SOCKET_SEARCH_END_PORT` - ending port number for automatic port searching
+for TCP socket binding, used for event addresses. default `65535`.
+
+`DB_CONFIG_FILE` - file path for database configuration. default `None`.
+
+`USE_UVLOOP` - signicantly faster event loop for Linux systems. Reads data from network faster. default `False`.
+
+`TRACE_MALLOC` - whether to trace memory allocations using tracemalloc module. default `False`.
+
+`VALIDATE_SCHEMAS` - whether to validate JSON schema supplied for properties, actions and events
+(not validation of payload, but validation of schema itself). default `True`.
+
+`DEBUG` - whether to print debug logs. default `False`.
+
+`LOG_LEVEL` - logging level to use. default `logging.INFO`, `logging.DEBUG` if `DEBUG` is `True`.
+
+`COLORED_LOGS` - whether to use colored logs in console. default `False`.
+
+`ALLOW_PICKLE` - whether to allow pickle serialization/deserialization. default `False`.
+
+`ALLOW_UNKNOWN_SERIALIZATION` - whether to allow unknown serialization formats, specifically from clients. default `False`.
+"""
 
 __all__ = ["global_config", "Configuration"]

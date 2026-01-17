@@ -8,10 +8,10 @@ from .security import APIKeySecurity, BasicSecurity  # noqa: F401
 
 class ObjectProxy:
     """
-    Procedural/scripting client for `Thing`. Once connected to a server, properties, methods and events are
+    Procedural/scripting client for `Thing`. Once connected to a server, properties, methods and events are loaded and
     dynamically populated. Can be used with any supported protocol binding.
 
-    Use `ClientFactory` to create an instance of this class of directly creating it.
+    Use `ClientFactory` to create an instance of this class instead of directly creating it.
     """
 
     _own_attrs = frozenset(
@@ -48,11 +48,11 @@ class ObjectProxy:
             additional keyword arguments:
 
             - `allow_foreign_attributes`: `bool`, default `False`.
-                allows local attributes for proxy apart from properties fetched from the server.
+                allows local attributes apart from resources fetched from the server.
             - `logger`: `structlog.stdlib.BoundLogger`, default `None`.
                 logger instance
             - `td`: `dict[str, Any]`, default `dict()`.
-                Thing Description of the consumed thing
+                Thing Description of the consumed Thing
             - `security`: `BasicSecurity` | `APIKeySecurity`, optional.
                 security scheme to be used for authentication
         """
@@ -125,9 +125,11 @@ class ObjectProxy:
         name: str
             name of the action
         oneway: bool, optional, default False
-            only send an instruction to invoke the action but do not fetch the reply. only accepted as keyword argument.
+            only send an instruction to invoke the action but do not fetch the reply.
+            only accepted as keyword argument.
         noblock: bool, optional, default False
-            schedule an action invokation but collect the reply later using a reply id. only accepted as keyword argument.
+            schedule an action invokation but collect the reply later using a reply id.
+            only accepted as keyword argument.
         *args: Any
             arguments for the action
         **kwargs: dict[str, Any]
@@ -136,12 +138,12 @@ class ObjectProxy:
         Returns
         -------
         Any
-            return value of the action call or an id if `noblock` is True
+            return value of the action call or a message id if `noblock` is True
 
         Raises
         ------
         AttributeError
-            if no action with specified name found in the Thing Description
+            if action with specified name not found in the Thing Description
         Exception
             server raised exception are propagated
         """
@@ -179,7 +181,7 @@ class ObjectProxy:
         Raises
         ------
         AttributeError
-            if no action with specified name found in the Thing Description
+            if action with specified name not found in the Thing Description
         Exception
             server raised exception are propagated
         """
@@ -247,9 +249,10 @@ class ObjectProxy:
         else:
             prop.set(value)
 
-    async def async_read_property(self, name: str) -> None:
+    async def async_read_property(self, name: str) -> Any:
         """
-        async(io) get property specified by name on server. `noblock` and `oneway` are not supported for async calls.
+        async(io) read property specified by name on server.
+        `noblock` and `oneway` are not supported for async calls.
 
         Parameters
         ----------
@@ -292,7 +295,7 @@ class ObjectProxy:
             raise AttributeError(f"No property named {name}")
         await prop.async_set(value)
 
-    def read_multiple_properties(self, names: list[str], noblock: bool = False) -> Any:
+    def read_multiple_properties(self, names: list[str], noblock: bool = False) -> dict[str, Any]:
         """
         read properties specified by list of names.
 
@@ -330,7 +333,7 @@ class ObjectProxy:
         **properties: dict[str, Any],
     ) -> None:
         """
-        write properties whose name is specified by keys of a dictionary
+        write properties whose name is specified as keyword arguments
 
         Parameters
         ----------
@@ -361,7 +364,7 @@ class ObjectProxy:
         else:
             return method(**properties)
 
-    async def async_read_multiple_properties(self, names: list[str]) -> None:
+    async def async_read_multiple_properties(self, names: list[str]) -> dict[str, Any]:
         """
         async(io) read properties specified by list of names. `noblock` reads are not supported for asyncio.
 
