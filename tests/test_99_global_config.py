@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 
 import pytest
@@ -69,6 +70,33 @@ def test_04_allow_cors():
     global_config.ALLOW_CORS = False
     server = HTTPServer(port=8080)
     assert not server.config.cors
+
+
+def test_05_temp_data_folders():
+    global_config.set_db_folder("test_db_folder")
+    assert global_config.TEMP_DIR_DB.endswith("test_db_folder")
+    assert global_config.TEMP_DIR_DB.startswith(global_config.TEMP_DIR)
+
+    global_config.set_logs_folder("test_logs_folder")
+    assert global_config.TEMP_DIR_LOGS.endswith("test_logs_folder")
+    assert global_config.TEMP_DIR_LOGS.startswith(global_config.TEMP_DIR)
+
+    global_config.set_secrets_folder("test_secrets_folder")
+    assert global_config.TEMP_DIR_SECRETS.endswith("test_secrets_folder")
+    assert global_config.TEMP_DIR_SECRETS.startswith(global_config.TEMP_DIR)
+
+    global_config.set_sockets_folders("test_sockets_folder")
+    assert global_config.TEMP_DIR_SOCKETS.endswith("test_sockets_folder")
+    assert global_config.TEMP_DIR_SOCKETS.startswith(global_config.TEMP_DIR)
+
+    for folder in [
+        global_config.TEMP_DIR_DB,
+        global_config.TEMP_DIR_LOGS,
+        global_config.TEMP_DIR_SECRETS,
+        global_config.TEMP_DIR_SOCKETS,
+    ]:
+        assert os.path.exists(folder)
+        assert os.path.isdir(folder)
 
 
 if __name__ == "__main__":
