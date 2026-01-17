@@ -21,28 +21,46 @@ class StateMachine:
     """
 
     initial_state = ClassSelector(
-        default=None, allow_None=True, constant=True, class_=(Enum, str), doc="initial state of the machine"
+        default=None,
+        allow_None=True,
+        constant=True,
+        class_=(Enum, str),
+        doc="initial state of the machine",
     )  # type: Enum | str
+    """initial state of the machine"""
 
     states = ClassSelector(
-        default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list), doc="list/enum of allowed states"
+        default=None,
+        allow_None=True,
+        constant=True,
+        class_=(EnumMeta, tuple, list),
+        doc="list/enum of allowed states",
     )  # type: EnumMeta | tuple | list
+    """list of allowed states"""
 
     on_enter = TypedDict(
         default=None,
         allow_None=True,
         key_type=str,
         doc="""callbacks to execute when a certain state is entered; 
-                        specfied as map with state as keys and callbacks as list""",
+            specified as map with state as keys and callbacks as list""",
     )  # type: dict[str, list[Callable]]
+    """
+    callbacks to execute when a certain state is entered; 
+    specified as map with state as keys and callbacks as list
+    """
 
     on_exit = TypedDict(
         default=None,
         allow_None=True,
         key_type=str,
         doc="""callbacks to execute when certain state is exited; 
-                        specfied as map with state as keys and callbacks as list""",
+            specified as map with state as keys and callbacks as list""",
     )  # type: dict[str, list[Callable]]
+    """
+    callbacks to execute when certain state is exited; 
+    specified as map with state as keys and callbacks as list
+    """
 
     machine = TypedDict(
         default=None,
@@ -51,17 +69,21 @@ class StateMachine:
         key_type=str,  # i.e. its like JSON
         doc="the machine specification with state as key and objects as list",
     )  # type: dict[str, list[Callable | Property]]
+    """the machine specification with state as key and objects as list"""
 
     push_state_change_event = Boolean(
-        default=True, doc="if `True`, when the state changes, an event is pushed with the new state"
+        default=True,
+        doc="if `True`, when the state changes, an event is pushed with the new state",
     )  # type: bool
+    """if `True`, when the state changes, an event is pushed with the new state"""
 
     valid = Boolean(
         default=False,
         readonly=True,
         fget=lambda self: self._valid,
         doc="internally computed, `True` if states, initial_states and the machine is valid",
-    )
+    )  # type: bool
+    """internally computed, `True` if states, initial_states and the machine is valid"""
 
     def __init__(
         self,
@@ -78,9 +100,9 @@ class StateMachine:
         ----------
         states: EnumMeta | List[str] | Tuple[str]
             enumeration of states
-        initial_state: str
+        initial_state: StrEnum | str
             initial state of machine
-        push_state_change_event : bool, default `True`
+        push_state_change_event: bool, default `True`
             when the state changes, an event is pushed to clients with the new state as the payload
         on_enter: Dict[str, Callable | Property]
             callbacks to be invoked when a certain state is entered. It is to be specified
@@ -269,7 +291,8 @@ class BoundFSM:
     def set_state(self, value: str | StrEnum | Enum, push_event: bool = True, skip_callbacks: bool = False) -> None:
         """
         set state of state machine. Also triggers state change callbacks if `skip_callbacks=False` and pushes a state
-        change event when `push_event=True`. One can also set state using the '=' operator of the `current_state` property,
+        change event when `push_event=True` (when __init__ argument `push_state_change_event=True`).
+        One can also set state using the '=' operator of the `current_state` property,
         in which case `skip_callbacks=False` and `push_event=True` will be used.
 
         If originally an enumeration for the list of allowed states was supplied,

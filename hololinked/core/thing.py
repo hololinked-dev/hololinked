@@ -7,7 +7,7 @@ from typing import Any
 import structlog
 
 from ..constants import ZMQ_TRANSPORTS
-from ..serializers import BaseSerializer, JSONSerializer, Serializers
+from ..serializers import Serializers
 from ..utils import forkable, getattr_without_descriptor_read
 from .actions import BoundAction, action
 from .events import EventDispatcher
@@ -19,9 +19,9 @@ from .property import Property
 class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     """
     Subclass from here to expose hardware or python objects on the network. Remotely accessible members of a `Thing` are
-    segragated into properties, actions & events. Utilize properties for data that can be read and written,
+    segregated into properties, actions & events. Utilize properties for data that can be read and written,
     actions to instruct the object to perform tasks and events to get notified of any relevant information. State Machines
-    can be used to contrain operations on properties and actions.
+    can be used to constrain operations on properties and actions.
 
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/Thing.pdf)
     """
@@ -37,6 +37,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             for example - creating zmq socket address, tables in databases, and to identify the instance 
             in the HTTP Server - (http(s)://{domain and sub domain}/{id}).""",
     )  # type: str
+    """
+    String identifier of the instance. For an interconnected system of hardware, 
+    IDs are recommended to be unique. This value is used for many operations,
+    for example - creating zmq socket address, tables in databases, and to identify the instance 
+    in the HTTP Server - (http(s)://{domain}/{id}).
+    """
+    # TODO use docstring in only one place
 
     logger = ClassSelector(
         class_=(logging.Logger, structlog.stdlib.BoundLoggerBase),
@@ -46,8 +53,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         doc="""structlog.stdlib.BoundLogger instance to log messages. Default logger with a IO-stream handler 
             is created if none supplied.""",
     )  # type: structlog.stdlib.BoundLoggerBase
+    """
+    structlog.stdlib.BoundLogger instance to log messages. Default logger with a IO-stream handler 
+    is created if none supplied.
+    """
 
     state_machine = None  # type: "StateMachine" | None
+    """class property reserved for state machine instance if any."""
 
     # remote properties
     state = String(
@@ -59,6 +71,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         doc="""Current state machine's state if state machine present, `None` indicates absence of state machine.
             State machine returned state is always a string even if specified as an Enum in the state machine.""",
     )  # type: str | None
+    """
+    Current state machine's state if state machine present, `None` indicates absence of state machine.
+    State machine returned state is always a string even if specified as an Enum in the state machine.
+    """
 
     # object_info = Property(doc="contains information about this object like the class name, script location etc.") # type: ThingInformation
 
@@ -74,7 +90,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         *,
         id: str,
         logger: structlog.stdlib.BoundLogger | None = None,
-        serializer: BaseSerializer | JSONSerializer | None = None,
         **kwargs: dict[str, Any],
     ) -> None:
         """
@@ -88,10 +103,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         logger: structlog.stdlib.BoundLogger, optional
             `structlog.stdlib.BoundLogger` instance to log messages. Default logger with a IO-stream handler
             is created if None supplied.
-        serializer: BaseSerializer | JSONSerializer, optional
-            Default serializer to be used for serializing and deserializing data.
-            If not supplied, a `msgspec` based JSON Serializer is used.
         **kwargs: dict[str, Any]
+
+            - `serializer`: `BaseSerializer` | `JSONSerializer`, optional
+                Default serializer to be used for serializing and deserializing data.
+                If not supplied, a `msgspec` based JSON Serializer is used.
             - `remote_accessible_logger`: `bool`, Default `False`.
                 if `True`, the log records can be streamed by a remote client. `remote_accessible_logger` can also be set as a
                 class attribute. Use this a minimalistic replacement for fluentd or similar log collectors.
@@ -113,8 +129,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         EventSource.__init__(self)
         if self.id.startswith("/"):
             self.id = self.id[1:]
-        if serializer is not None:
-            Serializers.register_for_thing_instance(self.id, serializer)
+        if kwargs.get("serializer", None) is not None:
+            Serializers.register_for_thing_instance(self.id, kwargs.get("serializer"))
 
         from .logger import prepare_object_logger  # noqa
         from .state_machine import prepare_object_FSM  # noqa
@@ -206,8 +222,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         # allow_loose_schema: bool, optional, Default False
         #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable
-        #     value for node-wot to ignore validation or claim the accessed value for complaint with the schema.
-        #     In other words, schema validation will always pass.
+        #     inaccurate but truthy value. In other words, schema validation will always pass.
         from ..td.tm import ThingModel
 
         return ThingModel(instance=self, ignore_errors=ignore_errors, skip_names=skip_names).generate()
@@ -222,8 +237,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         **kwargs: dict[str, Any],
     ) -> None:
         """
-        Quick-start to serve `Thing` over ZMQ. This method is fully blocking.
-        Call `exit()` to resume (untested).
+        Quick-start to serve `Thing` over ZMQ. This method is fully blocking, call `exit()` (`hololinked.server.exit()`)
+        to unblock.
 
         Parameters
         ----------
@@ -235,13 +250,15 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             The star `*` indicates that the server will listen on all available network interfaces.
             - `IPC` - inter process communication - connection can be made from other processes running
             locally within same computer. No client on the network will be able to contact the object using
-            this transport. Use this transport if you wish to avoid configuring your firewall for a local client.
+            this transport. Use this transport if you wish to avoid configuring your firewall for a local client,
+            like a Desktop application or a local web server.
             - `INPROC` - one main python process spawns several threads in one of which the `Thing`
             will be running. The object can be contacted by a client on another thread but not from other processes
             or the network.
 
             One may use more than one form of transport.  All requests made will be anyway queued internally
-            irrespective of origin. For multiple transports, supply a list of transports. For example: `[ZMQ_TRANSPORTS.TCP, ZMQ_TRANSPORTS.IPC]`,
+            irrespective of origin. For multiple transports, supply a list of transports.
+            For example: `[ZMQ_TRANSPORTS.TCP, ZMQ_TRANSPORTS.IPC]`,
             `["TCP", "IPC"]`, `["tcp://*:5555", "IPC"]` or `["IPC", "INPROC"]`.
 
         forked: bool, Default `False`
@@ -275,7 +292,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         **kwargs: dict[str, Any],
     ) -> None:
         """
-        Quick-start to serve `Thing` over HTTP. This method is fully blocking.
+        Quick-start to serve `Thing` over HTTP. This method is fully blocking, call `exit()` (`hololinked.server.exit()`)
+        to unblock.
 
         Parameters
         ----------
@@ -322,10 +340,17 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         **kwargs: dict[str, Any],
     ) -> None:
         """
-        Expose the object with the given servers. This method is blocking until `exit()` is called.
+        Expose the object with the given servers. This method is blocking until `exit()` (`hololinked.server.exit()`)
+        is called.
+
+        >>> Thing(id='example_id').run(servers=[http_server, zmq_server, mqtt_publisher])
 
         Parameters
         ----------
+        forked: bool, Default `False`
+            if `True`, the server is started in a separate thread and this method returns immediately.
+        print_welcome_message: bool, Default `True`
+            if `True`, a welcome message with server information is printed to the console.
         kwargs: dict[str, Any]
             keyword arguments
 
@@ -354,7 +379,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     @action()
     def exit(self) -> None:
-        """Stop serving the object. This method usually needs to be called remotely"""
+        """
+        Stop serving the object. This method usually needs to be called remotely.
+        The servers are not stopped, just the object run loop is exited.
+        """
         if self.rpc_server is None:
             self.logger.debug("exit() called on a object that is not exposed yet.")
             return

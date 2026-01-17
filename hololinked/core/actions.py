@@ -144,6 +144,13 @@ class BoundAction:
         """
         Validate the call to the action, like payload, state machine state etc.
         Errors are raised as exceptions.
+
+        Parameters
+        ----------
+        args: tuple
+            positional arguments to the action
+        kwargs: dict
+            keyword arguments to the action
         """
         if self.execution_info.isparameterized and len(args) > 0:
             raise RuntimeError("parameterized functions cannot have positional arguments")
@@ -188,7 +195,6 @@ class BoundAction:
         return hash(str(self))
 
     def __getattribute__(self, name):
-        "Emulate method_getset() in Objects/classobject.c"
         # https://docs.python.org/3/howto/descriptor.html#functions-and-methods
         if name == "__doc__":
             return self.obj.__doc__
@@ -214,7 +220,7 @@ class BoundAction:
 class BoundSyncAction(BoundAction):
     """
     non async(io) action call. The call is passed to the method as-it-is to allow local
-    invocation without state machine checks.
+    invocation without state machine checks. Use `external_call` to have validation.
     """
 
     def external_call(self, *args, **kwargs):
@@ -231,7 +237,7 @@ class BoundSyncAction(BoundAction):
 class BoundAsyncAction(BoundAction):
     """
     async(io) action call. The call is passed to the method as-it-is to allow local
-    invocation without state machine checks.
+    invocation without state machine checks. Use `external_call` to have validation.
     """
 
     async def external_call(self, *args, **kwargs):
@@ -255,13 +261,14 @@ def action(
     **kwargs,
 ) -> Action:
     """
-    decorate on your methods to make them accessible remotely or create 'actions' out of them.
+    Decorate on your methods to make them accessible remotely or create 'actions' out of them. When used with hardware,
+    actions generally command the hardware to do something.
 
     Parameters
     ----------
-    input_schema: JSON
+    input_schema: JSON | BaseModel | RootModel, optional
         schema for arguments to validate
-    output_schema: JSON
+    output_schema: JSON | BaseModel | RootModel, optional
         schema for return value, currently only used to inform clients which are supposed to validate on their own
     state: str | Tuple[str], optional
         state machine state under which the action can be executed. When not provided, the action can be executed
@@ -270,14 +277,14 @@ def action(
         additional keyword arguments to specify action characteristics:
 
         - `synchronous`: bool,
-            indicate in thing description if action is synchronous (not long running or async) - completes in a deterministic
-            (& usually) short period of time, default `True`
+            indicate in thing description if action is synchronous (not long running/threaded or async) - completes
+            in a deterministic (& usually) short period of time, default `True`
         - `threaded`: bool,
-            indicate that a method should be run in a separate thread, default `False`.
-            Alternative to synchronous for non-async methods.
+            indicate that a method/action should be run in a separate thread, default `False`.
+            Alternative to `synchronous` for non-async methods.
         - `create_task`: bool,
-            indicate that a method function should be run in a new task, default `True`.
-            Alternative to synchronous for async methods.
+            indicate that a method/action should be run in a new task, default `True`.
+            Alternative to `synchronous` for async methods.
         - `safe`: bool,
             indicate in thing description if action is safe to execute, default `False`
         - `idempotent`: bool,
