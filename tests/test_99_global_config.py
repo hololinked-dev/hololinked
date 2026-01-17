@@ -6,6 +6,7 @@ import pytest
 import structlog
 
 from hololinked.config import global_config
+from hololinked.server.security import APIKeySecurity
 
 
 @pytest.mark.parametrize(
@@ -97,6 +98,11 @@ def test_05_temp_data_folders():
     ]:
         assert os.path.exists(folder)
         assert os.path.isdir(folder)
+
+    assert not os.path.exists(os.path.join(global_config.TEMP_DIR_SECRETS, "apikeys.json"))
+    security = APIKeySecurity(name="test-api-key-security")
+    security.create(print_value=False)
+    assert os.path.exists(os.path.join(global_config.TEMP_DIR_SECRETS, "apikeys.json"))
 
 
 if __name__ == "__main__":
