@@ -96,6 +96,7 @@ class OAuth2Security:
         oidc_settings: OAuthDirectAccessGrant,
         req_rep_sync_client: httpx.Client,
         req_rep_async_client: httpx.AsyncClient,
+        refresh_interval_fraction: float = 0.75,
     ) -> None:
         self._oidc_settings = oidc_settings
         self._req_rep_async_client = req_rep_async_client
@@ -103,6 +104,8 @@ class OAuth2Security:
         self._tokens = None
         self._refresh_thread = None
         self._refresh_lock = threading.Lock()
+        self._refresh = True
+        self._refresh_interval_fraction = refresh_interval_fraction
 
     @property
     def http_header(self) -> str:
@@ -116,26 +119,30 @@ class OAuth2Security:
 
     def login(self) -> None:
         """login with username and password and obtain tokens"""
-        body = dict(
-            grant_type=self._oidc_settings.grant_type,
-            client_id=self._oidc_settings.oidc_client_id,
-            scope=self._oidc_settings.scope,
-            username=self._oidc_settings.username,
-            password=self._oidc_settings.password,
-        )
-        if self._oidc_settings.oidc_client_secret:
-            body["client_secret"] = self._oidc_settings.oidc_client_secret
-        response = self._req_rep_sync_client.post(
-            f"{self._oidc_settings.oidc_provider_url}/protocol/openid-connect/token",
-            data=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        response.raise_for_status()
-        self._tokens = ROPC(**response.json())
-        if self._refresh_thread and self._refresh_thread.is_alive():
-            return
-        self._refresh_thread = threading.Thread(target=self._refresh_tokens_in_background, daemon=True)
-        self._refresh_thread.start()
+        try:
+            self._refresh_lock.acquire()
+            body = dict(
+                grant_type=self._oidc_settings.grant_type,
+                client_id=self._oidc_settings.oidc_client_id,
+                scope=self._oidc_settings.scope,
+                username=self._oidc_settings.username,
+                password=self._oidc_settings.password,
+            )
+            if self._oidc_settings.oidc_client_secret:
+                body["client_secret"] = self._oidc_settings.oidc_client_secret
+            response = self._req_rep_sync_client.post(
+                f"{self._oidc_settings.oidc_provider_url}/protocol/openid-connect/token",
+                data=body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            response.raise_for_status()
+            self._tokens = ROPC(**response.json())
+            if self._refresh_thread and self._refresh_thread.is_alive():
+                return
+            self._refresh_thread = threading.Thread(target=self._refresh_tokens_in_background, daemon=True)
+            self._refresh_thread.start()
+        finally:
+            self._refresh_lock.release()
 
     def logout(self) -> None:
         """logout and invalidate tokens"""
@@ -152,6 +159,7 @@ class OAuth2Security:
         )
         response.raise_for_status()
         self._tokens = None
+        self._refresh = False
 
     def refresh_tokens(self) -> None:
         """refresh tokens, even forcibly by relogin if necessary"""
@@ -169,16 +177,17 @@ class OAuth2Security:
                 data=body,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
-            try:
-                response.raise_for_status()
-                self._tokens = ROPC(**response.json())
-            except httpx.HTTPStatusError:
-                self.login()
+            response.raise_for_status()
+            self._tokens = ROPC(**response.json())
+        except httpx.HTTPStatusError:
+            self._refresh_lock.release()
+            self.login()
         finally:
             self._refresh_lock.release()
 
     def _refresh_tokens_in_background(self) -> None:
         """background thread to refresh tokens periodically"""
-        while True:
-            time.sleep(int(0.75 * self._tokens.expires_in))
+        time.sleep(int(0.75 * self._tokens.expires_in))
+        while self._refresh:
             self.refresh_tokens()
+            time.sleep(int(self._refresh_interval_fraction * self._tokens.expires_in))
