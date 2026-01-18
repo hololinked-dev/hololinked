@@ -102,7 +102,13 @@ try:
             return self.validate_input(username, password)
 
 except ImportError:
-    pass
+
+    class BcryptBasicSecurity(Security):
+        """Placeholder for BcryptBasicSecurity when bcrypt is not installed"""
+
+        def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
+            raise ImportError("bcrypt library is required for BcryptBasicSecurity")
+
 
 try:
     import argon2
@@ -187,7 +193,13 @@ try:
             return self.validate_input(username, password)
 
 except ImportError:
-    pass
+
+    class Argon2BasicSecurity(Security):
+        """Placeholder for Argon2BasicSecurity when argon2 is not installed"""
+
+        def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
+            raise ImportError("argon2-cffi library is required for Argon2BasicSecurity")
+
 
 try:
     import argon2
@@ -385,4 +397,136 @@ try:
                 return False
 
 except ImportError:
-    pass
+
+    class APIKeySecurity(Security):
+        """Placeholder for APIKeySecurity when argon2 is not installed"""
+
+        def __init__(self, name: str, file: str = "apikeys.json") -> None:
+            raise ImportError("argon2-cffi library is required for APIKeySecurity")
+
+
+try:
+    from keycloak import KeycloakAdmin, KeycloakAuthenticationError, KeycloakOpenID
+
+    class KeycloakOAuth2Security(Security):
+        """Placeholder for KeycloakOAuth2Security"""
+
+        oidc_server_url: str
+        """URL of the OIDC server"""
+
+        oidc_client_id: str
+        """Client ID registered with the OIDC server"""
+
+        oidc_realm: str
+        """Realm name in the OIDC server"""
+
+        oidc_client_secret: str | None = None
+        """
+        Client secret registered with the OIDC server, necessary for retrieving confidential information 
+        like user roles. Not necessary for basic token validation and recomended to leave it `None`.
+        """
+
+        verify_ssl: bool = True
+        """Whether to verify SSL certificates"""
+
+        allowed_roles: list[str] | None = None
+        """
+        List of allowed roles which users need for access, `None` means no role-based restriction.
+        Please don't confuse it with a detailed RBAC implementation.
+        """
+
+        _keycloak_client: KeycloakOpenID = PrivateAttr()
+
+        def __init__(
+            self,
+            oidc_server_url: str,
+            oidc_client_id: str,
+            oidc_realm: str,
+            oidc_client_secret: str | None = None,
+            allowed_roles: list[str] | None = None,
+            verify_ssl: bool = True,
+        ) -> None:
+            super().__init__(
+                oidc_server_url=oidc_server_url,
+                oidc_client_id=oidc_client_id,
+                oidc_realm=oidc_realm,
+                oidc_client_secret=oidc_client_secret,
+                allowed_roles=allowed_roles,
+                verify_ssl=verify_ssl,
+            )
+            self._keycloak_client = KeycloakOpenID(
+                server_url=oidc_server_url,
+                client_id=oidc_client_id,
+                realm_name=oidc_realm,
+                verify=verify_ssl,
+            )
+            if oidc_client_secret:
+                self._admin_keycloak_client = KeycloakAdmin(
+                    server_url=oidc_server_url,
+                    realm_name=oidc_realm,  # moslty no need master realm, TODO check this logic later
+                    user_realm_name=oidc_realm,
+                    client_id=oidc_client_id,
+                    client_secret_key=oidc_client_secret,
+                    verify=verify_ssl,
+                )
+
+        def validate_input(self, jwt: str) -> bool:
+            try:
+                self._keycloak_client.userinfo(token=jwt)
+                return True
+            except KeycloakAuthenticationError:
+                return False
+
+        async def async_validate_input(self, jwt: str) -> bool:
+            """Asynchronous validation is not implemented yet"""
+            try:
+                await self._keycloak_client.a_userinfo(token=jwt)
+                return True
+            except KeycloakAuthenticationError:
+                return False
+
+        def userinfo(self, jwt: str) -> dict[str, Any]:
+            """Get user info from the JWT token"""
+            return self._keycloak_client.userinfo(token=jwt)
+
+        async def async_userinfo(self, jwt: str) -> dict[str, Any]:
+            """Get user info from the JWT token asynchronously"""
+            return await self._keycloak_client.a_userinfo(token=jwt)
+
+        def user_has_role(self, userinfo: dict) -> bool:
+            """Check if the client has a specific role"""
+            if not self.allowed_roles:
+                return True
+            if not self._admin_keycloak_client:
+                raise ValueError("Client secret is required to check roles")
+            realm_roles = self._admin_keycloak_client.get_realm_roles_of_user(user_id=userinfo["sub"])
+            for rolename in self.allowed_roles:
+                if any(role.get("name") == rolename for role in realm_roles):
+                    return True
+            return False
+
+        async def async_user_has_role(self, userinfo: dict) -> bool:
+            """Asynchronous role checking is not implemented yet"""
+            if not self.allowed_roles:
+                return True
+            if not self._admin_keycloak_client:
+                raise ValueError("Client secret is required to check roles")
+            realm_roles = await self._admin_keycloak_client.a_get_realm_roles_of_user(user_id=userinfo["sub"])
+            for rolename in self.allowed_roles:
+                if any(role.get("name") == rolename for role in realm_roles):
+                    return True
+            return False
+
+except ImportError:
+
+    class KeycloakOAuth2Security(Security):
+        """Placeholder for KeycloakOAuth2Security when keycloak library is not installed"""
+
+        def __init__(
+            self,
+            oidc_server_url: str,
+            oidc_client_id: str,
+            oidc_realm: str,
+            verify_ssl: bool = True,
+        ) -> None:
+            raise ImportError("keycloak library is required for KeycloakOAuth2Security")

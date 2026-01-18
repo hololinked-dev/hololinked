@@ -50,6 +50,7 @@ dependencies = [
     # security
     "bcrypt==4.3.0",
     "argon2-cffi>=23.1.0",
+    "python-keycloak>=5.8.1",
     # DB
     "sqlalchemy>2.0.21",
     "sqlalchemy-utils>=0.41",
