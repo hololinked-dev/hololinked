@@ -69,7 +69,7 @@ class OAuthDirectAccessGrant(BaseModel):
     Implements Resource Owner Password Credentials (ROPC) flow.
     """
 
-    oidc_server_url: str
+    oidc_provider_url: str
     oidc_realm: str
     oidc_client_id: str
     oidc_client_secret: str | None = None
@@ -80,13 +80,13 @@ class OAuthDirectAccessGrant(BaseModel):
 
     @property
     def oidc_provider_url(self) -> str:
-        return f"{self.oidc_server_url}/realms/{self.oidc_realm}"
+        return f"{self.oidc_provider_url}/realms/{self.oidc_realm}"
 
 
 class OAuth2Security:
     """
-    OAuth2 Security Scheme,
-    currently only supports Resource Owner Password Credentials (ROPC) flow.
+    OAuth2 Security Scheme, Currently only supports Resource Owner Password Credentials (ROPC) flow.
+    Please implement other flows on your own for applications with a web interface.
     """
 
     http_header_name: str = "Authorization"

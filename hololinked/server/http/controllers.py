@@ -31,7 +31,7 @@ from ..security import (
     APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
-    KeycloakOAuth2Security,
+    OIDCSecurity,
 )
 
 
@@ -159,7 +159,7 @@ class BaseHandler(RequestHandler):
         # 3. Keycloak JWT
         if authorization_header and "bearer " in authorization_header.lower():
             for security_scheme in self.security_schemes:
-                if isinstance(security_scheme, KeycloakOAuth2Security):
+                if isinstance(security_scheme, OIDCSecurity):
                     try:
                         self.logger.info(
                             "authenticating client with Keycloak JWT",
@@ -167,7 +167,7 @@ class BaseHandler(RequestHandler):
                             security_scheme=security_scheme.__class__.__name__,
                         )
                         jwt = authorization_header.split(maxsplit=1)[1]
-                        self.userinfo = await security_scheme.async_userinfo(jwt)
+                        self.userinfo = await security_scheme.userinfo(jwt)
                         if not self.userinfo:
                             continue
                         authenticated = True
@@ -185,8 +185,8 @@ class BaseHandler(RequestHandler):
         if not self.userinfo:
             return True
         for security_scheme in self.security_schemes:
-            if isinstance(security_scheme, KeycloakOAuth2Security):
-                return await security_scheme.async_user_has_role(self.userinfo)
+            if isinstance(security_scheme, OIDCSecurity):
+                return await security_scheme.user_has_role(self.userinfo)
         return False
 
     def set_access_control_allow_headers(self) -> None:
