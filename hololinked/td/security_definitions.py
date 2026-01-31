@@ -51,3 +51,17 @@ class APIKeySecurityScheme(SecurityScheme):
         self.scheme = "apikey"
         self.description = "API Key Authentication"
         self.in_ = "header"
+
+
+class OIDCSecurityScheme(SecurityScheme):
+    """OIDC Security Scheme"""
+
+    scheme: str = "oauth2"
+    token: str = ""
+    scopes: list[str] = Field(default_factory=list)
+
+    def build(self, token_url: str, scopes: list[str] | None = ["openid"]):
+        self.description = "OpenID Connect Authentication"
+        self.token = token_url
+        if scopes is not None:
+            self.scopes = scopes

@@ -25,7 +25,7 @@ from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThing
 from .http.consumed_interactions import HTTPAction, HTTPEvent, HTTPProperty
 from .mqtt.consumed_interactions import MQTTConsumer  # only one type for now
 from .proxy import ObjectProxy
-from .security import BasicSecurity
+from .security import BasicSecurity, OAuth2Security, OAuthDirectAccessGrant
 from .zmq.consumed_interactions import (
     ReadMultipleProperties,
     WriteMultipleProperties,
@@ -284,7 +284,15 @@ class ClientFactory:
         password = kwargs.pop("password", None)
         if not security and username and password:
             security = BasicSecurity(username=username, password=password)
-        if security:
+        if security and not isinstance(security, OAuthDirectAccessGrant):
+            headers[security.http_header_name] = security.http_header
+        if security and isinstance(security, OAuthDirectAccessGrant):
+            security = OAuth2Security(
+                security,
+                req_rep_sync_client=req_rep_sync_client,
+                req_rep_async_client=req_rep_async_client,
+            )
+            security.login()
             headers[security.http_header_name] = security.http_header
 
         response = req_rep_sync_client.get(url, headers=headers)  # type: httpx.Response

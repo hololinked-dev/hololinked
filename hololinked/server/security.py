@@ -9,6 +9,8 @@ import string
 from datetime import datetime, timedelta
 from typing import Any
 
+import httpx
+
 from pydantic import BaseModel, PrivateAttr, field_serializer, field_validator
 
 from ..config import global_config
@@ -102,7 +104,16 @@ try:
             return self.validate_input(username, password)
 
 except ImportError:
-    pass
+
+    class BcryptBasicSecurity(Security):
+        """
+        Placeholder for BcryptBasicSecurity when bcrypt is not installed.
+        Please install the `bcrypt` library to use Bcrypt password security and see the actual docstrings.
+        """
+
+        def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
+            raise ImportError("bcrypt library is required for BcryptBasicSecurity")
+
 
 try:
     import argon2
@@ -187,7 +198,16 @@ try:
             return self.validate_input(username, password)
 
 except ImportError:
-    pass
+
+    class Argon2BasicSecurity(Security):
+        """
+        Placeholder for Argon2BasicSecurity when argon2 is not installed.
+        Please install the `argon2-cffi` library to use Argon2 password security.
+        """
+
+        def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
+            raise ImportError("argon2-cffi library is required for Argon2BasicSecurity")
+
 
 try:
     import argon2
@@ -385,4 +405,258 @@ try:
                 return False
 
 except ImportError:
-    pass
+
+    class APIKeySecurity(Security):
+        """
+        Placeholder for APIKeySecurity when argon2 is not installed.
+        Please install the `argon2-cffi` library to use API key security and see the actual docstrings.
+        """
+
+        def __init__(self, name: str, file: str = "apikeys.json") -> None:
+            raise ImportError("argon2-cffi library is required for APIKeySecurity")
+
+
+try:
+    import jwt
+
+    from jwt import PyJWKClient
+
+    class OIDCSecurity(Security):
+        """
+        Generic OIDC JWT validation meant to be used with 'openid' scope to validate login sessions, requires the PyJWT
+        library to be installed. A *JWT access token* is validated by verifying its signature against the provider's
+        JWKS endpoint (JWK Set) and optionally validating issuer/audience.
+
+        This security scheme is not meant to be used with OAuth flows where the resource server is a third party
+        application from where data is fetched on behalf of the user. The server using this scheme is expected to
+        be the resource server itself, validating tokens issued by an identity provider.
+
+        Parameters one will typically set:
+
+        - `issuer`: The expected token issuer (`iss` claim). For OIDC this is usually the provider's issuer URL.
+        - `audience`: The expected audience (`aud` claim). Often the OAuth2 client id.
+        - `jwks_url`: The JWKS URL. If omitted, it is discovered via: `{issuer}/.well-known/openid-configuration`.
+        """
+
+        issuer: str
+        audience: str | None = None
+        jwks_url: str | None = None
+        algorithms: list[str] = ["RS256"]
+        verify_ssl: bool = True
+
+        allowed_roles: list[str] | None = None
+        role_claim_paths: list[str] | None = None
+
+        name: str = "oidc-security"
+
+        _jwk_client: PyJWKClient = PrivateAttr()
+
+        def __init__(
+            self,
+            issuer: str,
+            audience: str | None,
+            jwks_url: str | None = None,
+            algorithms: list[str] | None = None,
+            verify_ssl: bool = True,
+            allowed_roles: list[str] | None = None,
+            role_claim_paths: list[str] | None = None,
+            name: str = "oidc-security",
+        ) -> None:
+            """
+            Parameters
+            ----------
+            issuer: str
+                OIDC provider's issuer URL. This is considered to be the `iss` claim in the JWT.
+            audience: str | None
+                Expected audience (`aud` claim) in the JWT. Optional but highly recommended.
+                The audience is often the OAuth2 client id.
+            jwks_url: str | None
+                The JWKS URL to fetch signing keys from. If not provided, it is discovered via
+                `{issuer}/.well-known/openid-configuration`.
+            algorithms: list[str] | None
+                List of acceptable signing algorithms. Default is `["RS256"]`.
+            verify_ssl: bool
+                Whether to verify SSL certificates while connecting to the provider. Default is `True`.
+            allowed_roles: list[str] | None
+                List of allowed roles. If provided, the JWT must contain at least one of these roles
+                in order to be considered valid.
+            role_claim_paths: list[str] | None
+                List of claim paths to look for roles in the JWT. If not provided, a set of common
+                claim paths will be used, which are `roles`, `role`, `realm_access.roles`, `scp`, `scope`,
+                and `resource_access.{aud}.roles`.
+            """
+            jwks_url = jwks_url or self._discover_jwks_uri(issuer=issuer, verify_ssl=verify_ssl)
+
+            super().__init__(
+                issuer=issuer,
+                audience=audience,
+                jwks_url=jwks_url,
+                algorithms=algorithms or ["RS256"],
+                verify_ssl=verify_ssl,
+                allowed_roles=allowed_roles,
+                role_claim_paths=role_claim_paths,
+            )
+
+            # NOTE: PyJWKClient doesn't expose SSL context configuration directly. When verify_ssl is False
+            # we still validate tokens if keys can be fetched; this primarily affects transport security.
+            self._jwk_client = PyJWKClient(self.jwks_url)
+
+            if self.role_claim_paths is None:
+                # Common role claim locations across providers (Keycloak included).
+                self.role_claim_paths = [
+                    "realm_access.roles",
+                    "resource_access.{aud}.roles",
+                    "roles",
+                    "role",
+                    "scp",
+                    "scope",
+                ]
+                # For example, Keycloak uses `realm_access.roles` and `resource_access.{aud}.roles`.
+                # "realm_access": {
+                #   "roles": [
+                #     "offline_access",
+                #     "default-roles-hololinked-test",
+                #     "uma_authorization",
+                #     "device-admin" # our added roles for example
+                #   ]
+                # }
+            self.name = name
+
+        @staticmethod
+        def _discover_jwks_uri(issuer: str, verify_ssl: bool) -> str:
+            issuer = issuer.rstrip("/")
+            discovery_url = f"{issuer}/.well-known/openid-configuration"
+
+            try:
+                with httpx.Client(verify=verify_ssl, timeout=10.0) as client:
+                    resp = client.get(discovery_url, headers={"Accept": "application/json"})
+                    resp.raise_for_status()
+                    data = resp.json()  # type: dict[str, Any]
+            except Exception as ex:
+                raise ValueError(f"Failed to discover OIDC configuration from {discovery_url}: {ex}") from ex
+
+            jwks_uri = data.get("jwks_uri")
+            if not jwks_uri:
+                raise ValueError(f"OIDC discovery document at {discovery_url} missing 'jwks_uri'")
+            return jwks_uri
+
+        @staticmethod
+        def _get_dict_attr_by_path(payload: dict[str, Any], path: str) -> Any:
+            """Get a nested value from a dict using dot-separated keys."""
+            cur: Any = payload
+            for part in path.split("."):
+                if not isinstance(cur, dict):
+                    return None
+                cur = cur.get(part)
+            return cur
+
+        def decode_and_validate(self, token: str) -> dict[str, Any]:
+            """Decode and validate a JWT, returning the verified payload."""
+            signing_key = self._jwk_client.get_signing_key_from_jwt(token).key
+            options = dict(
+                verify_signature=True,
+                verify_exp=True,
+                verify_aud=self.audience is not None,
+                verify_iss=True,
+            )
+            return jwt.decode(
+                token,
+                signing_key,
+                algorithms=self.algorithms,
+                audience=self.audience,
+                issuer=self.issuer,
+                options=options,
+            )
+
+        def validate_input(self, jwt_token: str) -> bool:
+            """Validate a JWT access token."""
+            try:
+                self.decode_and_validate(jwt_token)
+                return True
+            except Exception:
+                return False
+
+        def userinfo(self, jwt_token: str) -> dict[str, Any]:
+            """Return the verified JWT claims. This does not call a remote userinfo endpoint."""
+            return self.decode_and_validate(jwt_token)
+
+        def user_has_role(self, claims: dict[str, Any]) -> bool:
+            """Return True if any configured allowed role is present in the JWT claims."""
+            if not self.allowed_roles:
+                return True
+
+            aud = self.audience or ""
+            role_paths = [(p.format(aud=aud) if "{aud}" in p else p) for p in (self.role_claim_paths or [])]
+
+            roles: set[str] = set()
+            for path in role_paths:
+                value = self._get_dict_attr_by_path(claims, path)
+                if value is None:
+                    continue
+                if isinstance(value, str):
+                    # Common for "scope" / "scp" claims.
+                    roles.update(value.split())
+                elif isinstance(value, list):
+                    roles.update(str(v) for v in value)
+
+            return any(r in roles for r in self.allowed_roles)
+
+    class KeycloakOIDCSecurity(OIDCSecurity):
+        """
+        Keycloak specific OIDC security, extends the generic `OIDCSecurity` class.
+        Only adds convenience around constructing the issuer URL. See `OIDCSecurity` for actual details and usage.
+        Keycloak issuer is typically: {server_url}/realms/{realm}
+        """
+
+        def __init__(
+            self,
+            oidc_server_url: str,
+            oidc_client_id: str,
+            oidc_realm: str,
+            allowed_roles: list[str] | None = None,
+            verify_ssl: bool = True,
+        ) -> None:
+            issuer = f"{oidc_server_url.rstrip('/')}/realms/{oidc_realm}"
+            super().__init__(
+                issuer=issuer,
+                audience=oidc_client_id,
+                verify_ssl=verify_ssl,
+                allowed_roles=allowed_roles,
+            )
+
+except ImportError:
+
+    class OIDCSecurity(Security):
+        """
+        Placeholder for OIDCSecurity when PyJWT is not installed.
+        If you see this doc, you need to install the `PyJWT` library to use OIDC security.
+        """
+
+        def __init__(
+            self,
+            issuer: str,
+            audience: str | None = None,
+            jwks_url: str | None = None,
+            algorithms: list[str] | None = None,
+            verify_ssl: bool = True,
+            allowed_roles: list[str] | None = None,
+            role_claim_paths: list[str] | None = None,
+        ) -> None:
+            raise ImportError("PyJWT library is required for OIDCSecurity")
+
+    class KeycloakOIDCSecurity(Security):
+        """
+        Placeholder for KeycloakOIDCSecurity.
+        If you see this doc, you need to install the `PyJWT` library to use OIDC security.
+        """
+
+        def __init__(
+            self,
+            oidc_server_url: str,
+            oidc_client_id: str,
+            oidc_realm: str,
+            oidc_client_secret: str | None = None,
+            allowed_roles: list[str] | None = None,
+            verify_ssl: bool = True,
+        ) -> None:
+            raise ImportError("PyJWT library is required for KeycloakOIDCSecurity")

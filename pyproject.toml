@@ -50,11 +50,12 @@ dependencies = [
     # security
     "bcrypt==4.3.0",
     "argon2-cffi>=23.1.0",
+    "pyjwt>=2.11.0",
     # DB
     "sqlalchemy>2.0.21",
     "sqlalchemy-utils>=0.41",
     "psycopg2-binary>=2.9.11",
-    "pymongo>=4.15.2"
+    "pymongo>=4.15.2",
 ]
 
 [project.urls]
