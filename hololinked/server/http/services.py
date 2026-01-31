@@ -20,6 +20,7 @@ from ..security import (
     APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
+    OIDCSecurity,
 )
 
 
@@ -307,6 +308,7 @@ class ThingDescriptionService:
             APIKeySecurityScheme,
             BasicSecurityScheme,
             NoSecurityScheme,
+            OIDCSecurityScheme,
         )
 
         TD["securityDefinitions"] = dict()
@@ -328,6 +330,11 @@ class ThingDescriptionService:
             if isinstance(scheme, APIKeySecurity):
                 sec = APIKeySecurityScheme()
                 TD["securityDefinitions"][scheme.name] = sec.json()
+                TD["security"].append(scheme.name)
+            if isinstance(scheme, OIDCSecurity):
+                oidc_sec = OIDCSecurityScheme()
+                oidc_sec.token = f"{scheme.issuer}/protocol/openid-connect/token"
+                TD["securityDefinitions"][scheme.name] = oidc_sec.json()
                 TD["security"].append(scheme.name)
 
     def add_links(self, TD: dict[str, JSONSerializable]) -> None:

@@ -106,7 +106,10 @@ try:
 except ImportError:
 
     class BcryptBasicSecurity(Security):
-        """Placeholder for BcryptBasicSecurity when bcrypt is not installed"""
+        """
+        Placeholder for BcryptBasicSecurity when bcrypt is not installed.
+        Please install the `bcrypt` library to use Bcrypt password security and see the actual docstrings.
+        """
 
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             raise ImportError("bcrypt library is required for BcryptBasicSecurity")
@@ -197,7 +200,10 @@ try:
 except ImportError:
 
     class Argon2BasicSecurity(Security):
-        """Placeholder for Argon2BasicSecurity when argon2 is not installed"""
+        """
+        Placeholder for Argon2BasicSecurity when argon2 is not installed.
+        Please install the `argon2-cffi` library to use Argon2 password security.
+        """
 
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             raise ImportError("argon2-cffi library is required for Argon2BasicSecurity")
@@ -401,7 +407,10 @@ try:
 except ImportError:
 
     class APIKeySecurity(Security):
-        """Placeholder for APIKeySecurity when argon2 is not installed"""
+        """
+        Placeholder for APIKeySecurity when argon2 is not installed.
+        Please install the `argon2-cffi` library to use API key security and see the actual docstrings.
+        """
 
         def __init__(self, name: str, file: str = "apikeys.json") -> None:
             raise ImportError("argon2-cffi library is required for APIKeySecurity")
@@ -414,9 +423,9 @@ try:
 
     class OIDCSecurity(Security):
         """
-        Generic OIDC JWT validation meant to be used with 'openid' scope to validate login sessions.
-        A *JWT access token* is validated by verifying its signature against the
-        provider's JWKS endpoint (JWK Set) and optionally validating issuer/audience.
+        Generic OIDC JWT validation meant to be used with 'openid' scope to validate login sessions, requires the PyJWT
+        library to be installed. A *JWT access token* is validated by verifying its signature against the provider's
+        JWKS endpoint (JWK Set) and optionally validating issuer/audience.
 
         This security scheme is not meant to be used with OAuth flows where the resource server is a third party
         application from where data is fetched on behalf of the user. The server using this scheme is expected to
@@ -438,18 +447,44 @@ try:
         allowed_roles: list[str] | None = None
         role_claim_paths: list[str] | None = None
 
+        name: str = "oidc-security"
+
         _jwk_client: PyJWKClient = PrivateAttr()
 
         def __init__(
             self,
             issuer: str,
-            audience: str | None = None,
+            audience: str | None,
             jwks_url: str | None = None,
             algorithms: list[str] | None = None,
             verify_ssl: bool = True,
             allowed_roles: list[str] | None = None,
             role_claim_paths: list[str] | None = None,
+            name: str = "oidc-security",
         ) -> None:
+            """
+            Parameters
+            ----------
+            issuer: str
+                OIDC provider's issuer URL. This is considered to be the `iss` claim in the JWT.
+            audience: str | None
+                Expected audience (`aud` claim) in the JWT. Optional but highly recommended.
+                The audience is often the OAuth2 client id.
+            jwks_url: str | None
+                The JWKS URL to fetch signing keys from. If not provided, it is discovered via
+                `{issuer}/.well-known/openid-configuration`.
+            algorithms: list[str] | None
+                List of acceptable signing algorithms. Default is `["RS256"]`.
+            verify_ssl: bool
+                Whether to verify SSL certificates while connecting to the provider. Default is `True`.
+            allowed_roles: list[str] | None
+                List of allowed roles. If provided, the JWT must contain at least one of these roles
+                in order to be considered valid.
+            role_claim_paths: list[str] | None
+                List of claim paths to look for roles in the JWT. If not provided, a set of common
+                claim paths will be used, which are `roles`, `role`, `realm_access.roles`, `scp`, `scope`,
+                and `resource_access.{aud}.roles`.
+            """
             jwks_url = jwks_url or self._discover_jwks_uri(issuer=issuer, verify_ssl=verify_ssl)
 
             super().__init__(
@@ -482,9 +517,10 @@ try:
                 #     "offline_access",
                 #     "default-roles-hololinked-test",
                 #     "uma_authorization",
-                #     "device-admin"
+                #     "device-admin" # our added roles for example
                 #   ]
                 # }
+            self.name = name
 
         @staticmethod
         def _discover_jwks_uri(issuer: str, verify_ssl: bool) -> str:
@@ -566,8 +602,9 @@ try:
             return any(r in roles for r in self.allowed_roles)
 
     class KeycloakOIDCSecurity(OIDCSecurity):
-        """Backward-compatible wrapper for Keycloak.
-
+        """
+        Keycloak specific OIDC security, extends the generic `OIDCSecurity` class.
+        Only adds convenience around constructing the issuer URL. See `OIDCSecurity` for actual details and usage.
         Keycloak issuer is typically: {server_url}/realms/{realm}
         """
 
@@ -590,7 +627,10 @@ try:
 except ImportError:
 
     class OIDCSecurity(Security):
-        """Placeholder for OIDCSecurity when PyJWT is not installed"""
+        """
+        Placeholder for OIDCSecurity when PyJWT is not installed.
+        If you see this doc, you need to install the `PyJWT` library to use OIDC security.
+        """
 
         def __init__(
             self,
@@ -605,7 +645,10 @@ except ImportError:
             raise ImportError("PyJWT library is required for OIDCSecurity")
 
     class KeycloakOIDCSecurity(Security):
-        """Placeholder for KeycloakOIDCSecurity when PyJWT is not installed"""
+        """
+        Placeholder for KeycloakOIDCSecurity.
+        If you see this doc, you need to install the `PyJWT` library to use OIDC security.
+        """
 
         def __init__(
             self,
