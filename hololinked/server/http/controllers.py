@@ -102,7 +102,7 @@ class BaseHandler(RequestHandler):
         if not self.security_schemes:
             self.logger.debug("no security schemes defined, allowing access")
             return True
-        if not await self.is_authenticated():
+        if await self.is_authenticated():
             self.logger.info("client authenticated successfully")
             if not self.userinfo:
                 return True
@@ -120,7 +120,7 @@ class BaseHandler(RequestHandler):
         authenticated = False
         # 1. Basic Authentication
         authorization_header = self.request.headers.get("Authorization", None)  # type: str
-        if authorization_header and "basic " in authorization_header.lower():
+        if authorization_header and "basic " in authorization_header[:10].lower():  # basic <base64-encoded>
             for security_scheme in self.security_schemes:
                 if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
                     try:
@@ -157,7 +157,7 @@ class BaseHandler(RequestHandler):
                     if authenticated:
                         return True
         # 3. Keycloak JWT
-        if authorization_header and "bearer " in authorization_header.lower():
+        if authorization_header and "bearer " in authorization_header[:10].lower():  # bearer <bla-bla>
             for security_scheme in self.security_schemes:
                 if isinstance(security_scheme, OIDCSecurity):
                     try:
