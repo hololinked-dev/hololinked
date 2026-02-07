@@ -435,7 +435,7 @@ class Parameter(metaclass=ParameterMetaclass):
         object stored in a constant or read-only Parameter (e.g. one
         item in a list).
         """
-        if self.readonly:
+        if (hasattr(self.readonly, '__call__') and self.readonly()) or self.readonly:
             raise_ValueError("Read-only parameter cannot be set/modified.", self)
 
         value = self.validate_and_adapt(value)
