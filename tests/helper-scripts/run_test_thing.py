@@ -17,7 +17,11 @@ from hololinked.serializers import Serializers
 from hololinked.server import run, stop
 from hololinked.server.http import HTTPServer
 from hololinked.server.mqtt import MQTTPublisher
-from hololinked.server.security import Argon2BasicSecurity, BcryptBasicSecurity, OIDCSecurity
+from hololinked.server.security import (
+    Argon2BasicSecurity,
+    BcryptBasicSecurity,
+    OIDCSecurity,
+)
 from hololinked.server.zmq import ZMQServer
 
 
