@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "description": "Use this debug config with helper-scripts/run_test_thing.py along with command line arguments", 
+  "configurations": [
+    {
+      "name": "Python: Debug Current File (args prompt)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "args": "${input:programArgs}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "programArgs",
+      "type": "promptString",
+      "description": "Command-line arguments to pass (space-separated)",
+      "default": ""
+    }
+  ]
+}
