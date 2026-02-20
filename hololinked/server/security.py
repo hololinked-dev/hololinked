@@ -10,11 +10,15 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
+import structlog
 
 from pydantic import BaseModel, PrivateAttr, field_serializer, field_validator
 
 from ..config import global_config
 from ..utils import uuid_hex
+
+
+logger = structlog.get_logger()
 
 
 class Security(BaseModel):
@@ -450,6 +454,7 @@ try:
         name: str = "oidc-security"
 
         _jwk_client: PyJWKClient = PrivateAttr()
+        _verify_options: dict[str, bool] = PrivateAttr(default_factory=dict)
 
         def __init__(
             self,
@@ -499,7 +504,8 @@ try:
 
             # NOTE: PyJWKClient doesn't expose SSL context configuration directly. When verify_ssl is False
             # we still validate tokens if keys can be fetched; this primarily affects transport security.
-            self._jwk_client = PyJWKClient(self.jwks_url)
+            self._jwk_client = PyJWKClient(self.jwks_url, headers={"User-Agent": "Python-httpx/3.x"})
+            self._jwk_client.fetch_data()
 
             if self.role_claim_paths is None:
                 # Common role claim locations across providers (Keycloak included).
@@ -521,6 +527,13 @@ try:
                 #   ]
                 # }
             self.name = name
+            self._verify_options = dict(
+                verify_signature=True,
+                verify_exp=True,
+                verify_aud=self.audience is not None,
+                verify_iss=True,
+            )
+            logger.info(f"OIDC JWT verify options set to: {self._verify_options}", component="Security")
 
         @staticmethod
         def _discover_jwks_uri(issuer: str, verify_ssl: bool) -> str:
@@ -533,11 +546,12 @@ try:
                     resp.raise_for_status()
                     data = resp.json()  # type: dict[str, Any]
             except Exception as ex:
-                raise ValueError(f"Failed to discover OIDC configuration from {discovery_url}: {ex}") from ex
+                raise ValueError(f"Failed to discover OIDC configuration from {discovery_url}: {ex}") from None
 
             jwks_uri = data.get("jwks_uri")
             if not jwks_uri:
                 raise ValueError(f"OIDC discovery document at {discovery_url} missing 'jwks_uri'")
+            logger.info(f"Discovered JWKS URI for issuer {issuer}: {jwks_uri}", component="Security")
             return jwks_uri
 
         @staticmethod
@@ -553,19 +567,14 @@ try:
         def decode_and_validate(self, token: str) -> dict[str, Any]:
             """Decode and validate a JWT, returning the verified payload."""
             signing_key = self._jwk_client.get_signing_key_from_jwt(token).key
-            options = dict(
-                verify_signature=True,
-                verify_exp=True,
-                verify_aud=self.audience is not None,
-                verify_iss=True,
-            )
+
             return jwt.decode(
                 token,
                 signing_key,
                 algorithms=self.algorithms,
                 audience=self.audience,
                 issuer=self.issuer,
-                options=options,
+                options=self._verify_options,
             )
 
         def validate_input(self, jwt_token: str) -> bool:
@@ -573,7 +582,8 @@ try:
             try:
                 self.decode_and_validate(jwt_token)
                 return True
-            except Exception:
+            except Exception as ex:
+                logger.error(f"JWT validation error: {ex}", component="Security")
                 return False
 
         def userinfo(self, jwt_token: str) -> dict[str, Any]:

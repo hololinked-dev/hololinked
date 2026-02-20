@@ -156,23 +156,24 @@ class BaseHandler(RequestHandler):
                         self.logger.error(f"error while authenticating client with API key - {str(ex)}")
                     if authenticated:
                         return True
-        # 3. Keycloak JWT
+        # 3. JWT from OIDC
         if authorization_header and "bearer " in authorization_header[:10].lower():  # bearer <bla-bla>
             for security_scheme in self.security_schemes:
                 if isinstance(security_scheme, OIDCSecurity):
                     try:
                         self.logger.info(
-                            "authenticating client with Keycloak JWT",
+                            "authenticating client with OIDC JWT",
                             origin=self.request.headers.get("Origin"),
                             security_scheme=security_scheme.__class__.__name__,
                         )
                         jwt = authorization_header.split(maxsplit=1)[1]
-                        self.userinfo = await security_scheme.userinfo(jwt)
+                        self.userinfo = security_scheme.validate_input(jwt)
+                        # local validation of JWT, no await
                         if not self.userinfo:
                             continue
                         authenticated = True
                     except Exception as ex:
-                        self.logger.error(f"error while authenticating client with Keycloak JWT - {str(ex)}")
+                        self.logger.error(f"error while authenticating client with OIDC JWT - {str(ex)}")
                     if authenticated:
                         return True
         return authenticated
