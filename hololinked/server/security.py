@@ -442,16 +442,15 @@ try:
         - `jwks_url`: The JWKS URL. If omitted, it is discovered via: `{issuer}/.well-known/openid-configuration`.
         """
 
+        name: str = "oidc-security"
+
         issuer: str
         audience: str | None = None
-        jwks_url: str | None = None
         algorithms: list[str] = ["RS256"]
         verify_ssl: bool = True
 
         allowed_roles: list[str] | None = None
         role_claim_paths: list[str] | None = None
-
-        name: str = "oidc-security"
 
         _jwk_client: PyJWKClient = PrivateAttr()
         _verify_options: dict[str, bool] = PrivateAttr(default_factory=dict)
@@ -464,7 +463,14 @@ try:
             algorithms: list[str] | None = None,
             verify_ssl: bool = True,
             allowed_roles: list[str] | None = None,
-            role_claim_paths: list[str] | None = None,
+            role_claim_paths: list[str] | None = [
+                "realm_access.roles",
+                "resource_access.{aud}.roles",
+                "roles",
+                "role",
+                "scp",
+                "scope",
+            ],
             name: str = "oidc-security",
         ) -> None:
             """
@@ -490,43 +496,26 @@ try:
                 claim paths will be used, which are `roles`, `role`, `realm_access.roles`, `scp`, `scope`,
                 and `resource_access.{aud}.roles`.
             """
-            jwks_url = jwks_url or self._discover_jwks_uri(issuer=issuer, verify_ssl=verify_ssl)
-
             super().__init__(
                 issuer=issuer,
                 audience=audience,
-                jwks_url=jwks_url,
                 algorithms=algorithms or ["RS256"],
                 verify_ssl=verify_ssl,
                 allowed_roles=allowed_roles,
                 role_claim_paths=role_claim_paths,
+                name=name,
             )
-
-            # NOTE: PyJWKClient doesn't expose SSL context configuration directly. When verify_ssl is False
-            # we still validate tokens if keys can be fetched; this primarily affects transport security.
-            self._jwk_client = PyJWKClient(self.jwks_url, headers={"User-Agent": "Python-httpx/3.x"})
-            self._jwk_client.fetch_data()
-
-            if self.role_claim_paths is None:
-                # Common role claim locations across providers (Keycloak included).
-                self.role_claim_paths = [
-                    "realm_access.roles",
-                    "resource_access.{aud}.roles",
-                    "roles",
-                    "role",
-                    "scp",
-                    "scope",
-                ]
-                # For example, Keycloak uses `realm_access.roles` and `resource_access.{aud}.roles`.
-                # "realm_access": {
-                #   "roles": [
-                #     "offline_access",
-                #     "default-roles-hololinked-test",
-                #     "uma_authorization",
-                #     "device-admin" # our added roles for example
-                #   ]
-                # }
-            self.name = name
+            # Common role claim locations across providers (Keycloak included).
+            # For example, Keycloak uses `realm_access.roles` and `resource_access.{aud}.roles`.
+            # "realm_access": {
+            #   "roles": [
+            #     "offline_access",
+            #     "default-roles-hololinked-test",
+            #     "uma_authorization",
+            #     "device-admin" # our added roles for example
+            #   ]
+            # }
+            self._jwk_client = self._get_jwk_client(issuer=issuer, jwks_uri=jwks_url, verify_ssl=verify_ssl)
             self._verify_options = dict(
                 verify_signature=True,
                 verify_exp=True,
@@ -536,23 +525,39 @@ try:
             logger.info(f"OIDC JWT verify options set to: {self._verify_options}", component="Security")
 
         @staticmethod
-        def _discover_jwks_uri(issuer: str, verify_ssl: bool) -> str:
+        def _get_jwk_client(issuer: str, jwks_uri: str | None, verify_ssl: bool) -> jwt.PyJWKClient:
             issuer = issuer.rstrip("/")
             discovery_url = f"{issuer}/.well-known/openid-configuration"
+            jwks = None
 
-            try:
-                with httpx.Client(verify=verify_ssl, timeout=10.0) as client:
-                    resp = client.get(discovery_url, headers={"Accept": "application/json"})
-                    resp.raise_for_status()
-                    data = resp.json()  # type: dict[str, Any]
-            except Exception as ex:
-                raise ValueError(f"Failed to discover OIDC configuration from {discovery_url}: {ex}") from None
+            with httpx.Client(verify=verify_ssl, timeout=10.0) as client:
+                if not jwks_uri:
+                    try:
+                        resp = client.get(discovery_url, headers={"Accept": "application/json"})
+                        resp.raise_for_status()
+                        data = resp.json()  # type: dict[str, Any]
+                    except Exception as ex:
+                        raise ValueError(f"Failed to discover OIDC configuration from {discovery_url}: {ex}") from None
+                    jwks_uri = data.get("jwks_uri")
+                    if not jwks_uri:
+                        raise ValueError(f"OIDC discovery document at {discovery_url} missing 'jwks_uri'")
 
-            jwks_uri = data.get("jwks_uri")
-            if not jwks_uri:
-                raise ValueError(f"OIDC discovery document at {discovery_url} missing 'jwks_uri'")
+                if not verify_ssl:
+                    try:
+                        jwks_response = client.get(jwks_uri, headers={"User-Agent": "Python-httpx/3.x"})
+                        jwks_response.raise_for_status()
+                        jwks = jwks_response.json()
+                    except Exception as ex:
+                        raise ValueError(f"Failed to fetch JWKS from {jwks_uri}: {ex}") from None
+
+            jwk_client = PyJWKClient(jwks_uri, headers={"User-Agent": "Python-httpx/3.x"})
+            if jwks:
+                jwk_client.jwk_set_cache(jwks)
+            else:
+                jwk_client.fetch_data()
+
             logger.info(f"Discovered JWKS URI for issuer {issuer}: {jwks_uri}", component="Security")
-            return jwks_uri
+            return jwk_client
 
         @staticmethod
         def _get_dict_attr_by_path(payload: dict[str, Any], path: str) -> Any:

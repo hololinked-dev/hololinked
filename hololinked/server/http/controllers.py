@@ -187,7 +187,7 @@ class BaseHandler(RequestHandler):
             return True
         for security_scheme in self.security_schemes:
             if isinstance(security_scheme, OIDCSecurity):
-                return await security_scheme.user_has_role(self.userinfo)
+                return security_scheme.user_has_role(self.userinfo)
         return False
 
     def set_access_control_allow_headers(self) -> None:
