@@ -1,6 +1,8 @@
 import base64
 import datetime
 import itertools
+import json
+import os
 import random
 import sys
 import time
@@ -13,8 +15,11 @@ import httpx
 import pytest
 import requests
 
+from pydantic import BaseModel
+
 from hololinked.client import ClientFactory, ObjectProxy
 from hololinked.client.security import APIKeySecurity as ClientAPIKeySecurity
+from hololinked.client.security import OAuthDirectAccessGrant
 from hololinked.config import global_config
 from hololinked.core.zmq.message import (
     PreserializedData,
@@ -35,6 +40,7 @@ from hololinked.server.security import (
     APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
+    OIDCSecurity,
     Security,
 )
 from hololinked.utils import uuid_hex
@@ -660,6 +666,47 @@ def test_13_object_proxy_with_apikey(port: int) -> None:
         assert security_scheme.name in object_proxy.td["securityDefinitions"]
 
         assert object_proxy.read_property("max_intensity") == 16384
+
+        pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)
+
+
+class OIDCConfig(BaseModel):
+    issuer: str
+    audience: str
+    client_id: str
+    client_secret: str
+    username: str
+    password: str
+
+
+def test_14_object_proxy_with_oidc(port: int) -> None:
+    config_b64 = os.getenv("OIDC_TEST_CONFIG_1_B64")
+    config = OIDCConfig(**json.loads(base64.b64decode(config_b64).decode("utf-8")))
+
+    oidc_security = OIDCSecurity(
+        issuer=config.issuer,
+        audience="device-server",
+    )
+    client_security = OAuthDirectAccessGrant(
+        username=config.username,
+        password=config.password,
+        oidc_config_url=f"{config.issuer}/.well-known/openid-configuration",
+        client_id=config.client_id,
+        client_secret=config.client_secret,
+    )
+    with running_thing(
+        id_prefix="test-oidc-object-proxy",
+        port=port,
+        security_schemes=[oidc_security],
+    ) as thing:
+        td_endpoint = f"{hostname_prefix}:{port}/{thing.id}/resources/wot-td"
+        object_proxy = ClientFactory.http(
+            url=td_endpoint,
+            security=client_security,
+        )
+        assert len(object_proxy.td["security"]) > 0
+        assert oidc_security.name in object_proxy.td["security"]
+        assert oidc_security.name in object_proxy.td["securityDefinitions"]
 
         pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)
 
