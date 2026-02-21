@@ -158,18 +158,24 @@ jobs:
 
       - name: run unit tests (linux/macOS)
         if: runner.os != 'Windows' && matrix.python-version != 3.13
+        env:
+          OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
         run: |
           source .venv/bin/activate
           pytest -s -v
 
       - name: run unit tests (Windows)
         if: runner.os == 'Windows'
+        env:
+          OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
         run: |
           .venv\Scripts\activate
           pytest -s -v
 
       - name: run unit tests and generate coverage report (linux/macOS python 3.13)
         if: runner.os != 'Windows' && matrix.python-version == 3.13
+        env:
+          OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
         run: |
           source .venv/bin/activate
           pytest -s -v --cov=hololinked --cov-report=xml:coverage.xml

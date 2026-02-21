@@ -14,11 +14,10 @@ doc/source/generated
 extra-packages 
 tests/test-rpc-results.txt
 tests/run-unittest.bat
+**/oidc-config*.json
 # comment tests until good organisation comes about
 
 # vs-code 
-.vscode/launch.json
-.vs/
 todo
 openapi.yaml
 

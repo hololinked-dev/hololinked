@@ -52,7 +52,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         remote=False,
         doc="""structlog.stdlib.BoundLogger instance to log messages. Default logger with a IO-stream handler 
             is created if none supplied.""",
-    )  # type: structlog.stdlib.BoundLoggerBase
+    )  # type: structlog.stdlib.BoundLogger
     """
     structlog.stdlib.BoundLogger instance to log messages. Default logger with a IO-stream handler 
     is created if none supplied.
