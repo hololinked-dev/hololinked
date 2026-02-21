@@ -264,13 +264,13 @@ what the event represents and how to subscribe to it) with subprotocol SSE:
 
 > data schema ("data" field above which describes the event payload) are optional and discussed in documentation
 
-Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through any supported protocol including HTTP server sent events.
+Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, through any supported protocol like HTTP server sent events (brokerless) or MQTT (brokered).
 
 [![Events Documentation](https://img.shields.io/badge/Events%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/beginners-guide/articles/events/) [![Try it Out](https://img.shields.io/badge/Try%20it%20Out-Live%20Demo-brightgreen?logo=python)](https://control-panel.hololinked.dev/#https://examples.hololinked.dev/simulations/oscilloscope/resources/wot-td)
 
 ### Start with a Protocol Server
 
-One can start the Thing object with one or more protocols simultaneously. Currently HTTP & ZMQ is supported. With HTTP server:
+One can start the Thing object with one or more protocols simultaneously. Currently HTTP, MQTT & ZMQ is supported. With HTTP server:
 
 ```python
 import ssl, os, logging
@@ -309,20 +309,24 @@ if __name__ == '__main__':
 Multiple:
 
 ```python
+from hololinked.server import HTTPServer, MQTTPublisher, ZMQServer
 
 if __name__ == '__main__':
+    http_server = HTTPServer(port=9000, ssl_context=http_ssl_context)
+    mqtt_publisher = MQTTPublisher(hostname='mqtt.example.com', ssl_context=mqtt_ssl_context)
+
     OceanOpticsSpectrometer(
         id='spectrometer',
         serial_number='S14155',
     ).run(
-       access_points=[
-            ("ZMQ", "IPC"),
-            ("HTTP", 8080),
-        ]
+        servers=[http_server, mqtt_publisher]
     )
-    # HTTP & ZMQ Interprocess Communication
+    # HTTP & MQTT
 ```
 
+There are other improved ways to configure protocol servers, please refer documentation for details.
+
+[![Protocol Servers Documentation](https://img.shields.io/badge/Protocol%20Servers%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/beginners-guide/articles/protocols/general/)
 [![Resources to Get Started](https://img.shields.io/badge/Resources-Get%20Started-orange?logo=book)](#resources)
 
 ## Client Side Applications
