@@ -160,18 +160,21 @@ jobs:
         if: runner.os != 'Windows' && matrix.python-version != 3.13
         run: |
           source .venv/bin/activate
+          export OIDC_TEST_CONFIG_1_B64=${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
           pytest -s -v
 
       - name: run unit tests (Windows)
         if: runner.os == 'Windows'
         run: |
           .venv\Scripts\activate
+          set OIDC_TEST_CONFIG_1_B64=${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
           pytest -s -v
 
       - name: run unit tests and generate coverage report (linux/macOS python 3.13)
         if: runner.os != 'Windows' && matrix.python-version == 3.13
         run: |
           source .venv/bin/activate
+          export OIDC_TEST_CONFIG_1_B64=${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
           pytest -s -v --cov=hololinked --cov-report=xml:coverage.xml
 
       - name: upload coverage report as artifact

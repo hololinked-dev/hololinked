@@ -644,7 +644,9 @@ def test_12_object_proxy_with_basic_auth(port: int) -> None:
 
         assert object_proxy.read_property("max_intensity") == 16384
 
-        pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)
+        with pytest.raises(httpx.HTTPStatusError) as excinfo:
+            ClientFactory.http(url=td_endpoint)
+        assert excinfo.value.response.status_code == 401
 
 
 def test_13_object_proxy_with_apikey(port: int) -> None:
@@ -667,7 +669,9 @@ def test_13_object_proxy_with_apikey(port: int) -> None:
 
         assert object_proxy.read_property("max_intensity") == 16384
 
-        pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)
+        with pytest.raises(httpx.HTTPStatusError) as excinfo:
+            ClientFactory.http(url=td_endpoint)
+        assert excinfo.value.response.status_code == 401
 
 
 class OIDCConfig(BaseModel):
@@ -682,6 +686,9 @@ class OIDCConfig(BaseModel):
 def test_14_object_proxy_with_oidc(port: int) -> None:
     config_b64 = os.getenv("OIDC_TEST_CONFIG_1_B64")
     config = OIDCConfig(**json.loads(base64.b64decode(config_b64).decode("utf-8")))
+
+    # uncomment for local tests and put a config file in said location
+    # config = OIDCConfig(**json.loads(open(f"tests{os.sep}helper-scripts{os.sep}oidc-config-2.json").read()))
 
     oidc_security = OIDCSecurity(
         issuer=config.issuer,
@@ -708,7 +715,17 @@ def test_14_object_proxy_with_oidc(port: int) -> None:
         assert oidc_security.name in object_proxy.td["security"]
         assert oidc_security.name in object_proxy.td["securityDefinitions"]
 
-        pytest.raises(httpx.HTTPStatusError, ClientFactory.http, url=td_endpoint)
+        with pytest.raises(httpx.HTTPStatusError) as excinfo:
+            ClientFactory.http(url=td_endpoint)
+        assert excinfo.value.response.status_code == 401
+        excinfo = None
+
+        assert object_proxy.read_property("max_intensity") == 16384
+
+        object_proxy._security.logout()  # to test logout functionality
+        with pytest.raises(httpx.HTTPStatusError) as excinfo:
+            object_proxy.read_property("max_intensity")
+        assert excinfo.value.response.status_code == 401
 
 
 if __name__ == "__main__":
