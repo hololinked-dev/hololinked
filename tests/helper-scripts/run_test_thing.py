@@ -44,6 +44,12 @@ def parse_args():
         help="Comma-separated list of security schemes to use (bcrypt, oidc). Default: none",
     )
     parser.add_argument(
+        "--oidc-config-file",
+        type=str,
+        default="oidc-config.json",
+        help="OIDC configuration JSON file path. Default: oidc-config.json. Add fields: issuer & audience at least for server side usage",
+    )
+    parser.add_argument(
         "--http-port",
         type=int,
         default=8080,
@@ -122,18 +128,6 @@ def parse_args():
     return parser.parse_args()
 
 
-# keycloak_security = OIDCSecurity(
-#     issuer="http://localhost:8080/realms/example-realm",
-#     audience="device-server",
-# )
-
-oidc_config = json.loads(open("oidc-config.json").read())
-ory_security = OIDCSecurity(
-    issuer=oidc_config["issuer"],
-    audience=oidc_config["audience"],
-)
-
-
 def setup_security_schemes(security_names, args):
     """Setup security schemes based on command line arguments"""
     security_schemes = []
@@ -152,7 +146,11 @@ def setup_security_schemes(security_names, args):
             security_schemes.append(argon2_security)
             logger.info("Added Argon2 security scheme")
         elif name == "oidc":
-            oidc_security = ory_security
+            oidc_config = json.loads(open(args.oidc_config_file).read())
+            oidc_security = OIDCSecurity(
+                issuer=oidc_config["issuer"],
+                audience=oidc_config["audience"],
+            )
             security_schemes.append(oidc_security)
             logger.info("Added OIDC security scheme")
         else:
