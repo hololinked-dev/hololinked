@@ -686,7 +686,7 @@ class OIDCConfig(BaseModel):
 def test_14_object_proxy_with_oidc(port: int) -> None:
     config_b64 = os.getenv("OIDC_TEST_CONFIG_1_B64")
     config = OIDCConfig(**json.loads(base64.b64decode(config_b64).decode("utf-8")))
-
+    print(config.issuer, config.audience)
     # uncomment for local tests and put a config file in said location
     # config = OIDCConfig(**json.loads(open(f"tests{os.sep}helper-scripts{os.sep}oidc-config-2.json").read()))
 
