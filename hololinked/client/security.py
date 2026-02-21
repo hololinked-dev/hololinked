@@ -165,7 +165,14 @@ class OAuth2Security:
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response.raise_for_status()
-            self.tokens = ROPC(**response.json())
+            self.tokens = ROPC(
+                access_token=response.json().get("access_token"),
+                refresh_token=response.json().get("refresh_token"),
+                expires_in=response.json().get("expires_in"),
+                id_token=response.json().get("id_token"),
+                scope=response.json().get("scope"),
+                token_type=response.json().get("token_type"),
+            )
             if self._refresh_thread and self._refresh_thread.is_alive():
                 return
             if not self.tokens.refresh_token or not self.tokens.expires_in:
@@ -179,7 +186,8 @@ class OAuth2Security:
         """logout and invalidate tokens"""
         body = dict(
             client_id=self._oidc_settings.client_id,
-            refresh_token=self.tokens.refresh_token,
+            token=self.tokens.refresh_token if self.tokens.refresh_token else self.tokens.access_token,
+            token_type_hint="refresh_token" if self.tokens.refresh_token else "access_token",
         )
         if self._oidc_settings.client_secret:
             body["client_secret"] = self._oidc_settings.client_secret
