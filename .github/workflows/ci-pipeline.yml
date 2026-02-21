@@ -161,7 +161,7 @@ jobs:
         run: |
           source .venv/bin/activate
           export OIDC_TEST_CONFIG_1_B64=${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
-          pytest -s -v tests\test_14_protocols_http.py::test_14_object_proxy_with_oidc
+          pytest -s -v tests/test_14_protocols_http.py::test_14_object_proxy_with_oidc
 
       - name: run unit tests (Windows)
         if: runner.os == 'Windows'
