@@ -50,7 +50,7 @@ def setup_test_environment():
     """Automatically setup test environment for each file"""
     # This fixture runs automatically for every test
     global_config.ZMQ_CONTEXT = zmq.asyncio.Context()
-    global_config.LOG_LEVEL = logging.ERROR + 10
+    global_config.LOG_LEVEL = logging.DEBUG
     global_config.setup()
     yield
     stop()
