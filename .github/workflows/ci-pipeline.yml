@@ -156,25 +156,29 @@ jobs:
           .venv\Scripts\activate
           uv sync --group test --group dev
 
-      # - name: run unit tests (linux/macOS)
-      #   if: runner.os != 'Windows' && matrix.python-version != 3.13
-      #   run: |
-      #     source .venv/bin/activate
-      #     export OIDC_TEST_CONFIG_1_B64=${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
-      #     pytest -s -v tests/test_14_protocols_http.py::test_14_object_proxy_with_oidc
+      - name: run unit tests (linux/macOS)
+        if: runner.os != 'Windows' && matrix.python-version != 3.13
+        env:
+          OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
+        run: |
+          source .venv/bin/activate
+          pytest -s -v
 
       - name: run unit tests (Windows)
         if: runner.os == 'Windows'
+        env:
+          OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
         run: |
           .venv\Scripts\activate
-          set OIDC_TEST_CONFIG_1_B64=${{ secrets.OIDC_TEST_CONFIG_1_B64 }} && pytest -s -v tests\test_14_protocols_http.py::test_14_object_proxy_with_oidc
+          pytest -s -v
 
-      # - name: run unit tests and generate coverage report (linux/macOS python 3.13)
-      #   if: runner.os != 'Windows' && matrix.python-version == 3.13
-      #   run: |
-      #     source .venv/bin/activate
-      #     export OIDC_TEST_CONFIG_1_B64=${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
-      #     pytest -s -v --cov=hololinked --cov-report=xml:coverage.xml
+      - name: run unit tests and generate coverage report (linux/macOS python 3.13)
+        if: runner.os != 'Windows' && matrix.python-version == 3.13
+        env:
+          OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
+        run: |
+          source .venv/bin/activate
+          pytest -s -v --cov=hololinked --cov-report=xml:coverage.xml
 
       - name: upload coverage report as artifact
         uses: actions/upload-artifact@v4
