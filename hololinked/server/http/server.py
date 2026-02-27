@@ -28,7 +28,6 @@ from ...utils import (
     pep8_to_dashed_name,
     run_callable_somehow,
 )
-from ..repository import thing_repository
 from ..security import Security
 from ..server import BaseProtocolServer
 from .config import HandlerMetadata, RuntimeConfig
@@ -125,7 +124,7 @@ class HTTPServer(BaseProtocolServer):
             readiness_probe_handler=kwargs.get("readiness_handler", ReadinessProbeHandler),
             stop_handler=kwargs.get("stop_handler", StopHandler),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            thing_repository=kwargs.get("thing_repository", thing_repository),
+            thing_repository=kwargs.get("thing_repository", dict()),
             allowed_clients=allowed_clients,
             security_schemes=security_schemes,
         )
@@ -140,7 +139,8 @@ class HTTPServer(BaseProtocolServer):
             config=config,
         )
 
-        self._IP = f"{self.address}:{self.port}"
+        self._IP = f"{self.address}:{self.port}"  # TODO, remove this variable later?
+        self.id = self._IP
         if self.logger is None:
             self.logger = structlog.get_logger().bind(component="http-server", host=f"{self.address}:{self.port}")
 
@@ -167,7 +167,7 @@ class HTTPServer(BaseProtocolServer):
         self.router = ApplicationRouter(self.app, self)
 
         self.zmq_client_pool = MessageMappedZMQClientPool(
-            id=self._IP,
+            id=self.id,
             server_ids=[],
             client_ids=[],
             handshake=False,
