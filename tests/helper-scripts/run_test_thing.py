@@ -245,14 +245,14 @@ def main():
     for server in servers:
         server_type = type(server).__name__
         if server_type == "HTTPServer":
-            server.add_things(thing1)
-            logger.info("Added thing1 to HTTP server")
+            server.add_things(thing1, thing2)
+            logger.info("Added thing1 and thing2 to HTTP server")
         elif server_type == "ZMQServer":
             server.add_things(thing1, thing2)
             logger.info("Added thing1 and thing2 to ZMQ server")
         elif server_type == "MQTTPublisher":
-            server.add_things(thing2)
-            logger.info("Added thing2 to MQTT publisher")
+            server.add_things(thing1, thing2)
+            logger.info("Added thing1 and thing2 to MQTT publisher")
 
     # Run servers
     logger.info(f"Starting {len(servers)} server(s) (forked={args.forked})...")

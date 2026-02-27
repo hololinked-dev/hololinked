@@ -246,7 +246,7 @@ class OceanOpticsSpectrometer(Thing):
             )
             loop = 0
             while self._running:
-                if max_count is not None and loop > max_count:
+                if max_count is not None and loop >= max_count:
                     break
                 loop += 1
                 time.sleep(self.integration_time / 1000.0)  # simulate integration time
