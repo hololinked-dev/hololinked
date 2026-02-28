@@ -164,7 +164,8 @@ def wait_until_server_ready(port: int, tries: int = 10) -> None:
                 response = session.get(f"{hostname_prefix}:{port}{readiness_endpoint}")
                 if response.status_code in [200, 201, 202, 204]:
                     return
-        except Exception:
+        except Exception as ex:
+            print(f"received exception while checking server readiness, retrying - {ex}")
             pass
         time.sleep(1)
     print(f"Server on port {port} not ready after {tries} tries, you need to retrigger this test job")
