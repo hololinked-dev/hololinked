@@ -163,6 +163,7 @@ jobs:
           uv venv .venv
           source .venv/bin/activate
           uv sync --group test --group dev
+          mv tests/patches/testcontainers/mqtt/__init__.py .venv/lib/python*/site-packages/testcontainers/mqtt/__init__.py
 
       - name: install dependencies (windows)
         if: runner.os == 'Windows'
@@ -170,6 +171,7 @@ jobs:
           uv venv .venv
           .venv\Scripts\activate
           uv sync --group test --group dev
+          copy tests\patches\testcontainers\mqtt\__init__.py .venv\Lib\site-packages\testcontainers\mqtt\__init__.py
 
       - name: run unit tests (linux/macOS)
         if: runner.os != 'Windows' && matrix.python-version != 3.13
