@@ -128,18 +128,18 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
 
-      - name: unpack MQTT certificates
+      - name: unpack MQTT certificates (linux)
         if: runner.os != 'Windows'
         run: |
           echo "${{ secrets.MQTT_CERTS }}" | base64 -d > certs.tar.gz
           tar xzf certs.tar.gz
           ls -la daq-system-infrastructure/certs
 
-      - name: unpack MQTT certificates
+      - name: unpack MQTT certificates (windows)
         if: runner.os == 'Windows'
         run: |
           $mqttCerts = "${{ secrets.MQTT_CERTS }}"
-          [System.Convert]::FromBase64String($mqttCerts) | Set-Content -Path certs.tar.gz -Encoding Byte
+          [System.IO.File]::WriteAllBytes("certs.tar.gz", [System.Convert]::FromBase64String($mqttCerts))
           tar xzf certs.tar.gz
           dir daq-system-infrastructure\certs
 
