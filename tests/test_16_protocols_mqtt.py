@@ -18,10 +18,10 @@ from hololinked.utils import uuid_hex
 
 
 try:
-    from tests.test_14_protocols_http import wait_until_server_ready
+    from tests.test_14_protocols_http import hostname_prefix, wait_until_server_ready  # noqa: F401
     from tests.things import TestThing
 except ImportError:
-    from test_14_protocols_http import wait_until_server_ready
+    from test_14_protocols_http import hostname_prefix, wait_until_server_ready  # noqa: F401
     from things import TestThing
 
 
@@ -30,16 +30,16 @@ count = itertools.count(63500)
 
 def mqtt_ssl_context() -> ssl.SSLContext:
     mqtt_ssl = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-    if not os.path.exists(f"tests{os.sep}helper-scripts{os.sep}ca.crt"):
+    if not os.path.exists(f"daq-system-infrastructure{os.sep}certs{os.sep}ca.crt"):
         raise FileNotFoundError("CA certificate 'ca.crt' not found in current directory for MQTT TLS connection")
-    mqtt_ssl.load_verify_locations(cafile=f"tests{os.sep}helper-scripts{os.sep}ca.crt")
+    mqtt_ssl.load_verify_locations(cafile=f"daq-system-infrastructure{os.sep}certs{os.sep}ca.crt")
     mqtt_ssl.verify_mode = ssl.CERT_REQUIRED
     mqtt_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
     return mqtt_ssl
 
 
 @pytest.fixture(scope="module")
-def container() -> Generator[MosquittoContainer, None, None]:
+def mosquitto_container() -> Generator[MosquittoContainer, None, None]:
     container = MosquittoContainer(
         volumes=[
             (
@@ -64,10 +64,13 @@ def container() -> Generator[MosquittoContainer, None, None]:
 
 
 @pytest.fixture(scope="module")
-def mqtt_host_and_port(container: MosquittoContainer) -> tuple[str, int]:
-    host = container.get_container_host_ip()
-    port = int(container.get_exposed_port(8883))
-    return host, port
+def mqtt_host(mosquitto_container: MosquittoContainer) -> str:
+    return mosquitto_container.get_container_host_ip()
+
+
+@pytest.fixture(scope="module")
+def mqtt_port(mosquitto_container: MosquittoContainer) -> int:
+    return int(mosquitto_container.get_exposed_port(8883))
 
 
 @pytest.fixture(scope="module")
@@ -78,14 +81,13 @@ def http_port() -> int:
 
 @pytest.fixture(scope="module")
 def thing(
-    container: MosquittoContainer,  # place holder to boot it up
+    mosquitto_container: MosquittoContainer,  # place holder to boot it up
     http_port: int,
-    mqtt_host_and_port: tuple[str, int],
+    mqtt_host: str,
+    mqtt_port: int,
 ) -> Generator[TestThing, None, None]:
     thing = TestThing(id=f"test-thing-{uuid_hex()}", serial_number="simulation")
-    print()  # TODO, can be removed when tornado logs respect level
     http_server = HTTPServer(port=http_port, config=dict(cors=True))
-    mqtt_host, mqtt_port = mqtt_host_and_port
     mqtt_publisher = MQTTPublisher(
         hostname=mqtt_host,
         port=mqtt_port,
@@ -101,11 +103,6 @@ def thing(
     stop()
 
 
-hostname_prefix = "http://127.0.0.1"
-readiness_endpoint = "/readiness"
-liveness_endpoint = "/liveness"
-
-
 @pytest.fixture(scope="function")
 def td_endpoint(thing: TestThing, http_port: int) -> str:
     return f"{hostname_prefix}:{http_port}/{thing.id}/resources/wot-td"
@@ -119,10 +116,10 @@ def object_proxy_http(td_endpoint: str) -> "ObjectProxy":
 @pytest.fixture(scope="function")
 @pytest.mark.asyncio  # bloody, the fixture needs to be marked asyncio. Does not pick it up for some reason.
 async def object_proxy_mqtt(
-    mqtt_host_and_port: tuple[str, int],
+    mqtt_host: str,
+    mqtt_port: int,
     thing: TestThing,
 ) -> "ObjectProxy":
-    mqtt_host, mqtt_port = mqtt_host_and_port
     return ClientFactory.mqtt(
         hostname=mqtt_host,
         port=mqtt_port,
