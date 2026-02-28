@@ -7,7 +7,9 @@ from typing import Any, Generator
 
 import pytest
 
-from testcontainers.mqtt import MosquittoContainer  # TODO this will not work from the current release of testcontainers
+from testcontainers.mqtt import (
+    MosquittoContainer,  # TODO this will not work from the current release of testcontainers
+)
 
 from hololinked.client import ClientFactory, ObjectProxy
 from hololinked.client.abstractions import SSE
@@ -18,10 +20,16 @@ from hololinked.utils import uuid_hex
 
 
 try:
-    from tests.test_14_protocols_http import hostname_prefix, wait_until_server_ready  # noqa: F401
+    from tests.test_14_protocols_http import (  # noqa: F401
+        hostname_prefix,
+        wait_until_server_ready,
+    )
     from tests.things import TestThing
 except ImportError:
-    from test_14_protocols_http import hostname_prefix, wait_until_server_ready  # noqa: F401
+    from test_14_protocols_http import (  # noqa: F401
+        hostname_prefix,
+        wait_until_server_ready,
+    )
     from things import TestThing
 
 
