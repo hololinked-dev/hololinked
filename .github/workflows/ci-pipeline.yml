@@ -127,6 +127,8 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: unpack MQTT certificates (linux)
         if: runner.os != 'Windows'
