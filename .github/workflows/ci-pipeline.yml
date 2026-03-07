@@ -189,6 +189,7 @@ jobs:
         if: runner.os == 'Windows'
         env:
           OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
+          TESTCONTAINERS_RYUK_DISABLED: true
         run: |
           .venv\Scripts\activate
           pytest -s -v tests\test_16_protocols_mqtt.py
