@@ -135,18 +135,14 @@ jobs:
         run: |
           echo "${{ secrets.MQTT_TEST_CREDENTIALS }}" | base64 -d > certs.tar.gz
           tar xzf certs.tar.gz
-          ls -la daq-system-infrastructure/certs
-          ls -la daq-system-infrastructure/conf
-
+    
       - name: unpack MQTT certificates (windows)
         if: runner.os == 'Windows'
         run: |
           $mqttCerts = "${{ secrets.MQTT_TEST_CREDENTIALS }}"
           [System.IO.File]::WriteAllBytes("certs.tar.gz", [System.Convert]::FromBase64String($mqttCerts))
           tar xzf certs.tar.gz
-          dir daq-system-infrastructure\certs
-          dir daq-system-infrastructure\conf
-
+    
       - name: set up python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
