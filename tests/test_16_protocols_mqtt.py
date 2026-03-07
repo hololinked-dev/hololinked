@@ -66,7 +66,25 @@ def mosquitto_container() -> Generator[MosquittoContainer, None, None]:
         mqtt_port=8883,
         ssl_context=mqtt_ssl_context(),
     )
-    container.start()
+
+    # One could in principle retry the tests directly
+    for i in range(3):
+        exc = None
+        try:
+            container.start()
+            break
+        except Exception as ex:
+            # some SSL handshake error appears sometimes, but not always
+            print(f"Attempt {i + 1}: Failed to start Mosquitto container, retrying...")
+            exc = ex
+        try:
+            container.stop()
+        except Exception:
+            pass
+        if i == 2:
+            raise exc from None
+        time.sleep(3)
+
     yield container
     container.stop()
 

@@ -65,8 +65,6 @@ class MQTTPublisher(BaseProtocolServer):
         kwargs: dict
             Additional keyword arguments
         """
-        super().__init__()
-
         default_config = dict(
             topic_publisher=kwargs.get("topic_publisher", TopicPublisher),
             thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
@@ -77,11 +75,12 @@ class MQTTPublisher(BaseProtocolServer):
         default_config.update(config or dict())
         config = RuntimeConfig(**default_config)
 
+        super().__init__(config=config)
+
+        endpoint = f"{hostname}{f':{port}' if port else ''}"
+
         self.hostname = hostname
         self.port = port
-        endpoint = f"{self.hostname}{f':{self.port}' if self.port else ''}"
-
-        self.config = config
         self.username = username
         self.password = password
         self.publishers = dict()  # type: dict[str, TopicPublisher]

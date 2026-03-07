@@ -3,7 +3,7 @@
   "description": "Use this debug config with helper-scripts/run_test_thing.py along with command line arguments", 
   "configurations": [
     {
-      "name": "Python: Debug Current File (args prompt)",
+      "name": "Python: Debug Current File (WITH args prompt)",
       "type": "debugpy",
       "request": "launch",
       "program": "${file}",
@@ -11,7 +11,16 @@
       "cwd": "${workspaceFolder}",
       "justMyCode": false,
       "args": "${input:programArgs}"
-    }
+    },
+    {
+      "name": "Python: Debug Current File (WITHOUT args prompt)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+    },
   ],
   "inputs": [
     {

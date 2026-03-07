@@ -59,12 +59,12 @@ class BaseProtocolServer(Parameterized):
     """List of things to be served"""
 
     def __init__(self, **kwargs) -> None:
+        self.zmq_client_pool = None
+        self.config = None  # type: SimpleNamespace
         super().__init__(**kwargs)
         if self.things is None:
             self.things = []
         self._disconnected_things = []  # type: list[BrokerThing]
-        self.zmq_client_pool = None
-        self.config  # type: SimpleNamespace
 
     def add_thing(self, thing: Thing) -> None:
         """Adds a thing to the list of things to serve."""

@@ -686,7 +686,19 @@ class OIDCConfig(BaseModel):
 
 def test_14_object_proxy_with_oidc(port: int) -> None:
     config_b64 = os.getenv("OIDC_TEST_CONFIG_1_B64")
+    if not config_b64:
+        pytest.skip("No OIDC config provided for the test, set OIDC_TEST_CONFIG_1_B64 env variable to run this test")
     config = OIDCConfig(**json.loads(base64.b64decode(config_b64).decode("utf-8")))
+
+    # uncomment for local tests and put a config file in said location
+    # config = OIDCConfig(**json.loads(open(f"tests{os.sep}helper-scripts{os.sep}oidc-config-2.json").read()))
+
+    # Check if OIDC issuer is reachable
+    try:
+        response = requests.get(f"{config.issuer}/.well-known/openid-configuration", timeout=5)
+        response.raise_for_status()
+    except Exception as ex:
+        pytest.skip(f"OIDC issuer {config.issuer} is not reachable: {ex}")
 
     # uncomment for local tests and put a config file in said location
     # config = OIDCConfig(**json.loads(open(f"tests{os.sep}helper-scripts{os.sep}oidc-config-2.json").read()))
