@@ -12,6 +12,7 @@
 
 import ssl
 import threading
+import time
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -37,6 +38,7 @@ class MQTTClientAvailabilityWaitStrategy(WaitStrategy):
     """
 
     def wait_until_ready(self, container: "MosquittoContainer") -> None:
+        time.sleep(3)  # give the container some time to start up before trying to connect
         container.get_client()
         logger.info("MQTT client is connected, container is ready")
 

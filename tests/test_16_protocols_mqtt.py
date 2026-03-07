@@ -75,8 +75,12 @@ def mosquitto_container() -> Generator[MosquittoContainer, None, None]:
             break
         except Exception as ex:
             # some SSL handshake error appears sometimes, but not always
-            print(f"Attempt {i + 1}: Failed to start Mosquitto container, retrying...")
+            print(f"\nAttempt {i + 1}: Failed to start Mosquitto container, retrying...")
             exc = ex
+        try:
+            print(container.get_logs())
+        except Exception:
+            print("Failed to get container logs")
         try:
             container.stop()
         except Exception:
