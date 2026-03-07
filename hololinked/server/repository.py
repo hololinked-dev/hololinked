@@ -277,9 +277,6 @@ class BrokerThing(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-thing_repository = dict()  # type: dict[str, BrokerThing]
-
-
 async def consume_broker_queue(
     id: str,
     server_id: str,

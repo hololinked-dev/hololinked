@@ -9,7 +9,6 @@ from ...core import Thing as CoreThing
 from ...param.parameters import ClassSelector, String
 from ...td.interaction_affordance import EventAffordance, PropertyAffordance
 from ...utils import get_current_async_loop
-from ..repository import thing_repository
 from ..server import BaseProtocolServer
 from .config import RuntimeConfig
 from .controllers import ThingDescriptionPublisher, TopicPublisher
@@ -66,26 +65,28 @@ class MQTTPublisher(BaseProtocolServer):
         kwargs: dict
             Additional keyword arguments
         """
-        endpoint = f"{self.hostname}{f':{self.port}' if self.port else ''}"
-
         default_config = dict(
             topic_publisher=kwargs.get("topic_publisher", TopicPublisher),
             thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            thing_repository=kwargs.get("thing_repository", thing_repository),
+            thing_repository=kwargs.get("thing_repository", dict()),
             qos=qos,
         )
         default_config.update(config or dict())
         config = RuntimeConfig(**default_config)
 
+        super().__init__(config=config)
+
+        endpoint = f"{hostname}{f':{port}' if port else ''}"
+
         self.hostname = hostname
         self.port = port
-        self.config = config
         self.username = username
         self.password = password
         self.publishers = dict()  # type: dict[str, TopicPublisher]
         self.logger = kwargs.get("logger", structlog.get_logger()).bind(component="mqtt-publisher", hostname=endpoint)
         self.ssl_context = kwargs.get("ssl_context", None)
+        self.id = endpoint
         self.add_things(*(things or []))
 
     async def start(self):
@@ -117,7 +118,7 @@ class MQTTPublisher(BaseProtocolServer):
             raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
 
         await self._instantiate_broker(server_id=thing.rpc_server.id, thing_id=thing.id, access_point="INPROC")
-        TD = thing_repository[thing.id].TD
+        TD = self.config.thing_repository[thing.id].TD
 
         for event_name in TD.get("events", {}).keys():
             event_affordance = EventAffordance.from_TD(event_name, TD)
@@ -163,3 +164,9 @@ class MQTTPublisher(BaseProtocolServer):
         """stop publishing, the client is not closed automatically"""
         for publisher in self.publishers.values():
             publisher.stop()
+
+    def add_thing(self, thing: CoreThing):
+        """Add a `Thing` to the MQTT publisher and start publishing its events/observable properties"""
+        if self.things is None:
+            self.things = list()
+        self.things.append(thing)

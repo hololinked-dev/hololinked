@@ -41,11 +41,12 @@ def event_loop():
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
     yield loop
     loop.close()
 
 
-@pytest.fixture(autouse=True, scope="module")
+@pytest.fixture(scope="module", autouse=True)
 def setup_test_environment():
     """Automatically setup test environment for each file"""
     # This fixture runs automatically for every test

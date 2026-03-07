@@ -2,7 +2,6 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
-from ..repository import thing_repository
 from .controllers import ThingDescriptionPublisher, TopicPublisher
 from .services import ThingDescriptionService
 
@@ -24,5 +23,5 @@ class RuntimeConfig(BaseModel):
     thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
     """Thing Description generation service, used by `ThingDescriptionPublisher` to generate the Thing Description"""
 
-    thing_repository: Any = thing_repository  # type: dict[str, BrokerThing]
+    thing_repository: Any = Field(default_factory=dict)  # type: dict[str, BrokerThing]
     """repository layer `Thing`s to be used by the MQTT publishers"""

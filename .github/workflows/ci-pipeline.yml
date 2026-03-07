@@ -127,6 +127,25 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: unpack MQTT certificates (linux)
+        if: runner.os != 'Windows'
+        run: |
+          echo "${{ secrets.MQTT_TEST_CREDENTIALS }}" | base64 -d > certs.tar.gz
+          tar xzf certs.tar.gz
+          ls -la daq-system-infrastructure/certs
+          ls -la daq-system-infrastructure/conf
+
+      - name: unpack MQTT certificates (windows)
+        if: runner.os == 'Windows'
+        run: |
+          $mqttCerts = "${{ secrets.MQTT_TEST_CREDENTIALS }}"
+          [System.IO.File]::WriteAllBytes("certs.tar.gz", [System.Convert]::FromBase64String($mqttCerts))
+          tar xzf certs.tar.gz
+          dir daq-system-infrastructure\certs
+          dir daq-system-infrastructure\conf
 
       - name: set up python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
@@ -148,6 +167,7 @@ jobs:
           uv venv .venv
           source .venv/bin/activate
           uv sync --group test --group dev
+          mv tests/patches/testcontainers/mqtt/__init__.py .venv/lib/python*/site-packages/testcontainers/mqtt/__init__.py
 
       - name: install dependencies (windows)
         if: runner.os == 'Windows'
@@ -155,6 +175,7 @@ jobs:
           uv venv .venv
           .venv\Scripts\activate
           uv sync --group test --group dev
+          copy tests\patches\testcontainers\mqtt\__init__.py .venv\Lib\site-packages\testcontainers\mqtt\__init__.py
 
       - name: run unit tests (linux/macOS)
         if: runner.os != 'Windows' && matrix.python-version != 3.13
@@ -170,7 +191,7 @@ jobs:
           OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
         run: |
           .venv\Scripts\activate
-          pytest -s -v
+          pytest -s -v --ignore=tests\test_16_protocols_mqtt.py
 
       - name: run unit tests and generate coverage report (linux/macOS python 3.13)
         if: runner.os != 'Windows' && matrix.python-version == 3.13

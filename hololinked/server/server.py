@@ -4,6 +4,7 @@ import threading
 import warnings
 
 from io import StringIO
+from types import SimpleNamespace  # noqa: F401
 
 import structlog
 
@@ -12,6 +13,7 @@ from ..core import Action, Event, Property, Thing
 from ..core.properties import ClassSelector, Integer, TypedList
 from ..core.zmq.rpc_server import ZMQ_TRANSPORTS, RPCServer
 from ..param import Parameterized
+from ..param.parameters import String
 from ..td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
@@ -27,7 +29,6 @@ from .repository import (
     BrokerThing,
     consume_broker_pubsub,
     consume_broker_queue,
-    thing_repository,
 )
 
 
@@ -40,6 +41,9 @@ class BaseProtocolServer(Parameterized):
     execution of operations over the `Thing` class). This class (& its children) represent the protocol server itself
     and is responsible for starting and stopping the protocol, deciding which `Thing`s to serve etc.
     """
+
+    id = String(default=None, allow_None=True)
+    """Unique identifier for the server"""
 
     port = Integer(default=9000, bounds=(1, 65535))
     """The protocol port"""
@@ -55,11 +59,12 @@ class BaseProtocolServer(Parameterized):
     """List of things to be served"""
 
     def __init__(self, **kwargs) -> None:
+        self.zmq_client_pool = None
+        self.config = None  # type: SimpleNamespace
         super().__init__(**kwargs)
         if self.things is None:
             self.things = []
         self._disconnected_things = []  # type: list[BrokerThing]
-        self.zmq_client_pool = None
 
     def add_thing(self, thing: Thing) -> None:
         """Adds a thing to the list of things to serve."""
@@ -91,14 +96,14 @@ class BaseProtocolServer(Parameterized):
             self._disconnected_things.append(broker_thing)
 
             client, TD = await consume_broker_queue(
-                id=self._IP,
+                id=f"{self.id}|client|{thing_id}",
                 server_id=server_id,
                 thing_id=thing_id,
                 access_point=access_point,
             )
 
             event_consumer = consume_broker_pubsub(
-                id=self._IP,
+                id=f"{self.id}|event-consumer|{thing_id}",
                 access_point=f"{client.socket_address}/event-publisher",
             )
 
@@ -117,7 +122,7 @@ class BaseProtocolServer(Parameterized):
                 self.zmq_client_pool.register(client, thing_id)
                 broker_thing.req_rep_client = self.zmq_client_pool
 
-            thing_repository[thing_id] = broker_thing
+            self.config.thing_repository[thing_id] = broker_thing
 
         except ConnectionError:
             self.logger.warning(

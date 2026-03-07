@@ -473,7 +473,7 @@ class ClientFactory:
                 logger=logger,
                 owner_inst=object_proxy,
             )
-            self.add_property(object_proxy, consumed_property)
+            self.add_event(object_proxy, consumed_property)
         for name in TD.get("events", []):
             affordance = EventAffordance.from_TD(name, TD)
             consumed_event = MQTTConsumer(
