@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 <!-- ✓ means ready to try -->
 
+Release date format is YYYY-MM-DD.
+
+# [v0.3.12] - 2025-08-03
+
+- fix bugs with MQTTPublisher and add MQTT end to end tests
+
 # [v0.3.11] - 2025-02-01
 
 - support for OIDC authentication for HTTP protocol binding
