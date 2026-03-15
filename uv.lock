@@ -8,6 +8,15 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "aiocoap"
+version = "0.4.17"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/7c/10483df04d7910e21d55d47ab7c014fb02644b5b58ba741161360f8e9e8d/aiocoap-0.4.17.tar.gz", hash = "sha256:464c8d2b85ec1ef435dabeaa3fb6c8256b40fadfe6ce4ca83b93acb8d555f436", size = 313536 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/43/aa24717e6a12dd00e0a9bee405ef8d3b9643edac23876e949f23f46b55ff/aiocoap-0.4.17-py3-none-any.whl", hash = "sha256:9f8f5f09e8f2666b635d7f9c45db5d1d0e38d41479b2d83878678a9cdb5a8f3c", size = 247391 },
+]
+
+[[package]]
 name = "aiomqtt"
 version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -728,9 +737,10 @@ wheels = [
 
 [[package]]
 name = "hololinked"
-version = "0.3.11"
+version = "0.3.12"
 source = { editable = "." }
 dependencies = [
+    { name = "aiocoap" },
     { name = "aiomqtt" },
     { name = "argon2-cffi" },
     { name = "bcrypt" },
@@ -779,6 +789,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiocoap", specifier = ">=0.4.17" },
     { name = "aiomqtt", specifier = ">=2.4.0" },
     { name = "argon2-cffi", specifier = ">=23.1.0" },
     { name = "bcrypt", specifier = "==4.3.0" },

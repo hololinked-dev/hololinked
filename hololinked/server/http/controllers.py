@@ -231,12 +231,12 @@ class BaseHandler(RequestHandler):
         An example would be the following URL:
 
         ```
-        http://localhost:8080/property/temperature?oneway=true&invokationTimeout=5&some_arg=42
+        http://localhost:8080/property/temperature?oneway=true&invokationTimeout=5&value=42
         ```
 
         server execution context would have `oneway` set to true & `invokationTimeout` set to 5 seconds,
         local execution context would be empty as no such arguments were passed,
-        and additional payload would have `{"some_arg": 42}` as its value.
+        and additional payload would have `{"value": 42}` as its value.
 
         Returns
         -------
