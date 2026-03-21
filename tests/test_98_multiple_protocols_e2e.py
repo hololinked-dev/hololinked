@@ -1,4 +1,5 @@
 import itertools
+import time
 
 from typing import Generator
 
@@ -24,11 +25,11 @@ try:
         mqtt_port,
         mqtt_ssl_context,
     )
-    from tests.things import OceanOpticsSpectrometer, TestThing
+    from tests.things import TestThing
 except ImportError:
     from test_14_protocols_http import wait_until_server_ready
     from test_16_protocols_mqtt import mosquitto_container, mqtt_host, mqtt_port, mqtt_ssl_context  # noqa: F401
-    from things import OceanOpticsSpectrometer, TestThing
+    from things import TestThing
 
 count = itertools.count(64000)
 
@@ -51,8 +52,8 @@ def thing1() -> TestThing:
 
 
 @pytest.fixture(scope="module")
-def thing2() -> OceanOpticsSpectrometer:
-    return OceanOpticsSpectrometer(id=f"test-thing-{uuid_hex()}", serial_number="simulation")
+def thing2() -> TestThing:
+    return TestThing(id=f"test-thing-{uuid_hex()}", serial_number="simulation")
 
 
 @pytest.fixture(scope="module")
@@ -60,7 +61,7 @@ def thing2() -> OceanOpticsSpectrometer:
 def things(
     mosquitto_container: MosquittoContainer,  # place holder to boot it up
     thing1: TestThing,
-    thing2: OceanOpticsSpectrometer,
+    thing2: TestThing,
     http_port: int,
     zmq_tcp_port: int,
     mqtt_host: str,
@@ -83,7 +84,7 @@ def things(
     zmq_server.add_thing(thing1)
     zmq_server.add_thing(thing2)
 
-    run(http_server, mqtt_publisher, zmq_server, forked=True)
+    run(http_server, mqtt_publisher, zmq_server, forked=True, print_welcome_message=False)
     wait_until_server_ready(port=http_port)
     yield thing1, thing2
     stop()
@@ -93,37 +94,32 @@ hostname_prefix = "http://127.0.0.1"
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
-def td1_endpoint(things: tuple[TestThing, OceanOpticsSpectrometer], http_port: int) -> str:
+def td1_endpoint(things: tuple[TestThing, TestThing], http_port: int) -> str:
     thing1, _ = things
     return f"{hostname_prefix}:{http_port}/{thing1.id}/resources/wot-td"
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
-def td2_endpoint(things: tuple[TestThing, OceanOpticsSpectrometer], http_port: int) -> str:
+def td2_endpoint(things: tuple[TestThing, TestThing], http_port: int) -> str:
     _, thing2 = things
     return f"{hostname_prefix}:{http_port}/{thing2.id}/resources/wot-td"
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
 def object_proxy_thing1_http(td1_endpoint: str) -> "ObjectProxy":
     return ClientFactory.http(url=td1_endpoint, ignore_TD_errors=True)
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
 def object_proxy_thing2_http(td2_endpoint: str) -> "ObjectProxy":
     return ClientFactory.http(url=td2_endpoint, ignore_TD_errors=True)
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
 def object_proxy_thing1_mqtt(
     mqtt_host: str,
     mqtt_port: int,
-    things: tuple[TestThing, OceanOpticsSpectrometer],
+    things: tuple[TestThing, TestThing],
 ) -> "ObjectProxy":
     thing1, _ = things
     return ClientFactory.mqtt(
@@ -137,11 +133,10 @@ def object_proxy_thing1_mqtt(
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
 def object_proxy_thing2_mqtt(
     mqtt_host: str,
     mqtt_port: int,
-    things: tuple[TestThing, OceanOpticsSpectrometer],
+    things: tuple[TestThing, TestThing],
 ) -> "ObjectProxy":
     _, thing2 = things
     return ClientFactory.mqtt(
@@ -155,8 +150,7 @@ def object_proxy_thing2_mqtt(
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
-def object_proxy_thing1_zmq(things: tuple[TestThing, OceanOpticsSpectrometer]) -> "ObjectProxy":
+def object_proxy_thing1_zmq(things: tuple[TestThing, TestThing]) -> "ObjectProxy":
     thing1, _ = things
     return ClientFactory.zmq(
         access_point="IPC",
@@ -167,8 +161,7 @@ def object_proxy_thing1_zmq(things: tuple[TestThing, OceanOpticsSpectrometer]) -
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
-def object_proxy_thing2_zmq(things: tuple[TestThing, OceanOpticsSpectrometer]) -> "ObjectProxy":
+def object_proxy_thing2_zmq(things: tuple[TestThing, TestThing]) -> "ObjectProxy":
     _, thing2 = things
     return ClientFactory.zmq(
         access_point="IPC",
@@ -178,9 +171,110 @@ def object_proxy_thing2_zmq(things: tuple[TestThing, OceanOpticsSpectrometer]) -
     )
 
 
-def test_01(
+@pytest.mark.asyncio
+async def test_01_rw_properties(
+    object_proxy_thing1_http: "ObjectProxy",
+    object_proxy_thing1_zmq: "ObjectProxy",
+    object_proxy_thing2_http: "ObjectProxy",
+    object_proxy_thing2_zmq: "ObjectProxy",
+):
+    assert object_proxy_thing1_http.read_property("string_prop") == object_proxy_thing1_zmq.read_property("string_prop")
+    assert object_proxy_thing2_http.read_property("string_prop") == object_proxy_thing2_zmq.read_property("string_prop")
+
+    object_proxy_thing1_http.write_property("string_prop", "newvalueone")
+    object_proxy_thing2_http.write_property("string_prop", "newvaluetwo")
+    assert object_proxy_thing1_zmq.read_property("string_prop") == "newvalueone"
+    assert object_proxy_thing2_zmq.read_property("string_prop") == "newvaluetwo"
+    assert object_proxy_thing1_http.read_property("string_prop") == object_proxy_thing1_zmq.read_property("string_prop")
+    assert object_proxy_thing2_http.read_property("string_prop") == object_proxy_thing2_zmq.read_property("string_prop")
+
+
+@pytest.mark.asyncio
+async def test_02_observe_properties(
     object_proxy_thing1_http: "ObjectProxy",
     object_proxy_thing1_mqtt: "ObjectProxy",
     object_proxy_thing1_zmq: "ObjectProxy",
 ):
-    pass
+    observed_values_thing1_http = []
+    observed_values_thing1_mqtt = []
+    observed_values_thing1_zmq = []
+
+    def callback_thing1_http(value):
+        observed_values_thing1_http.append(value)
+
+    def callback_thing1_zmq(value):
+        observed_values_thing1_zmq.append(value)
+
+    def callback_thing1_mqtt(value):
+        observed_values_thing1_mqtt.append(value)
+
+    object_proxy_thing1_http.observe_property("observable_readonly_prop", callbacks=callback_thing1_http)
+    object_proxy_thing1_zmq.observe_property("observable_readonly_prop", callbacks=callback_thing1_zmq)
+    object_proxy_thing1_mqtt.observe_property("observable_readonly_prop", callbacks=callback_thing1_mqtt)
+
+    total_events = 100
+    for i in range(total_events):
+        object_proxy_thing1_zmq.read_property("observable_readonly_prop")
+        time.sleep(0.01)  # wait for all events to be processed
+
+    assert len(observed_values_thing1_http) > 0, "No values observed through HTTP client"
+    assert len(observed_values_thing1_zmq) > 0, "No values observed through ZMQ client"
+    assert len(observed_values_thing1_mqtt) > 0, "No values observed through MQTT client"
+
+    assert total_events - 3 < len(observed_values_thing1_http) <= total_events, (
+        f"Expected around {total_events} events, got {len(observed_values_thing1_http)} through HTTP client"
+    )
+    assert total_events - 3 < len(observed_values_thing1_zmq) <= total_events, (
+        f"Expected around {total_events} events, got {len(observed_values_thing1_zmq)} through ZMQ client"
+    )
+    assert total_events - 3 < len(observed_values_thing1_mqtt) <= total_events, (
+        f"Expected around {total_events} events, got {len(observed_values_thing1_mqtt)} through MQTT client"
+    )
+
+    object_proxy_thing1_http.unobserve_property("observable_readonly_prop")
+    object_proxy_thing1_zmq.unobserve_property("observable_readonly_prop")
+    object_proxy_thing1_mqtt.unobserve_property("observable_readonly_prop")
+
+
+@pytest.mark.asyncio
+def test_03_invoke_action(
+    object_proxy_thing1_http: "ObjectProxy",
+    object_proxy_thing1_zmq: "ObjectProxy",
+    object_proxy_thing2_http: "ObjectProxy",
+    object_proxy_thing2_zmq: "ObjectProxy",
+):
+    object_proxy_thing1_http.invoke_action("set_non_remote_number_prop", 10)
+    assert object_proxy_thing1_zmq.invoke_action("get_non_remote_number_prop") == 10
+
+    object_proxy_thing2_http.invoke_action("set_non_remote_number_prop", 20)
+    assert object_proxy_thing2_zmq.invoke_action("get_non_remote_number_prop") == 20
+
+
+def test_04_subscribe_event(
+    object_proxy_thing2_http: "ObjectProxy",
+    object_proxy_thing2_mqtt: "ObjectProxy",
+    object_proxy_thing2_zmq: "ObjectProxy",
+):
+    results = []
+
+    def cb(value):
+        results.append(value)
+
+    object_proxy_thing2_mqtt.subscribe_event("test_event", cb)
+    object_proxy_thing2_zmq.subscribe_event("test_event", cb)
+    object_proxy_thing2_http.subscribe_event("test_event", cb)
+
+    time.sleep(3)
+
+    total_events = 10
+
+    for i in range(total_events):
+        object_proxy_thing2_http.push_events(total_number_of_events=1)
+        time.sleep(0.01)
+
+    assert len(results) > 0, "No events received"
+    assert abs(len(results) - total_events * 3) < 3, f"Expected {total_events * 3} events, got {len(results)}"
+
+    object_proxy_thing2_mqtt.unsubscribe_event("test_event")
+    object_proxy_thing2_zmq.unsubscribe_event("test_event")
+    object_proxy_thing2_http.unsubscribe_event("test_event")
