@@ -35,41 +35,6 @@ from .zmq.consumed_interactions import (
 )
 
 
-class _LazyAiomqttClient:
-    """Defers aiomqtt.Client construction until first use inside an async context.
-
-    aiomqtt.Client.__init__ calls asyncio.get_running_loop(), which means it can only
-    be instantiated inside a running event loop.  Factory methods like ClientFactory.mqtt()
-    are synchronous, so we keep the constructor kwargs here and create the real client
-    the first time any attribute is accessed (which always happens inside an async context
-    such as MQTTConsumer.async_listen).
-    """
-
-    def __init__(self, **kwargs: Any) -> None:
-        object.__setattr__(self, "_kwargs", kwargs)
-        object.__setattr__(self, "_client", None)
-
-    def _ensure_client(self) -> aiomqtt.Client:
-        client = object.__getattribute__(self, "_client")
-        if client is None:
-            kwargs = object.__getattribute__(self, "_kwargs")
-            client = aiomqtt.Client(**kwargs)
-            object.__setattr__(self, "_client", client)
-        return client
-
-    # Proxy all attribute access to the underlying client once it exists.
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._ensure_client(), name)
-
-    async def __aenter__(self) -> aiomqtt.Client:
-        return await self._ensure_client().__aenter__()
-
-    async def __aexit__(self, *args: Any) -> None:
-        client = object.__getattribute__(self, "_client")
-        if client is not None:
-            await client.__aexit__(*args)
-
-
 class ClientFactory:
     """
     A factory class for creating clients to interact with `Thing`s over different protocols.
@@ -487,7 +452,7 @@ class ClientFactory:
                 category=RuntimeWarning,
             )
 
-        async_client = _LazyAiomqttClient(
+        async_client = aiomqtt.Client(
             hostname=hostname,
             port=port,
             username=username,

@@ -116,7 +116,7 @@ def object_proxy_thing2_http(td2_endpoint: str) -> "ObjectProxy":
 
 
 @pytest.fixture(scope="module")
-def object_proxy_thing1_mqtt(
+async def object_proxy_thing1_mqtt(
     mqtt_host: str,
     mqtt_port: int,
     things: tuple[TestThing, TestThing],
@@ -133,7 +133,7 @@ def object_proxy_thing1_mqtt(
 
 
 @pytest.fixture(scope="module")
-def object_proxy_thing2_mqtt(
+async def object_proxy_thing2_mqtt(
     mqtt_host: str,
     mqtt_port: int,
     things: tuple[TestThing, TestThing],
@@ -171,7 +171,6 @@ def object_proxy_thing2_zmq(things: tuple[TestThing, TestThing]) -> "ObjectProxy
     )
 
 
-@pytest.mark.asyncio
 async def test_01_rw_properties(
     object_proxy_thing1_http: "ObjectProxy",
     object_proxy_thing1_zmq: "ObjectProxy",
@@ -189,7 +188,6 @@ async def test_01_rw_properties(
     assert object_proxy_thing2_http.read_property("string_prop") == object_proxy_thing2_zmq.read_property("string_prop")
 
 
-@pytest.mark.asyncio
 async def test_02_observe_properties(
     object_proxy_thing1_http: "ObjectProxy",
     object_proxy_thing1_mqtt: "ObjectProxy",
@@ -236,7 +234,6 @@ async def test_02_observe_properties(
     object_proxy_thing1_mqtt.unobserve_property("observable_readonly_prop")
 
 
-@pytest.mark.asyncio
 async def test_03_invoke_action(
     object_proxy_thing1_http: "ObjectProxy",
     object_proxy_thing1_zmq: "ObjectProxy",
@@ -250,7 +247,6 @@ async def test_03_invoke_action(
     assert object_proxy_thing2_zmq.invoke_action("get_non_remote_number_prop") == 20
 
 
-@pytest.mark.asyncio
 async def test_04_subscribe_event(
     object_proxy_thing2_http: "ObjectProxy",
     object_proxy_thing2_mqtt: "ObjectProxy",

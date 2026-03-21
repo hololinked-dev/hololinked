@@ -144,7 +144,6 @@ def object_proxy_http(td_endpoint: str) -> "ObjectProxy":
 
 
 @pytest.fixture(scope="function")
-@pytest.mark.asyncio  # bloody, the fixture needs to be marked asyncio. Does not pick it up for some reason.
 async def object_proxy_mqtt(
     mqtt_host: str,
     mqtt_port: int,
@@ -160,7 +159,7 @@ async def object_proxy_mqtt(
     )
 
 
-def test_01_subscribe_event(object_proxy_http: "ObjectProxy", object_proxy_mqtt: "ObjectProxy"):
+async def test_01_subscribe_event(object_proxy_http: "ObjectProxy", object_proxy_mqtt: "ObjectProxy"):
     results = []
 
     def cb(value: SSE):
@@ -206,7 +205,7 @@ def test_01_subscribe_event(object_proxy_http: "ObjectProxy", object_proxy_mqtt:
         ),
     ],
 )
-def test_02_observe_properties(
+async def test_02_observe_properties(
     object_proxy_http: "ObjectProxy",
     object_proxy_mqtt: "ObjectProxy",
     prop: str,
