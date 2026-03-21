@@ -237,7 +237,7 @@ async def test_02_observe_properties(
 
 
 @pytest.mark.asyncio
-def test_03_invoke_action(
+async def test_03_invoke_action(
     object_proxy_thing1_http: "ObjectProxy",
     object_proxy_thing1_zmq: "ObjectProxy",
     object_proxy_thing2_http: "ObjectProxy",
@@ -250,7 +250,8 @@ def test_03_invoke_action(
     assert object_proxy_thing2_zmq.invoke_action("get_non_remote_number_prop") == 20
 
 
-def test_04_subscribe_event(
+@pytest.mark.asyncio
+async def test_04_subscribe_event(
     object_proxy_thing2_http: "ObjectProxy",
     object_proxy_thing2_mqtt: "ObjectProxy",
     object_proxy_thing2_zmq: "ObjectProxy",
