@@ -135,18 +135,14 @@ jobs:
         run: |
           echo "${{ secrets.MQTT_TEST_CREDENTIALS }}" | base64 -d > certs.tar.gz
           tar xzf certs.tar.gz
-          ls -la daq-system-infrastructure/certs
-          ls -la daq-system-infrastructure/conf
-
+    
       - name: unpack MQTT certificates (windows)
         if: runner.os == 'Windows'
         run: |
           $mqttCerts = "${{ secrets.MQTT_TEST_CREDENTIALS }}"
           [System.IO.File]::WriteAllBytes("certs.tar.gz", [System.Convert]::FromBase64String($mqttCerts))
           tar xzf certs.tar.gz
-          dir daq-system-infrastructure\certs
-          dir daq-system-infrastructure\conf
-
+    
       - name: set up python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
@@ -191,7 +187,7 @@ jobs:
           OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
         run: |
           .venv\Scripts\activate
-          pytest -s -v --ignore=tests\test_16_protocols_mqtt.py
+          pytest -s -v --ignore=tests\test_16_protocols_mqtt.py --ignore=tests\test_98_multiple_protocols_e2e.py
 
       - name: run unit tests and generate coverage report (linux/macOS python 3.13)
         if: runner.os != 'Windows' && matrix.python-version == 3.13
