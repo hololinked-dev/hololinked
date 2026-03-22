@@ -28,7 +28,12 @@ try:
     from tests.things import TestThing
 except ImportError:
     from test_14_protocols_http import wait_until_server_ready
-    from test_16_protocols_mqtt import mosquitto_container, mqtt_host, mqtt_port, mqtt_ssl_context  # noqa: F401
+    from test_16_protocols_mqtt import (  # noqa: F401
+        mosquitto_container,
+        mqtt_host,
+        mqtt_port,
+        mqtt_ssl_context,
+    )
     from things import TestThing
 
 count = itertools.count(64000)
