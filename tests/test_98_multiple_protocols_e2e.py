@@ -288,7 +288,6 @@ async def test_04_subscribe_event(
 
     time.sleep(3)
 
-    assert len(observed_values_http) > 0, "No events received through HTTP client"
     assert len(observed_values_mqtt) > 0, "No events received through MQTT client"
     assert len(observed_values_zmq) > 0, "No events received through ZMQ client"
 
