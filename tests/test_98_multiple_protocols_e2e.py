@@ -198,40 +198,43 @@ async def test_02_observe_properties(
     object_proxy_thing1_mqtt: "ObjectProxy",
     object_proxy_thing1_zmq: "ObjectProxy",
 ):
-    observed_values_thing1_http = []
-    observed_values_thing1_mqtt = []
-    observed_values_thing1_zmq = []
+    observed_values_http = []
+    observed_values_mqtt = []
+    observed_values_zmq = []
 
-    def callback_thing1_http(value):
-        observed_values_thing1_http.append(value)
+    def callback_http(value):
+        observed_values_http.append(value)
 
-    def callback_thing1_zmq(value):
-        observed_values_thing1_zmq.append(value)
+    def callback_zmq(value):
+        observed_values_zmq.append(value)
 
-    def callback_thing1_mqtt(value):
-        observed_values_thing1_mqtt.append(value)
+    def callback_mqtt(value):
+        observed_values_mqtt.append(value)
 
-    object_proxy_thing1_http.observe_property("observable_readonly_prop", callbacks=callback_thing1_http)
-    object_proxy_thing1_zmq.observe_property("observable_readonly_prop", callbacks=callback_thing1_zmq)
-    object_proxy_thing1_mqtt.observe_property("observable_readonly_prop", callbacks=callback_thing1_mqtt)
+    object_proxy_thing1_http.observe_property("observable_readonly_prop", callbacks=callback_http)
+    object_proxy_thing1_zmq.observe_property("observable_readonly_prop", callbacks=callback_zmq)
+    object_proxy_thing1_mqtt.observe_property("observable_readonly_prop", callbacks=callback_mqtt)
 
     total_events = 100
     for i in range(total_events):
         object_proxy_thing1_zmq.read_property("observable_readonly_prop")
-        time.sleep(0.01)  # wait for all events to be processed
+        time.sleep(0.02)  # cannot say how good the CI CD machiens are,
+        # so let's give it some time to process events and not miss any of them
 
-    assert len(observed_values_thing1_http) > 0, "No values observed through HTTP client"
-    assert len(observed_values_thing1_zmq) > 0, "No values observed through ZMQ client"
-    assert len(observed_values_thing1_mqtt) > 0, "No values observed through MQTT client"
+    time.sleep(3)  # wait for all events to be processed
 
-    assert total_events - 3 < len(observed_values_thing1_http) <= total_events, (
-        f"Expected around {total_events} events, got {len(observed_values_thing1_http)} through HTTP client"
+    assert len(observed_values_http) > 0, "No values observed through HTTP client"
+    assert len(observed_values_zmq) > 0, "No values observed through ZMQ client"
+    assert len(observed_values_mqtt) > 0, "No values observed through MQTT client"
+
+    assert total_events - 3 < len(observed_values_http) <= total_events, (
+        f"Expected around {total_events} events, got {len(observed_values_http)} through HTTP client"
     )
-    assert total_events - 3 < len(observed_values_thing1_zmq) <= total_events, (
-        f"Expected around {total_events} events, got {len(observed_values_thing1_zmq)} through ZMQ client"
+    assert total_events - 3 < len(observed_values_zmq) <= total_events, (
+        f"Expected around {total_events} events, got {len(observed_values_zmq)} through ZMQ client"
     )
-    assert total_events - 3 < len(observed_values_thing1_mqtt) <= total_events, (
-        f"Expected around {total_events} events, got {len(observed_values_thing1_mqtt)} through MQTT client"
+    assert total_events - 3 < len(observed_values_mqtt) <= total_events, (
+        f"Expected around {total_events} events, got {len(observed_values_mqtt)} through MQTT client"
     )
 
     object_proxy_thing1_http.unobserve_property("observable_readonly_prop")
@@ -257,14 +260,22 @@ async def test_04_subscribe_event(
     object_proxy_thing2_mqtt: "ObjectProxy",
     object_proxy_thing2_zmq: "ObjectProxy",
 ):
-    results = []
+    observed_values_http = []
+    observed_values_mqtt = []
+    observed_values_zmq = []
 
-    def cb(value):
-        results.append(value)
+    def callback_http(value):
+        observed_values_http.append(value)
 
-    object_proxy_thing2_mqtt.subscribe_event("test_event", cb)
-    object_proxy_thing2_zmq.subscribe_event("test_event", cb)
-    object_proxy_thing2_http.subscribe_event("test_event", cb)
+    def callback_zmq(value):
+        observed_values_zmq.append(value)
+
+    def callback_mqtt(value):
+        observed_values_mqtt.append(value)
+
+    object_proxy_thing2_mqtt.subscribe_event("test_event", callback_mqtt)
+    object_proxy_thing2_zmq.subscribe_event("test_event", callback_zmq)
+    object_proxy_thing2_http.subscribe_event("test_event", callback_http)
 
     time.sleep(3)
 
@@ -272,10 +283,24 @@ async def test_04_subscribe_event(
 
     for i in range(total_events):
         object_proxy_thing2_http.push_events(total_number_of_events=1)
-        time.sleep(0.01)
+        time.sleep(0.02)  # cannot say how good the CI CD machiens are,
+        # so let's give it some time to process events and not miss any of them
 
-    assert len(results) > 0, "No events received"
-    assert abs(len(results) - total_events * 3) < 3, f"Expected {total_events * 3} events, got {len(results)}"
+    time.sleep(3)
+
+    assert len(observed_values_http) > 0, "No events received through HTTP client"
+    assert len(observed_values_mqtt) > 0, "No events received through MQTT client"
+    assert len(observed_values_zmq) > 0, "No events received through ZMQ client"
+
+    assert abs(len(observed_values_http) - total_events) < 3, (
+        f"Expected {total_events} events, got {len(observed_values_http)} through HTTP client"
+    )
+    assert abs(len(observed_values_mqtt) - total_events) < 3, (
+        f"Expected {total_events} events, got {len(observed_values_mqtt)} through MQTT client"
+    )
+    assert abs(len(observed_values_zmq) - total_events) < 3, (
+        f"Expected {total_events} events, got {len(observed_values_zmq)} through ZMQ client"
+    )
 
     object_proxy_thing2_mqtt.unsubscribe_event("test_event")
     object_proxy_thing2_zmq.unsubscribe_event("test_event")
