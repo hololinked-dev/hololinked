@@ -1,8 +1,10 @@
+"""Implementation of the ClientFactory class for creating clients to interact with Things over different protocols."""
+
 import ssl
 import threading
 import warnings
 
-from typing import Any
+from typing import Any, cast
 
 import aiomqtt
 import httpx
@@ -38,20 +40,27 @@ from .zmq.consumed_interactions import (
 class ClientFactory:
     """
     A factory class for creating clients to interact with `Thing`s over different protocols.
+
     This object is not meant to be instantiated, but rather provides class methods for creating clients.
 
+    [Documentation](https://docs.hololinked.dev/beginners-guide/articles/object-proxy/#__tabbed_1_1)
+
+    Example:
+
     ```python
-    zmq_client = ClientFactory.zmq(server_id="server1", thing_id="thing1", access_point="ipc:///tmp/thing1")
+    from hololinked.client import ClientFactory
+
+    zmq_client = ClientFactory.zmq(server_id="server1", thing_id="thing1", access_point="IPC")
     http_client = ClientFactory.http(url="https://example.com/thing-description")
-    mqtt_client = ClientFactory.mqtt(hostname="broker.example.com", port=8883, thing_id="thing1", username="user", password="pass")
+    mqtt_client = ClientFactory.mqtt(hostname="broker.example.com", port=8883, thing_id="thing1")
     ```
     """
 
     __wrapper_assignments__ = ("__name__", "__qualname__", "__doc__")
+    """Dunder attributes to be assigned onto dynamically populated properties, actions and events."""
 
-    @classmethod
+    @staticmethod
     def zmq(
-        self,
         server_id: str,
         thing_id: str,
         access_point: str = ZMQ_TRANSPORTS.IPC,
@@ -59,6 +68,46 @@ class ClientFactory:
     ) -> ObjectProxy:
         """
         Create a ZMQ client for the specified server and thing.
+
+        [Documentation](https://docs.hololinked.dev/beginners-guide/articles/object-proxy/#__tabbed_1_1)
+
+        Provide the server ID and thing ID used to start the `Thing` instance, apart from the protocol or access point
+        of the ZMQ transport mechanism. If a shorthand method like `Thing.run_with_zmq_server()` was used without
+        specifying the server ID, the thing ID is the server ID by default.
+
+        ```python
+        thing = Thing("thing1")
+        thing.run_with_zmq_server(access_point="IPC", forked=True)
+
+        client = ClientFactory.zmq(
+            server_id="thing1",
+            thing_id="thing1",
+            access_point="IPC"
+        )
+        ```
+
+        ```python
+        thing = Thing("thing1")
+        thing.run_with_zmq_server(access_point="IPC", server_id="thing1-server", forked=True)
+
+        client = ClientFactory.zmq(
+            server_id="thing1-server",
+            thing_id="thing1",
+            access_point="IPC"
+        )
+        ```
+
+        ```python
+        thing = Thing("thing1")
+        server = ZMQServer(thing, id="thing1-server", access_point="tcp://*:3569")
+        server.run(forked=True)
+
+        client = ClientFactory.zmq(
+            server_id="thing1-server",
+            thing_id="thing1",
+            access_point="tcp://localhost:3569"
+        )
+        ```
 
         Parameters
         ----------
@@ -74,9 +123,10 @@ class ClientFactory:
             - `logger`: `structlog.stdlib.BoundLogger`, optional.
                  A custom logger instance to use for logging
             - `ignore_TD_errors`: `bool`, default `False`.
-                Whether to ignore errors while fetching the Thing Description (TD)
+                Whether to ignore errors while fetching the Thing Description (TD). Supported only for this runtime,
+                not against a 3rd party Web of Things (WoT) implementation.
             - `skip_interaction_affordances`: `list[str]`, default `[]`.
-                A list of interaction names to skip (property, action or event names)
+                A list of interaction names to skip (any of property, action or event names)
             - `invokation_timeout`: `float`, optional, default `5.0`.
                 The timeout for invokation requests (in seconds)
             - `execution_timeout`: `float`, optional, default `5.0`.
@@ -85,7 +135,7 @@ class ClientFactory:
         Returns
         -------
         ObjectProxy
-            An ObjectProxy instance representing the remote Thing
+            An `ObjectProxy` instance representing the remote `Thing` with ZMQ protocol.
         """
         id = kwargs.get("id", f"{server_id}|{thing_id}|{access_point}|{uuid_hex()}")
 
@@ -136,7 +186,7 @@ class ClientFactory:
 
         # add properties
         for name in TD.get("properties", []):
-            affordance = PropertyAffordance.from_TD(name, TD)
+            affordance = cast(PropertyAffordance, PropertyAffordance.from_TD(name, TD))
             consumed_property = ZMQProperty(
                 resource=affordance,
                 sync_client=sync_zmq_client,
@@ -146,17 +196,17 @@ class ClientFactory:
                 execution_timeout=execution_timeout,
                 logger=logger,
             )
-            self.add_property(object_proxy, consumed_property)
+            ClientFactory.add_property(object_proxy, consumed_property)
             if hasattr(affordance, "observable") and affordance.observable:
                 consumed_observable = ZMQEvent(
                     resource=affordance,
                     owner_inst=object_proxy,
                     logger=logger,
                 )
-                self.add_event(object_proxy, consumed_observable)
+                ClientFactory.add_event(object_proxy, consumed_observable)
         # add actions
         for action in TD.get("actions", []):
-            affordance = ActionAffordance.from_TD(action, TD)
+            affordance = cast(ActionAffordance, ActionAffordance.from_TD(action, TD))
             consumed_action = ZMQAction(
                 resource=affordance,
                 sync_client=sync_zmq_client,
@@ -166,16 +216,16 @@ class ClientFactory:
                 execution_timeout=execution_timeout,
                 logger=logger,
             )
-            self.add_action(object_proxy, consumed_action)
+            ClientFactory.add_action(object_proxy, consumed_action)
         # add events
         for event in TD.get("events", []):
-            affordance = EventAffordance.from_TD(event, TD)
+            affordance = cast(EventAffordance, EventAffordance.from_TD(event, TD))
             consumed_event = ZMQEvent(
                 resource=affordance,
                 owner_inst=object_proxy,
                 logger=logger,
             )
-            self.add_event(object_proxy, consumed_event)
+            ClientFactory.add_event(object_proxy, consumed_event)
         # add top level form handlers (for ZMQ even if said form exists or not)
         for opname, ophandler in zip(
             ["_get_properties", "_set_properties"],
@@ -195,10 +245,30 @@ class ClientFactory:
             )
         return object_proxy
 
-    @classmethod
+    @staticmethod
     def http(self, url: str, **kwargs) -> ObjectProxy:
         """
         Create a HTTP client using the Thing Description (TD) available at the specified URL.
+
+        [Documentation](https://docs.hololinked.dev/beginners-guide/articles/object-proxy/#__tabbed_1_1)
+
+        ```python
+        client = ClientFactory.http(
+            url="https://example.com/thing-description",
+            username="user",
+            password="pass"
+        )
+        ```
+
+        ```python
+        thing = Thing("thing1")
+        thing.run_with_http_server(port=8080, forked=True)
+
+        client = ClientFactory.http(
+            url="http://localhost:8080/thing1/resources/wot-td",
+            ignore_TD_errors=True
+        )
+        ```
 
         Parameters
         ----------
@@ -212,17 +282,21 @@ class ClientFactory:
             - `ignore_TD_errors`: `bool`, default `False`.
                 Whether to ignore errors while fetching the Thing Description (TD)
             - `skip_interaction_affordances`: `list[str]`, default `[]`.
-                A list of interaction names to skip (property, action or event names)
+                A list of interaction names to skip (any of property, action or event names)
             - `invokation_timeout`: `float`, optional, default `5.0`.
-                The timeout for operation invokation (in seconds)
+                The timeout for operation invokation (in seconds), for example when invoking an action or
+                reading/writing a property. This is a server-side timeout.
             - `execution_timeout`: `float`, optional, default `5.0`.
-                The timeout for operation execution (in seconds)
+                The timeout for operation execution (in seconds) - the time it waits for an operation to be completed
+                after invokation before timing out. This is a server-side timeout.
             - `connect_timeout`: `float`, optional, default `10.0`.
-                The timeout for establishing a HTTP connection (in seconds)
+                The timeout for establishing a HTTP connection (in seconds). This is a client-side timeout.
             - `request_timeout`: `float`, optional, default `60.0`.
-                The timeout for completing a HTTP request (in seconds)
-            - `security`: `BasicSecurity` | `APIKeySecurity`, optional.
-                The security scheme to use for authentication
+                The timeout for completing a HTTP request (in seconds) after the connection is established.
+                This is a client-side timeout.
+            - `security`: `BasicSecurity` | `APIKeySecurity` | `OAuthDirectAccessGrant`, optional.
+                The security scheme to use for authentication. Not all schemes are supported for all protocols.
+                See [here](https://docs.hololinked.dev/introduction/use-cases/).
             - `username`: `str`, optional.
                 The username for HTTP Basic Authentication, shortcut for creating a `BasicSecurity` instance
             - `password`: `str`, optional.
@@ -231,9 +305,8 @@ class ClientFactory:
         Returns
         -------
         ObjectProxy
-            An ObjectProxy instance representing the remote Thing
+            An `ObjectProxy` instance representing the remote Thing with HTTP protocol.
         """
-
         # config
         skip_interaction_affordances = kwargs.get("skip_interaction_affordances", [])
         invokation_timeout = kwargs.get("invokation_timeout", 5.0)
@@ -309,7 +382,7 @@ class ClientFactory:
         object_proxy = ObjectProxy(id, td=TD, logger=logger, security=security, **kwargs)
 
         for name in TD.get("properties", []):
-            affordance = PropertyAffordance.from_TD(name, TD)
+            affordance = cast(PropertyAffordance, PropertyAffordance.from_TD(name, TD))
             consumed_property = HTTPProperty(
                 resource=affordance,
                 sync_client=req_rep_sync_client,
@@ -319,7 +392,7 @@ class ClientFactory:
                 owner_inst=object_proxy,
                 logger=logger,
             )
-            self.add_property(object_proxy, consumed_property)
+            ClientFactory.add_property(object_proxy, consumed_property)
             if affordance.observable:
                 consumed_event = HTTPEvent(
                     resource=affordance,
@@ -330,9 +403,9 @@ class ClientFactory:
                     owner_inst=object_proxy,
                     logger=logger,
                 )
-                self.add_event(object_proxy, consumed_event)
+                ClientFactory.add_event(object_proxy, consumed_event)
         for action in TD.get("actions", []):
-            affordance = ActionAffordance.from_TD(action, TD)
+            affordance = cast(ActionAffordance, ActionAffordance.from_TD(action, TD))
             consumed_action = HTTPAction(
                 resource=affordance,
                 sync_client=req_rep_sync_client,
@@ -342,9 +415,9 @@ class ClientFactory:
                 owner_inst=object_proxy,
                 logger=logger,
             )
-            self.add_action(object_proxy, consumed_action)
+            ClientFactory.add_action(object_proxy, consumed_action)
         for event in TD.get("events", []):
-            affordance = EventAffordance.from_TD(event, TD)
+            affordance = cast(EventAffordance, EventAffordance.from_TD(event, TD))
             consumed_event = HTTPEvent(
                 resource=affordance,
                 sync_client=sse_sync_client,
@@ -354,47 +427,60 @@ class ClientFactory:
                 owner_inst=object_proxy,
                 logger=logger,
             )
-            self.add_event(object_proxy, consumed_event)
+            ClientFactory.add_event(object_proxy, consumed_event)
 
         return object_proxy
 
-    @classmethod
+    @staticmethod
     def mqtt(
-        self,
         hostname: str,
         port: int,
         thing_id: str,
         protocol_version: MQTTProtocolVersion = MQTTProtocolVersion.MQTTv5,
         qos: int = 1,
-        username: str = None,
-        password: str = None,
-        ssl_context: ssl.SSLContext = None,
+        username: str | None = None,
+        password: str | None = None,
+        ssl_context: ssl.SSLContext | None = None,
         **kwargs,
     ) -> ObjectProxy:
         """
-        Create an MQTT client for the specified broker.
+        Create an MQTT client against the specified broker for the specified thing ID.
+
+        [Documentation](https://docs.hololinked.dev/beginners-guide/articles/object-proxy/#__tabbed_1_1)
 
         Parameters
         ----------
         hostname: str
-            The hostname of the MQTT broker
+            The hostname of the MQTT broker.
         port: int
-            The port of the MQTT broker
+            The port of the MQTT broker.
         thing_id: str
-            The ID of the thing to interact with
+            The ID of the thing to consume events from.
         protocol_version: paho.mqtt.client.MQTTProtocolVersion
-            The MQTT protocol version (e.g., MQTTv5)
+            The MQTT protocol version (e.g., MQTTv5).
         qos: int
-            The Quality of Service level for MQTT messages (0, 1, or 2)
+            The Quality of Service level for MQTT messages (0, 1, or 2).
         username: str, optional
-            The username for authenticating with MQTT broker
+            The username for authenticating with MQTT broker.
         password: str, optional
-            The password for authenticating with MQTT broker
+            The password for authenticating with MQTT broker.
+        ssl_context: ssl.SSLContext, optional
+            Secure sockets layer for encrypted communication with the MQTT broker.
         kwargs:
             Additional configuration options:
 
             - `logger`: `structlog.stdlib.BoundLogger`, optional.
                  A custom logger instance to use for logging
+
+        Returns
+        -------
+        ObjectProxy
+            An `ObjectProxy` instance representing the remote `Thing` with MQTT protocol.
+
+        Raises
+        ------
+        TimeoutError
+            If the Thing Description (TD) could not be fetched within the timeout period.
         """
         id = kwargs.get("id", f"mqtt-client|{hostname}:{port}|{uuid_hex()}")
         logger = kwargs.get("logger", structlog.get_logger()).bind(
@@ -417,7 +503,7 @@ class ClientFactory:
         def on_connect(
             client: PahoMQTTClient,
             userdata: Any,
-            flags: Any,
+            connect_flags: Any,
             reason_code: list,
             properties: dict[str, Any],
         ) -> None:  # TODO fix signature
@@ -436,8 +522,8 @@ class ClientFactory:
             sync_client.tls_set_context(ssl_context)
         elif kwargs.get("ca_certs", None):
             sync_client.tls_set(ca_certs=kwargs.get("ca_certs", None))
-        sync_client.on_connect = on_connect
-        sync_client.on_message = fetch_td
+        setattr(sync_client, "on_connect", on_connect)
+        setattr(sync_client, "on_message", fetch_td)
         sync_client.connect(hostname, port)
         sync_client.loop_start()
 
@@ -464,7 +550,7 @@ class ClientFactory:
         object_proxy = ObjectProxy(id=id, logger=logger, td=TD)
 
         for name in TD.get("properties", []):
-            affordance = PropertyAffordance.from_TD(name, TD)
+            affordance = cast(PropertyAffordance, PropertyAffordance.from_TD(name, TD))
             consumed_property = MQTTConsumer(
                 sync_client=sync_client,
                 async_client=async_client,
@@ -473,9 +559,9 @@ class ClientFactory:
                 logger=logger,
                 owner_inst=object_proxy,
             )
-            self.add_event(object_proxy, consumed_property)
+            ClientFactory.add_event(object_proxy, consumed_property)
         for name in TD.get("events", []):
-            affordance = EventAffordance.from_TD(name, TD)
+            affordance = cast(EventAffordance, EventAffordance.from_TD(name, TD))
             consumed_event = MQTTConsumer(
                 sync_client=sync_client,
                 async_client=async_client,
@@ -484,13 +570,13 @@ class ClientFactory:
                 logger=logger,
                 owner_inst=object_proxy,
             )
-            self.add_event(object_proxy, consumed_event)
+            ClientFactory.add_event(object_proxy, consumed_event)
 
         return object_proxy
 
-    @classmethod
-    def add_action(self, client, action: ConsumedThingAction) -> None:
-        """add action to client instance"""
+    @staticmethod
+    def add_action(client, action: ConsumedThingAction) -> None:
+        """Add action to the client instance."""
         setattr(action, "__name__", action.resource.name)
         setattr(action, "__qualname__", f"{client.__class__.__name__}.{action.resource.name}")
         setattr(
@@ -500,9 +586,9 @@ class ClientFactory:
         )
         setattr(client, action.resource.name, action)
 
-    @classmethod
-    def add_property(self, client, property: ConsumedThingProperty) -> None:
-        """add property to client instance"""
+    @staticmethod
+    def add_property(client, property: ConsumedThingProperty) -> None:
+        """Add property to the client instance."""
         setattr(property, "__name__", property.resource.name)
         setattr(property, "__qualname__", f"{client.__class__.__name__}.{property.resource.name}")
         setattr(
@@ -513,9 +599,9 @@ class ClientFactory:
         )
         setattr(client, property.resource.name, property)
 
-    @classmethod
-    def add_event(cls, client, event: ConsumedThingEvent) -> None:
-        """add event to client instance"""
+    @staticmethod
+    def add_event(client, event: ConsumedThingEvent) -> None:
+        """Add event to the client instance."""
         setattr(event, "__name__", event.resource.name)
         setattr(event, "__qualname__", f"{client.__class__.__name__}.{event.resource.name}")
         setattr(

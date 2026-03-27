@@ -1,3 +1,6 @@
+"""Exceptions."""
+
+
 class ReplyNotArrivedError(Exception):
     """Exception raised when a reply is not received in time."""
 
@@ -5,6 +8,6 @@ class ReplyNotArrivedError(Exception):
 
 
 class BreakLoop(Exception):
-    """raise and catch to exit a loop from within another function or method"""
+    """Raise and catch to exit a loop from within another function or method."""
 
     pass

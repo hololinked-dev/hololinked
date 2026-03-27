@@ -90,7 +90,7 @@ class ZMQConsumedAffordanceMixin:
 
     def get_last_return_value(self, response: ResponseMessage, raise_exception: bool = False) -> Any:
         """
-        cached return value of the last operation performed.
+        Cached return value of the last operation performed.
 
         Parameters
         ----------
@@ -113,7 +113,7 @@ class ZMQConsumedAffordanceMixin:
 
     @property
     def last_zmq_response(self) -> ResponseMessage:
-        """cache of last message received for this property"""
+        """Cache of last message received for this property"""
         return self._last_zmq_response
 
     def read_reply(self, message_id: str, timeout: int = None) -> Any:
@@ -420,7 +420,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
 
     def __init__(
         self,
-        resource: EventAffordance,
+        resource: EventAffordance | PropertyAffordance,
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any,
         **kwargs,

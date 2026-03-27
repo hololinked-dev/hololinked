@@ -286,7 +286,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
 
     def __init__(
         self,
-        resource: ActionAffordance,
+        resource: PropertyAffordance,
         sync_client: httpx.Client = None,
         async_client: httpx.AsyncClient = None,
         invokation_timeout: int = 5,
@@ -578,7 +578,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                 return
 
     def iter_lines_interruptible(self, resp: httpx.Response, stop: threading.Event) -> Iterator[str]:
-        """iterate lines from an httpx streaming response, but stop immediately when `stop` is set"""
+        """Iterate lines from an httpx streaming response, but stop immediately when `stop` is set"""
         it = resp.iter_lines()
         # Using a dedicated stream scope inside the thread
         while not stop.is_set():
@@ -591,7 +591,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             yield next_line
 
     def decode_chunk(self, line: str, event_data: "SSE") -> None:
-        """decode a single line of an SSE stream into the given SSE event_data object"""
+        """Decode a single line of an SSE stream into the given SSE event_data object"""
         if line is None or line.startswith(":"):  # comment/heartbeat
             return
 
