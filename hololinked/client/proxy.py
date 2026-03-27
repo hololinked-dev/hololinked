@@ -1,3 +1,5 @@
+"""Implementation of procedural/scripting client for Thing."""
+
 from typing import Any, Callable
 
 import structlog
@@ -8,10 +10,22 @@ from .security import APIKeySecurity, BasicSecurity  # noqa: F401
 
 class ObjectProxy:
     """
-    Procedural/scripting client for `Thing`. Once connected to a server, properties, methods and events are loaded and
-    dynamically populated. Can be used with any supported protocol binding.
+    Procedural/scripting client for `Thing`.
+
+    [Documentation](https://docs.hololinked.dev/beginners-guide/articles/object-proxy/)
+
+    Once connected to a server, properties, methods and events are loaded and
+    dynamically populated. One instance can be used with any supported protocol, however only one protocol at a time.
 
     Use `ClientFactory` to create an instance of this class instead of directly creating it.
+
+    ```python
+    from hololinked.client import ClientFactory
+
+    http_client = ClientFactory.http(url="http://example.com/thing")
+    zmq_client = ClientFactory.zmq(access_point="IPC", server_id="example_server", thing_id="example_thing")
+    mqtt_client = ClientFactory.mqtt(broker_url="mqtt://example.com", thing_id="example_thing")
+    ```
     """
 
     _own_attrs = frozenset(
@@ -31,15 +45,22 @@ class ObjectProxy:
             "_security",
         ]
     )
+    """
+    Attributes of ObjectProxy that are not dynamically populated from the server and are used for internal logic 
+    of the client. Dynamic properties are not supported unless `allow_foreign_attributes` is set to `True`.
+    """
 
     __allowed_attribute_types__ = (
         ConsumedThingProperty,
         ConsumedThingAction,
         ConsumedThingEvent,
     )
+    """Allowed types for dynamically populated attributes from the server."""
 
     def __init__(self, id: str, **kwargs) -> None:
         """
+        Initialize the client with given id and other optional parameters.
+
         Parameters
         ----------
         id: str
@@ -118,7 +139,7 @@ class ObjectProxy:
 
     def invoke_action(self, name: str, *args, **kwargs) -> Any:
         """
-        invoke an action specified by name on the server with positional/keyword arguments
+        Invoke an action specified by name on the served Thing with positional/keyword arguments.
 
         Parameters
         ----------
@@ -131,9 +152,9 @@ class ObjectProxy:
             schedule an action invokation but collect the reply later using a reply id.
             only accepted as keyword argument.
         *args: Any
-            arguments for the action
+            arguments for the action.
         **kwargs: dict[str, Any]
-            keyword arguments for the action
+            keyword arguments for the action.
 
         Returns
         -------
@@ -161,29 +182,30 @@ class ObjectProxy:
 
     async def async_invoke_action(self, name: str, *args, **kwargs) -> Any:
         """
-        async(io) call an action specified by name on the server with positional/keyword
-        arguments. `noblock` and `oneway` are not supported for async calls.
+        async(io) call an action specified by name on the served Thing with positional/keyword arguments.
+
+        `noblock` and `oneway` are not supported for async calls.
 
         Parameters
         ----------
         name: str
-            name of the action
+            name of the action.
         *args: Any
-            arguments for the action
+            arguments for the action.
         **kwargs: dict[str, Any]
-            keyword arguments for the action
+            keyword arguments for the action.
 
         Returns
         -------
         Any
-            return value of the action call
+            return value of the action call.
 
         Raises
         ------
         AttributeError
-            if action with specified name not found in the Thing Description
+            if action with specified name not found in the Thing Description.
         Exception
-            server raised exception are propagated
+            server raised exception are propagated.
         """
         action = getattr(self, name, None)  # type: ConsumedThingAction
         if not isinstance(action, ConsumedThingAction):
@@ -192,21 +214,26 @@ class ObjectProxy:
 
     def read_property(self, name: str, noblock: bool = False) -> Any:
         """
-        read property specified by name on server.
+        Read property specified by name on the served Thing.
 
         Parameters
         ----------
         name: str
-            name of the property
+            name of the property.
         noblock: bool, default False
-            request the property but collect the reply/value later using a reply id
+            request the property but collect the reply/value later using a reply id.
+
+        Returns
+        -------
+        Any
+            value of the property or a message id if `noblock` is True.
 
         Raises
         ------
         AttributeError
-            if no property with specified name found in the Thing Description
+            if no property with specified name found in the Thing Description.
         Exception
-            server raised exception are propagated
+            server raised exception are propagated.
         """
         prop = self.__dict__.get(name, None)  # type: ConsumedThingProperty
         if not isinstance(prop, ConsumedThingProperty):
@@ -218,26 +245,26 @@ class ObjectProxy:
 
     def write_property(self, name: str, value: Any, oneway: bool = False, noblock: bool = False) -> None:
         """
-        write property specified by name on server with given value.
+        Write property specified by name on the served Thing with given value.
 
         Parameters
         ----------
         name: str
-            name of the property
+            name of the property.
         value: Any
-            value of property to be set
+            value of property to be set.
         oneway: bool, default False
             only send an instruction to write the property but do not fetch the reply.
-            (irrespective of whether write was successful or not)
+            (irrespective of whether write was successful or not).
         noblock: bool, default False
-            request the write property but collect the reply later using a reply id
+            request the write property but collect the reply later using a reply id.
 
         Raises
         ------
         AttributeError
-            if no property with specified name found in the Thing Description
+            if no property with specified name found in the Thing Description.
         Exception
-            server raised exception are propagated
+            server raised exception are propagated.
         """
         prop = self.__dict__.get(name, None)  # type: ConsumedThingProperty
         if not isinstance(prop, ConsumedThingProperty):
@@ -251,20 +278,26 @@ class ObjectProxy:
 
     async def async_read_property(self, name: str) -> Any:
         """
-        async(io) read property specified by name on server.
+        async(io) read property specified by name on the served Thing.
+
         `noblock` and `oneway` are not supported for async calls.
 
         Parameters
         ----------
-        name: Any
-            name of the property to fetch
+        name: str
+            name of the property to fetch.
+
+        Returns
+        -------
+        Any
+            value of the property.
 
         Raises
         ------
         AttributeError
-            if no property with specified name found in the Thing Description
+            if no property with specified name found in the Thing Description.
         Exception
-            server raised exception are propagated
+            server raised exception are propagated.
         """
         prop = self.__dict__.get(name, None)  # type: ConsumedThingProperty
         if not isinstance(prop, ConsumedThingProperty):
@@ -273,22 +306,23 @@ class ObjectProxy:
 
     async def async_write_property(self, name: str, value: Any) -> None:
         """
-        async(io) write property specified by name on server with specified value.
+        async(io) write property specified by name on the served Thing with specified value.
+
         `noblock` and `oneway` are not supported for async calls.
 
         Parameters
         ----------
         name: str
-            name of the property
+            name of the property.
         value: Any
-            value of the property to be written
+            value of the property to be written.
 
         Raises
         ------
         AttributeError
-            if no property with specified name found in the Thing Description
+            if no property with specified name found in the Thing Description.
         Exception
-            server raised exception are propagated
+            server raised exception are propagated.
         """
         prop = self.__dict__.get(name, None)  # type: ConsumedThingProperty
         if not isinstance(prop, ConsumedThingProperty):
@@ -297,26 +331,27 @@ class ObjectProxy:
 
     def read_multiple_properties(self, names: list[str], noblock: bool = False) -> dict[str, Any]:
         """
-        read properties specified by list of names.
+        Read properties from the served Thing specified by list of names.
 
         Parameters
         ----------
         names: List[str]
-            names of properties to be fetched
+            names of properties to be fetched.
         noblock: bool, default False
-            request the fetch but collect the reply later using a reply id
+            request the fetch but collect the reply later using a reply id.
 
         Returns
         -------
         dict[str, Any]
-            dictionary with names as keys and values corresponding to those keys
+            dictionary with names as keys and values corresponding to those keys.
 
         Raises
         ------
-        AttributeError
-            if no property with specified name found in the Thing Description
+        RuntimeError
+            if internal `_get_properties` method is not found, which means client did not load server resources
+            correctly.
         Exception
-            server raised exception are propagated
+            server raised exception are propagated.
         """
         method = getattr(self, "_get_properties", None)  # type: ConsumedThingAction
         if not method:
@@ -333,7 +368,7 @@ class ObjectProxy:
         **properties: dict[str, Any],
     ) -> None:
         """
-        write properties whose name is specified as keyword arguments
+        Write properties onto the served Thing whose name is specified as keyword arguments.
 
         Parameters
         ----------
@@ -347,8 +382,11 @@ class ObjectProxy:
 
         Raises
         ------
-        AttributeError
-            if no property with specified name found in the Thing Description
+        ValueError
+            if no properties are given to be written
+        RuntimeError
+            if internal `_set_properties` method is not found, which means client did not load server resources
+            correctly.
         Exception
             server raised exception are propagated
         """
@@ -366,17 +404,27 @@ class ObjectProxy:
 
     async def async_read_multiple_properties(self, names: list[str]) -> dict[str, Any]:
         """
-        async(io) read properties specified by list of names. `noblock` reads are not supported for asyncio.
+        async(io) read properties from the served Thing specified by list of names.
+
+        `noblock` reads are not supported for asyncio.
 
         Parameters
         ----------
         names: List[str]
-            names of properties to be fetched
+            names of properties to be fetched.
 
         Returns
         -------
         dict[str, Any]
-            dictionary with property names as keys and values corresponding to those keys
+            dictionary with property names as keys and values corresponding to those keys.
+
+        Raises
+        ------
+        RuntimeError
+            if internal `_get_properties` method is not found, which means client did not load server resources
+            correctly.
+        Exception
+            server raised exception are propagated.
         """
         # TODO, actually noblock could be fine for async calls too
         method = getattr(self, "_get_properties", None)  # type: ConsumedThingAction
@@ -386,19 +434,22 @@ class ObjectProxy:
 
     async def async_write_multiple_properties(self, **properties: dict[str, Any]) -> None:
         """
-        async(io) write properties whose name is specified by keys of a dictionary
+        async(io) write properties whose name is specified by keys of a dictionary.
 
         Parameters
         ----------
         properties: dict[str, Any]
-            name and value of properties to be written
+            name and value of properties to be written.
 
         Raises
         ------
-        AttributeError
-            if no property with specified name found in the Thing Description
+        ValueError
+            if no properties are given to be written.
+        RuntimeError
+            if internal `_set_properties` method is not found, which means client did not load server resources
+            correctly.
         Exception
-            server raised exception are propagated
+            server raised exception are propagated.
         """
         if len(properties) == 0:
             raise ValueError("no properties given to set_properties")
@@ -416,26 +467,28 @@ class ObjectProxy:
         deserialize: bool = True,
     ) -> None:
         """
-        observe a property specified by name for change events.
+        Observe a property specified by name from the served Thing for change events.
+
+        This method returns immediately after subscribing to the change events of the property.
 
         Parameters
         ----------
         name: str
-            name of the property
+            name of the property.
         callbacks: Callable | List[Callable]
-            one or more callbacks that will be executed when the property changes
+            one or more callbacks that will be executed when the property changes.
         asynch: bool
-            whether the event should be listened as an asyncio task
+            whether the event should be listened as an asyncio task.
         concurrent: bool
-            - when asynch is `False`, whether to thread each of the callbacks otherwise the callbacks will be executed serially
-            - when asynch is `True`, whether to create a new task for each callback otherwise the callbacks will be awaited serially
+            - when asynch is `False`, whether to thread each of the callbacks otherwise the callbacks will be executed serially.
+            - when asynch is `True`, whether to create a new task for each callback otherwise the callbacks will be awaited serially.
         deserialize: bool
-            whether to deserialize the event data before passing it to the callbacks
+            whether to deserialize the event data before passing it to the callbacks.
 
         Raises
         ------
         AttributeError
-            if no property with specified name found in the Thing Description or if the property is not observable
+            if no property with specified name found in the Thing Description or if the property is not observable.
         """
         event = getattr(self, f"{name}_change_event", None)  # type: ConsumedThingEvent
         if not isinstance(event, ConsumedThingEvent):
@@ -450,17 +503,17 @@ class ObjectProxy:
 
     def unobserve_property(self, name: str) -> None:
         """
-        Unsubscribe to property specified by name.
+        Unsubscribe to property from the served Thing specified by name.
 
         Parameters
         ----------
         name: str
-            name of the property
+            name of the property.
 
         Raises
         ------
         AttributeError
-            if no property with specified name found in the Thing Description or if the property is not observable
+            if no property with specified name found in the Thing Description or if the property is not observable.
         """
         event = getattr(self, f"{name}_change_event", None)  # type: ConsumedThingEvent
         if not isinstance(event, ConsumedThingEvent):
@@ -477,28 +530,29 @@ class ObjectProxy:
         # create_new_connection: bool = False,
     ) -> None:
         """
-        Subscribe to event specified by name. Events are listened in separate threads and supplied callbacks are
-        are also called in those threads.
+        Subscribe to event specified by name.
+
+        This method returns immediately after subscribing to the event.
 
         Parameters
         ----------
         name: str
             name of the event, either the object name used in the server or the name specified in the name argument of
-            the Event object
+            the Event object.
         callbacks: Callable | List[Callable]
-            one or more callbacks that will be executed when the event is received
+            one or more callbacks that will be executed when the event is received.
         asynch: bool
-            whether the event should be listened as an asyncio task
+            whether the event should be listened as an asyncio task.
         concurrent: bool
-            - when asynch is `False`, whether to thread the callbacks otherwise the callbacks will be executed serially
-            - when asynch is `True`, whether to create a new task for each callback otherwise the callbacks will be awaited serially
+            - when asynch is `False`, whether to thread the callbacks otherwise the callbacks will be executed serially.
+            - when asynch is `True`, whether to create a new task for each callback otherwise the callbacks will be awaited serially.
         deserialize: bool
-            whether to deserialize the event data before passing it to the callbacks
+            whether to deserialize the event data before passing it to the callbacks.
 
         Raises
         ------
         AttributeError
-            if no event with specified name is found
+            if no event with specified name is found.
         """
         event = getattr(self, name, None)  # type: ConsumedThingEvent
         if not isinstance(event, ConsumedThingEvent):
@@ -516,17 +570,17 @@ class ObjectProxy:
 
     def unsubscribe_event(self, name: str) -> None:
         """
-        Unsubscribe to event specified by name.
+        Unsubscribe to event from served Thing specified by name.
 
         Parameters
         ----------
         name: str
-            name of the event
+            name of the event.
 
         Raises
         ------
         AttributeError
-            if no event with specified name is found
+            if no event with specified name is found.
         """
         event = getattr(self, name, None)  # type: ConsumedThingEvent
         if not isinstance(event, ConsumedThingEvent):
@@ -535,7 +589,7 @@ class ObjectProxy:
 
     def read_reply(self, message_id: str, timeout: float | None = 5.0) -> Any:
         """
-        read reply of no block calls of an action or a property read/write.
+        Read reply of no block calls of an action or no block calls of a property read/write.
 
         Parameters
         ----------
@@ -543,6 +597,16 @@ class ObjectProxy:
             id returned by the no block call
         timeout: float, optional, default 5.0
             time to wait for a reply before raising TimeoutError. None waits indefinitely.
+
+        Returns
+        -------
+        Any
+            reply of the action or property.
+
+        Raises
+        ------
+        ValueError
+            if given message id is not found.
         """
         obj = self._noblock_messages.get(message_id, None)
         if not obj:
@@ -551,27 +615,27 @@ class ObjectProxy:
 
     @property
     def properties(self) -> list[ConsumedThingProperty]:
-        """list of properties that were consumed from the Thing Description"""
+        """List of properties that were consumed from the Thing Description."""
         return [prop for prop in self.__dict__.values() if isinstance(prop, ConsumedThingProperty)]
 
     @property
     def actions(self) -> list[ConsumedThingAction]:
-        """list of actions that were consumed from the Thing Description"""
+        """List of actions that were consumed from the Thing Description."""
         return [action for action in self.__dict__.values() if isinstance(action, ConsumedThingAction)]
 
     @property
     def events(self) -> list[ConsumedThingEvent]:
-        """list of events that were consumed from the Thing Description"""
+        """List of events that were consumed from the Thing Description."""
         return [event for event in self.__dict__.values() if isinstance(event, ConsumedThingEvent)]
 
     @property
     def thing_id(self) -> str:
-        """thing ID this client is connected to"""
+        """Thing ID this client is connected to."""
         return self.td.get("id", None)
 
     @property
     def TD(self) -> dict[str, Any]:
-        """Thing Description of the consuimed thing"""
+        """Thing Description of the consumed thing."""
         return self.td
 
 

@@ -1,3 +1,5 @@
+"""Implementation of security schemes for authentication and authorization to be used by clients."""
+
 import base64
 import threading
 import time
@@ -10,9 +12,10 @@ from pydantic import BaseModel, PrivateAttr
 
 class BasicSecurity(BaseModel):
     """
-    Basic Security Scheme with username and password. The credentials are added into the `Authorization` header.
-    Normally, you can instantiate this indirectly through the `ClientFactory` by passing `username` and `password`
-    parameters, if the protocol supports it.
+    Basic Security Scheme with username and password.
+
+    The credentials are added into the `Authorization` header. Normally, you can instantiate this indirectly through the
+    `ClientFactory` by passing `username` and `password` parameters, if the protocol supports it.
 
     ```python
     client = ClientFactory.http(
@@ -36,6 +39,8 @@ class BasicSecurity(BaseModel):
 
     def __init__(self, username: str, password: str, use_base64: bool = True) -> None:
         """
+        Initialize BasicSecurity with username and password.
+
         Parameters
         ----------
         username: str
@@ -53,13 +58,19 @@ class BasicSecurity(BaseModel):
 
     @property
     def http_header(self) -> str:
-        """Value for the Authorization header - contains the credentials"""
+        """
+        Value for the Authorization header.
+
+        Contains the credentials prefixed with `Basic `, if necessary with base64 encoding.
+        """
         return self._credentials
 
 
 class APIKeySecurity(BaseModel):
     """
-    API Key Security Scheme. The API key is added into a header named `X-API-Key`.
+    API Key Security Scheme.
+
+    The API key is added into a header named `X-API-Key`.
 
     ```python
     client = ClientFactory.http(
@@ -80,30 +91,56 @@ class APIKeySecurity(BaseModel):
 
     @property
     def http_header(self) -> str:
+        """Value for the API key header."""
         return self.value
 
 
 class ROPC(BaseModel):
+    """Resource Owner Password Credentials (ROPC) token response."""
+
     access_token: str
+    """The access token issued by the authorization server."""
     scope: str
+    """The scope of the access token."""
     refresh_token: str | None = None
+    """Token to refresh the access token when it expires, if provided by the authorization server."""
     expires_in: int | None = None
+    """The lifetime in seconds of the access token."""
     token_type: str | None = None
+    """
+    Type of token, access token or ID token. 
+    
+    Usually one needs the access token. However, in restricted cases, the ID token may be sufficient
+    and philosophically used to identify the user.  
+    """
     id_token: str | None = None
+    """ID token issued by the authorization server, if provided."""
 
 
 class OAuthDirectAccessGrant(BaseModel):
     """
-    OAuth2 Direct Access Grant Security Scheme. Implements Resource Owner Password Credentials (ROPC) flow - in simple
-    terms, plain username and password authentication without the general features of OAuth2. Please implement other
-    flows on your own for applications with a web interface. There is no intention to provide a complete OAuth2 client
-    implementation in this library.
+    OAuth2 Direct Access Grant Security Scheme.
+
+    Implements Resource Owner Password Credentials (ROPC) flow - in simple terms, plain username and password
+    authentication without the general features of OAuth2. Please implement other flows on your own for applications
+    with a web interface. There is no intention to provide a complete OAuth2 client implementation in this library.
+
+    Warning
+    -------
+    This flow is not recommended for production use due to security risks, and should only be used in trusted
+    environments.
+
+    Note: The implementation class is `OAuth2Security`, which is instantiated indirectly through the `ClientFactory`.
     """
 
     token_endpoint: str
+    """The token endpoint URL for obtaining tokens. Required if `oidc_config_url` is not provided."""
     client_id: str
+    """client ID"""
     client_secret: str | None = None
+    """client secret, recommended to create a client with a client secret"""
     revocation_endpoint: str | None = None
+    """The token revocation endpoint URL, required if you want to support logout functionality."""
 
     username: str
     password: str
@@ -141,13 +178,19 @@ class OAuthDirectAccessGrant(BaseModel):
             Set to False if you are using self-signed certificates in development or testing environments or using
             a local provider.
         kwargs:
-            client_id: str
-                The client ID for authentication, required for most OIDC providers.
-            client_secret: str
-                The client secret for authentication, required for some OIDC providers.
-            revocation_endpoint: str
+            additional keyword arguments, currently supports:
+
+            - `client_id`: `str`
+                The client ID.
+            - `client_secret`: `str`
+                The client secret.
+            - `revocation_endpoint`: `str`
                 The token revocation endpoint URL, required if you want to support logout functionality.
-                If not provided, logout functionality will not be available.
+
+        Raises
+        ------
+        ValueError
+            If neither `oidc_config_url` nor `token_endpoint` is provided.
         """
         client_id = kwargs.get("client_id", None)
         client_secret = kwargs.get("client_secret", None)
@@ -174,11 +217,16 @@ class OAuthDirectAccessGrant(BaseModel):
 
 class OAuth2Security:
     """
-    OAuth2 Security Scheme, supporting only direct access grant or Resource Owner Password Credentials (ROPC) flow.
-    Please implement other flows on your own for applications with a web interface.
+    Implementation class for OAuth2 direct access grant security scheme.
+
+    Please refer to docs of `OAuthDirectAccessGrant` for details.
     """
 
     http_header_name: str = "Authorization"
+    """
+    Name of the HTTP header to use for authentication, default is `Authorization`.
+    Override this if the server expects the token in a different header.
+    """
 
     def __init__(
         self,
@@ -197,9 +245,11 @@ class OAuth2Security:
             The fraction of token expiration time to wait before refreshing tokens, by default 0.75,
             which means refreshing tokens when 75% of the token expiration time has passed.
         kwargs:
-            sync_http_client: httpx.Client
+            additional keyword arguments, currently supports:
+
+            - `sync_http_client`: `httpx.Client`
                 The http client to use for synchronous requests, by default a new httpx.Client with 10s timeout.
-            async_http_client: httpx.AsyncClient
+            - `async_http_client`: `httpx.AsyncClient`
                 The http client to use for asynchronous requests, by default a new httpx.AsyncClient with 10s timeout.
                 Unused currently, optional.
         """
@@ -213,12 +263,13 @@ class OAuth2Security:
 
     @property
     def http_header(self) -> str:
+        """Value for the Authorization header, containing the access token."""
         if not self.tokens:
             return ""
         return f"Bearer {self.tokens.access_token}"
 
     def login(self) -> None:
-        """login with username and password and obtain tokens"""
+        """Login with username and password and obtain tokens."""
         body = dict(
             grant_type=self.oidc_settings.grant_type,
             client_id=self.oidc_settings.client_id,
@@ -248,7 +299,7 @@ class OAuth2Security:
         self._refresh_thread.start()
 
     def logout(self) -> None:
-        """logout and invalidate tokens"""
+        """Logout and invalidate tokens."""
         if not self.tokens or not self.oidc_settings.revocation_endpoint:
             return
         body = dict(
@@ -268,7 +319,11 @@ class OAuth2Security:
         self._refresh = False
 
     def refresh_tokens(self) -> None:
-        """refresh tokens, even forcibly by relogin if necessary"""
+        """
+        Refresh tokens, even forcibly by relogin if necessary.
+
+        Call this method if authentication fails against the resource server.
+        """
         if not self.tokens:
             return
         if not self.tokens.refresh_token:
@@ -304,7 +359,7 @@ class OAuth2Security:
             self.login()
 
     def _refresh_tokens_in_background(self) -> None:
-        """background thread to refresh tokens periodically"""
+        """Background thread to refresh tokens periodically."""
         if not self.tokens:
             return
         if not self.tokens.expires_in:
