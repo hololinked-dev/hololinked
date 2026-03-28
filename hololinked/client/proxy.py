@@ -4,8 +4,8 @@ from typing import Any, Callable
 
 import structlog
 
-from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
-from .security import APIKeySecurity, BasicSecurity  # noqa: F401
+from hololinked.client.abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
+from hololinked.client.security import APIKeySecurity, BasicSecurity  # noqa: F401
 
 
 class ObjectProxy:

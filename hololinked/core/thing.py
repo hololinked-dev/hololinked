@@ -185,7 +185,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     @property
     def sub_things(self) -> dict[str, "Thing"]:
-        """other `Thing`s' that are composed within this `Thing`."""
+        """Other `Thing`s' that are composed within this `Thing`."""
         things = dict()
         for name, subthing in inspect._getmembers(
             self,
@@ -202,7 +202,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     @action()
     def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = []):
         """
-        generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object.
+        Generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object.
         The model is a JSON that describes the object's properties, actions, events and their metadata, without the
         protocol information. The model can be used by a client to understand the object's capabilities.
 
@@ -268,6 +268,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             - context: `zmq.asyncio.Context`, optional,
                 ZMQ context object to be used for creating sockets. If not supplied, a global shared context is used.
                 For INPROC, either do not supply context or use the same context across all threads.
+            - server_id: `str`, optional,
+                an identifier for the server
         """
         from ..server.server import parse_params, run
 
@@ -396,7 +398,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     @action()
     def ping(self) -> None:
         """
-        ping to see if it is alive. Successful when action succeeds with no return value and
+        Ping to see if it is alive. Successful when action succeeds with no return value and
         no timeout or exception raised on the client side.
         """
         pass
