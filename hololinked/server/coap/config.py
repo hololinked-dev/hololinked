@@ -6,49 +6,45 @@ from ..repository import BrokerThing  # noqa: F401
 from ..security import Security
 from .controllers import (
     ActionResource,
+    LivenessProbeResource,
     PropertyResource,
+    ReadinessProbeResource,
+    RWMultiplePropertiesResource,
+    StopResource,
+    ThingDescriptionResource,
 )
+from .services import ThingDescriptionService
 
 
 class RuntimeConfig(BaseModel):
     """
-    Runtime configuration for HTTP server and handlers.
-    Pass the attributes of this class as a dictionary to the `config` argument of `HTTPServer`.
+    Runtime configuration for CoAP server and resources.
+    Pass the attributes of this class as a dictionary to the `config` argument of `CoAPServer`.
     """
 
-    cors: bool = False
-    """use `True` to set CORS headers for the HTTP server, this is useful for local networks"""
-
     property_resource: Any = PropertyResource
-    """handler class to be used for property interactions"""
-    action_handler: Any = ActionResource
-    """handler class to be used for action interactions"""
-    # event_handler: type[EventHandler] | Any = EventHandler
-    # """handler class to be used for event interactions"""
-    # RW_multiple_properties_handler: type[RPCHandler] | Any = RWMultiplePropertiesHandler
-    # """handler class to be used for read/write multiple properties interactions"""
-    # thing_description_handler: type[ThingDescriptionHandler] | Any = ThingDescriptionHandler
-    # """handler class to be used for thing description"""
-    # liveness_probe_handler: type[LivenessProbeHandler] | Any = LivenessProbeHandler
-    # """handler class to be used for liveness probe"""
-    # readiness_probe_handler: type[ReadinessProbeHandler] | Any = ReadinessProbeHandler
-    # """handler class to be used for readiness probe"""
-    # stop_handler: type[StopHandler] | Any = StopHandler
-    # """handler class to be used for stopping server"""
+    """resource class to be used for property interactions"""
+    action_resource: Any = ActionResource
+    """resource class to be used for action interactions"""
 
-    # thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
-    # """service class to be used for generating thing description"""
+    # event_resource: type[EventHandler] | Any = EventHandler
+    # """resource class to be used for event interactions"""
+    RW_multiple_properties_resource: type[RWMultiplePropertiesResource] | Any = RWMultiplePropertiesResource
+    """resource class to be used for read/write multiple properties interactions"""
+    thing_description_resource: type[ThingDescriptionResource] | Any = ThingDescriptionResource
+    """resource class to be used for thing description"""
+    liveness_probe_resource: type[LivenessProbeResource] | Any = LivenessProbeResource
+    """resource class to be used for liveness probe"""
+    readiness_probe_resource: type[ReadinessProbeResource] | Any = ReadinessProbeResource
+    """resource class to be used for readiness probe"""
+    stop_resource: type[StopResource] | Any = StopResource
+    """resource class to be used for stopping server"""
+
+    thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
+    """service class to be used for generating thing description"""
 
     thing_repository: Any = Field(default_factory=dict)  # type: dict[str, BrokerThing]
-    """repository layer thing model to be used by the HTTP server and handlers"""
-
-    # allowed_clients: list[str] | None = Field(default=None)
-    # """
-    # Serves request and sets CORS only from these clients, other clients are rejected with 401.
-    # Unlike pure CORS, the server resource is not even executed if the client is not
-    # an allowed client. if None, any client is served. Not inherently a safety feature in public networks,
-    # and more useful in private networks when the remote origin is known reliably.
-    # """
+    """repository layer thing model to be used by the CoAP server and resources"""
 
     security_schemes: list[Security] | None = Field(default=None)
     """
@@ -58,8 +54,8 @@ class RuntimeConfig(BaseModel):
     """
 
 
-class HandlerMetadata(BaseModel):
-    """Specific metadata when a request handler has been initialized, in other words, handler specific metadata"""
+class ResourceMetadata(BaseModel):
+    """Specific metadata when a request resource has been initialized, in other words, resource specific metadata"""
 
     coap_methods: tuple[str, ...] = tuple()
-    """CoAP methods supported by the handler"""
+    """CoAP methods supported by the resource, e.g. ("GET", "POST")"""

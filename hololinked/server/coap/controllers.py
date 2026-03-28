@@ -20,6 +20,7 @@ from hololinked.core.zmq.message import (
     default_thing_execution_context,
 )
 from hololinked.serializers import Serializers
+from hololinked.server.coap.utils import ContentTypeMap
 from hololinked.td import (
     ActionAffordance,
     EventAffordance,
@@ -48,15 +49,15 @@ class RPCResource(Resource):
         logger: BoundLogger,
         metadata: Any,
     ) -> None:
-        from ..repository import BrokerThing  # noqa: F401
-        from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
+        from .config import ResourceMetadata, RuntimeConfig  # noqa: F401
 
         super().__init__()
         self.resource = resource
         self.config = config  # type: RuntimeConfig
         self.logger = logger
-        self.thing = self.config.thing_repository[resource.thing_id]  # type: BrokerThing
-        self.metadata = metadata  # type: HandlerMetadata
+        self.thing = None  # we need to postpone evaluation as CoAP resource needs to be passed in an initialized
+        # state to the Site
+        self.metadata = metadata  # type: ResourceMetadata
 
     async def render_get(self, request: Message):
         raise NotImplementedError("GET method is not implemented for this resource")
@@ -87,7 +88,7 @@ class RPCResource(Resource):
         An example would be the following URL:
 
         ```
-        http://localhost:8080/property/temperature?oneway=true&invokationTimeout=5&value=42
+        coap://127.0.0.1:8080/property/temperature?oneway=true&invokationTimeout=5&value=42
         ```
 
         server execution context would have `oneway` set to true & `invokationTimeout` set to 5 seconds,
@@ -105,14 +106,14 @@ class RPCResource(Resource):
             server execution context, thing execution context, local execution context and payload (if any)
         """
         arguments = dict()
-        if len(request.opt) == 0:
+        if len(request.opt.uri_query) == 0:
             return (
                 default_server_execution_context,
                 default_thing_execution_context,
                 LocalExecutionContext(),
                 SerializableNone,
             )
-        for key, value in self.request.query_arguments.items():
+        for key, value in request.opt.uri_query:
             if len(value) == 1:
                 try:
                     arguments[key] = Serializers.json.loads(value[0])
@@ -144,16 +145,16 @@ class RPCResource(Resource):
         additional_payload = SerializableNone if not arguments else SerializableData(arguments)  # application/json
         return server_execution_context, thing_execution_context, local_execution_context, additional_payload
 
-    def get_request_payload(self, request: Message) -> tuple[Any, Any]:
+    def get_request_payload(self, request: Message) -> tuple[SerializableData, PreserializedData]:
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
-        if self.request.body:
-            if self.request.headers.get("Content-Type", "application/json") in Serializers.allowed_content_types:
-                payload.value = self.request.body
-                payload.content_type = self.request.headers.get("Content-Type", "application/json")
+        if request.payload:
+            if request.opt.content_format in Serializers.allowed_content_types:
+                payload.value = request.payload
+                payload.content_type = request.opt.content_format
             elif global_config.ALLOW_UNKNOWN_SERIALIZATION:
-                preserialized_payload.value = self.request.body
-                preserialized_payload.content_type = self.request.headers.get("Content-Type", None)
+                preserialized_payload.value = request.payload
+                preserialized_payload.content_type = request.opt.content_format
             else:
                 raise ValueError("Content-Type not supported")
                 # NOTE that was assume that the content type is JSON even if unspecified in the header.
@@ -162,6 +163,8 @@ class RPCResource(Resource):
 
     async def execute_operation(self, request: Message, operation: str):
         """Handle the request through the associated `Thing` and return the response"""
+        from ..repository import BrokerThing  # noqa: F401
+
         try:
             server_execution_context, thing_execution_context, local_execution_context, additional_payload = (
                 self.get_execution_parameters(request=request)
@@ -176,6 +179,15 @@ class RPCResource(Resource):
                 mtype=mtypes.RST,
             )
         try:
+            if not self.thing:
+                if self.config.thing_repository.get(self.resource.thing_id) is None:
+                    return Message(
+                        code=Code.SERVICE_UNAVAILABLE,
+                        payload=f"thing with id {self.resource.thing_id} not found".encode(),
+                        content_format=ContentFormat.TEXT,
+                        mtype=mtypes.ACK,
+                    )
+                self.thing = self.config.thing_repository[self.resource.thing_id]  # type: BrokerThing
             if server_execution_context.oneway:
                 await self.thing.oneway(
                     objekt=self.resource.name,
@@ -216,11 +228,18 @@ class RPCResource(Resource):
                 )
                 response_payload = self.thing.get_response_payload(response_message)
                 if response_payload.value:
+                    if not ContentTypeMap.supports(response_payload.content_type):
+                        return Message(
+                            code=Code.INTERNAL_SERVER_ERROR,
+                            payload=f"Content-Type {response_payload.content_type} not supported by CoAP server".encode(),
+                            content_format=ContentFormat.TEXT,
+                            mtype=mtypes.ACK,
+                        )
                     return Message(
                         code=Code.CONTENT,
                         payload=response_payload.value,
                         mtype=mtypes.ACK,
-                        content_format=response_payload.content_type,
+                        content_format=ContentTypeMap.get(response_payload.content_type),
                     )
                 else:
                     return Message(
@@ -240,7 +259,7 @@ class RPCResource(Resource):
             self.logger.error(f"error while scheduling RPC call - {str(ex)}")
             return Message(
                 code=Code.INTERNAL_SERVER_ERROR,
-                payload={"exception": format_exception_as_json(ex)},
+                payload=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
                 content_format=ContentFormat.JSON,
                 mtype=mtypes.ACK,
             )
@@ -289,3 +308,56 @@ class ActionResource(RPCResource):
         if request.code.name not in self.metadata.coap_methods:
             return self.method_not_allowed_message
         return await self.execute_operation(request, operation="invokeaction")
+
+
+class ThingDescriptionResource(RPCResource):
+    """Resource class for thing description interactions"""
+
+    async def render_get(self, request: Message):
+        return await self.execute_operation(request, operation="get_thing_model")
+
+
+class RWMultiplePropertiesResource(RPCResource):
+    """Resource class for read/write multiple properties interactions"""
+
+    method_not_allowed_message = Message(
+        code=Code.METHOD_NOT_ALLOWED,
+        content_format=ContentFormat.TEXT,
+        mtype=mtypes.ACK,
+    )
+
+    async def render_get(self, request: Message):
+        if request.code.name not in self.metadata.coap_methods:
+            return self.method_not_allowed_message
+        return await self.execute_operation(request, operation="read_multiple_properties")
+
+    async def render_post(self, request: Message):
+        if request.code.name not in self.metadata.coap_methods:
+            return self.method_not_allowed_message
+        return await self.execute_operation(request, operation="rw_multiple_properties")
+
+    async def render_put(self, request: Message):
+        if request.code.name not in self.metadata.coap_methods:
+            return self.method_not_allowed_message
+        return await self.execute_operation(request, operation="rw_multiple_properties")
+
+
+class LivenessProbeResource(RPCResource):
+    """Resource class for liveness probe interactions"""
+
+    async def render_get(self, request: Message):
+        return await self.execute_operation(request, operation="liveness_probe")
+
+
+class ReadinessProbeResource(RPCResource):
+    """Resource class for readiness probe interactions"""
+
+    async def render_get(self, request: Message):
+        return await self.execute_operation(request, operation="readiness_probe")
+
+
+class StopResource(RPCResource):
+    """Resource class for stopping server interactions"""
+
+    async def render_post(self, request: Message):
+        return await self.execute_operation(request, operation="stop_server")
