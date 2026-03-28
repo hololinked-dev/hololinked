@@ -1,8 +1,8 @@
 import asyncio
-import socket
 import ssl
 import sys
 
+from copy import deepcopy
 from typing import Any, Iterable
 
 import aiocoap
@@ -25,6 +25,7 @@ from hololinked.server.coap.controllers import (
     ThingDescriptionResource,
 )
 from hololinked.server.coap.services import ThingDescriptionService
+from hololinked.server.coap.utils import get_routable_ip
 from hololinked.td import ActionAffordance, EventAffordance, PropertyAffordance
 
 
@@ -114,7 +115,6 @@ class CoAPServer(BaseProtocolServer):
             ssl_context=ssl_context,
             config=config,
         )
-        # self.config  # type: RuntimeConfig
 
         self._IP = f"{self.address}:{self.port}"  # TODO, remove this variable later?
         self.id = self._IP
@@ -123,16 +123,15 @@ class CoAPServer(BaseProtocolServer):
 
         self.root = Site()
         self.root.add_resource((".well-known", "core"), WKCResource(self.root.get_resources_as_linkheader))
-        self.context = None  # aiocoap Context instance
+        self.context = None  # type: aiocoap.Context | None
         self.add_things(*(things or []))
 
     async def setup(self) -> None:
-        # This method should not block, just create side-effects
         bind_address = self.address
         if sys.platform != "linux" and bind_address in ("0.0.0.0", "::", ""):
             # On non-Linux platforms, aiocoap's simplesocketserver transport does not support
             # binding to any-address. Resolve to the machine's actual routable IP.
-            bind_address = self._get_routable_ip()
+            bind_address = get_routable_ip()
             self.logger.info(f"Non-Linux: resolved 0.0.0.0 to specific interface address {bind_address}")
         self.context = await aiocoap.Context.create_server_context(
             self.root,
@@ -140,27 +139,13 @@ class CoAPServer(BaseProtocolServer):
             _ssl_context=self.ssl_context,
         )
         self.context.log = self.logger
+        # This method should not block, just create side-effects
 
         event_loop = asyncio.get_running_loop()
         for thing in self.things:
             if not thing.rpc_server:
                 raise ValueError(f"You need to expose thing {thing.id} via a RPCServer before trying to serve it")
             event_loop.create_task(self._instantiate_broker(thing.rpc_server.id, thing.id, "INPROC"))
-
-    @staticmethod
-    def _get_routable_ip() -> str:
-        """Get the primary routable IP address of this machine."""
-        try:
-            # Connect to a public address to determine which interface is used
-            # for outbound traffic. No data is actually sent.
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(("8.8.8.8", 80))
-                return s.getsockname()[0]
-            finally:
-                s.close()
-        except OSError:
-            return "127.0.0.1"
 
     async def start(self) -> None:
         # This method should not block, just create side-effects
@@ -174,12 +159,19 @@ class CoAPServer(BaseProtocolServer):
             asyncio.create_task(self.context.shutdown())
             self.logger.info("CoAP server stopped")
 
+    async def async_stop(self) -> None:
+        """Async version of stop method to be used when the server is awaited on"""
+        if self.context is not None:
+            await self.context.shutdown()
+            self.logger.info("CoAP server stopped")
+
     def add_property(
         self,
         URL_path: str | list[str],
         property: PropertyAffordance,
         coap_methods: Iterable[str],
         resource_class_: type[RPCResource] = PropertyResource,
+        **kwargs,
     ):
         """Add a property resource to the server at the specified path"""
         resource = resource_class_(
@@ -187,6 +179,7 @@ class CoAPServer(BaseProtocolServer):
             config=self.config,
             metadata=ResourceMetadata(coap_methods=tuple(coap_methods)),
             logger=self.logger,
+            **kwargs,
         )
         self.logger.info(f"Adding property resource at path: {URL_path} with CoAP methods: {coap_methods}")
         if isinstance(URL_path, str):
@@ -199,6 +192,7 @@ class CoAPServer(BaseProtocolServer):
         action: ActionAffordance,
         coap_methods: Iterable[str],
         resource_class_: type[RPCResource] = ActionResource,
+        **kwargs,
     ):
         """Add an action resource to the server at the specified path"""
         resource = resource_class_(
@@ -206,6 +200,7 @@ class CoAPServer(BaseProtocolServer):
             config=self.config,
             metadata=ResourceMetadata(coap_methods=tuple(coap_methods)),
             logger=self.logger,
+            **kwargs,
         )
         self.logger.info(f"Adding action resource at path: {URL_path} with CoAP methods: {coap_methods}")
         if isinstance(URL_path, str):
@@ -278,29 +273,29 @@ class CoAPServer(BaseProtocolServer):
         )
 
         # # thing description resource
-        # get_thing_description_action = deepcopy(get_thing_model_action)
-        # get_thing_description_action.override_defaults(name="get_thing_description")
-        # self.server.add_action(
-        #     URL_path=f"/{thing_id}/resources/wot-td" if thing_id else "/resources/wot-td",
-        #     action=get_thing_description_action,
-        #     coap_methods=("GET",),
-        #     resource=self.server.config.thing_description_resource,
-        #     owner_inst=self.server,
-        # )
+        get_thing_description_action = deepcopy(get_thing_model_action)
+        get_thing_description_action.override_defaults(name="get_thing_description")
+        self.add_action(
+            URL_path=[thing_id, "resources", "wot-td"] if thing_id else ["resources", "wot-td"],
+            action=get_thing_description_action,
+            coap_methods=("GET",),
+            resource_class_=self.config.thing_description_resource,
+            owner_inst=self,
+        )
 
         # # RW multiple properties resource
-        # read_properties = Thing._get_properties.to_affordance(Thing)
-        # write_properties = Thing._set_properties.to_affordance(Thing)
-        # read_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
-        # write_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
-        # self.server.add_action(
-        #     URL_path=f"/{thing_id}/properties" if thing_id else "/properties",
-        #     action=read_properties,
-        #     coap_methods=("GET", "PUT", "PATCH"),
-        #     resource=self.server.config.RW_multiple_properties_resource,
-        #     read_properties_resource=read_properties,
-        #     write_properties_resource=write_properties,
-        # )
+        read_properties = Thing._get_properties.to_affordance(Thing)
+        write_properties = Thing._set_properties.to_affordance(Thing)
+        read_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
+        write_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
+        self.add_action(
+            URL_path=[thing_id, "properties"] if thing_id else ["properties"],
+            action=read_properties,
+            coap_methods=("GET", "PUT", "PATCH"),
+            resource_class_=self.config.RW_multiple_properties_resource,
+            read_properties_resource=read_properties,
+            write_properties_resource=write_properties,
+        )
 
     # can add an entire thing instance at once
     def add_thing(self, thing: Thing) -> None:
