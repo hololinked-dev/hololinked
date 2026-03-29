@@ -1,4 +1,5 @@
 import asyncio
+import socket
 import ssl
 import sys
 
@@ -27,6 +28,7 @@ from hololinked.server.coap.controllers import (
 from hololinked.server.coap.services import ThingDescriptionService
 from hololinked.server.coap.utils import get_routable_ip
 from hololinked.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.td.interaction_affordance import InteractionAffordance
 
 
 class CoAPServer(BaseProtocolServer):
@@ -124,6 +126,7 @@ class CoAPServer(BaseProtocolServer):
         self.root = Site()
         self.root.add_resource((".well-known", "core"), WKCResource(self.root.get_resources_as_linkheader))
         self.context = None  # type: aiocoap.Context | None
+        self.router = Router(self)
         self.add_things(*(things or []))
 
     async def setup(self) -> None:
@@ -207,6 +210,29 @@ class CoAPServer(BaseProtocolServer):
             URL_path = [URL_path]
         self.root.add_resource(URL_path, resource)
 
+    def add_thing(self, thing: Thing) -> None:
+        """
+        Add a thing instance to be served by the CoAP server. Iterates through the
+        interaction affordances and adds a route for each property, action and event.
+
+        Parameters
+        ----------
+        thing: Thing
+            thing instance to be added to the server
+        """
+        self.router.add_thing(thing)
+        self.things.append(thing)
+
+
+class Router:
+    """
+    Class Mimicking a HTTP router used for grouping methods
+    to add resources to the CoAP server.
+    """
+
+    def __init__(self, server: CoAPServer) -> None:
+        self.server = server
+
     def add_interaction_affordances(
         self,
         properties: Iterable[PropertyAffordance],
@@ -234,12 +260,12 @@ class CoAPServer(BaseProtocolServer):
         for property in properties:
             if property.thing_id is not None:
                 path = [property.thing_id, property.name]
-            self.add_property(
+            self.server.add_property(
                 URL_path=path,
                 property=property,
                 coap_methods=("GET",) if property.readOnly else ("GET", "PUT"),
                 # if prop.fdel is None else ('GET', 'PUT', 'DELETE')
-                resource_class_=self.config.property_resource,
+                resource_class_=self.server.config.property_resource,
             )
             # if property.observable:
             #     self.add_event(
@@ -252,34 +278,34 @@ class CoAPServer(BaseProtocolServer):
                 continue
             if action.thing_id is not None:
                 path = [action.thing_id, action.name]
-            self.add_action(
+            self.server.add_action(
                 URL_path=path,
                 action=action,
                 coap_methods=("POST",),
-                resource_class_=self.config.action_resource,
+                resource_class_=self.server.config.action_resource,
             )
         # for event in events:
         #     if event.thing_id is not None:
         #         path = [event.thing_id, event.name]
-        #     self.add_event(URL_path=path, event=event, resource_class_=self.config.event_resource)
+        #     self.server.add_event(URL_path=path, event=event, resource_class_=self.config.event_resource)
 
         # thing model resource
         get_thing_model_action = next((action for action in actions if action.name == "get_thing_model"), None)
-        self.add_action(
+        self.server.add_action(
             URL_path=[thing_id, "resources", "wot-tm"] if thing_id else ["resources", "wot-tm"],
             action=get_thing_model_action,
             coap_methods=("GET",),
-            resource_class_=self.config.action_resource,
+            resource_class_=self.server.config.action_resource,
         )
 
         # # thing description resource
         get_thing_description_action = deepcopy(get_thing_model_action)
         get_thing_description_action.override_defaults(name="get_thing_description")
-        self.add_action(
+        self.server.add_action(
             URL_path=[thing_id, "resources", "wot-td"] if thing_id else ["resources", "wot-td"],
             action=get_thing_description_action,
             coap_methods=("GET",),
-            resource_class_=self.config.thing_description_resource,
+            resource_class_=self.server.config.thing_description_resource,
             owner_inst=self,
         )
 
@@ -288,11 +314,11 @@ class CoAPServer(BaseProtocolServer):
         write_properties = Thing._set_properties.to_affordance(Thing)
         read_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
         write_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
-        self.add_action(
+        self.server.add_action(
             URL_path=[thing_id, "properties"] if thing_id else ["properties"],
             action=read_properties,
             coap_methods=("GET", "PUT", "PATCH"),
-            resource_class_=self.config.RW_multiple_properties_resource,
+            resource_class_=self.server.config.RW_multiple_properties_resource,
             read_properties_resource=read_properties,
             write_properties_resource=write_properties,
         )
@@ -326,4 +352,66 @@ class CoAPServer(BaseProtocolServer):
             events,
             thing_id=thing.id,
         )
-        self.things.append(thing)
+
+    def get_injected_dependencies(self, affordance: InteractionAffordance) -> RPCResource:
+        for path, resource in self.server.root._resources.values():
+            if not isinstance(resource, RPCResource):
+                return resource
+            if resource.resource == affordance:
+                return resource.metadata
+
+    def get_href_for_affordance(
+        self,
+        affordance: InteractionAffordance,
+        authority: str = None,
+        use_localhost: bool = False,
+    ) -> str:
+        """
+        Get the full URL path for the affordance in the application router.
+
+        Parameters
+        ----------
+        affordance: PropertyAffordance | ActionAffordance | EventAffordance
+            the interaction affordance for which the URL path is to be retrieved
+        authority: str, optional
+            authority (protocol + host + port) to be used in the URL path. If None, the machine's hostname is used.
+        use_localhost: bool, default `False`
+            if `True`, localhost is used in the basepath instead of the server's hostname.
+
+        Returns
+        -------
+        str
+            full URL path for the affordance
+        """
+        if affordance not in self:
+            raise ValueError(f"affordance {affordance} not found in the application router")
+        for path, resource in self.server.root._resources.values():
+            if not isinstance(resource, RPCResource):
+                continue
+            if resource.resource == affordance:
+                path = "/".join(path)
+                return f"{self.get_basepath(authority, use_localhost)}{path}"
+
+    def get_basepath(self, authority: str = None, use_localhost: bool = False) -> str:
+        """
+        Get the basepath of the server.
+
+        Parameters
+        ----------
+        authority: str, optional
+            authority (protocol + host + port) to be used in the basepath. If None, the machine's hostname is used.
+        use_localhost: bool, default `False`
+            if `True`, localhost is used in the basepath instead of the server's hostname.
+        """
+        if authority:
+            return authority
+        protocol = "coaps" if self.server.ssl_context else "coap"
+        port = f":{self.server.port}" if self.server.port != 80 else ""
+        if not use_localhost:
+            return f"{protocol}://{socket.gethostname()}{port}"
+        if self.server.address == "0.0.0.0" or self.server.address == "127.0.0.1":
+            # SAST(id='hololinked.server.coap.ApplicationRouter.get_basepath', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
+            return f"{protocol}://127.0.0.1{port}"
+        elif self.server.address == "::":
+            return f"{protocol}://[::1]{port}"
+        return f"{protocol}://localhost{port}"

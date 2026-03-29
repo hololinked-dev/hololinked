@@ -99,8 +99,6 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
-        from .config import HandlerMetadata
-
         for name in ZMQ_TD.get("properties", []):
             affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
             TD["properties"][name]["forms"] = []
@@ -110,30 +108,26 @@ class ThingDescriptionService:
                     authority=authority,
                     use_localhost=use_localhost,
                 )
-                http_methods = (
-                    self.server.router.get_injected_dependencies(affordance)
-                    .get("metadata", HandlerMetadata())
-                    .http_methods
-                )  # type: tuple[str]
+                coap_methods = self.server.router.get_injected_dependencies(affordance).metadata.coap_methods
             except ValueError as ex:
                 if ignore_errors:
                     self.logger.warning(f"could not get HTTP methods for property {name}, skipping...")
                     continue
                 raise ex from None
-            for http_method in http_methods:
-                if http_method.upper() == "DELETE":
+            for coap_method in coap_methods:
+                if coap_method.upper() == "DELETE":
                     # currently not in spec although we support it
                     continue
-                if affordance.readOnly and http_method.upper() != "GET":
+                if affordance.readOnly and coap_method.upper() != "GET":
                     break
-                op = Operations.readproperty if http_method.upper() == "GET" else Operations.writeproperty
+                op = Operations.readproperty if coap_method.upper() == "GET" else Operations.writeproperty
                 form = affordance.retrieve_form(op)
                 if not form:
                     form = Form()
                     form.op = op
                     form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                 form.href = href
-                form.htv_methodName = http_method
+                form.htv_methodName = coap_method
                 TD["properties"][name]["forms"].append(form.json())
             if affordance.observable:
                 form = affordance.retrieve_form(Operations.observeproperty)
@@ -170,8 +164,6 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
-        from .config import HandlerMetadata
-
         for name in ZMQ_TD.get("actions", []):
             affordance = ActionAffordance.from_TD(name, ZMQ_TD)
             TD["actions"][name]["forms"] = []
@@ -181,24 +173,20 @@ class ThingDescriptionService:
                     authority=authority,
                     use_localhost=use_localhost,
                 )
-                http_methods = (
-                    self.server.router.get_injected_dependencies(affordance)
-                    .get("metadata", HandlerMetadata())
-                    .http_methods
-                )  # type: tuple[str]
+                coap_methods = self.server.router.get_injected_dependencies(affordance).metadata.coap_methods
             except ValueError as ex:
                 if ignore_errors:
                     self.logger.warning(f"could not get HTTP methods for action {name}, skipping...")
                     continue
                 raise ex from None
-            for http_method in http_methods:
+            for coap_method in coap_methods:
                 form = affordance.retrieve_form(Operations.invokeaction)
                 if not form:
                     form = Form()
                     form.op = Operations.invokeaction
                     form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                 form.href = href
-                form.htv_methodName = http_method
+                form.htv_methodName = coap_method
                 TD["actions"][name]["forms"].append(form.json())
 
     def add_events(
@@ -225,8 +213,6 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
-        from .config import HandlerMetadata
-
         for name in ZMQ_TD.get("events", []):
             affordance = EventAffordance.from_TD(name, ZMQ_TD)
             TD["events"][name]["forms"] = []
@@ -236,24 +222,20 @@ class ThingDescriptionService:
                     authority=authority,
                     use_localhost=use_localhost,
                 )
-                http_methods = (
-                    self.server.router.get_injected_dependencies(affordance)
-                    .get("metadata", HandlerMetadata(http_methods=["GET"]))
-                    .http_methods
-                )  # type: tuple[str]
+                coap_methods = self.server.router.get_injected_dependencies(affordance).metadata.coap_methods
             except ValueError as ex:
                 if ignore_errors:
                     self.logger.warning(f"could not get HTTP methods for event {name}, skipping...")
                     continue
                 raise ex from None
-            for http_method in http_methods:
+            for coap_method in coap_methods:
                 form = affordance.retrieve_form(Operations.subscribeevent)
                 if not form:
                     form = Form()
                     form.op = Operations.subscribeevent
                     form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                 form.href = href
-                form.htv_methodName = http_method
+                form.htv_methodName = coap_method
                 form.subprotocol = "sse"
                 TD["events"][name]["forms"].append(form.json())
 
