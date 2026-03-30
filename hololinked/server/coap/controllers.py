@@ -21,7 +21,7 @@ from hololinked.core.zmq.message import (
     default_thing_execution_context,
 )
 from hololinked.serializers import Serializers
-from hololinked.server.coap.utils import ContentTypeMap
+from hololinked.server.coap.utils import ContentTypeMap, ContentTypeToStr
 from hololinked.td import (
     ActionAffordance,
     EventAffordance,
@@ -167,9 +167,12 @@ class RPCResource(Resource):
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
         if request.payload:
-            if request.opt.content_format in Serializers.allowed_content_types:
+            if (
+                ContentTypeToStr.supports(request.opt.content_format)
+                and ContentTypeToStr.get(request.opt.content_format) in Serializers.allowed_content_types
+            ):
                 payload.value = request.payload
-                payload.content_type = request.opt.content_format
+                payload.content_type = ContentTypeToStr.get(request.opt.content_format)
             elif global_config.ALLOW_UNKNOWN_SERIALIZATION:
                 preserialized_payload.value = request.payload
                 preserialized_payload.content_type = request.opt.content_format

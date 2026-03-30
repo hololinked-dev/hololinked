@@ -22,6 +22,22 @@ class ContentTypeMap:
         return content_type in cls._mapping
 
 
+class ContentTypeToStr:
+    _mapping = {
+        ContentFormat.JSON: Serializers.json.content_type,
+        ContentFormat.OCTETSTREAM: Serializers.pickle.content_type,
+        ContentFormat.TEXT: Serializers.text.content_type,
+    }
+
+    @classmethod
+    def get(cls, content_type: str) -> str | None:
+        return cls._mapping.get(content_type, None)
+
+    @classmethod
+    def supports(cls, content_type: str) -> bool:
+        return content_type in cls._mapping
+
+
 def get_routable_ip() -> str:
     """Get the primary routable IP address of this machine."""
     try:
