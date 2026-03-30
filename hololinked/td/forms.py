@@ -42,6 +42,7 @@ class Form(Schema):
     op: str = None
     htv_methodName: str = Field(default=None, alias="htv:methodName")
     mqv_topic: str = Field(default=None, alias="mqv:topic")
+    cov_method: str = Field(default=None, alias="cov:method")
     contentType: Optional[str] = "application/json"
     additionalResponses: Optional[list[AdditionalExpectedResponse]] = None
     contentEncoding: Optional[str] = None

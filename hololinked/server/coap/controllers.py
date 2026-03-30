@@ -8,7 +8,6 @@ from aiocoap import Message
 from aiocoap.numbers import Code, ContentFormat
 from aiocoap.numbers import types as mtypes
 from aiocoap.resource import Resource
-from msgspec import DecodeError as MsgspecJSONDecodeError
 from structlog.stdlib import BoundLogger
 
 from hololinked.config import global_config
@@ -137,20 +136,9 @@ class RPCResource(Resource):
                 LocalExecutionContext(),
                 SerializableNone,
             )
-        for key, value in request.opt.uri_query:
-            if len(value) == 1:
-                try:
-                    arguments[key] = Serializers.json.loads(value[0])
-                except MsgspecJSONDecodeError:
-                    arguments[key] = value[0].decode("utf-8")
-            else:
-                final_value = []
-                for val in value:
-                    try:
-                        final_value.append(Serializers.json.loads(val))
-                    except MsgspecJSONDecodeError:
-                        final_value.append(val.decode("utf-8"))
-                arguments[key] = final_value
+        for query in request.opt.uri_query:
+            key, value = query.split("=", 1)
+            arguments[key] = Serializers.json.loads(value)
         # if self.resource.request_as_argument:
         #     arguments['request'] = self.request # find some way to pass the request object to the thing
         thing_execution_context = ThingExecutionContext(
@@ -167,6 +155,7 @@ class RPCResource(Resource):
             presend_ack=arguments.pop("presend_ack", False),
         )
         additional_payload = SerializableNone if not arguments else SerializableData(arguments)  # application/json
+        print("additional payload", additional_payload)
         self._request_parameters_cache = (
             server_execution_context,
             thing_execution_context,
@@ -410,7 +399,7 @@ class ThingDescriptionResource(RPCResource):
 
     async def render_get(self, request: Message):
         try:
-            _, _, _, body = self.get_execution_parameters()
+            _, _, _, body = self.get_execution_parameters(request=request)
             body = body.deserialize() or dict()
             if not isinstance(body, dict):
                 raise ValueError("request body must be or convertable to JSON when supplied as path parameters")

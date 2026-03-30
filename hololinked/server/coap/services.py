@@ -68,7 +68,7 @@ class ThingDescriptionService:
 
         self.add_properties(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
         self.add_actions(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
-        # self.add_events(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
+        self.add_events(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
         self.add_top_level_forms(TD, authority=authority, use_localhost=use_localhost)
         self.add_security_definitions(TD)
         self.add_links(TD)
@@ -127,7 +127,7 @@ class ThingDescriptionService:
                     form.op = op
                     form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                 form.href = href
-                form.htv_methodName = coap_method
+                form.cov_method = coap_method
                 TD["properties"][name]["forms"].append(form.json())
             if affordance.observable:
                 form = affordance.retrieve_form(Operations.observeproperty)
@@ -136,7 +136,7 @@ class ThingDescriptionService:
                     form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                     form.op = Operations.observeproperty
                 form.href = f"{href}/change-event"
-                form.htv_methodName = "GET"
+                form.cov_method = "GET"
                 form.subprotocol = "sse"
                 TD["properties"][name]["forms"].append(form.json())
 
@@ -186,7 +186,7 @@ class ThingDescriptionService:
                     form.op = Operations.invokeaction
                     form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                 form.href = href
-                form.htv_methodName = coap_method
+                form.cov_method = coap_method
                 TD["actions"][name]["forms"].append(form.json())
 
     def add_events(
@@ -235,7 +235,7 @@ class ThingDescriptionService:
                     form.op = Operations.subscribeevent
                     form.contentType = Serializers.for_object(TD["id"], TD["title"], affordance.name).content_type
                 form.href = href
-                form.htv_methodName = coap_method
+                form.cov_method = coap_method
                 form.subprotocol = "sse"
                 TD["events"][name]["forms"].append(form.json())
 
@@ -255,28 +255,28 @@ class ThingDescriptionService:
         readallproperties = Form()
         readallproperties.href = properties_end_point
         readallproperties.op = "readallproperties"
-        readallproperties.htv_methodName = "GET"
+        readallproperties.cov_method = "GET"
         readallproperties.contentType = "application/json"
         TD["forms"].append(readallproperties.json())
 
         writeallproperties = Form()
         writeallproperties.href = properties_end_point
         writeallproperties.op = "writeallproperties"
-        writeallproperties.htv_methodName = "PUT"
+        writeallproperties.cov_method = "PUT"
         writeallproperties.contentType = "application/json"
         TD["forms"].append(writeallproperties.json())
 
         readmultipleproperties = Form()
         readmultipleproperties.href = properties_end_point
         readmultipleproperties.op = "readmultipleproperties"
-        readmultipleproperties.htv_methodName = "GET"
+        readmultipleproperties.cov_method = "GET"
         readmultipleproperties.contentType = "application/json"
         TD["forms"].append(readmultipleproperties.json())
 
         writemultipleproperties = Form()
         writemultipleproperties.href = properties_end_point
         writemultipleproperties.op = "writemultipleproperties"
-        writemultipleproperties.htv_methodName = "PATCH"
+        writemultipleproperties.cov_method = "PATCH"
         writemultipleproperties.contentType = "application/json"
         TD["forms"].append(writemultipleproperties.json())
 

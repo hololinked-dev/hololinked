@@ -12,7 +12,7 @@ import structlog
 from aiocoap.resource import Site, WKCResource
 
 from hololinked.core import Thing
-from hololinked.param.parameters import ClassSelector, IPAddress
+from hololinked.param.parameters import ClassSelector, IPAddress, TypedList
 from hololinked.server import BaseProtocolServer
 from hololinked.server.coap.config import ResourceMetadata, RuntimeConfig
 from hololinked.server.coap.controllers import (
@@ -26,7 +26,6 @@ from hololinked.server.coap.controllers import (
     ThingDescriptionResource,
 )
 from hololinked.server.coap.services import ThingDescriptionService
-from hololinked.server.coap.utils import get_routable_ip
 from hololinked.td import ActionAffordance, EventAffordance, PropertyAffordance
 from hololinked.td.interaction_affordance import InteractionAffordance
 
@@ -52,14 +51,35 @@ class CoAPServer(BaseProtocolServer):
     )  # type: ssl.SSLContext | None
     """SSL context to provide encrypted communication"""
 
+    transports = TypedList(
+        item_type=str,
+        default=None,
+        allow_None=True,
+        doc="List of transports to be used by the server. Default: ['simplesocketserver']",
+    )
+    """
+    List of transports to be used by the server. Default: ['simplesocketserver'] for windows, 
+    ['udp6'] for linux. Use 
+    
+    - `udp6` for supported systems (linux or similar)
+    - `ws` for WebSocket TCP transport
+    - `tinydtls` for DTLS transport
+    - `tcpserver` and `simplesocketserver` for TCP transport
+    - `tlsserver` for TLS transport
+   
+    Note that some transports may not be available depending on the platform and installed modules.
+    """
+
     def __init__(
         self,
         *,
         port: int = 60000,
-        address: str = "127.0.0.1",  # SAST(id='hololinked.server.coap.CoAPServer.__init__.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
+        address: str = "0.0.0.0",
+        # SAST(id='hololinked.server.coap.CoAPServer.__init__.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
         things: list[Thing] | None = None,
         logger: structlog.stdlib.BoundLogger | None = None,
         ssl_context: ssl.SSLContext | None = None,
+        transports: list[str] | None = None,
         # security_schemes: list[Security] | None = None,
         # protocol_version : int = 1, network_interface : str = 'Ethernet',
         config: dict[str, Any] | None = None,
@@ -71,8 +91,10 @@ class CoAPServer(BaseProtocolServer):
         port: int, default 5683
             the port at which the server should be run
         address: str, default 0.0.0.0
-            IP address, use 0.0.0.0 to bind to all interfaces to expose the server to other devices in the network
-            and 127.0.0.1 to bind only to localhost
+            IP address, using 0.0.0.0 will be replaced to the machine's hostname.
+            Therefore, use coap://<machine's hostname>:port to access the server from other devices in the network.
+            Use 127.0.0.1 to bind only to localhost. Use suitable address according to the specific
+            transport layer when transports are supplied.
         logger: structlog.stdlib.BoundLogger, optional
             structlog.stdlib.BoundLogger instance
         ssl_context: ssl.SSLContext
@@ -116,6 +138,7 @@ class CoAPServer(BaseProtocolServer):
             logger=logger,
             ssl_context=ssl_context,
             config=config,
+            transports=transports,
         )
 
         self._IP = f"{self.address}:{self.port}"  # TODO, remove this variable later?
@@ -134,12 +157,13 @@ class CoAPServer(BaseProtocolServer):
         if sys.platform != "linux" and bind_address in ("0.0.0.0", "::", ""):
             # On non-Linux platforms, aiocoap's simplesocketserver transport does not support
             # binding to any-address. Resolve to the machine's actual routable IP.
-            bind_address = get_routable_ip()
-            self.logger.info(f"Non-Linux: resolved 0.0.0.0 to specific interface address {bind_address}")
+            bind_address = socket.gethostname()
+            self.logger.info(f"Non-Linux: resolved 0.0.0.0/[::] to specific interface address {bind_address}")
         self.context = await aiocoap.Context.create_server_context(
             self.root,
             bind=(bind_address, self.port),
             _ssl_context=self.ssl_context,
+            transports=self.transports,
         )
         self.context.log = self.logger
         # This method should not block, just create side-effects
@@ -306,7 +330,7 @@ class Router:
             action=get_thing_description_action,
             coap_methods=("GET",),
             resource_class_=self.server.config.thing_description_resource,
-            owner_inst=self,
+            owner_inst=self.server,
         )
 
         # # RW multiple properties resource
@@ -354,11 +378,11 @@ class Router:
         )
 
     def get_injected_dependencies(self, affordance: InteractionAffordance) -> RPCResource:
-        for path, resource in self.server.root._resources.values():
-            if not isinstance(resource, RPCResource):
-                return resource
+        for path, resource in self.server.root._resources.items():
+            if not isinstance(resource, RPCResource) or not hasattr(resource, "resource"):
+                continue
             if resource.resource == affordance:
-                return resource.metadata
+                return resource
 
     def get_href_for_affordance(
         self,
@@ -383,13 +407,11 @@ class Router:
         str
             full URL path for the affordance
         """
-        if affordance not in self:
-            raise ValueError(f"affordance {affordance} not found in the application router")
-        for path, resource in self.server.root._resources.values():
-            if not isinstance(resource, RPCResource):
+        for path, resource in self.server.root._resources.items():
+            if not isinstance(resource, RPCResource) or not hasattr(resource, "resource"):
                 continue
             if resource.resource == affordance:
-                path = "/".join(path)
+                path = f"/{'/'.join(path)}"
                 return f"{self.get_basepath(authority, use_localhost)}{path}"
 
     def get_basepath(self, authority: str = None, use_localhost: bool = False) -> str:
