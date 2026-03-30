@@ -202,7 +202,7 @@ def setup_servers(server_names, args, security_schemes):
         elif name == "coap":
             from hololinked.server.coap.server import CoAPServer
 
-            coap_server = CoAPServer(port=5683, security_schemes=security_schemes if security_schemes else None)
+            coap_server = CoAPServer(port=5683)
             servers.append(coap_server)
             logger.info(f"Added CoAP server on port {coap_server.port}")
         else:

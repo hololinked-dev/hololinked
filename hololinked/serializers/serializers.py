@@ -114,6 +114,8 @@ class JSONSerializer(BaseSerializer):
         self.type = msgspecjson
 
     def loads(self, data: bytearray | memoryview | bytes) -> JSONSerializable:
+        if isinstance(data, str):
+            return msgspecjson.decode(data)
         return msgspecjson.decode(self.convert_to_bytes(data))
 
     def dumps(self, data) -> bytes:
@@ -177,6 +179,8 @@ class PythonBuiltinJSONSerializer(JSONSerializer):
         self.type = pythonjson
 
     def loads(self, data: bytearray | memoryview | bytes) -> Any:
+        if isinstance(data, str):
+            return pythonjson.loads(data)
         return pythonjson.loads(self.convert_to_bytes(data))
 
     def dumps(self, data) -> bytes:
