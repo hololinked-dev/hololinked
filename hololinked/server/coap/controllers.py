@@ -155,7 +155,6 @@ class RPCResource(Resource):
             presend_ack=arguments.pop("presend_ack", False),
         )
         additional_payload = SerializableNone if not arguments else SerializableData(arguments)  # application/json
-        print("additional payload", additional_payload)
         self._request_parameters_cache = (
             server_execution_context,
             thing_execution_context,

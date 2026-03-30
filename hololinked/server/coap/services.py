@@ -213,6 +213,9 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
+        ZMQ_TD.pop("events", None)
+        # currently events are not supported
+
         for name in ZMQ_TD.get("events", []):
             affordance = EventAffordance.from_TD(name, ZMQ_TD)
             TD["events"][name]["forms"] = []
