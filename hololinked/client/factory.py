@@ -1,9 +1,11 @@
+import asyncio
 import ssl
 import threading
 import warnings
 
-from typing import Any
+from typing import Any, Coroutine
 
+import aiocoap
 import aiomqtt
 import httpx
 import structlog
@@ -22,6 +24,7 @@ from ..td.interaction_affordance import (
 )
 from ..utils import uuid_hex
 from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
+from .coap.consumed_interactions import CoAPAction, CoAPProperty
 from .http.consumed_interactions import HTTPAction, HTTPEvent, HTTPProperty
 from .mqtt.consumed_interactions import MQTTConsumer  # only one type for now
 from .proxy import ObjectProxy
@@ -241,13 +244,8 @@ class ClientFactory:
         connect_timeout = kwargs.get("connect_timeout", 10.0)
         request_timeout = kwargs.get("request_timeout", 60.0)
         use_localhost = False
-        if (
-            "http://localhost" in url
-            or "http://localhost" in url
-            or "http://[::1]" in url
-            or "http://[::1]" in url
-            or "http://127.0.0.1" in url
-        ):
+
+        if "://localhost" in url or "://[::1]" in url or "://127.0.0.1" in url:
             use_localhost = True
 
         # create clients
@@ -487,6 +485,132 @@ class ClientFactory:
             self.add_event(object_proxy, consumed_event)
 
         return object_proxy
+
+    @classmethod
+    def coap(
+        self,
+        url: str,
+        transports: list[str] = None,
+        **kwargs,
+    ) -> ObjectProxy:
+        """
+        Create a CoAP client for the specified URL.
+
+        Parameters
+        ----------
+        url: str
+            The URL of the CoAP server (e.g., coap://example.com/thing-description)
+        transports: list[str], optional
+            An optional list of transports to use (e.g., ["udp", "tcp"]). If not specified, defaults to ["udp"].
+            Please specify it if connection is not going through.
+
+        kwargs:
+            Additional configuration options:
+
+            - `logger`: `structlog.stdlib.BoundLogger`, optional.
+                 A custom logger instance to use for logging
+            - `ignore_TD_errors`: `bool`, default `False`.
+                Whether to ignore errors while fetching the Thing Description (TD)
+        """
+
+        async def init_coap_client() -> Coroutine[Any, Any, ObjectProxy]:
+            nonlocal url, kwargs, transports, self
+
+            # config
+            skip_interaction_affordances = kwargs.get("skip_interaction_affordances", [])
+            invokation_timeout = kwargs.get("invokation_timeout", 5.0)
+            execution_timeout = kwargs.get("execution_timeout", 5.0)
+            use_localhost = False
+
+            if "://localhost" in url or "://[::1]" in url or "://127.0.0.1" in url:
+                use_localhost = True
+
+            # fetch TD
+            payload = Serializers.json.dumps(
+                dict(
+                    ignore_errors=kwargs.get("ignore_TD_errors", False),
+                    skip_names=skip_interaction_affordances,
+                    use_localhost=use_localhost,
+                )
+            )
+            client = await aiocoap.Context.create_client_context(transports=transports)  # type: aiocoap.Context
+            request = aiocoap.Message(
+                code=aiocoap.GET,
+                uri=url,
+                payload=payload,
+                content_format=aiocoap.numbers.media_types_rev["application/json"],
+            )
+            response = await client.request(request).response  # type: aiocoap.Message
+            code = response.code  # type: aiocoap.numbers.codes.Code
+            payload = response.payload  # type: bytes
+            # variables split out to assign plausible types, typing is not so great in aiocoap
+            if not code.is_successful():
+                raise Exception(
+                    f"Failed to fetch Thing Description (TD) over CoAP, response code: {code}, payload: {payload}"
+                )
+
+            TD = Serializers.json.loads(payload)
+
+            id = kwargs.get("id", f"client|{TD['id']}|CoAP|{uuid_hex()}")
+            logger = kwargs.get("logger", structlog.get_logger()).bind(
+                component="client",
+                client_id=id,
+                protocol="coap",
+                thing_id=TD["id"],
+            )
+            object_proxy = ObjectProxy(id, td=TD, logger=logger, **kwargs)
+
+            for name in TD.get("properties", []):
+                affordance = PropertyAffordance.from_TD(name, TD)
+                consumed_property = CoAPProperty(
+                    resource=affordance,
+                    async_client=client,
+                    invokation_timeout=invokation_timeout,
+                    execution_timeout=execution_timeout,
+                    owner_inst=object_proxy,
+                    logger=logger,
+                )
+                self.add_property(object_proxy, consumed_property)
+                # if affordance.observable:
+                #     consumed_event = HTTPEvent(
+                #         resource=affordance,
+                #         sync_client=sse_sync_client,
+                #         async_client=sse_async_client,
+                #         invokation_timeout=invokation_timeout,
+                #         execution_timeout=execution_timeout,
+                #         owner_inst=object_proxy,
+                #         logger=logger,
+                #     )
+                #     self.add_event(object_proxy, consumed_event)
+            for action in TD.get("actions", []):
+                affordance = ActionAffordance.from_TD(action, TD)
+                consumed_action = CoAPAction(
+                    resource=affordance,
+                    async_client=client,
+                    invokation_timeout=invokation_timeout,
+                    execution_timeout=execution_timeout,
+                    owner_inst=object_proxy,
+                    logger=logger,
+                )
+                self.add_action(object_proxy, consumed_action)
+            # for event in TD.get("events", []):
+            #     affordance = EventAffordance.from_TD(event, TD)
+            #     consumed_event = HTTPEvent(
+            #         resource=affordance,
+            #         sync_client=sse_sync_client,
+            #         async_client=sse_async_client,
+            #         invokation_timeout=invokation_timeout,
+            #         execution_timeout=execution_timeout,
+            #         owner_inst=object_proxy,
+            #         logger=logger,
+            #     )
+            #     self.add_event(object_proxy, consumed_event)
+
+            return object_proxy
+
+        if asyncio.get_event_loop().is_running():
+            return init_coap_client()
+        return asyncio.run(init_coap_client())
 
     @classmethod
     def add_action(self, client, action: ConsumedThingAction) -> None:
