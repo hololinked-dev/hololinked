@@ -57,7 +57,7 @@ dependencies = [
     "sqlalchemy-utils>=0.41",
     "psycopg2-binary>=2.9.11",
     "pymongo>=4.15.2",
-    "aiocoap>=0.4.17",
+    "aiocoap[ws]>=0.4.17",
 ]
 
 [project.urls]
