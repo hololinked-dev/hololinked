@@ -1868,7 +1868,10 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         return message_id
 
     async def async_recv_response(
-        self, thing_id: str, message_id: bytes, timeout: float | int | None = None
+        self,
+        thing_id: str,
+        message_id: bytes,
+        timeout: float | int | None = None,
     ) -> ResponseMessage:
         """
         Receive response for specified message ID.

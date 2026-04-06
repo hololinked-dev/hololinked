@@ -1,4 +1,5 @@
 import asyncio
+import functools
 
 from typing import Any, Optional
 
@@ -47,6 +48,26 @@ method_not_allowed_message = Message(
 )
 
 
+def handle_render_exceptions(func):
+    """Decorator to handle exceptions in render methods and return appropriate error messages"""
+
+    @functools.wraps(func)
+    async def wrapper(self, request: Message) -> Message:
+        try:
+            return await func(self, request)
+        except Exception as ex:
+            if hasattr(self, "logger") and self.logger:
+                self.logger.error(f"error in {func.__name__} - {str(ex)}")
+            return Message(
+                code=Code.INTERNAL_SERVER_ERROR,
+                payload=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
+                content_format=ContentFormat.JSON,
+                mtype=mtypes.ACK,
+            )
+
+    return wrapper
+
+
 class RPCResource(Resource):
     """
     Base class for properties and action resources.
@@ -68,28 +89,37 @@ class RPCResource(Resource):
         self.logger = logger
         self.thing = None  # we need to postpone evaluation as CoAP resource needs to be passed in an initialized
         self.metadata = metadata  # type: ResourceMetadata
+        # cache to store the execution parameters for each request to avoid parsing them multiple times
+        # self._request_parameters_cache = dict()
 
     render_get_operation = None
     render_post_operation = None
     render_put_operation = None
     render_delete_operation = None
 
-    async def render_get(self, request: Message):
+    @handle_render_exceptions
+    async def render_get(self, request: Message) -> Message:
+        message_id = self.message_id(request)
+        if message_id is not None:
+            return await self.handle_no_block_response(message_id=message_id)
         if request.code.name not in self.metadata.coap_methods or not self.render_get_operation:
             return method_not_allowed_message
         return await self.execute_operation(request, operation=self.render_get_operation)
 
-    async def render_post(self, request: Message):
+    @handle_render_exceptions
+    async def render_post(self, request: Message) -> Message:
         if request.code.name not in self.metadata.coap_methods or not self.render_post_operation:
             return method_not_allowed_message
         return await self.execute_operation(request, operation=self.render_post_operation)
 
-    async def render_put(self, request: Message):
+    @handle_render_exceptions
+    async def render_put(self, request: Message) -> Message:
         if request.code.name not in self.metadata.coap_methods or not self.render_put_operation:
             return method_not_allowed_message
         return await self.execute_operation(request, operation=self.render_put_operation)
 
-    async def render_delete(self, request: Message):
+    @handle_render_exceptions
+    async def render_delete(self, request: Message) -> Message:
         if request.code.name not in self.metadata.coap_methods or not self.render_delete_operation:
             return method_not_allowed_message
         return await self.execute_operation(request, operation=self.render_delete_operation)
@@ -128,6 +158,10 @@ class RPCResource(Resource):
         ]
             server execution context, thing execution context, local execution context and payload (if any)
         """
+        # Note that the message ID is an ID per message, not an ID per full-cycle of request and response (which is called token).
+        # We will cache with the MID for now.
+        # if self._request_parameters_cache.get(request.mid, None):
+        #     return self._request_parameters_cache[request.mid]
         arguments = dict()
         if len(request.opt.uri_query) == 0:
             return (
@@ -136,9 +170,21 @@ class RPCResource(Resource):
                 LocalExecutionContext(),
                 SerializableNone,
             )
+
         for query in request.opt.uri_query:
             key, value = query.split("=", 1)
-            arguments[key] = Serializers.json.loads(value)
+            try:
+                arguments[key] = Serializers.json.loads(value)
+            except Exception:
+                if isinstance(value, str):
+                    arguments[key] = value
+                elif isinstance(value, bytes):
+                    arguments[key] = value.decode()
+                else:
+                    raise ValueError(
+                        f"query parameter value {value} is not a valid JSON or string,"
+                        + " only JSON or plain string is supported for query parameters"
+                    )
         # if self.resource.request_as_argument:
         #     arguments['request'] = self.request # find some way to pass the request object to the thing
         thing_execution_context = ThingExecutionContext(
@@ -155,6 +201,12 @@ class RPCResource(Resource):
             presend_ack=arguments.pop("presend_ack", False),
         )
         additional_payload = SerializableNone if not arguments else SerializableData(arguments)  # application/json
+        # self._request_parameters_cache[request.mid] = (
+        #     server_execution_context,
+        #     thing_execution_context,
+        #     local_execution_context,
+        #     additional_payload,
+        # )
         return server_execution_context, thing_execution_context, local_execution_context, additional_payload
 
     def get_request_payload(self, request: Message) -> tuple[SerializableData, PreserializedData]:
@@ -278,6 +330,67 @@ class RPCResource(Resource):
                 mtype=mtypes.ACK,
             )
 
+    def message_id(self, request: Message) -> str | None:
+        """retrieves the message id from the request headers"""
+        _, _, local_execution_context, _ = self.get_execution_parameters(request)
+        # TODO avoid calling get_execution_parameters twice in the same request
+        return local_execution_context.messageID
+
+    async def handle_no_block_response(self, message_id: str) -> Message:
+        """handles the no-block response for the noblock calls"""
+        try:
+            self.logger.info("waiting for no-block response", message_id=message_id)
+            response_message = await self.thing.recv_response(
+                message_id=message_id,
+                timeout=default_server_execution_context.invokationTimeout
+                + default_server_execution_context.executionTimeout,
+            )
+            response_payload = self.thing.get_response_payload(response_message)
+            if not response_payload.value:
+                return Message(
+                    code=Code.CHANGED,
+                    mtype=mtypes.ACK,
+                    content_format=ContentFormat.TEXT,
+                )
+            if not ContentTypeStrToCoAPCode.supports(response_payload.content_type):
+                return Message(
+                    code=Code.UNSUPPORTED_CONTENT_FORMAT,
+                    payload=f"Content-Type {response_payload.content_type} not supported by CoAP server".encode(),
+                    content_format=ContentFormat.TEXT,
+                    mtype=mtypes.ACK,
+                )
+            return Message(
+                code=Code.CONTENT,
+                payload=response_payload.value,
+                mtype=mtypes.ACK,
+                content_format=ContentTypeStrToCoAPCode.get(response_payload.content_type),
+            )
+        except KeyError as ex:
+            # if the message id is not found, it means that the response was not received in time
+            self.logger.error(f"message ID not found for no-block response - {str(ex)}")
+            return Message(
+                code=Code.NOT_FOUND,
+                payload=f"message ID {message_id} not found".encode(),
+                content_format=ContentFormat.TEXT,
+                mtype=mtypes.ACK,
+            )
+        except TimeoutError as ex:
+            self.logger.error(f"timeout while waiting for no-block response - {str(ex)}")
+            return Message(
+                code=Code.NOT_FOUND,
+                payload="timeout while waiting for response, ask later".encode(),
+                content_format=ContentFormat.TEXT,
+                mtype=mtypes.ACK,
+            )
+        except Exception as ex:
+            self.logger.error(f"error while receiving no-block response - {str(ex)}")
+            return Message(
+                code=Code.INTERNAL_SERVER_ERROR,
+                payload=Serializers.json.dumps({"exception": format_exception_as_json(ex)}),
+                content_format=ContentFormat.JSON,
+                mtype=mtypes.ACK,
+            )
+
 
 class PropertyResource(RPCResource):
     """Resource class for property interactions"""
@@ -319,6 +432,7 @@ class RWMultiplePropertiesResource(RPCResource):
         self.write_properties_resource = write_properties_resource
         self.lock = asyncio.Lock()  # to prevent concurrent read/write multiple properties interactions
 
+    @handle_render_exceptions
     async def render_get(self, request: Message):
         try:
             server_execution_context, _, _, _ = self.get_execution_parameters(request=request)
@@ -335,6 +449,7 @@ class RWMultiplePropertiesResource(RPCResource):
         finally:
             self.lock.release()
 
+    @handle_render_exceptions
     async def render_post(self, request: Message):
         try:
             server_execution_context, _, _, _ = self.get_execution_parameters(request=request)
@@ -351,6 +466,7 @@ class RWMultiplePropertiesResource(RPCResource):
         finally:
             self.lock.release()
 
+    @handle_render_exceptions
     async def render_put(self, request: Message):
         try:
             server_execution_context, _, _, _ = self.get_execution_parameters(request=request)
@@ -392,43 +508,37 @@ class ThingDescriptionResource(RPCResource):
             server=owner_inst,
         )
 
+    @handle_render_exceptions
     async def render_get(self, request: Message):
-        try:
-            _, _, _, body = self.get_execution_parameters(request=request)
-            body = body.deserialize() or dict()
-            if not isinstance(body, dict):
-                raise ValueError("request body must be or convertable to JSON when supplied as path parameters")
+        _, _, _, body = self.get_execution_parameters(request=request)
+        body = body.deserialize() or dict()
+        if not isinstance(body, dict):
+            raise ValueError("request body must be or convertable to JSON when supplied as path parameters")
 
-            ignore_errors = body.get("ignore_errors", False)
-            skip_names = body.get("skip_names", [])
-            authority = body.get("authority", None)
-            use_localhost = body.get("use_localhost", False)
+        ignore_errors = body.get("ignore_errors", False)
+        skip_names = body.get("skip_names", [])
+        authority = body.get("authority", None)
+        use_localhost = body.get("use_localhost", False)
 
-            TD = await self.thing_description.generate(
-                ignore_errors=ignore_errors,
-                skip_names=skip_names,
-                use_localhost=use_localhost,
-                authority=authority,
-            )
+        TD = await self.thing_description.generate(
+            ignore_errors=ignore_errors,
+            skip_names=skip_names,
+            use_localhost=use_localhost,
+            authority=authority,
+        )
 
-            return Message(
-                code=Code.CONTENT,
-                payload=Serializers.json.dumps(TD),
-                content_format=ContentFormat.JSON,
-                mtype=mtypes.ACK,
-            )
-        except Exception as ex:
-            return Message(
-                code=Code.INTERNAL_SERVER_ERROR,
-                payload=f"error while generating thing description - {str(ex)}".encode(),
-                content_format=ContentFormat.TEXT,
-                mtype=mtypes.ACK,
-            )
+        return Message(
+            code=Code.CONTENT,
+            payload=Serializers.json.dumps(TD),
+            content_format=ContentFormat.JSON,
+            mtype=mtypes.ACK,
+        )
 
 
 class LivenessProbeResource:
     """Resource class for liveness probe interactions"""
 
+    @handle_render_exceptions
     async def render_get(self, request: Message):
         return Message(
             code=Code.CONTENT,
@@ -445,6 +555,7 @@ class ReadinessProbeResource:
         self.server = server
         super().__init__()
 
+    @handle_render_exceptions
     async def render_get(self, request: Message):
         return Message(
             code=Code.CREATED,
@@ -460,6 +571,7 @@ class StopResource(RPCResource):
         self.server = server
         super().__init__()
 
+    @handle_render_exceptions
     async def render_post(self, request: Message):
         self.server.stop()  # creates a task in the running loop
         return Message(

@@ -85,11 +85,7 @@ class CoAPConsumedAffordanceMixin:
             The deserialized body of the response or None
         """
         code = response.code  # type: Code
-        if not code.is_successful():
-            raise ValueError(f"Received error response with code {code} and payload {response.payload}")
-        elif code == Code.VALID or code == Code.DELETED or code == Code.CONTINUE or code == Code.CREATED:
-            return None
-        elif code == Code.CONTENT or code == Code.CHANGED:
+        if code == Code.CONTENT or code == Code.CHANGED or code == Code.CREATED:
             body = response.payload
             if not body:
                 return
@@ -97,14 +93,16 @@ class CoAPConsumedAffordanceMixin:
             if isinstance(body, dict) and "exception" in body and raise_exception:
                 raise_local_exception(body)
             return body
-        elif code == Code.SERVICE_UNAVAILABLE:
-            if response.body:
+        elif code == Code.SERVICE_UNAVAILABLE or code == Code.INTERNAL_SERVER_ERROR:
+            if response.payload:
                 body = self._deserialize_response(response, form)
                 if isinstance(body, dict) and "exception" in body and raise_exception:
                     raise_local_exception(body)
             raise Exception(
-                f"Server is unavailable to process the request{' , body: ' + str(body) if response.body else ''}"
+                f"Server is unavailable to process the request{' , body: ' + str(body) if response.payload else ''}"
             )
+        elif code == Code.DELETED:
+            return None
         elif code in Code._member_map_:
             raise Exception(f"Unexpected response code {Code[code]}")
         raise Exception(f"Unexpected response code {code}")
@@ -324,9 +322,9 @@ class CoAPAction(ConsumedThingAction, CoAPConsumedAffordanceMixin):
         form.href = f"{form.href}?noblock=true"
         coap_request = self.create_coap_request(form, "POST", body)
         response = self.sync_coap_call(coap_request)
-        if response.headers.get("X-Message-ID", None) is None:
+        message_id = self.get_body_from_response(response, form)
+        if message_id is None:
             raise ValueError("The server did not return a message ID for the non-blocking action.")
-        message_id = response.headers["X-Message-ID"]
         self.owner_inst._noblock_messages[message_id] = self
         return message_id
 
@@ -444,9 +442,9 @@ class CoAPProperty(ConsumedThingProperty, CoAPConsumedAffordanceMixin):
         form.href = f"{form.href}?noblock=true"
         coap_request = self.create_coap_request(form, "GET", None)
         response = self.sync_coap_call(coap_request)
-        if response.headers.get("X-Message-ID", None) is None:
+        message_id = self.get_body_from_response(response, form)
+        if message_id is None:
             raise ValueError("The server did not return a message ID for the non-blocking property read.")
-        message_id = response.headers["X-Message-ID"]
         self._read_reply_op_map[message_id] = "readproperty"
         self.owner_inst._noblock_messages[message_id] = self
         return message_id
@@ -462,12 +460,9 @@ class CoAPProperty(ConsumedThingProperty, CoAPConsumedAffordanceMixin):
         form.href = f"{form.href}?noblock=true"
         coap_request = self.create_coap_request(form, "PUT", body)
         response = self.sync_coap_call(coap_request)
-        if response.headers.get("X-Message-ID", None) is None:
-            raise ValueError(
-                "The server did not return a message ID for the non-blocking property write. "
-                + f" response headers: {response.headers}, code {response.status_code}"
-            )
-        message_id = response.headers["X-Message-ID"]
+        message_id = self.get_body_from_response(response, form)
+        if message_id is None:
+            raise ValueError("The server did not return a message ID for the non-blocking property write.")
         self.owner_inst._noblock_messages[message_id] = self
         self._read_reply_op_map[message_id] = "writeproperty"
         return message_id

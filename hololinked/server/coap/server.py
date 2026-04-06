@@ -12,6 +12,7 @@ import structlog
 from aiocoap.resource import Site, WKCResource
 
 from hololinked.core import Thing
+from hololinked.core.zmq.brokers import MessageMappedZMQClientPool
 from hololinked.param.parameters import ClassSelector, IPAddress, TypedList
 from hololinked.server import BaseProtocolServer
 from hololinked.server.coap.config import ResourceMetadata, RuntimeConfig
@@ -150,6 +151,13 @@ class CoAPServer(BaseProtocolServer):
         self.root.add_resource((".well-known", "core"), WKCResource(self.root.get_resources_as_linkheader))
         self.context = None  # type: aiocoap.Context | None
         self.router = Router(self)
+        self.zmq_client_pool = MessageMappedZMQClientPool(
+            id=self.id,
+            server_ids=[],
+            client_ids=[],
+            handshake=False,
+            poll_timeout=100,
+        )
         self.add_things(*(things or []))
 
     async def setup(self) -> None:
@@ -168,8 +176,10 @@ class CoAPServer(BaseProtocolServer):
         )
         self.context.log = self.logger
         # This method should not block, just create side-effects
-
         event_loop = asyncio.get_running_loop()
+
+        event_loop.create_task(self.zmq_client_pool.poll_responses())
+
         for thing in self.things:
             if not thing.rpc_server:
                 raise ValueError(f"You need to expose thing {thing.id} via a RPCServer before trying to serve it")
@@ -182,12 +192,14 @@ class CoAPServer(BaseProtocolServer):
 
     def stop(self) -> None:
         """Stop the CoAP server and cleanup resources"""
+        self.zmq_client_pool.stop_polling()
         if self.context is not None:
             asyncio.create_task(self.context.shutdown())
             self.logger.info("CoAP server stopped")
 
     async def async_stop(self) -> None:
         """Async version of stop method to be used when the server is awaited on"""
+        self.zmq_client_pool.stop_polling()
         if self.context is not None:
             await self.context.shutdown()
             self.logger.info("CoAP server stopped")

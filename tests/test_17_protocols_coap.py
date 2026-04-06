@@ -14,11 +14,9 @@ from hololinked.utils import uuid_hex
 try:
     from .test_11_rpc_e2e import TestRPC_E2E as BaseRPC_E2E  # noqa: F401
     from .things import TestThing
-    from .utils import fake
 except ImportError:
     from test_11_rpc_e2e import TestRPC_E2E as BaseRPC_E2E  # noqa: F401
     from things import TestThing
-    from utils import fake
 
 
 hostname_prefix = f"coap://{socket.gethostname()}"
@@ -64,27 +62,6 @@ def client(td_endpoint: str) -> "ObjectProxy":
 
 @pytest.mark.asyncio(loop_scope="class")
 class TestCoAP_E2E(BaseRPC_E2E):
-    @pytest.mark.parametrize(
-        "payload",
-        [
-            pytest.param(
-                fake.pylist(20, value_types=[int, float, str, bool]),
-                id="pylist-explicit-types",
-            ),
-        ],
-    )
-    def test_05_invoke_action_noblock(self, client: ObjectProxy, payload: Any):
-        pass
-
-    def test_11_read_property_noblock(self, client: ObjectProxy):
-        pass
-
-    def test_12_write_property_noblock(self, client: ObjectProxy):
-        pass
-
-    def test_13_error_handling(self, client: ObjectProxy):
-        pass
-
     def test_14_rw_multiple_properties(self, client: ObjectProxy):
         pass
 

@@ -495,7 +495,9 @@ class ClientFactory:
         **kwargs,
     ) -> ObjectProxy:
         """
-        Create a CoAP client for the specified URL.
+        Create a CoAP client for the specified URL, both synchronous and asynchronous.
+        Note that the synchronous client is implemented by running the asynchronous client in a separate thread,
+        so there is a mild overhead when using the synchronous operations.
 
         Parameters
         ----------
@@ -526,7 +528,8 @@ class ClientFactory:
         **kwargs,
     ) -> ObjectProxy:
         """
-        Create a CoAP client for the specified URL.
+        Create a async-only CoAP client for the specified URL. This is the primary way to use the CoAP client,
+        the synchronous `coap` client wraps the asynchronous one by running it in a separate thread.
 
         Parameters
         ----------
