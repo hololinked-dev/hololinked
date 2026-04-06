@@ -68,7 +68,6 @@ class RPCResource(Resource):
         self.logger = logger
         self.thing = None  # we need to postpone evaluation as CoAP resource needs to be passed in an initialized
         self.metadata = metadata  # type: ResourceMetadata
-        self._request_parameters_cache = None
 
     render_get_operation = None
     render_post_operation = None
@@ -129,8 +128,6 @@ class RPCResource(Resource):
         ]
             server execution context, thing execution context, local execution context and payload (if any)
         """
-        if self._request_parameters_cache:
-            return self._request_parameters_cache
         arguments = dict()
         if len(request.opt.uri_query) == 0:
             return (
@@ -158,12 +155,6 @@ class RPCResource(Resource):
             presend_ack=arguments.pop("presend_ack", False),
         )
         additional_payload = SerializableNone if not arguments else SerializableData(arguments)  # application/json
-        self._request_parameters_cache = (
-            server_execution_context,
-            thing_execution_context,
-            local_execution_context,
-            additional_payload,
-        )
         return server_execution_context, thing_execution_context, local_execution_context, additional_payload
 
     def get_request_payload(self, request: Message) -> tuple[SerializableData, PreserializedData]:

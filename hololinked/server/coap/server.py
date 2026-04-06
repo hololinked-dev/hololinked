@@ -164,6 +164,7 @@ class CoAPServer(BaseProtocolServer):
             bind=(bind_address, self.port),
             _ssl_context=self.ssl_context,
             transports=self.transports,
+            loop=asyncio.get_running_loop(),
         )
         self.context.log = self.logger
         # This method should not block, just create side-effects
@@ -178,7 +179,6 @@ class CoAPServer(BaseProtocolServer):
         # This method should not block, just create side-effects
         await self.setup()
         self.logger.info(f"CoAP server started at coap://{self.address}:{self.port}")
-        await asyncio.get_running_loop().create_future()
 
     def stop(self) -> None:
         """Stop the CoAP server and cleanup resources"""

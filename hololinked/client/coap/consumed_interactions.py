@@ -215,8 +215,22 @@ class CoAPConsumedAffordanceMixin:
         form.href = f"{form.href}?messageID={message_id}&timeout={timeout or self._invokation_timeout}"
         form.cov_method = "GET"
         coap_request = self.create_coap_request(form, "GET", None)
-        response = self._async_coap_client.send(coap_request)
+        response = self.sync_coap_call(coap_request)
         return self.get_body_from_response(response, form)
+
+    async def coap_call(self, request: Message) -> Any:
+        return await self._async_coap_client.request(request).response
+
+    def sync_coap_call(self, request: Message) -> Any:
+        return asyncio.run_coroutine_threadsafe(
+            self.coap_call(request),
+            self._async_coap_client.loop,
+        ).result(self._invokation_timeout)
+
+    async def async_coap_call(self, request: Message) -> Any:
+        loop = self._async_coap_client.loop
+        future = asyncio.run_coroutine_threadsafe(self.coap_call(request), loop)
+        return await asyncio.wrap_future(future)
 
 
 class CoAPAction(ConsumedThingAction, CoAPConsumedAffordanceMixin):
@@ -267,7 +281,7 @@ class CoAPAction(ConsumedThingAction, CoAPConsumedAffordanceMixin):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(kwargs)
         coap_request = self.create_coap_request(form, "POST", body)
-        response = await self._async_coap_client.request(coap_request).response
+        response = await self.async_coap_call(coap_request)
         return self.get_body_from_response(response, form)
 
     def __call__(self, *args, **kwargs):
@@ -279,7 +293,7 @@ class CoAPAction(ConsumedThingAction, CoAPConsumedAffordanceMixin):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(kwargs)
         coap_request = self.create_coap_request(form, "POST", body)
-        response = asyncio.run(self._async_coap_client.request(coap_request).response)
+        response = self.sync_coap_call(coap_request)
         return self.get_body_from_response(response, form)
 
     def oneway(self, *args, **kwargs):
@@ -293,7 +307,7 @@ class CoAPAction(ConsumedThingAction, CoAPConsumedAffordanceMixin):
         body = serializer.dumps(kwargs)
         form.href = f"{form.href}?oneway=true"
         coap_request = self.create_coap_request(form, "POST", body)
-        response = asyncio.run(self._async_coap_client.request(coap_request).response)
+        response = self.sync_coap_call(coap_request)
         # just to ensure the request was successful, no body expected.
         self.get_body_from_response(response, form)
         return None
@@ -309,7 +323,7 @@ class CoAPAction(ConsumedThingAction, CoAPConsumedAffordanceMixin):
         body = serializer.dumps(kwargs)
         form.href = f"{form.href}?noblock=true"
         coap_request = self.create_coap_request(form, "POST", body)
-        response = asyncio.run(self._async_coap_client.request(coap_request).response)
+        response = self.sync_coap_call(coap_request)
         if response.headers.get("X-Message-ID", None) is None:
             raise ValueError("The server did not return a message ID for the non-blocking action.")
         message_id = response.headers["X-Message-ID"]
@@ -368,7 +382,7 @@ class CoAPProperty(ConsumedThingProperty, CoAPConsumedAffordanceMixin):
         if form is None:
             raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
         coap_request = self.create_coap_request(form, "GET", None)
-        response = asyncio.run(self._async_coap_client.request(coap_request).response)
+        response = self.sync_coap_call(coap_request)
         return self.get_body_from_response(response, form)
 
     def set(self, value: Any) -> None:
@@ -381,7 +395,7 @@ class CoAPProperty(ConsumedThingProperty, CoAPConsumedAffordanceMixin):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
         coap_request = self.create_coap_request(form, "PUT", body)
-        response = asyncio.run(self._async_coap_client.request(coap_request).response)
+        response = self.sync_coap_call(coap_request)
         self.get_body_from_response(response, form)
         # Just to ensure the request was successful, no body expected.
         return None
@@ -391,7 +405,7 @@ class CoAPProperty(ConsumedThingProperty, CoAPConsumedAffordanceMixin):
         if form is None:
             raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
         coap_request = self.create_coap_request(form, "GET", b"")
-        response = await self._async_coap_client.request(coap_request).response
+        response = await self.async_coap_call(coap_request)
         return self.get_body_from_response(response, form)
 
     async def async_set(self, value: Any) -> None:
@@ -403,7 +417,7 @@ class CoAPProperty(ConsumedThingProperty, CoAPConsumedAffordanceMixin):
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         body = serializer.dumps(value)
         coap_request = self.create_coap_request(form, "PUT", body)
-        response = await self._async_coap_client.request(coap_request).response
+        response = await self.async_coap_call(coap_request)
         # Just to ensure the request was successful, no body expected.
         self.get_body_from_response(response, form)
         return None
@@ -418,19 +432,18 @@ class CoAPProperty(ConsumedThingProperty, CoAPConsumedAffordanceMixin):
         body = serializer.dumps(value)
         form.href = f"{form.href}?oneway=true"
         coap_request = self.create_coap_request(form, "PUT", body)
-        response = asyncio.run(self._async_coap_client.request(coap_request).response)
+        response = self.sync_coap_call(coap_request)
         # Just to ensure the request was successful, no body expected.
         self.get_body_from_response(response, form, raise_exception=False)
         return None
 
     def noblock_get(self) -> str:
-        raise NotImplementedError
         form = deepcopy(self.resource.retrieve_form(Operations.readproperty, None))
         if form is None:
             raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
         form.href = f"{form.href}?noblock=true"
         coap_request = self.create_coap_request(form, "GET", None)
-        response = asyncio.run(self._async_coap_client.request(coap_request).response)
+        response = self.sync_coap_call(coap_request)
         if response.headers.get("X-Message-ID", None) is None:
             raise ValueError("The server did not return a message ID for the non-blocking property read.")
         message_id = response.headers["X-Message-ID"]
@@ -448,7 +461,7 @@ class CoAPProperty(ConsumedThingProperty, CoAPConsumedAffordanceMixin):
         body = serializer.dumps(value)
         form.href = f"{form.href}?noblock=true"
         coap_request = self.create_coap_request(form, "PUT", body)
-        response = asyncio.run(self._async_coap_client.request(coap_request).response)
+        response = self.sync_coap_call(coap_request)
         if response.headers.get("X-Message-ID", None) is None:
             raise ValueError(
                 "The server did not return a message ID for the non-blocking property write. "
