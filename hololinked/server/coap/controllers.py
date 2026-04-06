@@ -21,7 +21,10 @@ from hololinked.core.zmq.message import (
     default_thing_execution_context,
 )
 from hololinked.serializers import Serializers
-from hololinked.server.coap.utils import ContentTypeMap, ContentTypeToStr
+from hololinked.server.coap.utils import (
+    CoAPCodeToContentTypeStr,
+    ContentTypeStrToCoAPCode,
+)
 from hololinked.td import (
     ActionAffordance,
     EventAffordance,
@@ -168,11 +171,11 @@ class RPCResource(Resource):
         preserialized_payload = PreserializedData(value=b"")
         if request.payload:
             if (
-                ContentTypeToStr.supports(request.opt.content_format)
-                and ContentTypeToStr.get(request.opt.content_format) in Serializers.allowed_content_types
+                CoAPCodeToContentTypeStr.supports(request.opt.content_format)
+                and CoAPCodeToContentTypeStr.get(request.opt.content_format) in Serializers.allowed_content_types
             ):
                 payload.value = request.payload
-                payload.content_type = ContentTypeToStr.get(request.opt.content_format)
+                payload.content_type = CoAPCodeToContentTypeStr.get(request.opt.content_format)
             elif global_config.ALLOW_UNKNOWN_SERIALIZATION:
                 preserialized_payload.value = request.payload
                 preserialized_payload.content_type = request.opt.content_format
@@ -248,26 +251,25 @@ class RPCResource(Resource):
                     thing_execution_context=thing_execution_context,
                 )
                 response_payload = self.thing.get_response_payload(response_message)
-                if response_payload.value:
-                    if not ContentTypeMap.supports(response_payload.content_type):
-                        return Message(
-                            code=Code.UNSUPPORTED_CONTENT_FORMAT,
-                            payload=f"Content-Type {response_payload.content_type} not supported by CoAP server".encode(),
-                            content_format=ContentFormat.TEXT,
-                            mtype=mtypes.ACK,
-                        )
-                    return Message(
-                        code=Code.CONTENT,
-                        payload=response_payload.value,
-                        mtype=mtypes.ACK,
-                        content_format=ContentTypeMap.get(response_payload.content_type),
-                    )
-                else:
+                if not response_payload.value:
                     return Message(
                         code=Code.CREATED,
                         mtype=mtypes.ACK,
                         content_format=ContentFormat.TEXT,
                     )
+                if not ContentTypeStrToCoAPCode.supports(response_payload.content_type):
+                    return Message(
+                        code=Code.UNSUPPORTED_CONTENT_FORMAT,
+                        payload=f"Content-Type {response_payload.content_type} not supported by CoAP server".encode(),
+                        content_format=ContentFormat.TEXT,
+                        mtype=mtypes.ACK,
+                    )
+                return Message(
+                    code=Code.CONTENT,
+                    payload=response_payload.value,
+                    mtype=mtypes.ACK,
+                    content_format=ContentTypeStrToCoAPCode.get(response_payload.content_type),
+                )
         except ConnectionAbortedError as ex:
             self.logger.error(f"lost connection to thing - {str(ex)}")
             return Message(

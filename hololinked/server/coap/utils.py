@@ -5,7 +5,7 @@ from aiocoap.numbers import ContentFormat
 from hololinked.serializers import Serializers
 
 
-class ContentTypeMap:
+class ContentTypeStrToCoAPCode:
     _mapping = {
         Serializers.json.content_type: ContentFormat.JSON,
         Serializers.pickle.content_type: ContentFormat.OCTETSTREAM,
@@ -22,7 +22,7 @@ class ContentTypeMap:
         return content_type in cls._mapping
 
 
-class ContentTypeToStr:
+class CoAPCodeToContentTypeStr:
     _mapping = {
         ContentFormat.JSON: Serializers.json.content_type,
         ContentFormat.OCTETSTREAM: Serializers.pickle.content_type,

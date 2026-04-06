@@ -19,13 +19,14 @@ from hololinked.client.abstractions import (
     ConsumedThingProperty,
     raise_local_exception,
 )
-from hololinked.client.coap.utils import ContentTypeToCode, ContentTypeToStr
+from hololinked.client.coap.utils import (
+    CoAPCodeToContentTypeStr,
+    ContentTypeStrToCoAPCode,
+)
 from hololinked.constants import Operations
 from hololinked.serializers import Serializers
 from hololinked.td.forms import Form
-from hololinked.td.interaction_affordance import (
-    ActionAffordance,
-)
+from hololinked.td.interaction_affordance import ActionAffordance
 
 
 class CoAPConsumedAffordanceMixin:
@@ -128,9 +129,10 @@ class CoAPConsumedAffordanceMixin:
         if not body:
             return None
         opt = response.opt  # type: Options
-        if ContentTypeToStr.supports(opt.content_format):
-            givenContentType = ContentTypeToStr.get(opt.content_format)
-        givenContentType = givenContentType or form.contentType or "application/json"
+        if CoAPCodeToContentTypeStr.supports(opt.content_format):
+            givenContentType = CoAPCodeToContentTypeStr.get(opt.content_format)
+        else:
+            givenContentType = form.contentType or "application/json"
         serializer = Serializers.content_types.get(givenContentType)
         if serializer is None:
             raise ValueError(f"Unsupported content type: {form.contentType}")
@@ -182,14 +184,14 @@ class CoAPConsumedAffordanceMixin:
             method = Code[default_method]
         if body is None:
             body = b""
-        if form.contentType and not ContentTypeToCode.supports(form.contentType):
+        if form.contentType and not ContentTypeStrToCoAPCode.supports(form.contentType):
             raise ValueError(f"Unsupported content type: {form.contentType}")
         return Message(
             code=method,
             uri=form.href,
             payload=body,
             # add opts below
-            content_format=ContentTypeToCode.get(form.contentType or "application/json"),
+            content_format=ContentTypeStrToCoAPCode.get(form.contentType or "application/json"),
         )
 
     def read_reply(self, form: Form, message_id: str, timeout: float = None) -> Any:
