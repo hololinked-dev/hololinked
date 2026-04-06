@@ -10,7 +10,7 @@
       "console": "integratedTerminal",
       "cwd": "${workspaceFolder}",
       "justMyCode": false,
-      "args": "${input:programArgs}"
+      "args": ["${input:programArgs}"]
     },
     {
       "name": "Python: Debug Current File (WITHOUT args prompt)",
@@ -21,6 +21,15 @@
       "cwd": "${workspaceFolder}",
       "justMyCode": false,
     },
+    {
+      "name": "Python: Attach to debugpy",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+    }
   ],
   "inputs": [
     {

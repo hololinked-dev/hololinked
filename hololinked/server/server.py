@@ -52,7 +52,7 @@ class BaseProtocolServer(Parameterized):
         class_=(logging.Logger, structlog.stdlib.BoundLoggerBase),
         default=None,
         allow_None=True,
-    )  # type: logging.Logger | structlog.stdlib.BoundLogger
+    )  # type: structlog.stdlib.BoundLogger
     """Logger instance"""
 
     things = TypedList(default=None, allow_None=True, item_type=Thing)  # type: list[Thing] | None
@@ -283,6 +283,8 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
 
 def _print_welcome_message(servers: list[BaseProtocolServer]) -> None:
     """prints a welcome message to the console/log"""
+    from hololinked.server.coap.server import CoAPServer
+
     from . import HTTPServer, MQTTPublisher
 
     buffer = StringIO()
@@ -301,5 +303,10 @@ def _print_welcome_message(servers: list[BaseProtocolServer]) -> None:
             buffer.write(f" • Broker:   {server.hostname}:{server.port}\n")
             for thing in server.things:
                 buffer.write(f"   ➜ Topic tree: {thing.id}/thing-description\n")
+        elif isinstance(server, CoAPServer):
+            buffer.write("\n📡 CoAP:\n")
+            for thing in server.things:
+                td_path = "/resources/wot-td"
+                buffer.write(f"   ➜ Access point: {server.address}:{server.port}/{thing.id}{td_path}\n")
     buffer.write("\n" + "=" * 60 + "\n")
     print(buffer.getvalue())

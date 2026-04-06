@@ -199,6 +199,12 @@ def setup_servers(server_names, args, security_schemes):
             )
             servers.append(mqtt_publisher)
             logger.info(f"Added MQTT publisher to {args.mqtt_hostname}:{args.mqtt_port}")
+        elif name == "coap":
+            from hololinked.server.coap.server import CoAPServer
+
+            coap_server = CoAPServer(port=5683)
+            servers.append(coap_server)
+            logger.info(f"Added CoAP server on port {coap_server.port}")
         else:
             logger.info(f"Unknown server type: {name}")
 
@@ -253,6 +259,9 @@ def main():
         elif server_type == "MQTTPublisher":
             server.add_things(thing1, thing2)
             logger.info("Added thing1 and thing2 to MQTT publisher")
+        elif server_type == "CoAPServer":
+            server.add_things(thing1)
+            logger.info("Added thing1 to CoAP server")
 
     # Run servers
     logger.info(f"Starting {len(servers)} server(s) (forked={args.forked})...")

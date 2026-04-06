@@ -2563,6 +2563,8 @@ class TypedList(ClassSelector):
             return
         if value is not None and self.accept_nonlist_object and not isinstance(value, list):
             value = [value]
+        if isinstance(value, TypeConstrainedList):
+            return value
         return TypeConstrainedList(
             default=value,
             item_type=self.item_type,
