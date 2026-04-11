@@ -344,7 +344,7 @@ class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will c
 
     def __init__(
         self,
-        resource: EventAffordance,
+        resource: EventAffordance | PropertyAffordance,
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any,
     ) -> None:
@@ -353,8 +353,8 @@ class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will c
 
         Parameters
         ----------
-        resource: EventAffordance
-            dataclass object representing the event
+        resource: EventAffordance | PropertyAffordance
+            dataclass object representing the event or an observable property
         logger: structlog.stdlib.BoundLogger
             logger instance
         owner_inst: Any
@@ -399,17 +399,27 @@ class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will c
         """
         op = Operations.observeproperty if isinstance(self.resource, PropertyAffordance) else Operations.subscribeevent
         form = self.resource.retrieve_form(op, None)
-        callbacks = callbacks if isinstance(callbacks, (list, tuple)) else [callbacks]
+        cbs = (
+            callbacks
+            if isinstance(callbacks, list)
+            else list(callbacks)
+            if isinstance(callbacks, tuple)
+            else [callbacks]
+        )
         # if not create_new_connection:
         #   see tag v0.3.2 for logic
         if form is None:
             raise ValueError(f"No form found for {op} operation for {self.resource.name}")
         if asynch:
             get_current_async_loop().call_soon(
-                lambda: asyncio.create_task(self.async_listen(form, callbacks, concurrent, deserialize))
+                lambda: asyncio.create_task(self.async_listen(form, cbs, concurrent, deserialize))  # type: ignore
             )
         else:
-            _thread = threading.Thread(target=self.listen, args=(form, callbacks, concurrent, deserialize), daemon=True)
+            _thread = threading.Thread(
+                target=self.listen,
+                args=(form, cbs, concurrent, deserialize),
+                daemon=True,
+            )
             _thread.start()
 
     def unsubscribe(self) -> None:
@@ -483,7 +493,7 @@ class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will c
                     threading.Thread(target=cb, args=(event_data,)).start()
             except Exception as ex:
                 self.logger.error(f"Error occurred in callback {cb}: {ex}")
-                self.logger.exception(ex)
+                self.logger.exception(str(ex))
 
     async def async_schedule_callbacks(self, callbacks, event_data: Any, concurrent: bool = False) -> None:
         """
@@ -512,7 +522,7 @@ class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will c
                     cb(event_data)
             except Exception as ex:
                 self.logger.error(f"Error occurred in callback {cb}: {ex}")
-                self.logger.exception(ex)
+                self.logger.exception(str(ex))
 
     def add_callbacks(self, callbacks: list[Callable] | Callable, asynch: bool = False) -> None:
         """

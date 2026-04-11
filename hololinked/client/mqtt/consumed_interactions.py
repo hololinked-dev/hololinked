@@ -1,3 +1,5 @@
+"""Concrete implementation of MQTT based consumed property or event."""
+
 from typing import Any, Callable
 
 import aiomqtt
@@ -6,13 +8,13 @@ import structlog
 from paho.mqtt.client import Client as PahoMQTTClient
 from paho.mqtt.client import MQTTMessage
 
-from ...serializers import BaseSerializer, Serializers  # noqa: F401
-from ...td.forms import Form
-from ...td.interaction_affordance import EventAffordance, PropertyAffordance
-from ..abstractions import SSE, ConsumedThingEvent
+from hololinked.client.abstractions import SSE, ConsumedThingEvent
+from hololinked.serializers import BaseSerializer, Serializers  # noqa: F401
+from hololinked.td.forms import Form
+from hololinked.td.interaction_affordance import EventAffordance, PropertyAffordance
 
 
-class MQTTConsumer(ConsumedThingEvent):
+class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
     # An MQTT event consumer, both sync and async,
     # please dont add classdoc
 
@@ -26,6 +28,8 @@ class MQTTConsumer(ConsumedThingEvent):
         owner_inst: Any,
     ) -> None:
         """
+        Initialize the MQTT consumer.
+
         Parameters
         ----------
         sync_client: PahoMQTTClient
@@ -47,7 +51,13 @@ class MQTTConsumer(ConsumedThingEvent):
         self.async_client = async_client
         self.subscribed = True
 
-    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:
+    def listen(  # noqa: D102
+        self,
+        form: Form,
+        callbacks: list[Callable],
+        concurrent: bool = True,
+        deserialize: bool = True,
+    ) -> None:
         # This method is called from a different thread but also finishes quickly, we wont redo this way
         # for the time being.
         topic = form.mqv_topic or f"{self.resource.thing_id}/{self.resource.name}"
@@ -67,18 +77,24 @@ class MQTTConsumer(ConsumedThingEvent):
                             f"Error deserializing MQTT message for topic {topic}, "
                             + f"passing payload as it is. message: {ex}"
                         )
-                        self.logger.exception(ex)
+                        self.logger.exception(str(ex))
                 event_data = SSE()
                 event_data.data = payload
                 event_data.id = message.mid
                 self.schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
             except Exception as ex:
                 self.logger.error(f"Error handling MQTT message for topic {topic}: {ex}")
-                self.logger.exception(ex)
+                self.logger.exception(str(ex))
 
         self.sync_client.message_callback_add(topic, on_topic_message)
 
-    async def async_listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:
+    async def async_listen(  # noqa: D102
+        self,
+        form: Form,
+        callbacks: list[Callable],
+        concurrent: bool = True,
+        deserialize: bool = True,
+    ) -> None:
         topic = form.mqv_topic or f"{self.resource.thing_id}/{self.resource.name}"
         try:
             await self.async_client.__aenter__()
@@ -104,16 +120,16 @@ class MQTTConsumer(ConsumedThingEvent):
                             f"Error deserializing MQTT message for topic {topic}, "
                             + f"passing payload as it is. message: {ex}"
                         )
-                        self.logger.exception(ex)
+                        self.logger.exception(str(ex))
                 event_data = SSE()
                 event_data.data = payload
                 event_data.id = message.mid
                 await self.async_schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
             except Exception as ex:
                 self.logger.error(f"Error handling MQTT message for topic {topic}: {ex}")
-                self.logger.exception(ex)
+                self.logger.exception(str(ex))
         self.async_client.unsubscribe(topic)
 
-    def unsubscribe(self) -> None:
+    def unsubscribe(self) -> None:  # noqa: D102
         self.subscribed = False
         self.sync_client.message_callback_remove(f"{self.resource.thing_id}/{self.resource.name}")

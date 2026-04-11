@@ -106,7 +106,7 @@ class InteractionAffordance(Schema):
         return self._name
 
     @property
-    def thing_id(self) -> str | None:
+    def thing_id(self) -> str:
         """ID of the `Thing` instance owning the interaction affordance, if available, otherwise None"""
         return self._thing_id
 
@@ -116,12 +116,12 @@ class InteractionAffordance(Schema):
         return self._thing_cls
 
     def build(self) -> None:
-        """populate the fields of the schema for the specific interaction affordance"""
+        """Populate the fields of the schema for the specific interaction affordance"""
         raise NotImplementedError("build must be implemented in subclass of InteractionAffordance")
 
     def retrieve_form(self, op: str, default: Any = None) -> Form:
         """
-        retrieve form for a certain operation, return default if not found
+        Retrieve form for a certain operation, return default if not found
 
         Parameters
         ----------
@@ -145,7 +145,7 @@ class InteractionAffordance(Schema):
 
     def pop_form(self, op: str, default: Any = None) -> Form:
         """
-        retrieve and remove form for a certain operation, return default if not found
+        Retrieve and remove form for a certain operation, return default if not found
 
         Parameters
         ----------
@@ -174,7 +174,7 @@ class InteractionAffordance(Schema):
         owner: Thing,
     ) -> "PropertyAffordance | ActionAffordance | EventAffordance":
         """
-        build the schema for the specific interaction affordance as an instance of this class.
+        Build the schema for the specific interaction affordance as an instance of this class.
         Use the `json()` method to get the JSON representation of the schema.
 
         Note that this method is different from build() method as its supposed to be used as a classmethod
@@ -196,7 +196,7 @@ class InteractionAffordance(Schema):
     @classmethod
     def from_TD(cls, name: str, TD: JSON) -> "PropertyAffordance | ActionAffordance | EventAffordance":
         """
-        populate the schema from the TD and return it as an instance of this class.
+        Populate the schema from the TD and return it as an instance of this class.
 
         Parameters
         ----------
@@ -235,7 +235,7 @@ class InteractionAffordance(Schema):
         descriptor: Property | Action | Event,
         schema_generator: "InteractionAffordance",
     ) -> None:
-        """register a custom schema generator for a descriptor"""
+        """Register a custom schema generator for a descriptor"""
         if not isinstance(descriptor, (Property, Action, Event)):
             raise TypeError(
                 "custom schema generator can also be registered for Property." + f" Given type {type(descriptor)}"

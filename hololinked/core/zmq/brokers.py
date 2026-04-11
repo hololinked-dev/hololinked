@@ -439,7 +439,6 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
 
             - `logger`: logger instance to use. If None, a default logger is created.
         """
-
         super().__init__(id=id, **kwargs)
         self.create_socket(
             server_id=id,
@@ -456,7 +455,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
 
     @property
     def poll_timeout(self) -> int:
-        """socket polling timeout in milliseconds greater than 0"""
+        """Socket polling timeout in milliseconds greater than 0"""
         return self._poll_timeout
 
     @poll_timeout.setter
@@ -585,7 +584,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
 
     async def poll_requests(self) -> list[RequestMessage]:
         """
-        poll for messages with specified timeout (`poll_timeout`) and return if any messages are available.
+        Poll for messages with specified timeout (`poll_timeout`) and return if any messages are available.
         This method can be stopped from another method in a different thread or asyncio task (not in the same thread though).
 
         Returns
@@ -619,7 +618,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         return messages
 
     def stop_polling(self) -> None:
-        """stop polling and unblock `poll_messages()` method"""
+        """Stop polling and unblock `poll_messages()` method"""
         self.stop_poll = True
 
     async def _handshake(self, request_message: RequestMessage) -> None:
@@ -698,7 +697,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         )
 
     def exit(self) -> None:
-        """unregister socket from poller and terminate socket. context is not terminated as it may be shared."""
+        """Unregister socket from poller and terminate socket. context is not terminated as it may be shared."""
         try:
             BaseZMQ.exit(self)
             self.poller.unregister(self.socket)
@@ -757,7 +756,7 @@ class ZMQServerPool(BaseZMQServer):
 
     @property
     def poll_timeout(self) -> int:
-        """socket polling timeout in milliseconds greater than 0"""
+        """Socket polling timeout in milliseconds greater than 0"""
         return self._poll_timeout
 
     @poll_timeout.setter
@@ -771,7 +770,7 @@ class ZMQServerPool(BaseZMQServer):
 
     async def async_recv_request(self, id: str) -> RequestMessage:
         """
-        receive message for server specified by id
+        Receive message for server specified by id
 
         Parameters
         ----------
@@ -787,7 +786,7 @@ class ZMQServerPool(BaseZMQServer):
 
     async def async_recv_requests(self, id: str) -> list[RequestMessage]:
         """
-        receive all available messages for server specified by id
+        Receive all available messages for server specified by id
 
         Parameters
         ----------
@@ -810,7 +809,7 @@ class ZMQServerPool(BaseZMQServer):
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
     ) -> None:
         """
-        send response for a request message for server specified by id
+        Send response for a request message for server specified by id
 
         Parameters
         ----------
@@ -862,7 +861,7 @@ class ZMQServerPool(BaseZMQServer):
         return messages
 
     def stop_polling(self) -> None:
-        """stop polling method `poll()`"""
+        """Stop polling method `poll()`"""
         self.stop_poll = True
 
     def __getitem__(self, key) -> AsyncZMQServer:
@@ -923,7 +922,7 @@ class BaseZMQClient(BaseZMQ):
 
     @property
     def poll_timeout(self) -> int:
-        """socket polling timeout in milliseconds greater than 0"""
+        """Socket polling timeout in milliseconds greater than 0"""
         return self._poll_timeout
 
     @poll_timeout.setter
@@ -1054,11 +1053,11 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict = default_thing_execution_context,
     ) -> bytes:
         """
-        send request message to server.
+        Send request message to server.
 
         Parameters
         ----------
@@ -1160,16 +1159,16 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
 
     def execute(
         self,
-        thing_id: bytes,
+        thing_id: str,
         objekt: str,
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict = default_thing_execution_context,
     ) -> ResponseMessage:
         """
-        send an operation and receive the response for it.
+        Send an operation and receive the response for it.
 
         Parameters
         ----------
@@ -1206,7 +1205,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
 
     def handshake(self, timeout: float | int = 60000) -> None:
         """
-        handshake with server before sending first message
+        Handshake with server before sending first message
 
         Parameters
         ----------
@@ -1300,7 +1299,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
 
     def handshake(self, timeout: int | None = 60000) -> None:
         """
-        schedules a handshake coroutine in the running event loop
+        Schedules a handshake coroutine in the running event loop
         or completes handshake synchronously if no event loop is running.
         Use `handshake_complete()` async method to check if handshake is complete.
 
@@ -1313,7 +1312,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         run_callable_somehow(self._handshake(timeout))
 
     async def _handshake(self, timeout: float | int | None = 60000) -> None:
-        """handshake with server before sending first message"""
+        """Handshake with server before sending first message"""
         self._stop = False
         if self._monitor_socket is not None and self._monitor_socket in self.poller:
             self.poller.unregister(self._monitor_socket)
@@ -1346,7 +1345,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
 
     async def handshake_complete(self, timeout: float | int = 60000) -> None:
         """
-        wait for handshake to complete
+        Wait for handshake to complete
 
         Parameters
         ----------
@@ -1369,7 +1368,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         thing_execution_context: dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
-        send request message to server.
+        Send request message to server.
 
         Parameters
         ----------
@@ -1476,11 +1475,11 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict = default_thing_execution_context,
     ) -> ResponseMessage:
         """
-        send an operation and receive the response for it.
+        Send an operation and receive the response for it.
 
         Parameters
         ----------
@@ -1688,7 +1687,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     @property
     def poll_timeout(self) -> int:
-        """socket polling timeout in milliseconds greater than 0"""
+        """Socket polling timeout in milliseconds greater than 0"""
         return self._poll_timeout
 
     @poll_timeout.setter
@@ -1702,13 +1701,13 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self._poll_timeout = value
 
     async def handshake_complete(self) -> None:
-        """wait for handshake to complete for all clients in the pool"""
+        """Wait for handshake to complete for all clients in the pool"""
         for client in self.pool.values():
             await client.handshake_complete()  # sufficient to wait serially
 
     def handshake(self, timeout: int | None = 60000) -> None:
         """
-        schedules handshake coroutines for each client in the running event loop
+        Schedules handshake coroutines for each client in the running event loop
         or completes handshake synchronously if no event loop is running.
         Use `handshake_complete()` async method to check if handshake is complete.
 
@@ -1826,7 +1825,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> str:
         """
-        send request message to server.
+        Send request message to server.
 
         Parameters
         ----------
@@ -1929,7 +1928,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> ResponseMessage:
         """
-        send an operation and receive the response for it.
+        Send an operation and receive the response for it.
 
         Parameters
         ----------
@@ -1970,12 +1969,12 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         )
 
     def start_polling(self) -> None:
-        """register the server message polling loop in the asyncio event loop"""
+        """Register the server message polling loop in the asyncio event loop"""
         get_current_async_loop().create_task(self.poll_responses())
 
     def stop_polling(self):
         """
-        stop polling for replies from server
+        Stop polling for replies from server
         """
         self.stop_poll = True
         for client in self.pool.values():
@@ -2022,7 +2021,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> dict[str, ResponseMessage]:
-        """execute the same operation in all `Thing`s"""
+        """Execute the same operation in all `Thing`s"""
         return await self.async_execute_in_all(
             objekt=objekt,
             operation=operation,
@@ -2087,7 +2086,7 @@ class AsyncioEventPool:
 
     def pop(self) -> asyncio.Event:
         """
-        pop an event, new one is created if nothing left in pool
+        Pop an event, new one is created if nothing left in pool
         """
         try:
             event = self.pool.pop(0)
@@ -2099,7 +2098,7 @@ class AsyncioEventPool:
 
     def completed(self, event: asyncio.Event) -> None:
         """
-        put an event back into the pool
+        Put an event back into the pool
         """
         self.pool.append(event)
 
@@ -2143,7 +2142,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
     def register(self, event: "EventDispatcher") -> None:
         """
-        register event with a specific (unique) name
+        Register event with a specific (unique) name
 
         Parameters
         ----------
@@ -2158,7 +2157,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
     def unregister(self, event: "EventDispatcher") -> None:
         """
-        unregister event with a specific (unique) name
+        Unregister event with a specific (unique) name
 
         Parameters
         ----------
@@ -2176,7 +2175,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
     def publish(self, event, data: Any) -> None:
         """
-        publish an event with given unique name.
+        Publish an event with given unique name.
 
         Parameters
         ----------
@@ -2267,7 +2266,6 @@ class BaseEventConsumer(BaseZMQClient):
             - `poll_timeout`: `int`, socket polling timeout in milliseconds greater than 0.
             - `server_id`: `str`, id of the PUB socket server, usually not necessary as `access_point` is sufficient.
         """
-
         if isinstance(self, BaseSyncZMQ):
             self.context = context or global_config.zmq_context()
             self.poller = zmq.Poller()
@@ -2310,7 +2308,7 @@ class BaseEventConsumer(BaseZMQClient):
         self._stop = False
 
     def subscribe(self) -> None:
-        """subscribe to the event at the PUB socket"""
+        """Subscribe to the event at the PUB socket"""
         self.socket.setsockopt(zmq.SUBSCRIBE, self.event_unique_identifier)
         # pair sockets cannot be polled unforunately, so we use router
         # if self.socket in self.poller._map:
@@ -2321,13 +2319,13 @@ class BaseEventConsumer(BaseZMQClient):
         self.poller.register(self.interruptor, zmq.POLLIN)
 
     def stop_polling(self) -> None:
-        """stop polling for events when `receive()` is called"""
+        """Stop polling for events when `receive()` is called"""
         self._stop = True
 
     @property
     def interrupt_message(self) -> EventMessage:
         """
-        craft an interrupt message to be sent to the interruptor socket, if `stop_polling()` is not sufficient as
+        Craft an interrupt message to be sent to the interruptor socket, if `stop_polling()` is not sufficient as
         the poll timeout is infinite. Used internally by `interrupt()` method.
         """
         return EventMessage.craft_from_arguments(
@@ -2358,7 +2356,7 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
 
     def receive(self, timeout: float | None = 1000, raise_interrupt_as_exception: bool = False) -> EventMessage | None:
         """
-        receive event with given timeout
+        Receive event with given timeout
 
         Parameters
         ----------
@@ -2402,7 +2400,7 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
 
     def interrupt(self):
         """
-        interrupts the event consumer. Generally should be used for exiting this object if there is no poll
+        Interrupts the event consumer. Generally should be used for exiting this object if there is no poll
         period/infinite polling. Otherwise please use stop_polling().
         """
         self.interrupting_peer.send_multipart(self.interrupt_message.byte_array)
@@ -2417,7 +2415,7 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         raise_interrupt_as_exception: bool = False,
     ) -> EventMessage | None:
         """
-        receive event with given timeout
+        Receive event with given timeout
 
         Parameters
         ----------
@@ -2466,7 +2464,7 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
 
     async def interrupt(self):
         """
-        interrupts the event consumer. Generally should be used for exiting this object if there is no poll
+        Interrupts the event consumer. Generally should be used for exiting this object if there is no poll
         period/infinite polling. Otherwise please use stop_polling().
         """
         await self.interrupting_peer.send_multipart(self.interrupt_message.byte_array)

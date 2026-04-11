@@ -1,3 +1,5 @@
+"""Concrete implementation of ZMQ based consumed property, action or event."""
+
 import asyncio
 import threading
 import traceback
@@ -8,13 +10,14 @@ from typing import Any, Callable
 
 import structlog
 
-from ...client.abstractions import (
+from hololinked.client.abstractions import (
     SSE,
     ConsumedThingAction,
     ConsumedThingEvent,
     ConsumedThingProperty,
-    raise_local_exception,
 )
+from hololinked.client.exceptions import raise_local_exception
+
 from ...constants import Operations
 from ...core import Action, Thing  # noqa: F401
 from ...core.zmq.brokers import (
@@ -63,15 +66,17 @@ class ZMQConsumedAffordanceMixin:
     def __init__(
         self,
         sync_client: SyncZMQClient,
-        async_client: AsyncZMQClient | None = None,
+        async_client: AsyncZMQClient,
         **kwargs,
     ) -> None:
         """
+        Initialize this mixin, which offers common functionalities for ZMQ based affordances.
+
         Parameters
         ----------
-        sync_client: SyncZMQClient
+        sync_client: SyncZMQClient | None
             synchronous ZMQ client
-        async_client: AsyncZMQClient
+        async_client: AsyncZMQClient | None
             asynchronous ZMQ client for async calls
         kwargs:
             additional keyword arguments:
@@ -88,9 +93,13 @@ class ZMQConsumedAffordanceMixin:
         self._thing_execution_context = dict(fetch_execution_logs=False)
         self._last_zmq_response = None  # type: ResponseMessage | None
 
+        from hololinked.client import ObjectProxy
+
+        self.owner_inst: ObjectProxy
+
     def get_last_return_value(self, response: ResponseMessage, raise_exception: bool = False) -> Any:
         """
-        Cached return value of the last operation performed.
+        Get cached return value of the last operation performed.
 
         Parameters
         ----------
@@ -98,6 +107,16 @@ class ZMQConsumedAffordanceMixin:
             last response message received from the server
         raise_exception: bool
             whether to raise exception if the last response was an error message
+
+        Returns
+        -------
+        Any
+            As the title says
+
+        Raises
+        ------
+        RuntimeError
+            if response is None, meaning no operation was performed yet
         """
         if response is None:
             raise RuntimeError("No last response available. Did you make an operation?")
@@ -112,21 +131,43 @@ class ZMQConsumedAffordanceMixin:
         return payload
 
     @property
-    def last_zmq_response(self) -> ResponseMessage:
-        """Cache of last message received for this property"""
+    def last_zmq_response(self) -> ResponseMessage | None:
+        """Cache of last ZMQ message received."""
         return self._last_zmq_response
 
-    def read_reply(self, message_id: str, timeout: int = None) -> Any:
+    def read_reply(self, message_id: str, timeout: float | int | None = None) -> Any:
+        """
+        Read the reply of the action call which was scheduled with `noblock`.
+
+        Parameters
+        ----------
+        message_id: str
+            id of the request or message (UUID4 as string)
+        timeout: float | int | None
+            timeout in seconds to wait for the reply, None means wait indefinitely
+
+        Raises
+        ------
+        RuntimeError
+            if the message_id does not belong to this property or action
+        ReplyNotArrivedError
+            if the reply did not arrive within the timeout
+
+        Returns
+        -------
+        Any
+            reply of the action call
+        """
         if self.owner_inst._noblock_messages.get(message_id) != self:
             raise RuntimeError(f"Message ID {message_id} does not belong to this property.")
-        response = self._sync_zmq_client.recv_response(message_id=message_id)
+        response = self._sync_zmq_client.recv_response(message_id=message_id.encode())
         if not response:
             raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
         self._last_zmq_response = response
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
 
 
-class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
+class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):  # noqa: D101
     # ZMQ method call abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
@@ -140,18 +181,27 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         **kwargs,
     ) -> None:
         """
+        Initialize a ZMQAction instance.
+
         Parameters
         ----------
         resource: ActionAffordance
             dataclass object representing the action
         sync_client: SyncZMQClient
             synchronous ZMQ client
-        async_zmq_client: AsyncZMQClient
+        async_client: AsyncZMQClient
             asynchronous ZMQ client for async calls
         owner_inst: Any
             the parent object that owns this action
         logger: structlog.stdlib.BoundLogger
             logger instance
+        kwargs:
+            additional keyword arguments:
+
+            - `invokation_timeout`: float, default 5.0
+                timeout for invokation of action or property read/write
+            - `execution_timeout`: float, default 5.0
+                timeout for execution of action or property read/write
         """
         ConsumedThingAction.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
@@ -162,13 +212,11 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
         doc="cached return value of the last call to the method",
     )
 
-    def __call__(self, *args, **kwargs) -> Any:
+    def __call__(self, *args, **kwargs) -> Any:  # noqa: D102
         if len(args) > 0:
             kwargs["__args__"] = args
-        elif self.schema_validator:
-            self.schema_validator.validate(kwargs)
-        form = self.resource.retrieve_form(Operations.invokeaction, Form())
-        # works over ThingModel, there can be a default empty form
+        form = self.resource.retrieve_form(Operations.invokeaction, Form())  # works over ThingModel,
+        # so there can be a default empty form
         response = self._sync_zmq_client.execute(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -181,15 +229,11 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             thing_execution_context=self._thing_execution_context,
         )
         self._last_zmq_response = response
-        return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, raise_exception=True)
 
-    async def async_call(self, *args, **kwargs) -> Any:
-        if not self._async_zmq_client:
-            raise RuntimeError("async calls not possible as async_mixin was not set True at __init__()")
+    async def async_call(self, *args, **kwargs) -> Any:  # noqa: D102
         if len(args) > 0:
             kwargs["__args__"] = args
-        elif self.schema_validator:
-            self.schema_validator.validate(kwargs)
         response = await self._async_zmq_client.async_execute(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -206,13 +250,11 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             thing_execution_context=self._thing_execution_context,
         )
         self._last_zmq_response = response
-        return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
+        return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, raise_exception=True)
 
-    def oneway(self, *args, **kwargs) -> None:
+    def oneway(self, *args, **kwargs) -> None:  # noqa: D102
         if len(args) > 0:
             kwargs["__args__"] = args
-        elif self.schema_validator:
-            self.schema_validator.validate(kwargs)
         self._sync_zmq_client.send_request(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -230,11 +272,9 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
             thing_execution_context=self._thing_execution_context,
         )
 
-    def noblock(self, *args, **kwargs) -> str:
+    def noblock(self, *args, **kwargs) -> str:  # noqa: D102
         if len(args) > 0:
             kwargs["__args__"] = args
-        elif self.schema_validator:
-            self.schema_validator.validate(kwargs)
         msg_id = self._sync_zmq_client.send_request(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -249,12 +289,12 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):
                 execution_timeout=self._execution_timeout,
             ),
             thing_execution_context=self._thing_execution_context,
-        )
+        ).decode()
         self.owner_inst._noblock_messages[msg_id] = self
         return msg_id
 
 
-class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
+class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):  # noqa: D101
     # property get set abstraction
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
@@ -268,6 +308,8 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         **kwargs,
     ) -> None:
         """
+        Initialize a ZMQProperty instance.
+
         Parameters
         ----------
         resource: PropertyAffordance
@@ -280,6 +322,14 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
             the parent object that owns this property
         logger: structlog.stdlib.BoundLogger
             logger instance for logging
+
+        kwargs:
+            additional keyword arguments:
+
+            - `invokation_timeout`: float, default 5.0
+                timeout for invokation of action or property read/write
+            - `execution_timeout`: float, default 5.0
+                timeout for execution of action or property read/write
         """
         ConsumedThingProperty.__init__(self, resource=resource, owner_inst=owner_inst, logger=logger)
         ZMQConsumedAffordanceMixin.__init__(self, sync_client=sync_client, async_client=async_client, **kwargs)
@@ -290,7 +340,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         doc="cached return value of the last call to the method",
     )
 
-    def set(self, value: Any) -> None:
+    def set(self, value: Any) -> None:  # noqa: D102
         response = self._sync_zmq_client.execute(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -309,7 +359,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self._last_zmq_response = response
         ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
 
-    def get(self) -> Any:
+    def get(self) -> Any:  # noqa: D102
         response = self._sync_zmq_client.execute(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -323,9 +373,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self._last_zmq_response = response
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
 
-    async def async_set(self, value: Any) -> None:
-        if not self._async_zmq_client:
-            raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
+    async def async_set(self, value: Any) -> None:  # noqa: D102
         response = await self._async_zmq_client.async_execute(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -344,9 +392,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self._last_zmq_response = response
         ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
 
-    async def async_get(self) -> Any:
-        if not self._async_zmq_client:
-            raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
+    async def async_get(self) -> Any:  # noqa: D102
         response = await self._async_zmq_client.async_execute(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -360,7 +406,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
         self._last_zmq_response = response
         return ZMQConsumedAffordanceMixin.get_last_return_value(self, response, True)
 
-    def oneway_set(self, value: Any) -> None:
+    def oneway_set(self, value: Any) -> None:  # noqa: D102
         self._sync_zmq_client.send_request(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -377,7 +423,7 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
             ),
         )
 
-    def noblock_get(self) -> str:
+    def noblock_get(self) -> str:  # noqa: D102
         msg_id = self._sync_zmq_client.send_request(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -387,11 +433,11 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
                 execution_timeout=self._execution_timeout,
             ),
             thing_execution_context=self._thing_execution_context,
-        )
+        ).decode()
         self.owner_inst._noblock_messages[msg_id] = self
         return msg_id
 
-    def noblock_set(self, value: Any) -> None:
+    def noblock_set(self, value: Any) -> str:  # noqa: D102
         msg_id = self._sync_zmq_client.send_request(
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
@@ -406,17 +452,15 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):
                 execution_timeout=self._execution_timeout,
             ),
             thing_execution_context=self._thing_execution_context,
-        )
+        ).decode()
         self.owner_inst._noblock_messages[msg_id] = self
         return msg_id
 
 
-class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
+class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):  # noqa: D101
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
-    __slots__ = [
-        "_subscribed",
-    ]
+    __slots__ = ["_subscribed"]
 
     def __init__(
         self,
@@ -425,10 +469,28 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
         owner_inst: Any,
         **kwargs,
     ) -> None:
-        ConsumedThingEvent.__init__(self, resource=resource, logger=logger, owner_inst=owner_inst)
-        ZMQConsumedAffordanceMixin.__init__(self, sync_client=None, async_client=None, **kwargs)
+        """
+        Initialize a ZMQEvent instance.
 
-    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:
+        Parameters
+        ----------
+        resource: EventAffordance | PropertyAffordance
+            dataclass object representing the event or property to subscribe to
+        logger: structlog.stdlib.BoundLogger
+            logger instance for logging
+        owner_inst: Any
+            the parent object that owns this event
+        """
+        ConsumedThingEvent.__init__(self, resource=resource, logger=logger, owner_inst=owner_inst)
+        ZMQConsumedAffordanceMixin.__init__(self, sync_client=None, async_client=None, **kwargs)  # type: ignore
+
+    def listen(  # noqa: D102
+        self,
+        form: Form,
+        callbacks: list[Callable],
+        concurrent: bool = True,
+        deserialize: bool = True,
+    ) -> None:
         sync_event_client = EventConsumer(
             id=f"{self.resource.thing_id}|{self.resource.name}|sync|{uuid.uuid4().hex[:8]}",
             event_unique_identifier=f"{self.resource.thing_id}/{self.resource.name}",
@@ -461,7 +523,13 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                     category=RuntimeWarning,
                 )
 
-    async def async_listen(self, form: Form, callbacks: list[Callable], concurrent: bool, deserialize: bool) -> None:
+    async def async_listen(  # noqa: D102
+        self,
+        form: Form,
+        callbacks: list[Callable],
+        concurrent: bool = True,
+        deserialize: bool = True,
+    ) -> None:
         async_event_client = AsyncEventConsumer(
             id=f"{self.resource.thing_id}|{self.resource.name}|async|{uuid.uuid4().hex[:8]}",
             event_unique_identifier=f"{self.resource.thing_id}/{self.resource.name}",
@@ -469,7 +537,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
             logger=self.logger,
         )
         async_event_client.subscribe()
-        task_id = asyncio.current_task().get_name()
+        task_id = asyncio.current_task().get_name()  # type: ignore
         self._subscribed[task_id] = (True, async_event_client)
         while True:
             try:
@@ -485,7 +553,7 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                 await self.async_schedule_callbacks(callbacks, event_data, concurrent)
             except BreakLoop:
                 break
-            except Exception as ex:
+            except Exception as ex:  # noqa: BLE001
                 # traceback.print_exc()
                 # if "There is no current event loop in thread" and not self._subscribed:
                 #     # TODO: some minor bug here within the umq receive loop when the loop is interrupted
@@ -493,29 +561,46 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):
                 #    pass
                 # else:
                 warnings.warn(
-                    f"Uncaught exception from {self.resource.name} event - {str(ex)}\n{traceback.print_exc()}",
+                    f"Uncaught exception from {self.resource.name} event - {ex!s}\n{traceback.print_exc()}",
                     category=RuntimeWarning,
                 )
 
-    def unsubscribe(self) -> None:
-        for task_id, (subscribed, client) in self._subscribed.items():
+    def unsubscribe(self) -> None:  # noqa: D102
+        for subscribed, client in self._subscribed.values():
             if client:
                 client.stop_polling()
         return super().unsubscribe()
 
 
 class WriteMultipleProperties(ZMQAction):
-    """
-    Read and write multiple properties at once
-    """
+    """Read and write multiple properties at once."""
 
     def __init__(
         self,
         sync_client: SyncZMQClient,
-        async_client: AsyncZMQClient | None = None,
+        async_client: AsyncZMQClient,
         owner_inst: Any = None,
         **kwargs,
     ) -> None:
+        """
+        Initialize a WriteMultipleProperties instance.
+
+        Parameters
+        ----------
+        sync_client: SyncZMQClient
+            synchronous ZMQ client
+        async_client: AsyncZMQClient
+            asynchronous ZMQ client for async calls
+        owner_inst: Any
+            the parent object that owns this action
+        kwargs:
+            additional keyword arguments:
+
+            - `invokation_timeout`: float, default 5.0
+                timeout for invokation of action or property read/write
+            - `execution_timeout`: float, default 5.0
+                timeout for execution of action or property read/write
+        """
         action = Thing._set_properties  # type: Action
         resource = action.to_affordance(Thing)
         resource._thing_id = owner_inst.thing_id
@@ -529,17 +614,34 @@ class WriteMultipleProperties(ZMQAction):
 
 
 class ReadMultipleProperties(ZMQAction):
-    """
-    Read multiple properties at once
-    """
+    """Read multiple properties at once."""
 
     def __init__(
         self,
         sync_client: SyncZMQClient,
-        async_client: AsyncZMQClient | None = None,
+        async_client: AsyncZMQClient,
         owner_inst: Any = None,
         **kwargs,
     ) -> None:
+        """
+        Initialize a ReadMultipleProperties instance.
+
+        Parameters
+        ----------
+        sync_client: SyncZMQClient
+            synchronous ZMQ client
+        async_client: AsyncZMQClient
+            asynchronous ZMQ client for async calls
+        owner_inst: Any
+            the parent object that owns this action
+        kwargs:
+            additional keyword arguments:
+
+            - `invokation_timeout`: float, default 5.0
+                timeout for invokation of action or property read/write
+            - `execution_timeout`: float, default 5.0
+                timeout for execution of action or property read/write
+        """
         action = Thing._get_properties  # type: Action
         resource = action.to_affordance(Thing)
         resource._thing_id = owner_inst.thing_id
@@ -553,7 +655,7 @@ class ReadMultipleProperties(ZMQAction):
 
 
 __all__ = [
-    ZMQAction.__name__,
-    ZMQProperty.__name__,
-    ZMQEvent.__name__,
+    "ZMQAction",
+    "ZMQEvent",
+    "ZMQProperty",
 ]

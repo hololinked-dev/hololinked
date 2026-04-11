@@ -1,6 +1,4 @@
-"""
-Classes that contain the client logic for the HTTP protocol.
-"""
+"""Concrete implementation of HTTP based consumed property, action or event."""
 
 import asyncio
 import contextlib
@@ -13,20 +11,20 @@ import httpcore
 import httpx
 import structlog
 
-from ...constants import Operations
-from ...serializers import Serializers
-from ...td.forms import Form
-from ...td.interaction_affordance import (
-    ActionAffordance,
-    EventAffordance,
-    PropertyAffordance,
-)
-from ..abstractions import (
+from hololinked.client.abstractions import (
     SSE,
     ConsumedThingAction,
     ConsumedThingEvent,
     ConsumedThingProperty,
-    raise_local_exception,
+)
+from hololinked.client.exceptions import raise_local_exception
+from hololinked.constants import Operations
+from hololinked.serializers import Serializers
+from hololinked.td.forms import Form
+from hololinked.td.interaction_affordance import (
+    ActionAffordance,
+    EventAffordance,
+    PropertyAffordance,
 )
 
 
@@ -35,32 +33,34 @@ class HTTPConsumedAffordanceMixin:
 
     def __init__(
         self,
+        sync_client: httpx.Client,
+        async_client: httpx.AsyncClient,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        sync_client: httpx.Client = None,
-        async_client: httpx.AsyncClient = None,
     ) -> None:
         """
+        Initialize the HTTP consumed affordance mixin.
+
         Parameters
         ----------
+        sync_client: httpx.Client
+            synchronous HTTP client
+        async_client: httpx.AsyncClient
+            asynchronous HTTP client
         invokation_timeout: int
             timeout for invokation of an operation, other timeouts are specified while creating the client
             in `ClientFactory`
         execution_timeout: int
             timeout for execution of an operation, other timeouts are specified while creating the client
             in `ClientFactory`
-        sync_client: httpx.Client
-            synchronous HTTP client
-        async_client: httpx.AsyncClient
-            asynchronous HTTP client
         """
         super().__init__()
-        self._invokation_timeout = invokation_timeout
-        self._execution_timeout = execution_timeout
         self._sync_http_client = sync_client
         self._async_http_client = async_client
+        self._invokation_timeout = invokation_timeout
+        self._execution_timeout = execution_timeout
 
-        from .. import ObjectProxy  # noqa: F401
+        from hololinked.client import ObjectProxy  # noqa: F401
 
         self.owner_inst: ObjectProxy
 
@@ -71,9 +71,10 @@ class HTTPConsumedAffordanceMixin:
         raise_exception: bool = True,
     ) -> Any:
         """
-        Extracts and deserializes the body from an HTTP response.
+        Extract and deserialize the body from an HTTP response.
+
         Only 200 to 300 status codes, and 304 are considered successful.
-        Other response codes raise an error or return None.
+        Other response codes raise an error or return None, whichever is appropriate.
 
         Parameters
         ----------
@@ -83,6 +84,11 @@ class HTTPConsumedAffordanceMixin:
             The form used for the request, needed to decide a fallback content type
         raise_exception: bool
             Whether to raise an exception if the response body contains an exception
+
+        Raises
+        ------
+        ValueError
+            If the content type of the response is not supported
 
         Returns
         -------
@@ -106,12 +112,19 @@ class HTTPConsumedAffordanceMixin:
 
     def _merge_auth_headers(self, base: dict[str, str]) -> dict[str, str]:
         """
-        Merge authentication headers into the base headers. The security scheme must be available on the owner object.
+        Merge authentication headers into the base headers.
+
+        The security scheme must be available on the owner object.
 
         Parameters
         ----------
         base: dict[str, str]
             The base headers to merge into
+
+        Returns
+        -------
+        dict[str, str]
+            The merged headers with authentication headers included if available
         """
         headers = base or {}
 
@@ -124,7 +137,9 @@ class HTTPConsumedAffordanceMixin:
 
     def create_http_request(self, form: Form, default_method: str, body: bytes | None = None) -> httpx.Request:
         """
-        Creates a HTTP request object from the given form and body. Adds authentication headers if available.
+        Create a HTTP request object from the given form and body.
+
+        Adds authentication headers if available.
 
         Parameters
         ----------
@@ -147,9 +162,9 @@ class HTTPConsumedAffordanceMixin:
             headers=self._merge_auth_headers({"Content-Type": form.contentType or "application/json"}),
         )
 
-    def read_reply(self, form: Form, message_id: str, timeout: float = None) -> Any:
+    def read_reply(self, form: Form, message_id: str, timeout: float | None = None) -> Any:
         """
-        Read the reply for a non-blocking action
+        Read the reply for a non-blocking action.
 
         Parameters
         ----------
@@ -157,8 +172,8 @@ class HTTPConsumedAffordanceMixin:
             The form to use for reading the reply
         message_id: str
             The message ID of the no-block request previously made
-        timeout: float
-            The timeout for waiting for the reply
+        timeout: float | None
+            The timeout for waiting for the reply, defaults to the invokation timeout of the client if not specified
 
         Returns
         -------
@@ -179,14 +194,16 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
     def __init__(
         self,
         resource: ActionAffordance,
-        sync_client: httpx.Client = None,
-        async_client: httpx.AsyncClient = None,
+        sync_client: httpx.Client,
+        async_client: httpx.AsyncClient,
+        logger: structlog.stdlib.BoundLogger,
+        owner_inst: Any = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        owner_inst: Any = None,
-        logger: structlog.stdlib.BoundLogger = None,
     ) -> None:
         """
+        Initialize the HTTP consumed action.
+
         Parameters
         ----------
         resource: ActionAffordance
@@ -195,16 +212,16 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
             synchronous HTTP client
         async_client: httpx.AsyncClient
             asynchronous HTTP client
+        logger: structlog.stdlib.BoundLogger
+            Logger instance
+        owner_inst: Any
+            The parent object that owns this consumer
         invokation_timeout: int
             timeout for invokation of an operation, other timeouts are specified while creating the client
             in `ClientFactory`
         execution_timeout: int
             timeout for execution of an operation, other timeouts are specified while creating the client
             in `ClientFactory`
-        owner_inst: Any
-            The parent object that owns this consumer
-        logger: structlog.stdlib.BoundLogger
-            Logger instance
         """
         ConsumedThingAction.__init__(self=self, resource=resource, owner_inst=owner_inst, logger=logger)
         HTTPConsumedAffordanceMixin.__init__(
@@ -240,7 +257,6 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         return self.get_body_from_response(response, form)
 
     def oneway(self, *args, **kwargs):
-        """Invoke the action without waiting for a response."""
         form = deepcopy(self.resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
@@ -256,7 +272,6 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         return None
 
     def noblock(self, *args, **kwargs) -> str:
-        """Invoke the action in non-blocking mode."""
         form = deepcopy(self.resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
@@ -287,14 +302,16 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
     def __init__(
         self,
         resource: PropertyAffordance,
-        sync_client: httpx.Client = None,
-        async_client: httpx.AsyncClient = None,
+        sync_client: httpx.Client,
+        async_client: httpx.AsyncClient,
+        logger: structlog.stdlib.BoundLogger,
+        owner_inst: Any = None,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        owner_inst: Any = None,
-        logger: structlog.stdlib.BoundLogger = None,
     ) -> None:
         """
+        Initialize the HTTP property consumer.
+
         Parameters
         ----------
         resource: PropertyAffordance
@@ -333,7 +350,6 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         return self.get_body_from_response(response, form)
 
     def set(self, value: Any) -> None:
-        """Synchronous set of the property value."""
         if self.resource.readOnly:
             raise NotImplementedError("This property is not writable")
         form = self.resource.retrieve_form(Operations.writeproperty, None)
@@ -433,14 +449,16 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
     def __init__(
         self,
         resource: EventAffordance | PropertyAffordance,
-        sync_client: httpx.Client = None,
-        async_client: httpx.AsyncClient = None,
+        sync_client: httpx.Client,
+        async_client: httpx.AsyncClient,
+        owner_inst: Any,
+        logger: structlog.stdlib.BoundLogger,
         invokation_timeout: int = 5,
         execution_timeout: int = 5,
-        owner_inst: Any = None,
-        logger: structlog.stdlib.BoundLogger = None,
     ) -> None:
         """
+        Initialize the HTTP event consumer.
+
         Parameters
         ----------
         resource: EventAffordance | PropertyAffordance
@@ -469,7 +487,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             execution_timeout=execution_timeout,
         )
 
-    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = False, deserialize: bool = True) -> None:
+    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = True, deserialize: bool = True) -> None:
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         callback_id = threading.get_ident()
 
@@ -509,11 +527,11 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
         self,
         form: Form,
         callbacks: list[Callable],
-        concurrent: bool = False,
+        concurrent: bool = True,
         deserialize: bool = True,
     ) -> None:
         serializer = Serializers.content_types.get(form.contentType or "application/json")
-        callback_id = asyncio.current_task().get_name()
+        callback_id = asyncio.current_task().get_name()  # type: ignore
 
         try:
             async with self._async_http_client.stream(
@@ -525,7 +543,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                 interrupting_event = asyncio.Event()
                 self._subscribed[callback_id] = (True, interrupting_event, resp)
                 event_data = SSE()
-                async for line in self.aiter_lines_interruptible(resp, interrupting_event, resp):
+                async for line in self.aiter_lines_interruptible(resp, interrupting_event):
                     try:
                         if not self._subscribed.get(callback_id, (False, None))[0] or interrupting_event.is_set():
                             # when value is popped, consider unsubscribed
@@ -550,12 +568,25 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
     async def aiter_lines_interruptible(self, resp: httpx.Response, stop: asyncio.Event) -> AsyncIterator[str]:
         """
         Yield lines from an httpx streaming response, but stop immediately when `stop` is set.
+
         Works by racing the next __anext__() call against stop.wait().
+
+        Parameters
+        ----------
+        resp: httpx.Response
+            The HTTP response object to read lines from
+        stop: asyncio.Event
+            The event to wait on for stopping the iteration
+
+        Yields
+        ------
+        str
+            The next line from the response, until stop is set or the stream ends
         """
         it = resp.aiter_lines()
         while not stop.is_set():
             try:
-                next_line = asyncio.create_task(it.__anext__())
+                next_line = asyncio.create_task(it.__anext__())  # type: ignore
                 stopper = asyncio.create_task(stop.wait())
                 done, pending = await asyncio.wait({next_line, stopper}, return_when=asyncio.FIRST_COMPLETED)
 
@@ -578,7 +609,21 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                 return
 
     def iter_lines_interruptible(self, resp: httpx.Response, stop: threading.Event) -> Iterator[str]:
-        """Iterate lines from an httpx streaming response, but stop immediately when `stop` is set"""
+        """
+        Iterate lines from an httpx streaming response, but stop immediately when `stop` is set.
+
+        Parameters
+        ----------
+        resp: httpx.Response
+            The HTTP response object to read lines from
+        stop: threading.Event
+            The event to wait on for stopping the iteration
+
+        Yields
+        ------
+        str
+            The next line from the response, until stop is set or the stream ends
+        """
         it = resp.iter_lines()
         # Using a dedicated stream scope inside the thread
         while not stop.is_set():
@@ -591,7 +636,16 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             yield next_line
 
     def decode_chunk(self, line: str, event_data: "SSE") -> None:
-        """Decode a single line of an SSE stream into the given SSE event_data object"""
+        """
+        Decode a single line of an SSE stream into the given SSE event_data object.
+
+        Parameters
+        ----------
+        line: str
+            The line from the SSE stream to decode
+        event_data: SSE
+            The SSE event data object to populate
+        """
         if line is None or line.startswith(":"):  # comment/heartbeat
             return
 
@@ -618,4 +672,8 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
         return super().unsubscribe()
 
 
-__all__ = [HTTPProperty.__name__, HTTPAction.__name__, HTTPEvent.__name__]
+__all__ = [
+    "HTTPProperty",
+    "HTTPAction",
+    "HTTPEvent",
+]
