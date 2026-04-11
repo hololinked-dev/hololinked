@@ -129,6 +129,7 @@ extend-select = [
 [tool.ruff.lint.per-file-ignores]
 "hololinked/client/abstractions.py" = ["DOC502"]
 "hololinked/client/proxy.py" = ["DOC502"]
+"hololinked/client/exceptions.py" = ["DOC502"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

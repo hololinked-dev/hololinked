@@ -130,6 +130,19 @@ class OAuthDirectAccessGrant(BaseModel):
     This flow is not recommended for production use due to security risks, and should only be used in trusted
     environments.
 
+    ```python
+    client = ClientFactory.http(
+        url="http://localhost:9000/my-thing/resources/wot-td",
+        security=OAuthDirectAccessGrant(
+            username=os.getenv("USERNAME", "admin"),
+            password=os.getenv("PASSWORD", "adminpass"),
+            oidc_config_url="https://example.com/.well-known/openid-configuration",
+            client_id="my-client-id",
+            client_secret=os.getenv("CLIENT_SECRET", "my-client-secret"),
+        )
+    )
+    ```
+
     Note: The implementation class is `OAuth2Security`, which is instantiated indirectly through the `ClientFactory`.
     """
 

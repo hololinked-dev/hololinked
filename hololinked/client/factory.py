@@ -13,6 +13,18 @@ import structlog
 from paho.mqtt.client import CallbackAPIVersion, MQTTMessage, MQTTProtocolVersion
 from paho.mqtt.client import Client as PahoMQTTClient
 
+from hololinked.client.http.consumed_interactions import HTTPAction, HTTPEvent, HTTPProperty
+from hololinked.client.mqtt.consumed_interactions import MQTTConsumer  # only one type for now
+from hololinked.client.proxy import ObjectProxy
+from hololinked.client.security import BasicSecurity, OAuth2Security, OAuthDirectAccessGrant
+from hololinked.client.zmq.consumed_interactions import (
+    ReadMultipleProperties,
+    WriteMultipleProperties,
+    ZMQAction,
+    ZMQEvent,
+    ZMQProperty,
+)
+
 from ..constants import ZMQ_TRANSPORTS
 from ..core import Thing
 from ..core.zmq import AsyncZMQClient, SyncZMQClient
@@ -24,17 +36,6 @@ from ..td.interaction_affordance import (
 )
 from ..utils import uuid_hex
 from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
-from .http.consumed_interactions import HTTPAction, HTTPEvent, HTTPProperty
-from .mqtt.consumed_interactions import MQTTConsumer  # only one type for now
-from .proxy import ObjectProxy
-from .security import BasicSecurity, OAuth2Security, OAuthDirectAccessGrant
-from .zmq.consumed_interactions import (
-    ReadMultipleProperties,
-    WriteMultipleProperties,
-    ZMQAction,
-    ZMQEvent,
-    ZMQProperty,
-)
 
 
 class ClientFactory:
