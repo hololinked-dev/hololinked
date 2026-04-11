@@ -1,6 +1,7 @@
 """Concrete implementation of MQTT based consumed property or event."""
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import aiomqtt
 import structlog
@@ -17,6 +18,22 @@ from hololinked.td.interaction_affordance import EventAffordance, PropertyAfford
 class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
     # An MQTT event consumer, both sync and async,
     # please dont add classdoc
+
+    __slots__ = [
+        "__doc__",
+        "__name__",
+        "__qualname__",
+        "async_client",
+        "logger",
+        "owner_inst",
+        "qos",
+        "resource",
+        "schema_validator",
+        "subscribed",
+        "sync_client",
+    ]
+    # __slots__ dont support multiple inheritance. Here there is no multiple inheritance but just to be consistent
+    # with other protocols which use multiple inheritance, we will keep the slots in the lowest child
 
     def __init__(
         self,
@@ -75,16 +92,15 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
                     except Exception as ex:
                         self.logger.error(
                             f"Error deserializing MQTT message for topic {topic}, "
-                            + f"passing payload as it is. message: {ex}"
+                            + f"passing payload as it is. message - {ex}",
+                            exc_info=True,
                         )
-                        self.logger.exception(str(ex))
                 event_data = SSE()
                 event_data.data = payload
                 event_data.id = message.mid
                 self.schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
             except Exception as ex:
-                self.logger.error(f"Error handling MQTT message for topic {topic}: {ex}")
-                self.logger.exception(str(ex))
+                self.logger.error(f"Error handling MQTT message for topic {topic} - {ex}", exc_info=True)
 
         self.sync_client.message_callback_add(topic, on_topic_message)
 
@@ -118,16 +134,15 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
                     except Exception as ex:
                         self.logger.error(
                             f"Error deserializing MQTT message for topic {topic}, "
-                            + f"passing payload as it is. message: {ex}"
+                            + f"passing payload as it is. message - {ex}",
+                            exc_info=True,
                         )
-                        self.logger.exception(str(ex))
                 event_data = SSE()
                 event_data.data = payload
                 event_data.id = message.mid
                 await self.async_schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
             except Exception as ex:
-                self.logger.error(f"Error handling MQTT message for topic {topic}: {ex}")
-                self.logger.exception(str(ex))
+                self.logger.error(f"Error handling MQTT message for topic {topic} - {ex}", exc_info=True)
         self.async_client.unsubscribe(topic)
 
     def unsubscribe(self) -> None:  # noqa: D102

@@ -1,10 +1,15 @@
 """Implementation of procedural/scripting client for Thing."""
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import structlog
 
-from hololinked.client.abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
+from hololinked.client.abstractions import (
+    ConsumedThingAction,
+    ConsumedThingEvent,
+    ConsumedThingProperty,
+)
 from hololinked.client.security import APIKeySecurity, BasicSecurity  # noqa: F401
 
 
@@ -79,56 +84,57 @@ class ObjectProxy:
         """
         self.id = id
         self._allow_foreign_attributes = kwargs.get("allow_foreign_attributes", False)
-        self._noblock_messages = dict()  # type: dict[str, ConsumedThingAction | ConsumedThingProperty]
+        self._noblock_messages = {}  # type: dict[str, ConsumedThingAction | ConsumedThingProperty]
         self._schema_validator = kwargs.get("schema_validator", None)
         self._security = kwargs.get("security", None)  # type: BasicSecurity | APIKeySecurity | None
         self.logger = kwargs.pop("logger", structlog.get_logger())
-        self.td = kwargs.get("td", dict())  # type: dict[str, Any]
+        self.td = kwargs.get("td", {})  # type: dict[str, Any]
 
-    def __getattribute__(self, __name: str) -> Any:
-        obj = super().__getattribute__(__name)
+    def __getattribute__(self, name: str) -> Any:  # noqa: D105
+        obj = super().__getattribute__(name)
         if isinstance(obj, ConsumedThingProperty):
             return obj.get()
         return obj
 
-    def __setattr__(self, __name: str, __value: Any) -> None:
+    def __setattr__(self, name: str, value: Any) -> None:  # noqa: D105
         if (
-            __name in ObjectProxy._own_attrs
-            or (__name not in self.__dict__ and isinstance(__value, ObjectProxy.__allowed_attribute_types__))
+            name in ObjectProxy._own_attrs
+            or (name not in self.__dict__ and isinstance(value, ObjectProxy.__allowed_attribute_types__))
             or self._allow_foreign_attributes
         ):
             # allowed attribute types are ConsumedThingProperty and ConsumedThingAction defined after this class
-            return super(ObjectProxy, self).__setattr__(__name, __value)
-        elif __name in self.__dict__:
-            obj = self.__dict__[__name]
+            return super().__setattr__(name, value)
+        elif name in self.__dict__:
+            obj = self.__dict__[name]
             if isinstance(obj, ConsumedThingProperty):
-                obj.set(value=__value)
+                obj.set(value=value)
                 return
-            raise AttributeError(f"Cannot set attribute {__name} again to ObjectProxy for {self.id}.")
+            raise AttributeError(f"Cannot set attribute {name} again to ObjectProxy for {self.id}.")
         raise AttributeError(
-            f"Cannot set foreign attribute {__name} to ObjectProxy for {self.id}. Given attribute not found in server object."
+            f"Cannot set foreign attribute {name} to ObjectProxy for {self.id}."
+            + "Given attribute not found in server object."
         )
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # noqa: D105
         return f"ObjectProxy {self.id}"
 
-    def __enter__(self):
+    def __enter__(self):  # noqa: D105
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback):  # noqa: D105
         pass
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other) -> bool:  # noqa: D105
         if other is self:
             return True
         return isinstance(other, ObjectProxy) and other.id == self.id and other.TD == self.TD
 
-    def __ne__(self, other) -> bool:
+    def __ne__(self, other) -> bool:  # noqa: D105
         if other and isinstance(other, ObjectProxy):
             return other.id != self.id or other.TD != self.TD
         return True
 
-    def __hash__(self) -> int:
+    def __hash__(self) -> int:  # noqa: D105
         return hash(self.id)
 
     # @abstractmethod
@@ -169,7 +175,7 @@ class ObjectProxy:
             server raised exception are propagated
         """
         action = getattr(self, name, None)  # type: ConsumedThingAction
-        if not isinstance(action, ConsumedThingAction):
+        if not action:
             raise AttributeError(f"No action named {name} in Thing {self.td['id']}")
         oneway = kwargs.pop("oneway", False)
         noblock = kwargs.pop("noblock", False)
@@ -208,7 +214,7 @@ class ObjectProxy:
             server raised exception are propagated.
         """
         action = getattr(self, name, None)  # type: ConsumedThingAction
-        if not isinstance(action, ConsumedThingAction):
+        if not action:
             raise AttributeError(f"No remote action named {name}")
         return await action.async_call(*args, **kwargs)
 
@@ -236,7 +242,7 @@ class ObjectProxy:
             server raised exception are propagated.
         """
         prop = self.__dict__.get(name, None)  # type: ConsumedThingProperty
-        if not isinstance(prop, ConsumedThingProperty):
+        if not prop:
             raise AttributeError(f"No property named {name}")
         if noblock:
             return prop.noblock_get()
@@ -267,7 +273,7 @@ class ObjectProxy:
             server raised exception are propagated.
         """
         prop = self.__dict__.get(name, None)  # type: ConsumedThingProperty
-        if not isinstance(prop, ConsumedThingProperty):
+        if not prop:
             raise AttributeError(f"No property named {name}")
         if oneway:
             prop.oneway_set(value)
@@ -300,7 +306,7 @@ class ObjectProxy:
             server raised exception are propagated.
         """
         prop = self.__dict__.get(name, None)  # type: ConsumedThingProperty
-        if not isinstance(prop, ConsumedThingProperty):
+        if not prop:
             raise AttributeError(f"No property named {name}")
         return await prop.async_get()
 
@@ -325,7 +331,7 @@ class ObjectProxy:
             server raised exception are propagated.
         """
         prop = self.__dict__.get(name, None)  # type: ConsumedThingProperty
-        if not isinstance(prop, ConsumedThingProperty):
+        if not prop:
             raise AttributeError(f"No property named {name}")
         await prop.async_set(value)
 
@@ -491,7 +497,7 @@ class ObjectProxy:
             if no property with specified name found in the Thing Description or if the property is not observable.
         """
         event = getattr(self, f"{name}_change_event", None)  # type: ConsumedThingEvent
-        if not isinstance(event, ConsumedThingEvent):
+        if not event:
             raise AttributeError(f"No events for property {name} or property not found")
         self.subscribe_event(
             name=f"{name}_change_event",
@@ -516,7 +522,7 @@ class ObjectProxy:
             if no property with specified name found in the Thing Description or if the property is not observable.
         """
         event = getattr(self, f"{name}_change_event", None)  # type: ConsumedThingEvent
-        if not isinstance(event, ConsumedThingEvent):
+        if not event:
             raise AttributeError(f"No events for property {name} or property not found")
         event.unsubscribe()
 
@@ -555,7 +561,7 @@ class ObjectProxy:
             if no event with specified name is found.
         """
         event = getattr(self, name, None)  # type: ConsumedThingEvent
-        if not isinstance(event, ConsumedThingEvent):
+        if not event:
             raise AttributeError(f"No event named {name}")
         # TODO: fix the logic below to reuse connections when possible
         # if not create_new_connection:
@@ -583,7 +589,7 @@ class ObjectProxy:
             if no event with specified name is found.
         """
         event = getattr(self, name, None)  # type: ConsumedThingEvent
-        if not isinstance(event, ConsumedThingEvent):
+        if not event:
             raise AttributeError(f"No event named {name}")
         event.unsubscribe()
 
@@ -639,4 +645,4 @@ class ObjectProxy:
         return self.td
 
 
-__all__ = [ObjectProxy.__name__]
+__all__ = ["ObjectProxy"]

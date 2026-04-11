@@ -6,7 +6,8 @@ import traceback
 import uuid
 import warnings
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import structlog
 
@@ -48,19 +49,19 @@ class ZMQConsumedAffordanceMixin:
     # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
     __slots__ = [
-        "resource",
-        "logger",
-        "schema_validator",
-        "owner_inst",
+        "__doc__",
         "__name__",
         "__qualname__",
-        "__doc__",
-        "_sync_zmq_client",
         "_async_zmq_client",
-        "_invokation_timeout",
         "_execution_timeout",
-        "_thing_execution_context",
+        "_invokation_timeout",
         "_last_zmq_response",
+        "_sync_zmq_client",
+        "_thing_execution_context",
+        "logger",
+        "owner_inst",
+        "resource",
+        "schema_validator",
     ]  # __slots__ dont support multiple inheritance
 
     def __init__(
@@ -90,7 +91,7 @@ class ZMQConsumedAffordanceMixin:
         self._async_zmq_client = async_client
         self._invokation_timeout = kwargs.get("invokation_timeout", 5.0)
         self._execution_timeout = kwargs.get("execution_timeout", 5.0)
-        self._thing_execution_context = dict(fetch_execution_logs=False)
+        self._thing_execution_context = {"fetch_execution_logs": False}
         self._last_zmq_response = None  # type: ResponseMessage | None
 
         from hololinked.client import ObjectProxy
@@ -135,7 +136,7 @@ class ZMQConsumedAffordanceMixin:
         """Cache of last ZMQ message received."""
         return self._last_zmq_response
 
-    def read_reply(self, message_id: str, timeout: float | int | None = None) -> Any:
+    def read_reply(self, message_id: str, timeout: float | None = None) -> Any:
         """
         Read the reply of the action call which was scheduled with `noblock`.
 
@@ -146,6 +147,11 @@ class ZMQConsumedAffordanceMixin:
         timeout: float | int | None
             timeout in seconds to wait for the reply, None means wait indefinitely
 
+        Returns
+        -------
+        Any
+            reply of the action call
+
         Raises
         ------
         RuntimeError
@@ -153,10 +159,6 @@ class ZMQConsumedAffordanceMixin:
         ReplyNotArrivedError
             if the reply did not arrive within the timeout
 
-        Returns
-        -------
-        Any
-            reply of the action call
         """
         if self.owner_inst._noblock_messages.get(message_id) != self:
             raise RuntimeError(f"Message ID {message_id} does not belong to this property.")
@@ -222,10 +224,10 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):  # noqa: D101
             objekt=self.resource.name,
             operation=Operations.invokeaction,
             payload=SerializableData(value=kwargs, content_type=form.contentType or "application/json"),
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+            },
             thing_execution_context=self._thing_execution_context,
         )
         self._last_zmq_response = response
@@ -243,10 +245,10 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):  # noqa: D101
                 content_type=self.resource.retrieve_form(Operations.invokeaction, Form()).contentType
                 or "application/json",
             ),
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+            },
             thing_execution_context=self._thing_execution_context,
         )
         self._last_zmq_response = response
@@ -264,11 +266,11 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):  # noqa: D101
                 content_type=self.resource.retrieve_form(Operations.invokeaction, Form()).contentType
                 or "application/json",
             ),
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-                oneway=True,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+                "oneway": True,
+            },
             thing_execution_context=self._thing_execution_context,
         )
 
@@ -284,10 +286,10 @@ class ZMQAction(ZMQConsumedAffordanceMixin, ConsumedThingAction):  # noqa: D101
                 content_type=self.resource.retrieve_form(Operations.invokeaction, Form()).contentType
                 or "application/json",
             ),
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+            },
             thing_execution_context=self._thing_execution_context,
         ).decode()
         self.owner_inst._noblock_messages[msg_id] = self
@@ -350,10 +352,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):  # noqa: D
                 content_type=self.resource.retrieve_form(Operations.writeproperty, Form()).contentType
                 or "application/json",
             ),
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+            },
             thing_execution_context=self._thing_execution_context,
         )
         self._last_zmq_response = response
@@ -364,10 +366,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):  # noqa: D
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
             operation=Operations.readproperty,
-            server_execution_context=dict(
-                invocation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+            },
             thing_execution_context=self._thing_execution_context,
         )
         self._last_zmq_response = response
@@ -383,10 +385,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):  # noqa: D
                 content_type=self.resource.retrieve_form(Operations.writeproperty, Form()).contentType
                 or "application/json",
             ),
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+            },
             thing_execution_context=self._thing_execution_context,
         )
         self._last_zmq_response = response
@@ -397,10 +399,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):  # noqa: D
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
             operation=Operations.readproperty,
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+            },
             thing_execution_context=self._thing_execution_context,
         )
         self._last_zmq_response = response
@@ -416,11 +418,11 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):  # noqa: D
                 content_type=self.resource.retrieve_form(Operations.writeproperty, Form()).contentType
                 or "application/json",
             ),
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-                oneway=True,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+                "oneway": True,
+            },
         )
 
     def noblock_get(self) -> str:  # noqa: D102
@@ -428,10 +430,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):  # noqa: D
             thing_id=self.resource.thing_id,
             objekt=self.resource.name,
             operation=Operations.readproperty,
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+            },
             thing_execution_context=self._thing_execution_context,
         ).decode()
         self.owner_inst._noblock_messages[msg_id] = self
@@ -447,10 +449,10 @@ class ZMQProperty(ZMQConsumedAffordanceMixin, ConsumedThingProperty):  # noqa: D
                 content_type=self.resource.retrieve_form(Operations.writeproperty, Form()).contentType
                 or "application/json",
             ),
-            server_execution_context=dict(
-                invokation_timeout=self._invokation_timeout,
-                execution_timeout=self._execution_timeout,
-            ),
+            server_execution_context={
+                "invokation_timeout": self._invokation_timeout,
+                "execution_timeout": self._execution_timeout,
+            },
             thing_execution_context=self._thing_execution_context,
         ).decode()
         self.owner_inst._noblock_messages[msg_id] = self
@@ -514,12 +516,12 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):  # noqa: D101
                 self.schedule_callbacks(callbacks, event_data, concurrent)
             except BreakLoop:
                 break
-            except Exception as ex:
+            except Exception as ex:  # noqa: BLE001
                 # traceback.print_exc()
                 # TODO: some minor bug here within the zmq receive loop when the loop is interrupted
                 # uncomment the above line to see the traceback
                 warnings.warn(
-                    f"Uncaught exception from {self.resource.name} event - {str(ex)}\n{traceback.print_exc()}",
+                    f"Uncaught exception from {self.resource.name} event - {ex!s}\n{traceback.print_exc()}",
                     category=RuntimeWarning,
                 )
 

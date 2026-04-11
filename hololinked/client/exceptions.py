@@ -8,16 +8,12 @@ from typing import Any
 class ReplyNotArrivedError(Exception):
     """Exception raised when a reply is not received in time."""
 
-    pass
-
 
 class BreakLoop(Exception):
     """Raise and catch to exit a loop from within another function or method."""
 
-    pass
 
-
-def raise_local_exception(error_message: dict[str, Any] | str) -> None:  # noqa
+def raise_local_exception(error_message: dict[str, Any] | str) -> None:
     """
     Raise an exception on client side using an exception type from the server.
 
@@ -42,7 +38,7 @@ def raise_local_exception(error_message: dict[str, Any] | str) -> None:  # noqa
     """
     if isinstance(error_message, Exception):
         raise error_message from None
-    elif isinstance(error_message, dict) and "exception" in error_message.keys():
+    elif isinstance(error_message, dict) and "exception" in error_message:
         error_message = error_message["exception"]
         message = error_message["message"]
         exc = getattr(builtins, error_message["type"], None)

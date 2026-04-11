@@ -125,6 +125,9 @@ extend-select = [
     "D",    # pydocstyle
     "DOC"
 ]
+ignore = [
+    "G201",  # logging-exc-info: do not require exc_info in logger.exception calls
+]
 
 [tool.ruff.lint.per-file-ignores]
 "hololinked/client/abstractions.py" = ["DOC502"]

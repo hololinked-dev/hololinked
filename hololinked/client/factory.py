@@ -13,10 +13,20 @@ import structlog
 from paho.mqtt.client import CallbackAPIVersion, MQTTMessage, MQTTProtocolVersion
 from paho.mqtt.client import Client as PahoMQTTClient
 
-from hololinked.client.http.consumed_interactions import HTTPAction, HTTPEvent, HTTPProperty
-from hololinked.client.mqtt.consumed_interactions import MQTTConsumer  # only one type for now
+from hololinked.client.http.consumed_interactions import (
+    HTTPAction,
+    HTTPEvent,
+    HTTPProperty,
+)
+from hololinked.client.mqtt.consumed_interactions import (
+    MQTTConsumer,  # only one type for now
+)
 from hololinked.client.proxy import ObjectProxy
-from hololinked.client.security import BasicSecurity, OAuth2Security, OAuthDirectAccessGrant
+from hololinked.client.security import (
+    BasicSecurity,
+    OAuth2Security,
+    OAuthDirectAccessGrant,
+)
 from hololinked.client.zmq.consumed_interactions import (
     ReadMultipleProperties,
     WriteMultipleProperties,
@@ -157,7 +167,7 @@ class ClientFactory:
         async_zmq_client = AsyncZMQClient(f"{id}|async", server_id=server_id, logger=logger, access_point=access_point)
 
         # Fetch the TD
-        Thing.get_thing_model  # type: Action
+        Thing.get_thing_model  # type: Action # noqa: B018
         FetchTDAffordance = Thing.get_thing_model.to_affordance()
         FetchTDAffordance.override_defaults(name="get_thing_description", thing_id=thing_id)
         FetchTD = ZMQAction(
@@ -247,7 +257,7 @@ class ClientFactory:
         return object_proxy
 
     @staticmethod
-    def http(self, url: str, **kwargs) -> ObjectProxy:
+    def http(url: str, **kwargs) -> ObjectProxy:
         """
         Create a HTTP client using the Thing Description (TD) available at the specified URL.
 
@@ -514,7 +524,7 @@ class ClientFactory:
         sync_client = PahoMQTTClient(
             callback_api_version=CallbackAPIVersion.VERSION2,
             client_id=id,
-            clean_session=True if not protocol_version == MQTTProtocolVersion.MQTTv5 else None,
+            clean_session=True if protocol_version != MQTTProtocolVersion.MQTTv5 else None,
             protocol=protocol_version,
         )
         if username and password:
@@ -523,8 +533,8 @@ class ClientFactory:
             sync_client.tls_set_context(ssl_context)
         elif kwargs.get("ca_certs", None):
             sync_client.tls_set(ca_certs=kwargs.get("ca_certs", None))
-        setattr(sync_client, "on_connect", on_connect)
-        setattr(sync_client, "on_message", fetch_td)
+        sync_client.on_connect = on_connect  # type: ignore[assignment]
+        sync_client.on_message = fetch_td
         sync_client.connect(hostname, port)
         sync_client.loop_start()
 
@@ -578,38 +588,27 @@ class ClientFactory:
     @staticmethod
     def add_action(client, action: ConsumedThingAction) -> None:
         """Add action to the client instance."""
-        setattr(action, "__name__", action.resource.name)
-        setattr(action, "__qualname__", f"{client.__class__.__name__}.{action.resource.name}")
-        setattr(
-            action,
-            "__doc__",
-            action.resource.description or "Invokes the action {} on the remote Thing".format(action.resource.name),
-        )
+        action.__name__ = action.resource.name
+        action.__qualname__ = f"{client.__class__.__name__}.{action.resource.name}"
+        action.__doc__ = action.resource.description or f"Invokes the action {action.resource.name} on the remote Thing"
         setattr(client, action.resource.name, action)
 
     @staticmethod
     def add_property(client, property: ConsumedThingProperty) -> None:
         """Add property to the client instance."""
-        setattr(property, "__name__", property.resource.name)
-        setattr(property, "__qualname__", f"{client.__class__.__name__}.{property.resource.name}")
-        setattr(
-            property,
-            "__doc__",
-            property.resource.description
-            or "Represents the property {} on the remote Thing".format(property.resource.name),
+        property.__name__ = property.resource.name
+        property.__qualname__ = f"{client.__class__.__name__}.{property.resource.name}"
+        property.__doc__ = (
+            property.resource.description or f"Represents the property {property.resource.name} on the remote Thing"
         )
         setattr(client, property.resource.name, property)
 
     @staticmethod
     def add_event(client, event: ConsumedThingEvent) -> None:
         """Add event to the client instance."""
-        setattr(event, "__name__", event.resource.name)
-        setattr(event, "__qualname__", f"{client.__class__.__name__}.{event.resource.name}")
-        setattr(
-            event,
-            "__doc__",
-            event.resource.description or "Represents the event {} on the remote Thing".format(event.resource.name),
-        )
+        event.__name__ = event.resource.name
+        event.__qualname__ = f"{client.__class__.__name__}.{event.resource.name}"
+        event.__doc__ = event.resource.description or f"Represents the event {event.resource.name} on the remote Thing"
         if hasattr(event.resource, "observable") and event.resource.observable:
             setattr(client, f"{event.resource.name}_change_event", event)
         else:

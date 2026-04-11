@@ -29,8 +29,9 @@ SOFTWARE.
 import asyncio
 import threading
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -42,6 +43,13 @@ from hololinked.utils import get_current_async_loop
 
 class ConsumedThingAction:  # noqa: D101  # Dont add class doc otherwise it will conflict with __doc__ in slots
     # Client side action call abstraction. Subclasss from here to implement protocol specific action call.
+
+    if TYPE_CHECKING:
+        # These are declared as __slots__ in the protocol-specific mixin subclasses.
+        # Annotated here only so type checkers resolve them on the base type.
+        __name__: str
+        __qualname__: str
+        __doc__: str | None
 
     def __init__(
         self,
@@ -151,7 +159,7 @@ class ConsumedThingAction:  # noqa: D101  # Dont add class doc otherwise it will
         """
         raise NotImplementedError("implement action noblock call per protocol")
 
-    def read_reply(self, message_id: str, timeout: float | int | None = None) -> Any:
+    def read_reply(self, message_id: str, timeout: float | None = None) -> Any:
         """
         Read the reply of the action call which was scheduled with `noblock`.
 
@@ -180,6 +188,13 @@ class ConsumedThingAction:  # noqa: D101  # Dont add class doc otherwise it will
 
 class ConsumedThingProperty:  # noqa: D101 # Dont add class doc otherwise it will conflict with __doc__ in slots
     # property get set abstraction
+
+    if TYPE_CHECKING:
+        # These are declared as __slots__ in the protocol-specific mixin subclasses.
+        # Annotated here only so type checkers resolve them on the base type.
+        __name__: str
+        __qualname__: str
+        __doc__: str | None
 
     def __init__(self, resource: PropertyAffordance, owner_inst: Any, logger: structlog.stdlib.BoundLogger) -> None:
         """
@@ -320,7 +335,7 @@ class ConsumedThingProperty:  # noqa: D101 # Dont add class doc otherwise it wil
         # looks like this will be unused, observe property is done via ConsumedThingEvent
         raise NotImplementedError("implement property unobserve per protocol")
 
-    def read_reply(self, message_id: str, timeout: float | int | None = None) -> Any:
+    def read_reply(self, message_id: str, timeout: float | None = None) -> Any:
         """
         Read the reply of the property get or set which was scheduled with `noblock`.
 
@@ -341,6 +356,13 @@ class ConsumedThingProperty:  # noqa: D101 # Dont add class doc otherwise it wil
 
 class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will conflict with __doc__ in slots
     # event subscription
+
+    if TYPE_CHECKING:
+        # These are declared as __slots__ in the protocol-specific mixin subclasses.
+        # Annotated here only so type checkers resolve them on the base type.
+        __name__: str
+        __qualname__: str
+        __doc__: str | None
 
     def __init__(
         self,
@@ -365,7 +387,7 @@ class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will c
         self.resource = resource
         self.logger = logger
         self.owner_inst = owner_inst  # type: ObjectProxy
-        self._subscribed = dict()
+        self._subscribed = {}
         # self._sync_callbacks = []
         # self._async_callbacks = []
 
@@ -492,8 +514,7 @@ class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will c
                 else:
                     threading.Thread(target=cb, args=(event_data,)).start()
             except Exception as ex:
-                self.logger.error(f"Error occurred in callback {cb}: {ex}")
-                self.logger.exception(str(ex))
+                self.logger.error(f"Error occurred in callback {cb} - {ex}", exc_info=True)
 
     async def async_schedule_callbacks(self, callbacks, event_data: Any, concurrent: bool = False) -> None:
         """
@@ -521,8 +542,7 @@ class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will c
                 else:
                     cb(event_data)
             except Exception as ex:
-                self.logger.error(f"Error occurred in callback {cb}: {ex}")
-                self.logger.exception(str(ex))
+                self.logger.error(f"Error occurred in callback {cb} - {ex}", exc_info=True)
 
     def add_callbacks(self, callbacks: list[Callable] | Callable, asynch: bool = False) -> None:
         """
@@ -557,7 +577,7 @@ class SSE:
         reconnection time in milliseconds, defaults to None, currently unused.
     """
 
-    __slots__ = ("event", "data", "id", "retry")
+    __slots__ = ("data", "event", "id", "retry")
 
     def __init__(self) -> None:
         self.clear()

@@ -4,8 +4,9 @@ import asyncio
 import contextlib
 import threading
 
+from collections.abc import AsyncIterator, Callable, Iterator
 from copy import deepcopy
-from typing import Any, AsyncIterator, Callable, Iterator
+from typing import Any
 
 import httpcore
 import httpx
@@ -30,6 +31,20 @@ from hololinked.td.interaction_affordance import (
 
 class HTTPConsumedAffordanceMixin:
     # Mixin class for HTTP consumed affordances
+
+    __slots__ = [
+        "__doc__",
+        "__name__",
+        "__qualname__",
+        "_async_http_client",
+        "_execution_timeout",
+        "_invokation_timeout",
+        "_sync_http_client",
+        "logger",
+        "owner_inst",
+        "resource",
+        "schema_validator",
+    ]  # __slots__ dont support multiple inheritance
 
     def __init__(
         self,
@@ -60,7 +75,7 @@ class HTTPConsumedAffordanceMixin:
         self._invokation_timeout = invokation_timeout
         self._execution_timeout = execution_timeout
 
-        from hololinked.client import ObjectProxy  # noqa: F401
+        from hololinked.client import ObjectProxy
 
         self.owner_inst: ObjectProxy
 
@@ -85,15 +100,15 @@ class HTTPConsumedAffordanceMixin:
         raise_exception: bool
             Whether to raise an exception if the response body contains an exception
 
-        Raises
-        ------
-        ValueError
-            If the content type of the response is not supported
-
         Returns
         -------
         Any
             The deserialized body of the response or None
+
+        Raises
+        ------
+        ValueError
+            If the content type of the response is not supported
         """
         if response.status_code >= 200 and response.status_code < 300 or response.status_code == 304:
             body = response.content
@@ -130,7 +145,7 @@ class HTTPConsumedAffordanceMixin:
 
         if not self.owner_inst or self.owner_inst._security is None:
             return headers
-        if not any(key.lower() == self.owner_inst._security.http_header_name.lower() for key in headers.keys()):
+        if not any(key.lower() == self.owner_inst._security.http_header_name.lower() for key in headers):
             headers[self.owner_inst._security.http_header_name] = self.owner_inst._security.http_header
 
         return headers
@@ -187,7 +202,7 @@ class HTTPConsumedAffordanceMixin:
         return self.get_body_from_response(response, form)
 
 
-class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
+class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):  # noqa: D101
     # An HTTP action, both sync and async
     # please dont add classdoc
 
@@ -232,7 +247,7 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
             execution_timeout=execution_timeout,
         )
 
-    async def async_call(self, *args, **kwargs):
+    async def async_call(self, *args, **kwargs):  # noqa: D102
         form = self.resource.retrieve_form(Operations.invokeaction, None)
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
@@ -244,7 +259,7 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         response = await self._async_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs):  # noqa: D102
         form = self.resource.retrieve_form(Operations.invokeaction, None)
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
@@ -256,7 +271,7 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         response = self._sync_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
-    def oneway(self, *args, **kwargs):
+    def oneway(self, *args, **kwargs):  # noqa: D102
         form = deepcopy(self.resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
@@ -269,9 +284,8 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         response = self._sync_http_client.send(http_request)
         # just to ensure the request was successful, no body expected.
         self.get_body_from_response(response, form)
-        return None
 
-    def noblock(self, *args, **kwargs) -> str:
+    def noblock(self, *args, **kwargs) -> str:  # noqa: D102
         form = deepcopy(self.resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
@@ -288,14 +302,14 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):
         self.owner_inst._noblock_messages[message_id] = self
         return message_id
 
-    def read_reply(self, message_id, timeout=None):
+    def read_reply(self, message_id, timeout=None):  # noqa: D102
         form = deepcopy(self.resource.retrieve_form(Operations.invokeaction, None))
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
         return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
 
 
-class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
+class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):  # noqa: D101
     # An HTTP property, both sync and async
     # please dont add classdoc
 
@@ -339,9 +353,9 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
             invokation_timeout=invokation_timeout,
             execution_timeout=execution_timeout,
         )
-        self._read_reply_op_map = dict()
+        self._read_reply_op_map = {}  # when a single property has multiple forms which can be invoked noblock
 
-    def get(self) -> Any:
+    def get(self) -> Any:  # noqa: D102
         form = self.resource.retrieve_form(Operations.readproperty, None)
         if form is None:
             raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
@@ -349,7 +363,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         response = self._sync_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
-    def set(self, value: Any) -> None:
+    def set(self, value: Any) -> None:  # noqa: D102
         if self.resource.readOnly:
             raise NotImplementedError("This property is not writable")
         form = self.resource.retrieve_form(Operations.writeproperty, None)
@@ -361,9 +375,8 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         response = self._sync_http_client.send(http_request)
         self.get_body_from_response(response, form)
         # Just to ensure the request was successful, no body expected.
-        return None
 
-    async def async_get(self) -> Any:
+    async def async_get(self) -> Any:  # noqa: D102
         form = self.resource.retrieve_form(Operations.readproperty, None)
         if form is None:
             raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
@@ -371,7 +384,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         response = await self._async_http_client.send(http_request)
         return self.get_body_from_response(response, form)
 
-    async def async_set(self, value: Any) -> None:
+    async def async_set(self, value: Any) -> None:  # noqa: D102
         if self.resource.readOnly:
             raise NotImplementedError("This property is not writable")
         form = self.resource.retrieve_form(Operations.writeproperty, None)
@@ -383,9 +396,8 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         response = await self._async_http_client.send(http_request)
         # Just to ensure the request was successful, no body expected.
         self.get_body_from_response(response, form)
-        return None
 
-    def oneway_set(self, value: Any) -> None:
+    def oneway_set(self, value: Any) -> None:  # noqa: D102
         if self.resource.readOnly:
             raise NotImplementedError("This property is not writable")
         form = deepcopy(self.resource.retrieve_form(Operations.writeproperty, None))
@@ -398,9 +410,8 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         response = self._sync_http_client.send(http_request)
         # Just to ensure the request was successful, no body expected.
         self.get_body_from_response(response, form, raise_exception=False)
-        return None
 
-    def noblock_get(self) -> str:
+    def noblock_get(self) -> str:  # noqa: D102
         form = deepcopy(self.resource.retrieve_form(Operations.readproperty, None))
         if form is None:
             raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
@@ -414,7 +425,7 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         self.owner_inst._noblock_messages[message_id] = self
         return message_id
 
-    def noblock_set(self, value) -> str:
+    def noblock_set(self, value) -> str:  # noqa: D102
         form = deepcopy(self.resource.retrieve_form(Operations.writeproperty, None))
         if form is None:
             raise ValueError(f"No form found for writeproperty operation for {self.resource.name}")
@@ -435,14 +446,14 @@ class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):
         self._read_reply_op_map[message_id] = "writeproperty"
         return message_id
 
-    def read_reply(self, message_id, timeout=None) -> Any:
+    def read_reply(self, message_id, timeout=None) -> Any:  # noqa: D102
         form = deepcopy(self.resource.retrieve_form(op=self._read_reply_op_map.get(message_id, "readproperty")))
         if form is None:
             raise ValueError(f"No form found for readproperty operation for {self.resource.name}")
         return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
 
 
-class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
+class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):  # noqa: D101
     # An HTTP event, both sync and async,
     # please dont add classdoc
 
@@ -487,7 +498,13 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             execution_timeout=execution_timeout,
         )
 
-    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = True, deserialize: bool = True) -> None:
+    def listen(  # noqa: D102
+        self,
+        form: Form,
+        callbacks: list[Callable],
+        concurrent: bool = True,
+        deserialize: bool = True,
+    ) -> None:
         serializer = Serializers.content_types.get(form.contentType or "application/json")
         callback_id = threading.get_ident()
 
@@ -518,12 +535,12 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                             continue
 
                         self.decode_chunk(line, event_data)
-                    except Exception as ex:
+                    except Exception as ex:  # noqa: BLE001
                         self.logger.error(f"Error processing SSE event: {ex}")
         except (httpx.ReadError, httpcore.ReadError):
             pass
 
-    async def async_listen(
+    async def async_listen(  # noqa: D102
         self,
         form: Form,
         callbacks: list[Callable],
@@ -560,7 +577,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
                             continue
 
                         self.decode_chunk(line, event_data)
-                    except Exception as ex:
+                    except Exception as ex:  # noqa: BLE001
                         self.logger.error(f"Error processing SSE event: {ex}")
         except (httpx.ReadError, httpcore.ReadError):
             pass
@@ -588,7 +605,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             try:
                 next_line = asyncio.create_task(it.__anext__())  # type: ignore
                 stopper = asyncio.create_task(stop.wait())
-                done, pending = await asyncio.wait({next_line, stopper}, return_when=asyncio.FIRST_COMPLETED)
+                done, _ = await asyncio.wait({next_line, stopper}, return_when=asyncio.FIRST_COMPLETED)
 
                 if stopper in done:
                     next_line.cancel()
@@ -650,8 +667,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
             return
 
         field, _, value = line.partition(":")
-        if value.startswith(" "):
-            value = value[1:]  # spec: single leading space is stripped
+        value = value.removeprefix(" ")  # spec: single leading space is stripped
 
         if field == "event":
             event_data.event = value or "message"
@@ -673,7 +689,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):
 
 
 __all__ = [
-    "HTTPProperty",
     "HTTPAction",
     "HTTPEvent",
+    "HTTPProperty",
 ]

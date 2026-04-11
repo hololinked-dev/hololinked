@@ -244,7 +244,7 @@ class OAuth2Security:
     def __init__(
         self,
         oidc_settings: OAuthDirectAccessGrant,
-        refresh_interval_fraction: int | float = 0.75,
+        refresh_interval_fraction: float = 0.75,
         **kwargs,
     ) -> None:
         """
@@ -283,13 +283,13 @@ class OAuth2Security:
 
     def login(self) -> None:
         """Login with username and password and obtain tokens."""
-        body = dict(
-            grant_type=self.oidc_settings.grant_type,
-            client_id=self.oidc_settings.client_id,
-            scope=self.oidc_settings.scope,
-            username=self.oidc_settings.username,
-            password=self.oidc_settings.password,
-        )
+        body = {
+            "grant_type": self.oidc_settings.grant_type,
+            "client_id": self.oidc_settings.client_id,
+            "scope": self.oidc_settings.scope,
+            "username": self.oidc_settings.username,
+            "password": self.oidc_settings.password,
+        }
         if self.oidc_settings.client_secret:
             body["client_secret"] = self.oidc_settings.client_secret
         response = self._sync_http_client.post(
@@ -315,11 +315,11 @@ class OAuth2Security:
         """Logout and invalidate tokens."""
         if not self.tokens or not self.oidc_settings.revocation_endpoint:
             return
-        body = dict(
-            client_id=self.oidc_settings.client_id,
-            token=self.tokens.refresh_token if self.tokens.refresh_token else self.tokens.access_token,
-            token_type_hint="refresh_token" if self.tokens.refresh_token else "access_token",
-        )
+        body = {
+            "client_id": self.oidc_settings.client_id,
+            "token": self.tokens.refresh_token if self.tokens.refresh_token else self.tokens.access_token,
+            "token_type_hint": "refresh_token" if self.tokens.refresh_token else "access_token",
+        }
         if self.oidc_settings.client_secret:
             body["client_secret"] = self.oidc_settings.client_secret
         response = self._sync_http_client.post(
@@ -347,11 +347,11 @@ class OAuth2Security:
             )
             return
         try:
-            body = dict(
-                grant_type="refresh_token",
-                client_id=self.oidc_settings.client_id,
-                refresh_token=self.tokens.refresh_token,
-            )
+            body = {
+                "grant_type": "refresh_token",
+                "client_id": self.oidc_settings.client_id,
+                "refresh_token": self.tokens.refresh_token,
+            }
             if self.oidc_settings.client_secret:
                 body["client_secret"] = self.oidc_settings.client_secret
             response = self._sync_http_client.post(
