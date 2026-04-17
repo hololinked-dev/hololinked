@@ -163,7 +163,7 @@ class ClientFactory:
         async_zmq_client = AsyncZMQClient(f"{id}|async", server_id=server_id, logger=logger, access_point=access_point)
 
         # Fetch the TD
-        Thing.get_thing_model  # type: Action # noqa: B018
+        Thing.get_thing_model  # noqa: B018  # type: Action
         FetchTDAffordance = Thing.get_thing_model.to_affordance()
         FetchTDAffordance.override_defaults(name="get_thing_description", thing_id=thing_id)
         FetchTD = ZMQAction(
