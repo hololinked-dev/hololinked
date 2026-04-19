@@ -1,3 +1,5 @@
+"""Implementation of Forms."""
+
 from typing import Any, Optional
 
 from pydantic import Field
@@ -8,8 +10,9 @@ from .base import Schema
 
 class ExpectedResponse(Schema):
     """
-    Form property.
-    schema - https://www.w3.org/TR/wot-thing-description11/#expectedresponse
+    Form field for the expected response of an interaction.
+
+    https://www.w3.org/TR/wot-thing-description11/#expectedresponse
     """
 
     contentType: str
@@ -21,7 +24,8 @@ class ExpectedResponse(Schema):
 class AdditionalExpectedResponse(Schema):
     """
     Form field for additional responses which are different from the usual response.
-    schema - https://www.w3.org/TR/wot-thing-description11/#additionalexpectedresponse
+
+    https://www.w3.org/TR/wot-thing-description11/#additionalexpectedresponse
     """
 
     success: bool = Field(default=False)
@@ -35,7 +39,8 @@ class AdditionalExpectedResponse(Schema):
 class Form(Schema):
     """
     Form hypermedia.
-    schema - https://www.w3.org/TR/wot-thing-description11/#form
+
+    https://www.w3.org/TR/wot-thing-description11/#form
     """
 
     href: str = None
@@ -78,5 +83,5 @@ class Form(Schema):
                 setattr(form, field, form_json[field])
         return form
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:  # noqa: D105
         return f"Form(href={self.href}, op={self.op}, htv_methodName={self.htv_methodName}, contentType={self.contentType})"
