@@ -76,15 +76,15 @@ class BaseSerializer(object):
         self.type = None
 
     def loads(self, data) -> Any:
-        """deserialize data"""
+        """Deserialize data"""
         raise NotImplementedError("implement loads()/deserialization in subclass")
 
     def dumps(self, data) -> bytes:
-        """serialize data"""
+        """Serialize data"""
         raise NotImplementedError("implement dumps()/serialization in subclass")
 
     def convert_to_bytes(self, data) -> bytes:
-        """convert data to bytes if it is bytearray or memoryview"""
+        """Convert data to bytes if it is bytearray or memoryview"""
         if isinstance(data, bytes):
             return data
         if isinstance(data, bytearray):
@@ -97,7 +97,7 @@ class BaseSerializer(object):
 
     @property
     def content_type(self) -> str:
-        """content type of the serializer"""
+        """Content type of the serializer"""
         raise NotImplementedError("serializer must implement a content type")
 
 
@@ -121,7 +121,7 @@ class JSONSerializer(BaseSerializer):
 
     @classmethod
     def default(cls, obj) -> JSONSerializable:
-        """method called if no serialization option was found"""
+        """Method called if no serialization option was found"""
         if hasattr(obj, "model_dump"):
             return obj.model_dump()
         if hasattr(obj, "json"):
@@ -159,7 +159,7 @@ class JSONSerializer(BaseSerializer):
 
     @classmethod
     def register_type_replacement(cls, object_type, replacement_function) -> None:
-        """register custom serialization function for a particular type"""
+        """Register custom serialization function for a particular type"""
         if object_type is type or not inspect.isclass(object_type):
             raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
         cls._type_replacements[object_type] = replacement_function
@@ -185,12 +185,12 @@ class PythonBuiltinJSONSerializer(JSONSerializer):
 
     @classmethod
     def dump(cls, data: dict[str, Any], file_desc) -> None:
-        """write JSON to file"""
+        """Write JSON to file"""
         pythonjson.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=cls.default)
 
     @classmethod
     def load(cls, file_desc) -> JSONSerializable:
-        """load JSON from file"""
+        """Load JSON from file"""
         return pythonjson.load(file_desc)
 
 
@@ -294,7 +294,7 @@ try:
 
         @classmethod
         def register_type_replacement(cls, object_type, replacement_function) -> None:
-            """register custom serialization function for a particular type"""
+            """Register custom serialization function for a particular type"""
 
             def custom_serializer(obj, serpent_serializer, outputstream, indentlevel):
                 replaced = replacement_function(obj)
@@ -449,7 +449,7 @@ class Serializers(metaclass=MappableSingleton):
         cls[name or serializer.__name__] = serializer
 
     @classmethod
-    def for_object(cls, thing_id: str, thing_cls: str, objekt: str) -> BaseSerializer | None:
+    def for_object(cls, thing_id: str, thing_cls: str, objekt: str) -> BaseSerializer:
         """
         Retrieve a serializer for a given property, action or event
 
@@ -500,7 +500,6 @@ class Serializers(metaclass=MappableSingleton):
             the content type for the property, action or event. If no content type is found, the default content type is
             returned.
         """
-
         if len(self.object_serializer_map) == 0 and len(self.object_content_type_map) == 0:
             return self.default_content_type
         for thing in [thing_id, thing_cls]:  # first thing id, then thing cls

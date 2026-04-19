@@ -1,3 +1,11 @@
+"""
+Storage backends for `Thing` instances.
+
+When properties are written, their values can be dispatched to store them in different storage backends.
+Whenever the `Thing` instance is reinitialized, these stored values can be reloaded.
+This helps backup running configuration and survive those in case of power-cycles or crashes.
+"""
+
 import os
 
 from ..config import global_config
@@ -6,9 +14,9 @@ from .json_storage import ThingJSONStorage
 from .utils import get_sanitized_filename_from_thing_instance
 
 
-def prepare_object_storage(instance, **kwargs):
+def prepare_object_storage(instance, **kwargs) -> None:
     """
-    Prepare the storage backend for a `Thing` instance
+    Prepare the storage backend for a `Thing` instance.
 
     Parameters
     ----------
@@ -22,10 +30,6 @@ def prepare_object_storage(instance, **kwargs):
         - `use_mongo_db`: `bool`, whether to use MongoDB storage (default: False)
         - `db_config_file`: `str`, path to database configuration file (default: from `global_config.DB_CONFIG_FILE`)
         - `json_filename`: `str`, filename for JSON file storage (default: derived from thing instance)
-
-    Returns
-    -------
-    None
     """
     use_json_file = kwargs.get(
         "use_json_file",
