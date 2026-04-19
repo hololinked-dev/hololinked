@@ -180,8 +180,8 @@ class InteractionAffordance(Schema):
 
         Use the `json()` method to get the JSON representation of the schema.
 
-        Note that this method is different from build() method as its supposed to be used as a classmethod
-        to create an instance. Although, it internally calls build(), and some additional steps are included.
+        Note that this method is different from `build()` method as its supposed to be used as a classmethod
+        to create an instance. Although, it internally calls `build()`, and some additional steps are included.
 
         Parameters
         ----------
@@ -255,15 +255,15 @@ class InteractionAffordance(Schema):
         ----------
         descriptor: Property | Action | Event
             The descriptor class
-        schema_generator: InteractionAffordance
-            InteractionAffordance subclass that implements the custom schema generation logic for the descriptor.
-            Either implement the generate() method or override the build() method.
+        schema_generator: `InteractionAffordance`
+            `InteractionAffordance` subclass that implements the custom schema generation logic for the descriptor.
+            Either override the `generate()` method or the `build()` method.
 
         Raises
         ------
         TypeError
-            If the descriptor is not an instance of Property, Action or Event, or if the schema generator is not an
-            instance of InteractionAffordance.
+            If the descriptor is not an instance of `Property`, `Action` or `Event`, or if the schema generator is not an
+            instance of `InteractionAffordance`.
         """
         if not isinstance(descriptor, (Property, Action, Event)):
             raise TypeError(

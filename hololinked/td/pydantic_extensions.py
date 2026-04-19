@@ -110,7 +110,8 @@ def look_up_reference(reference: str, d: JSONSchema) -> JSONSchema:
 
 
 def is_an_object(d: JSONSchema) -> bool:
-    """Determine whether a JSON schema dict is an object.
+    """
+    Determine whether a JSON schema dict is an object.
 
     Parameters
     ----------
@@ -126,7 +127,8 @@ def is_an_object(d: JSONSchema) -> bool:
 
 
 def convert_object(d: JSONSchema) -> JSONSchema:
-    """Convert an object from JSONSchema to Thing Description.
+    """
+    Convert an object from JSONSchema to Thing Description.
 
     Parameters
     ----------
@@ -215,7 +217,8 @@ def convert_prefixitems(d: JSONSchema) -> JSONSchema:
 
 
 def convert_additionalproperties(d: JSONSchema) -> JSONSchema:
-    """Move additionalProperties into properties, or remove it.
+    """
+    Move additionalProperties into properties, or remove it.
 
     Parameters
     ----------
@@ -237,7 +240,8 @@ def convert_additionalproperties(d: JSONSchema) -> JSONSchema:
 
 
 def check_recursion(depth: int, limit: int):
-    """Check the recursion count is less than the limit.
+    """
+    Check the recursion count is less than the limit.
 
     Parameters
     ----------
