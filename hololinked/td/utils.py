@@ -1,9 +1,11 @@
+"""utility functions for the TD module."""
+
 from typing import Optional
 
 
 def get_summary(docs: str) -> Optional[str]:
     """
-    Return the first line of the dosctring of an object
+    Return the first line of the docstring of an object.
 
     Parameters
     ----------

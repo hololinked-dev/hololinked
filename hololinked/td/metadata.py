@@ -1,3 +1,5 @@
+"""Include a general metadata like links, version info, etc. here."""
+
 from typing import Optional
 
 from pydantic import Field
@@ -7,8 +9,9 @@ from .base import Schema
 
 class Link(Schema):
     """
-    Represents a link in the link section of the TD
-    schema - https://www.w3.org/TR/wot-thing-description11/#link
+    Impelements the Link schema for linking to other resources.
+
+    https://www.w3.org/TR/wot-thing-description11/#link
     """
 
     href: str
@@ -20,7 +23,8 @@ class Link(Schema):
 class VersionInfo(Schema):
     """
     Represents version info.
-    schema - https://www.w3.org/TR/wot-thing-description11/#versioninfo
+
+    https://www.w3.org/TR/wot-thing-description11/#versioninfo
     """
 
     instance: str

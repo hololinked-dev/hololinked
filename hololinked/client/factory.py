@@ -13,13 +13,10 @@ import structlog
 from paho.mqtt.client import CallbackAPIVersion, MQTTMessage, MQTTProtocolVersion
 from paho.mqtt.client import Client as PahoMQTTClient
 
-from hololinked.client.http.consumed_interactions import (
-    HTTPAction,
-    HTTPEvent,
-    HTTPProperty,
-)
-from hololinked.client.mqtt.consumed_interactions import (
-    MQTTConsumer,  # only one type for now
+from hololinked.client.abstractions import (
+    ConsumedThingAction,
+    ConsumedThingEvent,
+    ConsumedThingProperty,
 )
 from hololinked.client.proxy import ObjectProxy
 from hololinked.client.security import (
@@ -27,25 +24,15 @@ from hololinked.client.security import (
     OAuth2Security,
     OAuthDirectAccessGrant,
 )
-from hololinked.client.zmq.consumed_interactions import (
-    ReadMultipleProperties,
-    WriteMultipleProperties,
-    ZMQAction,
-    ZMQEvent,
-    ZMQProperty,
-)
-
-from ..constants import ZMQ_TRANSPORTS
-from ..core import Thing
-from ..core.zmq import AsyncZMQClient, SyncZMQClient
-from ..serializers import Serializers
-from ..td.interaction_affordance import (
+from hololinked.constants import ZMQ_TRANSPORTS
+from hololinked.core import Thing
+from hololinked.serializers import Serializers
+from hololinked.td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
     PropertyAffordance,
 )
-from ..utils import uuid_hex
-from .abstractions import ConsumedThingAction, ConsumedThingEvent, ConsumedThingProperty
+from hololinked.utils import uuid_hex
 
 
 class ClientFactory:
@@ -148,6 +135,15 @@ class ClientFactory:
         ObjectProxy
             An `ObjectProxy` instance representing the remote `Thing` with ZMQ protocol.
         """
+        from hololinked.client.zmq.consumed_interactions import (
+            ReadMultipleProperties,
+            WriteMultipleProperties,
+            ZMQAction,
+            ZMQEvent,
+            ZMQProperty,
+        )
+        from hololinked.core.zmq import AsyncZMQClient, SyncZMQClient
+
         id = kwargs.get("id", f"{server_id}|{thing_id}|{access_point}|{uuid_hex()}")
 
         # configs
@@ -167,7 +163,7 @@ class ClientFactory:
         async_zmq_client = AsyncZMQClient(f"{id}|async", server_id=server_id, logger=logger, access_point=access_point)
 
         # Fetch the TD
-        Thing.get_thing_model  # type: Action # noqa: B018
+        Thing.get_thing_model  # noqa: B018  # type: Action
         FetchTDAffordance = Thing.get_thing_model.to_affordance()
         FetchTDAffordance.override_defaults(name="get_thing_description", thing_id=thing_id)
         FetchTD = ZMQAction(
@@ -318,6 +314,12 @@ class ClientFactory:
         ObjectProxy
             An `ObjectProxy` instance representing the remote Thing with HTTP protocol.
         """
+        from hololinked.client.http.consumed_interactions import (
+            HTTPAction,
+            HTTPEvent,
+            HTTPProperty,
+        )
+
         # config
         skip_interaction_affordances = kwargs.get("skip_interaction_affordances", [])
         invokation_timeout = kwargs.get("invokation_timeout", 5.0)
@@ -493,6 +495,8 @@ class ClientFactory:
         TimeoutError
             If the Thing Description (TD) could not be fetched within the timeout period.
         """
+        from hololinked.client.mqtt.consumed_interactions import MQTTConsumer
+
         id = kwargs.get("id", f"mqtt-client|{hostname}:{port}|{uuid_hex()}")
         logger = kwargs.get("logger", structlog.get_logger()).bind(
             component="client",

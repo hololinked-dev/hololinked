@@ -1,3 +1,5 @@
+"""Implementations of Data Schema."""
+
 from typing import Any, ClassVar, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
@@ -29,8 +31,7 @@ from .utils import get_summary
 
 class DataSchema(Schema):
     """
-    Implements Data Schema, usually used to represent payloads of properties, actions and events in a
-    WoT Thing Description.
+    Usually represents payloads of properties, actions and events in a WoT Thing Description.
 
     - [Vocabulary Definitions](https://www.w3.org/TR/wot-thing-description11/#sec-data-schema-vocabulary-definition)
     - [Supported Fields](https://www.w3.org/TR/wot-thing-description11/#data-schema-fields)
@@ -57,7 +58,7 @@ class DataSchema(Schema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property: Property) -> None:
-        """populates schema information from property descriptor object"""
+        """Populates schema information from property descriptor object."""
         self.title = get_summary(property.doc)
         if property.constant:
             self.const = property.constant
@@ -87,8 +88,20 @@ class DataSchema(Schema):
     # you dont know what you are building, whether the data schema or something else when viewed from property affordance
     def ds_build_from_property(self, property: Property) -> None:
         """
-        generates the schema specific to the property type,
-        calls `ds_build_fields_from_property()` after choosing the right type
+        Generates the schema specific to the property type.
+
+        Calls `ds_build_fields_from_property()` after choosing the right type.
+
+        Parameters
+        ----------
+        property: Property
+            property descriptor object to generate the schema from
+
+        Raises
+        ------
+        TypeError
+            if the property type is not supported for schema generation. Custom schema generators need to
+            be registered for custom defined properties.
         """
         if self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
             data_schema = self._custom_schema_generators[property]()
@@ -135,21 +148,21 @@ class DataSchema(Schema):
                 setattr(self, field_name, field_value)
 
     def _move_own_type_to_oneOf(self):
-        """move a type to oneOf"""
+        """Move a type to oneOf, usually when allow None is True."""
         pass
 
 
 class BooleanSchema(DataSchema):
     """
-    boolean schema - https://www.w3.org/TR/wot-thing-description11/#booleanschema
-    used by Boolean descriptor
+    Boolean Schema - https://www.w3.org/TR/wot-thing-description11/#booleanschema.
+
+    Used by Boolean descriptor.
     """
 
     def __init__(self):
         super().__init__()
 
-    def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+    def ds_build_fields_from_property(self, property) -> None:  # noqa: D102
         self.type = "boolean"
         super().ds_build_fields_from_property(property)
 
@@ -164,8 +177,9 @@ class BooleanSchema(DataSchema):
 
 class StringSchema(DataSchema):
     """
-    string schema - https://www.w3.org/TR/wot-thing-description11/#stringschema
-    used by String, Filename, Foldername, Path descriptors
+    String Schema - https://www.w3.org/TR/wot-thing-description11/#stringschema.
+
+    Used by String, Filename, Foldername, Path descriptors.
     """
 
     pattern: Optional[str] = None
@@ -175,8 +189,7 @@ class StringSchema(DataSchema):
     def __init__(self):
         super().__init__()
 
-    def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+    def ds_build_fields_from_property(self, property) -> None:  # noqa: D102
         self.type = "string"
         if isinstance(property, String):
             if property.regex is not None:
@@ -198,8 +211,9 @@ class StringSchema(DataSchema):
 
 class NumberSchema(DataSchema):
     """
-    number schema - https://www.w3.org/TR/wot-thing-description11/#numberschema
-    used by Number and Integer descriptors
+    Number Schema - https://www.w3.org/TR/wot-thing-description11/#numberschema.
+
+    Used by Number and Integer descriptors.
     """
 
     minimum: Optional[int | float] = None
@@ -211,8 +225,7 @@ class NumberSchema(DataSchema):
     def __init__(self):
         super().__init__()
 
-    def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+    def ds_build_fields_from_property(self, property) -> None:  # noqa: D102
         if isinstance(property, Integer):
             self.type = "integer"
         elif isinstance(property, Number):  # dont change order - one is subclass of other
@@ -248,8 +261,9 @@ class NumberSchema(DataSchema):
 
 class ArraySchema(DataSchema):
     """
-    array schema - https://www.w3.org/TR/wot-thing-description11/#arrayschema
-    Used by list, Tuple, TypedList and TupleSelector
+    Array Schema - https://www.w3.org/TR/wot-thing-description11/#arrayschema.
+
+    Used by List, Tuple, TypedList and TupleSelector.
     """
 
     items: Optional[DataSchema | list[DataSchema] | JSON | JSONSerializable] = None
@@ -259,8 +273,7 @@ class ArraySchema(DataSchema):
     def __init__(self):
         super().__init__()
 
-    def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+    def ds_build_fields_from_property(self, property) -> None:  # noqa: D102
         self.type = "array"
         self.items = []
         if isinstance(property, (List, Tuple, TypedList)) and property.item_type is not None:
@@ -304,8 +317,9 @@ class ArraySchema(DataSchema):
 
 class ObjectSchema(DataSchema):
     """
-    object schema - https://www.w3.org/TR/wot-thing-description11/#objectschema
-    Used by TypedDict where the key type must be a string
+    Object Schema - https://www.w3.org/TR/wot-thing-description11/#objectschema.
+
+    Used by TypedDict where the key type must be a string.
     """
 
     properties: Optional[JSON] = None
@@ -314,8 +328,7 @@ class ObjectSchema(DataSchema):
     def __init__(self):
         super().__init__()
 
-    def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+    def ds_build_fields_from_property(self, property) -> None:  # noqa: D102
         super().ds_build_fields_from_property(property)
         properties = None
         required = None
@@ -341,7 +354,8 @@ class ObjectSchema(DataSchema):
 
 class SelectorSchema(DataSchema):
     """
-    custom schema to deal with ClassSelector & Selector to fill oneOf field correctly
+    Custom schema to deal with ClassSelector & Selector to fill oneOf field correctly.
+
     https://www.w3.org/TR/wot-thing-description11/#dataschema
     """
 
@@ -355,8 +369,7 @@ class SelectorSchema(DataSchema):
     def __init__(self):
         super().__init__()
 
-    def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+    def ds_build_fields_from_property(self, property) -> None:  # noqa: D102
         self.oneOf = []
         if isinstance(property, ClassSelector):
             if not property.isinstance:
@@ -418,7 +431,8 @@ class SelectorSchema(DataSchema):
 
 class EnumSchema(SelectorSchema):
     """
-    custom schema to fill enum field correctly
+    Custom schema to fill enum field correctly.
+
     https://www.w3.org/TR/wot-thing-description11/#dataschema
     """
 
@@ -427,8 +441,7 @@ class EnumSchema(SelectorSchema):
     def __init__(self):
         super().__init__()
 
-    def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+    def ds_build_fields_from_property(self, property) -> None:  # noqa: D102
         if not isinstance(property, Selector):
             raise TypeError(f"EnumSchema compatible property is only Selector, not {property.__class__}")
         self.enum = list(property.objects)
