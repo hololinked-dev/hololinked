@@ -1,3 +1,5 @@
+"""generic reusable payload dataclasses for serialization and deserialization of data in different formats."""
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,6 +11,7 @@ from .serializers import BaseSerializer, Serializers
 class SerializableData:
     """
     A container for data that can be serialized.
+
     Either provide a serializer or a content type to pick a suitable already supported serializer.
     """
 
@@ -17,8 +20,20 @@ class SerializableData:
     content_type: str = "application/json"
     _serialized: bytes | None = None
 
-    def serialize(self):
-        """serialize the value"""
+    def serialize(self) -> bytes:
+        """
+        Serialize the value.
+
+        Returns
+        -------
+        bytes
+            serialized value
+
+        Raises
+        ------
+        ValueError
+            If no suitable serializer is found for the content type.
+        """
         if self._serialized is not None:
             return self._serialized
         if isinstance(self.value, byte_types):
@@ -30,8 +45,20 @@ class SerializableData:
             return serializer.dumps(self.value)
         raise ValueError(f"content type {self.content_type} not supported for serialization")
 
-    def deserialize(self):
-        """deserialize the value"""
+    def deserialize(self) -> Any:
+        """
+        Deserialize the value.
+
+        Returns
+        -------
+        Any
+            deserialized value
+
+        Raises
+        ------
+        ValueError
+            If no suitable serializer is found for the content type.
+        """
         if not isinstance(self.value, byte_types):
             return self.value
         if self.serializer is not None:
@@ -42,7 +69,7 @@ class SerializableData:
         raise ValueError(f"content type {self.content_type} not supported for deserialization")
 
     def require_serialized(self) -> None:
-        """ensure the value is serialized"""
+        """Ensure the value is serialized. Can raise `ValueError` if no suitable serializer is found."""
         self._serialized = self.serialize()
 
 
@@ -50,6 +77,7 @@ class SerializableData:
 class PreserializedData:
     """
     A container for data that is already serialized.
+
     The content type is only a metadata here. The value is expected to be bytes.
     """
 
