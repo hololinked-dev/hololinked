@@ -284,11 +284,11 @@ class MsgpackSerializer(BaseSerializer):
 
     codes = dict(NDARRAY_EXT=1)
 
-    def dumps(self, value) -> bytes:
-        return msgpack.encode(value, enc_hook=self.default_encode)
+    def dumps(self, data) -> bytes:
+        return msgpack.encode(data, enc_hook=self.default_encode)
 
-    def loads(self, value) -> Any:
-        return msgpack.decode(self.convert_to_bytes(value), ext_hook=self.ext_decode)
+    def loads(self, data) -> Any:
+        return msgpack.decode(self.convert_to_bytes(data), ext_hook=self.ext_decode)
 
     @classmethod
     def default_encode(cls, obj) -> Any:
@@ -378,7 +378,7 @@ try:
 
     # __all__.append(SerpentSerializer.__name__)
 except ImportError:
-    SerpentSerializer = None
+    pass
 
 
 class Serializers(metaclass=MappableSingleton):
@@ -517,7 +517,7 @@ class Serializers(metaclass=MappableSingleton):
             cls.content_types[serializer.content_type] = serializer
         except NotImplementedError:
             warnings.warn("serializer does not implement a content type", category=UserWarning)
-        cls[name or serializer.__name__] = serializer
+        cls[name or serializer.__class__.__name__] = serializer
 
     @classmethod
     def for_object(cls, thing_id: str, thing_cls: str, objekt: str) -> BaseSerializer:
