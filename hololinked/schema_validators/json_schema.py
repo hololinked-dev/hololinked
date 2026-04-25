@@ -1,3 +1,5 @@
+"""JSON Schema validator."""
+
 from typing import Any
 
 from ..constants import JSON
@@ -5,8 +7,9 @@ from ..constants import JSON
 
 class JSONSchema:
     """
-    Type management object for converting python types to JSON schema types,
-    generally used for WoT Thing Descriptions.
+    JSON Schema validation and type management.
+
+    Especially handles converting highly specific python types to JSON schema types.
     """
 
     _allowed_types = ("string", "number", "integer", "boolean", "object", "array", None)
@@ -31,15 +34,16 @@ class JSONSchema:
             },
             "required": ["message", "type", "traceback"],
         },
-    }
+    }  # type: dict[type, str | dict]
 
     _schemas = {}
 
     @classmethod
     def is_allowed_type(cls, typ: Any) -> bool:
         """
-        Check if a certain base type has a JSON schema base type
-        For example,
+        Check if a certain base type has a JSON schema base type.
+
+        For example:
 
         ```python
         JSONSchema.is_allowed_type(int)  # returns True
@@ -53,6 +57,11 @@ class JSONSchema:
         ----------
         typ: Any
             the python type to check
+
+        Returns
+        -------
+        bool
+            True or False
         """
         if typ in JSONSchema._replacements.keys():
             return True
@@ -62,6 +71,7 @@ class JSONSchema:
     def has_additional_schema_definitions(cls, typ: Any) -> bool:
         """
         Check, if in additional to the JSON schema base type, additional schema definitions exists.
+
         Utility function to decide where to insert additional schema definitions in a JSON document.
 
         ```python
@@ -84,9 +94,9 @@ class JSONSchema:
         return False
 
     @classmethod
-    def get_base_type(cls, typ: Any) -> str:
+    def get_base_type(cls, typ: Any) -> str | dict:
         """
-        Get the JSON schema base type for a certain python type
+        Get the JSON schema base type for a certain python type.
 
         ```python
         JSONSchema.register_type_replacement(MyCustomObject, 'object', schema=MyCustomObject.schema())
@@ -97,6 +107,16 @@ class JSONSchema:
         ----------
         typ: Any
             the python type to get the JSON schema base type
+
+        Returns
+        -------
+        str
+            the JSON schema base type
+
+        Raises
+        ------
+        TypeError
+            If the type is not natively supported in JSON schema or is not registered for conversion.
         """
         if not JSONSchema.is_allowed_type(typ):
             raise TypeError(
@@ -125,6 +145,11 @@ class JSONSchema:
             ('string', 'number', 'integer', 'boolean', 'object', 'array', 'null').
         schema: Optional[JSON]
             An optional JSON schema to use for the type.
+
+        Raises
+        ------
+        TypeError
+            If the provided JSON schema base type is not one of the allowed types.
         """
         if json_schema_base_type in JSONSchema._allowed_types:
             JSONSchema._replacements[type] = json_schema_base_type
@@ -138,7 +163,19 @@ class JSONSchema:
 
     @classmethod
     def get_additional_schema_definitions(cls, typ: Any):
-        """retrieve additional schema definitions for a certain python type"""
+        """
+        Retrieve additional schema definitions for a certain python type.
+
+        Returns
+        -------
+        JSON
+            the additional schema definitions for the type
+
+        Raises
+        ------
+        ValueError
+            If no additional schema definitions exist for the type.
+        """
         if not JSONSchema.has_additional_schema_definitions(typ):
             raise ValueError(f"Schema for {typ} not provided. register one with JSONSchema.register_type_replacement()")
         return JSONSchema._schemas[typ]
