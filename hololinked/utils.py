@@ -54,12 +54,12 @@ def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name: str | 
 
 
 def uuid_hex() -> str:
-    """generate a random UUID hex string of 8 characters"""
+    """Generate a random UUID hex string of 8 characters"""
     return uuid4().hex[:8]
 
 
 def format_exception_as_json(exc: Exception) -> dict[str, Any]:
-    """return exception as a JSON serializable dictionary"""
+    """Return exception as a JSON serializable dictionary"""
     return dict(
         message=str(exc),
         type=repr(exc).split("(", 1)[0],
@@ -82,7 +82,7 @@ def pep8_to_dashed_name(word: str) -> str:
 
 
 def get_current_async_loop() -> asyncio.AbstractEventLoop:
-    """get or automatically create an asnyc loop for the current thread"""
+    """Get or automatically create an asnyc loop for the current thread"""
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -92,7 +92,7 @@ def get_current_async_loop() -> asyncio.AbstractEventLoop:
 
 
 def run_coro_sync(coro: Coroutine) -> Any:
-    """try to run coroutine synchronously, raises runtime error if event loop is already running"""
+    """Try to run coroutine synchronously, raises runtime error if event loop is already running"""
     eventloop = get_current_async_loop()
     if eventloop.is_running():
         raise RuntimeError(
@@ -105,7 +105,7 @@ def run_coro_sync(coro: Coroutine) -> Any:
 
 def run_callable_somehow(method: Callable | Coroutine) -> Any:
     """
-    run method if synchronous, or when async, either schedule a coroutine
+    Run method if synchronous, or when async, either schedule a coroutine
     or run it until its complete
     """
     if inspect.isawaitable(method):
@@ -158,7 +158,7 @@ def print_pending_tasks_in_current_loop():
 
 
 def set_global_event_loop_policy(use_uvloop: bool = False) -> None:
-    """set global event loop policy, optionally using uvloop if available and on linux/macos"""
+    """Set global event loop policy, optionally using uvloop if available and on linux/macos"""
     if sys.platform.lower().startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -201,7 +201,7 @@ def get_signature(callable: Callable) -> tuple[list[str], list[type]]:
 
 def getattr_without_descriptor_read(instance: Any, key: str) -> Any:
     """
-    supply to inspect._get_members (not inspect.get_members) to avoid calling
+    Supply to inspect._get_members (not inspect.get_members) to avoid calling
     __get__ on descriptors, especially whey they are hardware attributes that would
     invoke a hardware read.
     """
@@ -307,7 +307,7 @@ def get_sanitized_filename_from_random_string(a_string: str, extension: str) -> 
 
 
 def generate_main_script_log_filename(self, app_name: str | None = None) -> str | None:
-    """returns the main script filename if available"""
+    """Returns the main script filename if available"""
     import __main__
 
     if not app_name:
@@ -490,7 +490,6 @@ def pydantic_validate_args_kwargs(
     ValidationError
         If the arguments are invalid
     """
-
     field_names = list(model.model_fields.keys())
     data = {}
 
@@ -530,7 +529,11 @@ def pydantic_validate_args_kwargs(
     model.model_validate(data)
 
 
-def json_schema_merge_args_to_kwargs(schema: dict, args: tuple = tuple(), kwargs: dict = dict()) -> dict[str, Any]:
+def json_schema_merge_args_to_kwargs(
+    schema,
+    args: tuple = tuple(),
+    kwargs: dict = dict(),
+) -> dict[str, Any]:
     """
     Merge positional arguments into keyword arguments according to the schema.
 
@@ -597,7 +600,7 @@ def forkable(func):
 
 
 def get_all_sub_things_recusively(thing) -> list:
-    """get all sub things recursively from a thing"""
+    """Get all sub things recursively from a thing"""
     sub_things = [thing]
     for sub_thing in thing.sub_things.values():
         sub_things.extend(get_all_sub_things_recusively(sub_thing))

@@ -1,3 +1,5 @@
+"""Configuration validators for database storage."""
+
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -5,7 +7,7 @@ from pydantic.types import SecretStr, StrictInt, StrictStr
 
 
 class SQLDBConfig(BaseModel):
-    """Configuration validator for SQL databases for PostgreSQL and MySQL"""
+    """Configuration validator for SQL databases for PostgreSQL and MySQL."""
 
     provider: Literal["postgresql", "mysql"] = "postgresql"
     """Database provider, postgresql or mysql"""
@@ -21,13 +23,14 @@ class SQLDBConfig(BaseModel):
     """user password, default empty"""
     dialect: Literal["asyncpg", "psycopg", "asyncmy", "mysqldb", ""] = ""
     """dialect to use, default psycopg for postgresql"""
-    uri: SecretStr = ""
+    uri: SecretStr = Field(default=SecretStr(""), repr=False)
     """Full database URI, overrides other settings, default empty"""
 
     model_config = ConfigDict(extra="forbid")
 
     @property
     def URL(self) -> str:
+        """Fully qualified database URL."""
         if self.uri:
             return self.uri.get_secret_value()
         if self.provider == "postgresql":
@@ -42,23 +45,24 @@ class SQLDBConfig(BaseModel):
 
 
 class SQLiteConfig(BaseModel):
-    """Configuration validator for SQLite database"""
+    """Configuration validator for SQLite database."""
 
     provider: Literal["sqlite"] = "sqlite"
     """Database provider, only sqlite is supported"""
-    dialect: SecretStr = "pysqlite"
+    dialect: SecretStr = Field(default=SecretStr("pysqlite"), repr=False)
     """dialect to use, aiosqlite for async, pysqlite for sync"""
     file: str = ""
     """SQLite database file, default is empty string, which leads to an DB with name of thing ID"""
     in_memory: bool = False
     """Use in-memory SQLite database, default False as it is not persistent"""
-    uri: SecretStr = ""
+    uri: SecretStr = Field(default=SecretStr(""), repr=False)
     """Full database URI, overrides other settings, default empty"""
 
     model_config = ConfigDict(extra="forbid")
 
     @property
     def URL(self) -> str:
+        """Fully qualified database URL."""
         if self.uri:
             return self.uri.get_secret_value()
         if self.in_memory:
@@ -69,7 +73,7 @@ class SQLiteConfig(BaseModel):
 
 
 class MongoDBConfig(BaseModel):
-    """Configuration validator for MongoDB database"""
+    """Configuration validator for MongoDB database."""
 
     provider: Literal["mongo"] = "mongo"
     """Database provider, only mongo is supported"""
@@ -81,17 +85,18 @@ class MongoDBConfig(BaseModel):
     """database name, default hololinked"""
     user: StrictStr = ""
     """user name, default empty, recommended not to use admin user"""
-    password: SecretStr = ""
+    password: SecretStr = Field(default=SecretStr(""), repr=False)
     """user password, default empty"""
     authSource: StrictStr = ""
     """authentication source database, default empty"""
-    uri: SecretStr = ""
+    uri: SecretStr = Field(default=SecretStr(""), repr=False)
     """Full database URI, overrides other settings, default empty"""
 
     model_config = ConfigDict(extra="forbid")
 
     @property
     def URL(self) -> str:
+        """Fully qualified database URL."""
         if self.uri:
             return self.uri.get_secret_value()
         if self.user and self.password:
