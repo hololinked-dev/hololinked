@@ -127,7 +127,8 @@ extend-select = [
 ]
 ignore = [
     "G201",  # logging-exc-info: do not require exc_info in logger.exception calls
-    "D401", # imperative mode for summary line
+    "D401",  # imperative mode for summary line
+    "D105",  # magic methods dont need a docstring
 ]
 
 [tool.ruff.lint.per-file-ignores]

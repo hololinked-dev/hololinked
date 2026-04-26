@@ -1,3 +1,5 @@
+"""Concrete implementations of serializers."""
+
 from .serializers import (  # noqa: F401
     BaseSerializer,
     JSONSerializer,
