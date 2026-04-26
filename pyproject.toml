@@ -72,6 +72,9 @@ dev = [
     "pip>=25.2",
     "ruff>=0.12.10",
     "pre-commit>=4.5.0",
+    "mypy>=1.19.1",
+    "ty>=0.0.24",
+    "pdoc>=16.0.0",
 ]
 test = [
     "requests==2.32.3",
@@ -116,7 +119,25 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-extend-select = ["I"]
+preview = true
+extend-select = [
+    "I",    # isort
+    "D",    # pydocstyle
+    "DOC"
+]
+ignore = [
+    "G201",  # logging-exc-info: do not require exc_info in logger.exception calls
+    "D401",  # imperative mode for summary line
+    "D105",  # magic methods dont need a docstring
+]
+
+[tool.ruff.lint.per-file-ignores]
+"hololinked/client/abstractions.py" = ["DOC502"]
+"hololinked/client/proxy.py" = ["DOC502"]
+"hololinked/client/exceptions.py" = ["DOC502"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
 
 [tool.ruff.lint.isort]
 lines-between-types = 1

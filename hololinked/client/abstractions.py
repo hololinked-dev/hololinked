@@ -1,4 +1,8 @@
 """
+Abstractions of property, action and events for a client.
+
+Inspired by wotpy repository, needs to be wrapped with descriptors.
+
 MIT License
 
 Copyright (c) 2018 CTIC Centro Tecnologico
@@ -21,26 +25,31 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-# copied from wotpy repository
 
 import asyncio
-import builtins
 import threading
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from ..constants import Operations
-from ..td import ActionAffordance, EventAffordance, PropertyAffordance
-from ..td.forms import Form
-from ..utils import get_current_async_loop
+from hololinked.constants import Operations
+from hololinked.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.td.forms import Form
+from hololinked.utils import get_current_async_loop
 
 
-class ConsumedThingAction:
+class ConsumedThingAction:  # noqa: D101  # Dont add class doc otherwise it will conflict with __doc__ in slots
     # Client side action call abstraction. Subclasss from here to implement protocol specific action call.
-    # Dont add class doc otherwise __doc__ in slots will conflict with class variable
+
+    if TYPE_CHECKING:
+        # These are declared as __slots__ in the protocol-specific mixin subclasses.
+        # Annotated here only so type checkers resolve them on the base type.
+        __name__: str
+        __qualname__: str
+        __doc__: str | None
 
     def __init__(
         self,
@@ -49,11 +58,13 @@ class ConsumedThingAction:
         logger: structlog.stdlib.BoundLogger,
     ) -> None:
         """
+        Initialize a consumed thing action.
+
         Parameters
         ----------
         resource: ActionAffordance
             dataclass TD fragment representing the action (must have forms).
-        owner_inst: Any
+        owner_inst: ObjectProxy
             instance of the owning consumed Thing or `ObjectProxy`
         logger: structlog.stdlib.BoundLogger
             logger instance
@@ -66,18 +77,18 @@ class ConsumedThingAction:
         self.schema_validator = None  # schema_validator
 
     def get_last_return_value(self, raise_exception: bool = False) -> Any:
-        """retrieve return value of the last call to the action"""
+        """Retrieve return value of the last call to the action."""
         raise NotImplementedError("implement get_last_return_value per protocol")
 
     last_return_value = property(
         fget=get_last_return_value,
         doc="cached return value of the last call to the method",
     )
-    """cached return value of the last call to the method"""
+    """cached return value of the last call to the method."""
 
     def __call__(self, *args, **kwargs) -> Any:
         """
-        Invoke action/method on server
+        Invoke action/method on server.
 
         Parameters
         ----------
@@ -95,7 +106,9 @@ class ConsumedThingAction:
 
     async def async_call(self, *args, **kwargs) -> Any:
         """
-        async invoke action on server - asynchronous at the network level, may not necessarily be at the server level.
+        Async invoke action/method on server.
+
+        Asynchronous at the network level, may not necessarily be at the server level.
 
         Parameters
         ----------
@@ -113,8 +126,9 @@ class ConsumedThingAction:
 
     def oneway(self, *args, **kwargs) -> None:
         """
-        Only invokes the action on the server and does not wait for reply,
-        neither does the server reply to this invokation.
+        Only invokes the action on the server and does not wait for reply.
+
+        Neither does the server (need to) reply to this invokation as any responses are not processed.
 
         Parameters
         ----------
@@ -127,8 +141,9 @@ class ConsumedThingAction:
 
     def noblock(self, *args, **kwargs) -> str:
         """
-        Invoke the action and collect the reply later. A message ID must be returned by the server to identify the
-        invokation.
+        Invoke the action and collect the reply later.
+
+        A message ID must be returned by the server to identify the invokation.
 
         Parameters
         ----------
@@ -144,7 +159,7 @@ class ConsumedThingAction:
         """
         raise NotImplementedError("implement action noblock call per protocol")
 
-    def read_reply(self, message_id: str, timeout: float | int | None = None) -> Any:
+    def read_reply(self, message_id: str, timeout: float | None = None) -> Any:
         """
         Read the reply of the action call which was scheduled with `noblock`.
 
@@ -162,21 +177,29 @@ class ConsumedThingAction:
         """
         raise NotImplementedError("implement action read_reply per protocol")
 
-    def __hash__(self):
+    def __hash__(self):  # noqa: D105
         return hash(self.resource.name)
 
-    def __eq__(self, other):
+    def __eq__(self, other):  # noqa: D105
         if not isinstance(other, ConsumedThingAction):
             return False
         return self.resource.name == other.resource.name
 
 
-class ConsumedThingProperty:
+class ConsumedThingProperty:  # noqa: D101 # Dont add class doc otherwise it will conflict with __doc__ in slots
     # property get set abstraction
-    # Dont add doc otherwise __doc__ in slots will conflict with class variable
+
+    if TYPE_CHECKING:
+        # These are declared as __slots__ in the protocol-specific mixin subclasses.
+        # Annotated here only so type checkers resolve them on the base type.
+        __name__: str
+        __qualname__: str
+        __doc__: str | None
 
     def __init__(self, resource: PropertyAffordance, owner_inst: Any, logger: structlog.stdlib.BoundLogger) -> None:
         """
+        Initialize a consumed thing property.
+
         Parameters
         ----------
         resource: PropertyAffordance
@@ -194,7 +217,11 @@ class ConsumedThingProperty:
 
     @property  # i.e. cannot have setter
     def last_read_value(self) -> Any:
-        """cache of last read value"""
+        """
+        Cache of last read value, updated on each get/read call.
+
+        Does not necessarily reflect the current value on the server.
+        """
         raise NotImplementedError("implement last_read_value per protocol")
 
     def set(self, value: Any) -> None:
@@ -221,8 +248,9 @@ class ConsumedThingProperty:
 
     async def async_set(self, value: Any) -> None:
         """
-        Async set or write property value - asynchronous at the network level,
-        may not necessarily be at the server level.
+        Async set or write property value.
+
+        Asynchronous at the network level, may not necessarily be at the server level.
 
         Parameters
         ----------
@@ -233,8 +261,9 @@ class ConsumedThingProperty:
 
     async def async_get(self) -> Any:
         """
-        Async get or read property value - asynchronous at the network level,
-        may not necessarily be at the server level.
+        Async get or read property value.
+
+        Asynchronous at the network level, may not necessarily be at the server level.
 
         Returns
         -------
@@ -245,8 +274,10 @@ class ConsumedThingProperty:
 
     def noblock_get(self) -> str:
         """
-        Get or read property value without blocking, i.e. make a request and collect it later
-        and the method returns immediately. Server must return a message ID to identify the request.
+        Get or read property value without blocking.
+
+        Make a request and collect it later and the method returns immediately. Server must return a message ID to
+        identify the request.
 
         Returns
         -------
@@ -257,8 +288,10 @@ class ConsumedThingProperty:
 
     def noblock_set(self, value: Any) -> str:
         """
-        Set or write property value without blocking, i.e. make a request and collect it later
-        and the method returns immediately. Server must return a message ID to identify the request.
+        Set or write property value without blocking.
+
+        Make a request and collect it later and the method returns immediately. Server must return a message ID to
+        identify the request.
 
         Parameters
         ----------
@@ -274,8 +307,9 @@ class ConsumedThingProperty:
 
     def oneway_set(self, value: Any) -> None:
         """
-        Set property value without waiting for acknowledgement. The server also does not send any reply.
-        There is no guarantee that the property value was set.
+        Set property value without waiting for acknowledgement.
+
+        The server also does not (need to) send any reply. There is no guarantee that the property value was set.
 
         Parameters
         ----------
@@ -286,7 +320,7 @@ class ConsumedThingProperty:
 
     def observe(self, *callbacks: Callable) -> None:
         """
-        Observe property value changes
+        Observe property value changes.
 
         Parameters
         ----------
@@ -297,11 +331,11 @@ class ConsumedThingProperty:
         raise NotImplementedError("implement property observe per protocol")
 
     def unobserve(self) -> None:
-        """Stop observing property value changes"""
+        """Stop observing property value changes."""
         # looks like this will be unused, observe property is done via ConsumedThingEvent
         raise NotImplementedError("implement property unobserve per protocol")
 
-    def read_reply(self, message_id: str, timeout: float | int | None = None) -> Any:
+    def read_reply(self, message_id: str, timeout: float | None = None) -> Any:
         """
         Read the reply of the property get or set which was scheduled with `noblock`.
 
@@ -320,21 +354,29 @@ class ConsumedThingProperty:
         raise NotImplementedError("implement property read_reply per protocol")
 
 
-class ConsumedThingEvent:
+class ConsumedThingEvent:  # noqa: D101 # Dont add class doc otherwise it will conflict with __doc__ in slots
     # event subscription
-    # Dont add class doc otherwise __doc__ in slots will conflict with class variable
+
+    if TYPE_CHECKING:
+        # These are declared as __slots__ in the protocol-specific mixin subclasses.
+        # Annotated here only so type checkers resolve them on the base type.
+        __name__: str
+        __qualname__: str
+        __doc__: str | None
 
     def __init__(
         self,
-        resource: EventAffordance,
+        resource: EventAffordance | PropertyAffordance,
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any,
     ) -> None:
         """
+        Initialize a consumed thing event.
+
         Parameters
         ----------
-        resource: EventAffordance
-            dataclass object representing the event
+        resource: EventAffordance | PropertyAffordance
+            dataclass object representing the event or an observable property
         logger: structlog.stdlib.BoundLogger
             logger instance
         owner_inst: Any
@@ -345,7 +387,7 @@ class ConsumedThingEvent:
         self.resource = resource
         self.logger = logger
         self.owner_inst = owner_inst  # type: ObjectProxy
-        self._subscribed = dict()
+        self._subscribed = {}
         # self._sync_callbacks = []
         # self._async_callbacks = []
 
@@ -358,7 +400,7 @@ class ConsumedThingEvent:
         # create_new_connection: bool = False,
     ) -> None:
         """
-        subscribe to the event
+        Subscribe to the event.
 
         Parameters
         ----------
@@ -371,32 +413,48 @@ class ConsumedThingEvent:
             - threading - if `True`, each callback is called in a separate thread, if `False` they are called sequentially.
         deserialize: bool
             if `False`, event payload is passed to the callbacks as raw bytes, if `True` it is deserialized
+
+        Raises
+        ------
+        ValueError
+            if no form is found for the event subscription
         """
         op = Operations.observeproperty if isinstance(self.resource, PropertyAffordance) else Operations.subscribeevent
         form = self.resource.retrieve_form(op, None)
-        callbacks = callbacks if isinstance(callbacks, (list, tuple)) else [callbacks]
+        cbs = (
+            callbacks
+            if isinstance(callbacks, list)
+            else list(callbacks)
+            if isinstance(callbacks, tuple)
+            else [callbacks]
+        )
         # if not create_new_connection:
         #   see tag v0.3.2 for logic
         if form is None:
             raise ValueError(f"No form found for {op} operation for {self.resource.name}")
         if asynch:
             get_current_async_loop().call_soon(
-                lambda: asyncio.create_task(self.async_listen(form, callbacks, concurrent, deserialize))
+                lambda: asyncio.create_task(self.async_listen(form, cbs, concurrent, deserialize))  # type: ignore
             )
         else:
-            _thread = threading.Thread(target=self.listen, args=(form, callbacks, concurrent, deserialize), daemon=True)
+            _thread = threading.Thread(
+                target=self.listen,
+                args=(form, cbs, concurrent, deserialize),
+                daemon=True,
+            )
             _thread.start()
 
-    def unsubscribe(self):
-        """unsubscribe from the event"""
+    def unsubscribe(self) -> None:
+        """Unsubscribe from the event."""
         self._subscribed.clear()
         # self._sync_callbacks.clear()
         # self._async_callbacks.clear()
 
-    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = True, deserialize: bool = True):
+    def listen(self, form: Form, callbacks: list[Callable], concurrent: bool = True, deserialize: bool = True) -> None:
         """
-        Listen to events and call the callbacks. This method needs to be invoked by the `subscribe()` method
-        in threaded mode. Use `async_listen()` for asyncio mode.
+        Listen to events and call the callbacks in threaded mode.
+
+        This method needs to be invoked by the `subscribe()` method. Use `async_listen()` for asyncio mode.
 
         Parameters
         ----------
@@ -412,11 +470,16 @@ class ConsumedThingEvent:
         raise NotImplementedError("implement listen per protocol")
 
     async def async_listen(
-        self, form: Form, callbacks: list[Callable], concurrent: bool = True, deserialize: bool = True
-    ):
+        self,
+        form: Form,
+        callbacks: list[Callable],
+        concurrent: bool = True,
+        deserialize: bool = True,
+    ) -> None:
         """
-        Listen to events and call the callbacks. This method needs to be invoked by the `subscribe()` method
-        in asyncio mode. Use `listen()` for threaded mode.
+        Listen to events and call the callbacks.
+
+        This method needs to be invoked by the `subscribe()` method in asyncio mode. Use `listen()` for threaded mode.
 
         Parameters
         ----------
@@ -433,7 +496,7 @@ class ConsumedThingEvent:
 
     def schedule_callbacks(self, callbacks: list[Callable], event_data: Any, concurrent: bool = False) -> None:
         """
-        schedule the callbacks to be called with the event data
+        Schedule the callbacks to be called with the event data.
 
         Parameters
         ----------
@@ -442,7 +505,7 @@ class ConsumedThingEvent:
         event_data: Any
             event data to pass to the callbacks
         concurrent: bool
-            whether to run each callback in a separate thread
+            whether to run each callback in a separate thread concurrently
         """
         for cb in callbacks:
             try:
@@ -451,12 +514,11 @@ class ConsumedThingEvent:
                 else:
                     threading.Thread(target=cb, args=(event_data,)).start()
             except Exception as ex:
-                self.logger.error(f"Error occurred in callback {cb}: {ex}")
-                self.logger.exception(ex)
+                self.logger.error(f"Error occurred in callback {cb} - {ex}", exc_info=True)
 
     async def async_schedule_callbacks(self, callbacks, event_data: Any, concurrent: bool = False) -> None:
         """
-        async schedule the callbacks to be called with the event data
+        Async schedule the callbacks to be called with the event data.
 
         Parameters
         ----------
@@ -465,7 +527,7 @@ class ConsumedThingEvent:
         event_data: Any
             event data to pass to the callbacks
         concurrent: bool
-            whether to run each callback in a separate thread
+            whether to run each callback in a separate asyncio task concurrently
         """
         loop = get_current_async_loop()
         for cb in callbacks:
@@ -480,60 +542,28 @@ class ConsumedThingEvent:
                 else:
                     cb(event_data)
             except Exception as ex:
-                self.logger.error(f"Error occurred in callback {cb}: {ex}")
-                self.logger.exception(ex)
+                self.logger.error(f"Error occurred in callback {cb} - {ex}", exc_info=True)
 
     def add_callbacks(self, callbacks: list[Callable] | Callable, asynch: bool = False) -> None:
         """
-        add callbacks to the event
+        Add callbacks to the event.
 
         Parameters
         ----------
         *callbacks: list[Callable] | Callable
             callback or list of callbacks to add
         """
-        raise NotImplementedError(
-            "logic error - cannot add callbacks to reuse event subscription. Unsubscribe and resubscribe with new callbacks"
-        )
         # for logic, see tag v0.3.2
-
-
-def raise_local_exception(error_message: dict[str, Any]) -> None:
-    """
-    raises an exception on client side using an exception from server, using a mapping based on exception type
-    (currently only python built-in exceptions supported). If the exception type is not found, a generic `Exception` is raised.
-    Server traceback is added to the exception notes. Client creates its own traceback which is not usually the cause of the error.
-
-    Parameters
-    ----------
-    error_message: dict[str, Any]
-        exception dictionary made by server with following keys - `type`, `message`, `traceback`, `notes`
-    """
-    if isinstance(error_message, Exception):
-        raise error_message from None
-    elif isinstance(error_message, dict) and "exception" in error_message.keys():
-        error_message = error_message["exception"]
-        message = error_message["message"]
-        exc = getattr(builtins, error_message["type"], None)
-        if exc is None:
-            ex = Exception(message)
-        else:
-            ex = exc(message)
-        error_message["traceback"][0] = f"Server {error_message['traceback'][0]}"
-        ex.__notes__ = error_message["traceback"][0:-1]
-        raise ex from None
-    elif isinstance(error_message, str) and error_message in ["invokation", "execution"]:
-        raise TimeoutError(
-            f"{error_message[0].upper()}{error_message[1:]} timeout occured. "
-            + "Server did not respond within specified timeout"
-        ) from None
-    raise RuntimeError("unknown error occurred on server side") from None
+        raise NotImplementedError(
+            "cannot add callbacks currrently to reuse event subscription."
+            + " Unsubscribe and resubscribe with new callbacks"
+        )
 
 
 @dataclass
 class SSE:
     """
-    dataclass representing a server sent event and the argument used to invoke event callbacks.
+    dataclass representing a server sent event and the data used to invoke event callbacks.
 
     Attributes
     ----------
@@ -547,20 +577,27 @@ class SSE:
         reconnection time in milliseconds, defaults to None, currently unused.
     """
 
-    __slots__ = ("event", "data", "id", "retry")
+    __slots__ = ("data", "event", "id", "retry")
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.clear()
 
-    def clear(self):
-        """reset to default/empty values"""
+    def clear(self) -> None:
+        """Reset to default/empty values."""
         self.event = "message"  # type: str
         self.data = ""  # type: Any
         self.id = None  # type: str | None
         self.retry = None  # type: int | None
 
     def flush(self) -> dict[str, Any] | None:
-        """obtain the event payload as dictionary and reset to default values"""
+        """
+        Obtain the event payload as dictionary and reset to default values.
+
+        Returns
+        -------
+        dict[str, Any] | None
+            dictionary with keys - `event`, `data`, `id`, `retry` if event has data or id, None otherwise
+        """
         if not self.data and self.id is None:
             return None
         payload = {
