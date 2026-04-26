@@ -8,7 +8,8 @@ from ..constants import JSONSchema
 from ..utils import json_schema_merge_args_to_kwargs, pydantic_validate_args_kwargs
 
 
-class BaseSchemaValidator:  # type definition
+# type definition
+class BaseSchemaValidator:
     """
     Base class for all schema validators.
 
@@ -27,7 +28,7 @@ class BaseSchemaValidator:  # type definition
         raise NotImplementedError("validate_method_call method must be implemented by subclass")
 
     def json(self) -> JSONSchema:
-        """Allows JSON serialization of the instance itself."""
+        """Allows JSON serialization of the validator instance itself."""
         raise NotImplementedError("json method must be implemented by subclass")
 
     def __get_state__(self):
@@ -41,8 +42,23 @@ class JSONSchemaValidator(BaseSchemaValidator):
     """
     JSON schema validator extending the standard python JSON schema package.
 
+    ```python
+    power_supply_output_schema = {
+        "type": "object",
+        "properties": {
+            "current": {"type": "number", "minimum": 0},
+            "power": {"type": "number", "minimum": 0, "maximum": 100},
+        },
+    }
+    validator = JSONSchemaValidator(power_supply_output_schema)
+    validator.validate({"current": 50, "power": 75})  # valid
+    validator.validate({"current": 65, "power": 110})  # raises
+    ```
+
+    This class is largely used internally and there is no need to explicitly instantiate it.
+
     Consider `FastJSONSchemaValidator` (`pip install fastjsonschema`) or
-    pydantic annotation based validation if necessary.
+    pydantic annotation based validation for performance if necessary.
     """
 
     def __init__(self, schema: JSONSchema) -> None:
@@ -51,7 +67,7 @@ class JSONSchemaValidator(BaseSchemaValidator):
 
         Parameters
         ----------
-        schema: JSON
+        schema: JSONSchema
             The JSON schema to validate against
         """
         jsonschema.Draft7Validator.check_schema(schema)
@@ -78,7 +94,22 @@ class JSONSchemaValidator(BaseSchemaValidator):
 
 
 class PydanticSchemaValidator(BaseSchemaValidator):
-    """pydantic model validator."""
+    """
+    Pydantic model validator.
+
+    ```python
+    class PowerSupplyOutput(BaseModel):
+        current: float = Field(..., ge=0)
+        power: float = Field(..., ge=0, le=100)
+
+    validator = PydanticSchemaValidator(PowerSupplyOutput)
+    validator.validate({"current": 50, "power": 75})  # valid
+    validator.validate({"current": 65, "power": 110})  # raises
+    ```
+
+    The user is encouraged to use pydantic models as much as possible. This class is largely used internally and
+    there is no need to explicitly instantiate it.
+    """
 
     def __init__(self, schema: BaseModel) -> None:
         """
@@ -112,7 +143,24 @@ try:
     import fastjsonschema
 
     class FastJSONSchemaValidator(BaseSchemaValidator):
-        """JSON schema validator according to fast JSON schema."""
+        """
+        JSON schema validator according to fast JSON schema.
+
+        `pip install fastjsonschema` to use.
+
+        ```python
+        power_supply_output_schema = {
+            "type": "object",
+            "properties": {
+                "current": {"type": "number", "minimum": 0},
+                "power": {"type": "number", "minimum": 0, "maximum": 100},
+            },
+        }
+        validator = JSONSchemaValidator(power_supply_output_schema)
+        validator.validate({"current": 50, "power": 75})  # valid
+        validator.validate({"current": 65, "power": 110})  # raises
+        ```
+        """
 
         # Useful for performance with dictionary based schema specification
         # which msgspec has no built in support. Normally, for speed,

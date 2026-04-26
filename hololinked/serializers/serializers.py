@@ -138,6 +138,9 @@ class JSONSerializer(BaseSerializer):
         """
         Method called if object is not serializable by default JSON encoder.
 
+        To override, one can subclass and implement default method and call `super().default()` at the very end.
+        Or one can directly register a type with `register_type_replacement()`.
+
         Parameters
         ----------
         obj: Any
@@ -199,7 +202,7 @@ class JSONSerializer(BaseSerializer):
             the type for which the replacement function is registered
         replacement_function: Function
             the function that takes an object of the given type and returns a JSON serializable representation of
-            the object, not bytes.
+            the object. `bytes` are not expected, only the JSON serializable representation.
 
         Raises
         ------
@@ -757,7 +760,7 @@ class Serializers(metaclass=MappableSingleton):
         """
         Get a list of all allowed content types for serialization.
 
-        Set `global_config.ALLOW_PICKLE` to True to allow pickle content type,
+        Set `global_config.ALLOW_PICKLE` to `True` to allow pickle content type,
         which is not allowed by default for security reasons.
 
         Returns

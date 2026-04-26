@@ -1,4 +1,4 @@
-"""JSON Schema validator."""
+"""JSON Schema type management."""
 
 from typing import Any
 
@@ -7,9 +7,19 @@ from ..constants import JSON
 
 class JSONSchema:
     """
-    JSON Schema validation and type management.
+    JSON Schema type management.
 
-    Especially handles converting highly specific python types to JSON schema types.
+    Handles converting highly specific python types to JSON schema types.
+    One needs to explicitly register such python types with the `register_type_replacement` method to be able to
+    insert JSON schema in JSON documents (like the Thing Description).
+
+    ```python
+    JSONSchema.register_type_replacement(Image, 'string', schema=dict(contentEncoding='base64'))
+    JSONSchema.register_type_replacement(MyCustomObject, 'object', schema=MyCustomObject.schema())
+    ```
+
+    Validation of JSON schema, say for properties or action payloads, is carried out by the `JSONSchemaValidator`
+    class which is separate.
     """
 
     _allowed_types = ("string", "number", "integer", "boolean", "object", "array", None)
@@ -68,33 +78,7 @@ class JSONSchema:
         return False
 
     @classmethod
-    def has_additional_schema_definitions(cls, typ: Any) -> bool:
-        """
-        Check, if in additional to the JSON schema base type, additional schema definitions exists.
-
-        Utility function to decide where to insert additional schema definitions in a JSON document.
-
-        ```python
-        JSONSchema.register_type_replacement(Image, 'string', schema=dict(contentEncoding='base64'))
-        JSONSchema.has_additional_schema_definitions(Image)  # returns True
-        ```
-
-        Parameters
-        ----------
-        typ: Any
-            the python type to check
-
-        Returns
-        -------
-        bool
-            True, if additional schema definitions exist for the type
-        """
-        if typ in JSONSchema._schemas.keys():
-            return True
-        return False
-
-    @classmethod
-    def get_base_type(cls, typ: Any) -> str | dict:
+    def get_base_type(cls, typ: Any) -> str:
         """
         Get the JSON schema base type for a certain python type.
 
@@ -123,7 +107,12 @@ class JSONSchema:
                 f"Object for wot-td has invalid type for JSON conversion. Given type - {type(typ)}. "
                 + "Use JSONSchema.register_replacements on hololinked.schema_validators.JSONSchema object to recognise the type."
             )
-        return JSONSchema._replacements[typ]
+        typ = JSONSchema._replacements[typ]
+        if isinstance(typ, str):
+            return typ
+        if isinstance(typ, dict) and "type" in typ:
+            return typ["type"]  # type: ignore[invalid-return-type]
+        return "object"
 
     @classmethod
     def register_type_replacement(self, type: Any, json_schema_base_type: str, schema: JSON | None = None) -> None:
@@ -160,6 +149,32 @@ class JSONSchema:
                 "json schema replacement type must be one of allowed type - 'string', 'object', 'array', 'string', "
                 + f"'number', 'integer', 'boolean', 'null'. Given value {json_schema_base_type}"
             )
+
+    @classmethod
+    def has_additional_schema_definitions(cls, typ: Any) -> bool:
+        """
+        Check, if in additional to the JSON schema base type, additional schema definitions exists.
+
+        Utility function to decide where to insert additional schema definitions in a JSON document.
+
+        ```python
+        JSONSchema.register_type_replacement(Image, 'string', schema=dict(contentEncoding='base64'))
+        JSONSchema.has_additional_schema_definitions(Image)  # returns True
+        ```
+
+        Parameters
+        ----------
+        typ: Any
+            the python type to check
+
+        Returns
+        -------
+        bool
+            True, if additional schema definitions exist for the type
+        """
+        if typ in JSONSchema._schemas.keys():
+            return True
+        return False
 
     @classmethod
     def get_additional_schema_definitions(cls, typ: Any):

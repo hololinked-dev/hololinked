@@ -1,4 +1,4 @@
-"""generic reusable payload dataclasses for serialization and deserialization of data in different formats."""
+"""Generic reusable payload dataclasses for serialization and deserialization of data from/to different formats."""
 
 from dataclasses import dataclass
 from typing import Any
