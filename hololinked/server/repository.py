@@ -27,7 +27,7 @@ from ..utils import uuid_hex
 
 
 class BrokerThing(BaseModel):
-    """Repository Layer of a Thing over the internal message broker"""
+    """Repository Layer of a Thing over the internal message broker."""
 
     id: str
     """Thing ID"""
@@ -84,6 +84,10 @@ class BrokerThing(BaseModel):
             The server execution context
         thing_execution_context: ThingExecutionContext, optional
             The thing execution context
+
+        Raises
+        ------
+        RuntimeError
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")

@@ -1,3 +1,5 @@
+"""MQTT Topic Publishers."""
+
 from typing import Any
 
 import aiomqtt
@@ -11,7 +13,9 @@ from ..repository import BrokerThing  # noqa: F401
 
 class TopicPublisher:
     """
-    Publishes an event to an MQTT topic. Supply a different class in `MQTTPublisher` to use a different one.
+    Publishes an event to an MQTT topic.
+
+    Supply a different class in `MQTTPublisher` to use a different one.
     This object would be a controller in layered architecture.
     """
 
@@ -23,6 +27,8 @@ class TopicPublisher:
         logger: structlog.stdlib.BoundLogger,
     ) -> None:
         """
+        Initializes the `TopicPublisher`.
+
         Parameters
         ----------
         client: aiomqtt.Client
@@ -46,11 +52,11 @@ class TopicPublisher:
         self._stop_publishing = False
 
     def stop(self):
-        """stop publishing, the client is not closed automatically"""
+        """Stop publishing, the client is not closed automatically."""
         self._stop_publishing = True
 
     async def publish(self):
-        """Publishes events to the MQTT broker in an infinite loop"""
+        """Publishes events to the MQTT broker in an infinite loop."""
         consumer = self.thing.subscribe_event(self.resource)
         self.logger.info(f"Starting to publish events for {self.resource.name} to MQTT broker on topic {self.topic}")
         while not self._stop_publishing:
@@ -73,7 +79,9 @@ class TopicPublisher:
 
 class ThingDescriptionPublisher:
     """
-    Publishes Thing Description to an MQTT Topic. Supply a different class in `MQTTPublisher` to use a different one.
+    Publishes Thing Description to an MQTT Topic.
+
+    Supply a different class in `MQTTPublisher` to use a different one.
     This object would be a controller in layered architecture.
     """
 
@@ -85,6 +93,8 @@ class ThingDescriptionPublisher:
         ZMQ_TD: dict[str, Any],
     ) -> None:
         """
+        Initializes the `ThingDescriptionPublisher`.
+
         Parameters
         ----------
         client: aiomqtt.Client
@@ -111,7 +121,7 @@ class ThingDescriptionPublisher:
         )
 
     async def publish(self, ZMQ_TD: dict[str, Any]) -> dict[str, Any]:
-        """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True"""
+        """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True."""
         TD = await self.thing_description.generate(ZMQ_TD)
 
         await self.client.publish(

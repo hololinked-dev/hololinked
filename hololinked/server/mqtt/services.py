@@ -1,3 +1,5 @@
+"""Add all service-like classes here."""
+
 import copy
 
 from typing import Any
@@ -10,7 +12,8 @@ from ...td.interaction_affordance import EventAffordance, PropertyAffordance
 
 class ThingDescriptionService:
     """
-    Generates Thing Descriptions for `Thing`s.
+    Generates MQTT Thing Descriptions for `Thing`s.
+
     This object would be a service in layered architecture.
     """
 
@@ -22,6 +25,8 @@ class ThingDescriptionService:
         ssl: bool = True,
     ) -> None:
         """
+        Initializes the `ThingDescriptionService`.
+
         Parameters
         ----------
         hostname: str

@@ -1,4 +1,8 @@
-"""Implementation of security schemes for a server"""
+"""
+Implementation of security schemes that can be used by a server.
+
+Not all security schemes may be supported by all protocols.
+"""
 
 import base64
 import json
@@ -22,7 +26,7 @@ logger = structlog.get_logger()
 
 
 class Security(BaseModel):
-    """Type definition for security schemes"""
+    """Type definition for security schemes."""
 
     pass
 
@@ -33,6 +37,7 @@ try:
     class BcryptBasicSecurity(Security):
         """
         A username and password based security scheme using bcrypt.
+
         The password is stored as a hash.
 
         The request must supply an authorization header in of the following formats:
@@ -43,10 +48,9 @@ try:
         The username and password are expected to be base64 encoded, by default.
         Set `expect_base64=False` if you want to use plain text credentials without base64 encoding.
 
-        Use bcrypt when you are constrained in terms of memory. Use Argon2BasicSecurity
+        Use bcrypt when you are constrained in terms of memory. Use `Argon2BasicSecurity`
         when you can afford more memory (which is the recommended username-password implementation).
-
-        Note: bcrypt is a cpu-hard hashing algorithm, which means it is resistant to brute-force attacks.
+        Bcrypt is a cpu-hard hashing algorithm, which means it is resistant to brute-force attacks.
         """
 
         username: str
@@ -57,6 +61,8 @@ try:
 
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             """
+            Initialize the BcryptBasicSecurity scheme with a username and password.
+
             Parameters
             ----------
             username: str
@@ -77,7 +83,7 @@ try:
 
         def validate_input(self, username: str, password: str) -> bool:
             """
-            plain validate a username and password
+            Validate a username and password.
 
             Returns
             -------
@@ -91,12 +97,18 @@ try:
         def validate_base64(self, b64_str: str) -> bool:
             """
             Validate a base64 encoded string containing username and password.
-            Please strip the 'Basic ' prefix before passing as argument.
+
+            Please strip the `Basic ` prefix before passing as argument.
 
             Returns
             -------
             bool
                 True if the username and password are valid, False otherwise
+
+            Raises
+            ------
+            ValueError
+                If the security scheme is not configured to expect base64 encoded credentials but this method is called.
             """
             if not self.expect_base64:
                 raise ValueError("base64 encoded credentials not expected, please reconfigure if needed")
@@ -112,6 +124,7 @@ except ImportError:
     class BcryptBasicSecurity(Security):
         """
         Placeholder for BcryptBasicSecurity when bcrypt is not installed.
+
         Please install the `bcrypt` library to use Bcrypt password security and see the actual docstrings.
         """
 
@@ -125,6 +138,7 @@ try:
     class Argon2BasicSecurity(Security):
         """
         A username and password based security scheme using Argon2.
+
         The password is stored as a hash.
 
         The request must supply an authorization header in of the following formats:
@@ -147,6 +161,8 @@ try:
 
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             """
+            Initialize the Argon2BasicSecurity scheme with a username and password.
+
             Parameters
             ----------
             username: str
@@ -168,7 +184,7 @@ try:
 
         def validate_input(self, username: str, password: str) -> bool:
             """
-            plain validate a username and password
+            Plain validate a username and password.
 
             Returns
             -------
@@ -185,12 +201,18 @@ try:
         def validate_base64(self, b64_str: str) -> bool:
             """
             Validate a base64 encoded string containing username and password.
-            Please strip the 'Basic ' prefix before passing.
+
+            Please strip the `Basic ` prefix before passing.
 
             Returns
             -------
             bool
                 True if the username and password are valid, False otherwise
+
+            Raises
+            ------
+            ValueError
+                If the security scheme is not configured to expect base64 encoded credentials but this method is called.
             """
             if not self.expect_base64:
                 raise ValueError("base64 encoded credentials not expected, please reconfigure if needed")
@@ -206,6 +228,7 @@ except ImportError:
     class Argon2BasicSecurity(Security):
         """
         Placeholder for Argon2BasicSecurity when argon2 is not installed.
+
         Please install the `argon2-cffi` library to use Argon2 password security.
         """
 
@@ -217,25 +240,46 @@ try:
     import argon2
 
     class APIKeyRecord(BaseModel):
-        """An API key record dataclass"""
+        """An API key record dataclass."""
 
         name: str
+        """Name of the API key. A unique identifier used when storing or providing metadata about the API key."""
         id: str
+        """A short random ID part of the API key, used for lookup before verifying the secret part."""
         apikey_hash: str
+        """The hash of the API key, the ID is included in the hash value."""
         description: str
+        """A human readable description about the API key, its purpose or any other relevant information."""
         created_at: datetime
+        """The datetime when the API key was created."""
         expiry_at: datetime
+        """The datetime when the API key will expire."""
         hasher: str = "argon2"
+        """The hashing algorithm used, `argon2` or `bcrypt` is supported."""
 
         @field_serializer("created_at", "expiry_at")
         def serialize_datetime(self, dt: datetime, _info) -> str:
-            """Serialize datetime to ISO format string"""
+            """
+            Serialize datetime to ISO format string.
+
+            Returns
+            -------
+            str
+                The datetime in ISO format string.
+            """
             return dt.isoformat()
 
         @field_validator("created_at", "expiry_at", mode="before")
         @classmethod
         def parse_datetime(cls, value):
-            """Parse datetime from string or return datetime object"""
+            """
+            Parse datetime from string or return datetime object.
+
+            Returns
+            -------
+            datetime
+                The parsed datetime object.
+            """
             if isinstance(value, str):
                 return datetime.fromisoformat(value)
             return value
@@ -267,6 +311,8 @@ try:
 
         def __init__(self, name: str, file: str = "apikeys.json", hasher: Any = None) -> None:
             """
+            Initialize the APIKeySecurity scheme with a name and optional file for storage.
+
             Parameters
             ----------
             name: str
@@ -293,7 +339,9 @@ try:
             override: bool = False,
         ) -> str:
             """
-            Create a new API key. Use this method to generate and store a new API key before running your application.
+            Create a new API key.
+
+            Use this method to generate and store a new API key before running your application.
             The validity period, specified in minutes (default 30 days), is stored as validation metadata and not a part
             of the key itself. Nevertheless, this is checked during validation.
 
@@ -350,7 +398,7 @@ try:
 
         def hash(self, apikey: str) -> str:
             """
-            Create a hash of the API key for storage
+            Create a hash of the API key for storage.
 
             Returns
             -------
@@ -360,7 +408,23 @@ try:
             return self._ph.hash(apikey)
 
         def save(self, record: APIKeyRecord, filename: str = "apikeys.json", override: bool = False) -> None:
-            """Save the security scheme data to persistent storage"""
+            """
+            Save the security scheme data to persistent storage.
+
+            Parameters
+            ----------
+            record: APIKeyRecord
+                The API key record to save.
+            filename: str
+                The file to save the API key record to, defaults to "apikeys.json".
+            override: bool
+                Whether to override an existing API key record with the same name, defaults to False.
+
+            Raises
+            ------
+            ValueError
+                If an API key with the same name already exists and override is set to False.
+            """
             filepath = os.path.join(global_config.TEMP_DIR_SECRETS, filename)
             existing_data = {}
             if os.path.exists(filepath):
@@ -373,7 +437,14 @@ try:
                 json.dump(existing_data, file, indent=4)
 
         def load(self) -> None:
-            """load the security scheme data from persistent storage"""
+            """
+            Load the security scheme data from persistent storage.
+
+            Raises
+            ------
+            ValueError
+                If the stored data is invalid or the API key record cannot be found.
+            """
             if not os.path.exists(self.file):
                 return
             with open(self.file, "r") as file:
@@ -386,12 +457,24 @@ try:
 
         def validate_input(self, apikey: str) -> bool:
             """
-            Validate an API key against a stored hash. API key ID, expiry and hash are all validated.
+            Validate an API key against a stored hash.
+
+            API key ID, expiry and hash are all validated.
+
+            Parameters
+            ----------
+            apikey: str
+                The API key to validate.
 
             Returns
             -------
             bool
-                True if the API key is valid, False otherwise
+                True if the API key is valid, False otherwise.
+
+            Raises
+            ------
+            ValueError
+                If no API key record is loaded for validation.
             """
             if self.record is None:
                 raise ValueError("No API key loaded for validation")
@@ -413,6 +496,7 @@ except ImportError:
     class APIKeySecurity(Security):
         """
         Placeholder for APIKeySecurity when argon2 is not installed.
+
         Please install the `argon2-cffi` library to use API key security and see the actual docstrings.
         """
 
@@ -427,9 +511,10 @@ try:
 
     class OIDCSecurity(Security):
         """
-        Generic OIDC JWT validation meant to be used with 'openid' scope to validate login sessions, requires the PyJWT
-        library to be installed. A *JWT access token* is validated by verifying its signature against the provider's
-        JWKS endpoint (JWK Set) and optionally validating issuer/audience.
+        Generic OIDC JWT validation meant to be used with 'openid' scope to validate login sessions.
+
+        Requires the PyJWT library to be installed. A *JWT access token* is validated by verifying its signature
+        against the provider's JWKS endpoint (JWK Set) and optionally validating issuer/audience.
 
         This security scheme is not meant to be used with OAuth flows where the resource server is a third party
         application from where data is fetched on behalf of the user. The server using this scheme is expected to
@@ -474,6 +559,8 @@ try:
             name: str = "oidc-security",
         ) -> None:
             """
+            Initialize the OIDCSecurity scheme with issuer, audience and JWKS URL.
+
             Parameters
             ----------
             issuer: str
@@ -559,9 +646,10 @@ try:
             logger.info(f"Discovered JWKS URI for issuer {issuer}: {jwks_uri}", component="Security")
             return jwk_client
 
+        # TODO move this method outside the class
         @staticmethod
         def _get_dict_attr_by_path(payload: dict[str, Any], path: str) -> Any:
-            """Get a nested value from a dict using dot-separated keys."""
+            """Get a nested value from a dict using dot-separated keys."""  # noqa
             cur: Any = payload
             for part in path.split("."):
                 if not isinstance(cur, dict):
@@ -570,7 +658,19 @@ try:
             return cur
 
         def decode_and_validate(self, token: str) -> dict[str, Any]:
-            """Decode and validate a JWT, returning the verified payload."""
+            """
+            Decode and validate a JWT, returning the verified payload.
+
+            Parameters
+            ----------
+            token: str
+                The JWT access token to decode and validate.
+
+            Returns
+            -------
+            dict[str, Any]
+                The decoded JWT claims if the token is valid.
+            """
             signing_key = self._jwk_client.get_signing_key_from_jwt(token).key
 
             return jwt.decode(
@@ -583,7 +683,19 @@ try:
             )
 
         def validate_input(self, jwt_token: str) -> bool:
-            """Validate a JWT access token."""
+            """
+            Validate a JWT access token.
+
+            Parameters
+            ----------
+            jwt_token: str
+                The JWT access token to validate.
+
+            Returns
+            -------
+            bool
+                True if the token is valid, False otherwise.
+            """
             try:
                 self.decode_and_validate(jwt_token)
                 return True
@@ -592,11 +704,34 @@ try:
                 return False
 
         def userinfo(self, jwt_token: str) -> dict[str, Any]:
-            """Return the verified JWT claims. This does not call a remote userinfo endpoint."""
+            """
+            Validate and return the JWT claims.
+
+            Parameters
+            ----------
+            jwt_token: str
+                The JWT access token.
+
+            Returns
+            -------
+            dict[str, Any]
+                The decoded JWT claims if the token is valid.
+            """
             return self.decode_and_validate(jwt_token)
 
         def user_has_role(self, claims: dict[str, Any]) -> bool:
-            """Return True if any configured allowed role is present in the JWT claims."""
+            """
+            Return `True` if a role is present in the JWT claims.
+
+            Parameters
+            ----------
+            claims: dict[str, Any]
+                The decoded JWT claims.
+
+            Returns
+            -------
+            bool
+            """
             if not self.allowed_roles:
                 return True
 
@@ -619,6 +754,7 @@ try:
     class KeycloakOIDCSecurity(OIDCSecurity):
         """
         Keycloak specific OIDC security, extends the generic `OIDCSecurity` class.
+
         Only adds convenience around constructing the issuer URL. See `OIDCSecurity` for actual details and usage.
         Keycloak issuer is typically: {server_url}/realms/{realm}
         """
@@ -644,6 +780,7 @@ except ImportError:
     class OIDCSecurity(Security):
         """
         Placeholder for OIDCSecurity when PyJWT is not installed.
+
         If you see this doc, you need to install the `PyJWT` library to use OIDC security.
         """
 
@@ -662,6 +799,7 @@ except ImportError:
     class KeycloakOIDCSecurity(Security):
         """
         Placeholder for KeycloakOIDCSecurity.
+
         If you see this doc, you need to install the `PyJWT` library to use OIDC security.
         """
 

@@ -1,5 +1,6 @@
+"""ZMQ server with TCP, IPC and INPROC support."""
+
 import structlog
-import zmq
 import zmq.asyncio
 
 from ...constants import ZMQ_TRANSPORTS
@@ -11,7 +12,11 @@ from ..server import BaseProtocolServer
 
 
 class ZMQServer(RPCServer, BaseProtocolServer):
-    """Server to expose `Thing` over `ZeroMQ` protocol. Extends `RPCServer` to support `IPC` & `TCP`"""
+    """
+    Server to expose `Thing` over `ZeroMQ` protocol.
+
+    Extends `RPCServer` to support `IPC` & `TCP`.
+    """
 
     def __init__(
         self,
@@ -23,6 +28,8 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         **kwargs,
     ) -> None:
         """
+        Initialize ZMQServer.
+
         Parameters
         ----------
         id: str
@@ -39,6 +46,11 @@ class ZMQServer(RPCServer, BaseProtocolServer):
 
             - `logger`: `structlog.stdlib.BoundLogger`, custom logger instance.
             - `poll_timeout`: `int`, polling timeout in milliseconds.
+
+        Raises
+        ------
+        TypeError
+            If `access_points` is not a string or list of strings.
         """
         self.ipc_server = self.tcp_server = None
         self.ipc_event_publisher = self.tcp_event_publisher = self.inproc_events_proxy = None
@@ -106,10 +118,18 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             )
 
     def add_thing(self, thing: Thing) -> None:
-        """Adds a thing to the list of things to serve"""
+        """
+        Adds a thing to the list of things to serve.
+
+        Parameters
+        ----------
+        thing: Thing
+            The `Thing` instance to be added to the server.
+        """
+        # Written in this way because of multiple inheritance. Otherwise, an explicit override is not necessary.
         return RPCServer.add_thing(self, thing)
 
-    def run_zmq_request_listener(self) -> None:
+    def run_zmq_request_listener(self) -> None:  # noqa: D102
         # doc in parent class
         eventloop = get_current_async_loop()
         if self.ipc_server is not None:
@@ -120,7 +140,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             eventloop.create_task(self.tunnel_events_from_inproc())
         super().run_zmq_request_listener()
 
-    async def tunnel_events_from_inproc(self) -> None:
+    async def tunnel_events_from_inproc(self) -> None:  # noqa: D102
         if not self.inproc_events_proxy:
             return
         self.logger.info("starting to tunnel events from inproc to external publishers")
@@ -142,7 +162,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 self.logger.error(f"error in tunneling events from inproc: {e}")
         self.logger.info("stopped tunneling events from inproc")
 
-    def stop(self) -> None:
+    def stop(self) -> None:  # noqa: D102
         # doc in parent class
         if self.ipc_server is not None:
             self.ipc_server.stop_polling()
@@ -152,7 +172,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             self.inproc_events_proxy.stop()
         super().stop()
 
-    def exit(self) -> None:
+    def exit(self) -> None:  # noqa: D102
         # doc in parent class
         try:
             self.stop()
@@ -192,8 +212,8 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         paths += "\n)"
         return paths
 
-    async def start(self) -> None:
+    async def start(self) -> None:  # noqa: D102
         raise NotImplementedError("Use the blocking run() method to start the ZMQServer.")
 
-    async def setup(self) -> None:
+    async def setup(self) -> None:  # noqa: D102
         raise NotImplementedError("Use the blocking run() method to start the ZMQServer, no need to setup separately.")
