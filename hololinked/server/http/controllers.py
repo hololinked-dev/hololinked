@@ -1,3 +1,5 @@
+"""HTTP request handlers."""
+
 from typing import Any, Optional
 
 import msgspec
@@ -36,12 +38,22 @@ from ..security import (
 
 
 class LocalExecutionContext(msgspec.Struct):
+    """dataclass holding context on the current operation being performed."""
+
     noblock: Optional[bool] = None
+    """
+    The request will be scheduled but the response will not be provided, 
+    the client is expected to fetch the response later using the message ID
+    """
     messageID: Optional[str] = None
+    """
+    A message ID especially to correlate no-block requests with their responses, 
+    can be provided in the query parameters or the headers
+    """
 
 
 class BaseHandler(RequestHandler):
-    """Base request handler for running operations on the `Thing`"""
+    """Base request handler for running operations on the `Thing`."""
 
     # Would be a Controller in layered architecture.
 
@@ -53,12 +65,16 @@ class BaseHandler(RequestHandler):
         metadata: Any = None,
     ) -> None:
         """
+        Initializes the handler with the resource, config, logger and metadata.
+
         Parameters
         ----------
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
             dataclass representation of `Thing`'s exposed object that can quickly convert to a ZMQ Request object
-        owner_inst: HTTPServer
-            owning `hololinked.server.HTTPServer` instance
+        config: Any
+            The runtime configuration for the `HTTPServer`
+        logger: structlog.stdlib.BoundLogger
+            The logger to use for logging messages
         metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
         """
@@ -82,9 +98,15 @@ class BaseHandler(RequestHandler):
 
     async def has_access_control(self) -> bool:
         """
-        Checks if a client is an allowed client and enforces security schemes.
-        Custom web request handlers can use this property to check if a client has access control on the server or `Thing`
-        and let this property automatically generate a 401/403.
+        Enforces security schemes.
+
+        Custom web request handlers can use this property to check if a client has access control on the server or
+        `Thing` and automatically generate a 401/403.
+
+        Returns
+        -------
+        bool
+            True if the client has access control, False otherwise
         """
         if not self.allowed_clients and not self.security_schemes:
             return True
@@ -116,7 +138,14 @@ class BaseHandler(RequestHandler):
         return False  # keep False always at the end
 
     async def is_authenticated(self) -> bool:
-        """enforces authentication using the defined security schemes, freshly computed everytime"""
+        """
+        Enforces authentication using the defined security schemes, freshly computed everytime.
+
+        Returns
+        -------
+        bool
+            True if the client is authenticated, False otherwise
+        """
         authenticated = False
         # 1. Basic Authentication
         authorization_header = self.request.headers.get("Authorization", None)  # type: str
@@ -180,8 +209,14 @@ class BaseHandler(RequestHandler):
 
     async def is_authorized(self) -> bool:
         """
-        enforces authorization using the defined security schemes, freshly computed everytime.
-        Do not call this method without doing authentication first and having a userinfo property.
+        Enforces authorization (roles and permissions) using the defined security schemes, freshly computed everytime.
+
+        Do not call this method without doing authentication first. Mainly useful only for OIDC/OAuth2 currently.
+
+        Returns
+        -------
+        bool
+            True if the client is authorized, False otherwise.
         """
         if not self.userinfo:
             return True
@@ -192,7 +227,8 @@ class BaseHandler(RequestHandler):
 
     def set_access_control_allow_headers(self) -> None:
         """
-        For credential login, access control allow headers cannot be a wildcard '*'.
+        For credential login, sets access control allow headers, which cannot be a wildcard '*'.
+
         Some requests require exact list of allowed headers for the client to access the response.
         """
         headers = ", ".join(self.request.headers.keys())
@@ -202,7 +238,9 @@ class BaseHandler(RequestHandler):
 
     def set_custom_default_headers(self) -> None:
         """
-        sets general default headers, override in child classes to add more headers.
+        Sets general default headers for any request.
+
+        Override in child classes to add more headers.
 
         ```yaml
         Content-Type: application/json
@@ -225,18 +263,19 @@ class BaseHandler(RequestHandler):
     ]:
         """
         Aggregates all arguments to a standard dataclasses from the query parameters.
+
         Retrieves execution context (like oneway calls, fetching executing
         logs), timeouts, etc. Non recognized arguments are passed as additional payload to the `Thing`.
 
         An example would be the following URL:
 
         ```
-        http://localhost:8080/property/temperature?oneway=true&invokationTimeout=5&some_arg=42
+        http://localhost:8080/properties/temperature?oneway=true&invokationTimeout=5&some_arg=42
         ```
 
-        server execution context would have `oneway` set to true & `invokationTimeout` set to 5 seconds,
-        local execution context would be empty as no such arguments were passed,
-        and additional payload would have `{"some_arg": 42}` as its value.
+        - Server execution context would have `oneway` set to true & `invokationTimeout` set to 5 seconds
+        - Local execution context would be empty as no such arguments were passed
+        - Additional payload would have `{"some_arg": 42}` as its value.
 
         Returns
         -------
@@ -289,7 +328,7 @@ class BaseHandler(RequestHandler):
 
     @property
     def message_id(self) -> str:
-        """retrieves the message id from the request headers"""
+        """Retrieves the message id from the request headers or query parameters."""
         try:
             return self._message_id
         except AttributeError:
@@ -302,7 +341,21 @@ class BaseHandler(RequestHandler):
             return message_id
 
     def get_request_payload(self) -> tuple[SerializableData, PreserializedData]:
-        """retrieves the payload from the request body, does not necessarily deserialize it"""
+        """
+        Retrieves the payload from the request body, does not necessarily deserialize it.
+
+        Returns
+        -------
+        tuple[SerializableData, PreserializedData]
+            A tuple of SerializableData and PreserializedData, where the first one has the deserialized value
+            (if possible) and the second one has the raw value.
+            If deserialization is not possible and ALLOW_UNKNOWN_SERIALIZATION is False, raises an error.
+
+        Raises
+        ------
+        ValueError
+            If the content type is not supported and ALLOW_UNKNOWN_SERIALIZATION is False.
+        """
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
         if self.request.body:
@@ -319,26 +372,27 @@ class BaseHandler(RequestHandler):
         return payload, preserialized_payload
 
     async def get(self) -> None:
-        """runs property or action if accessible by 'GET' method. Default for property reads"""
+        """Runs property or action if accessible by 'GET' method. Default for property reads."""
         raise NotImplementedError("implement GET request method in child handler class")
 
     async def post(self) -> None:
-        """runs property or action if accessible by 'POST' method. Default for action execution"""
+        """Runs property or action if accessible by 'POST' method. Default for action execution."""
         raise NotImplementedError("implement POST request method in child handler class")
 
     async def put(self) -> None:
-        """runs property or action if accessible by 'PUT' method. Default for property writes"""
+        """Runs property or action if accessible by 'PUT' method. Default for property writes."""
         raise NotImplementedError("implement PUT request method in child handler class")
 
     async def delete(self) -> None:
         """
-        runs property or action if accessible by 'DELETE' method. Default for property deletes
-        (not a valid operation as per web of things semantics).
+        Runs property or action if accessible by 'DELETE' method.
+
+        Default for property deletes (not a valid operation as per web of things semantics).
         """
         raise NotImplementedError("implement DELETE request method in child handler class")
 
     def is_method_allowed(self, method: str) -> bool:
-        """checks if the method is allowed for the property"""
+        """Checks if the method is allowed for the property."""
         raise NotImplementedError("implement is_method_allowed in child handler class")
 
 
@@ -354,11 +408,16 @@ class RPCHandler(BaseHandler):
 
     async def is_method_allowed(self, method: str) -> bool:
         """
-        Checks if the method is allowed for the property:
+        Checks if the method is allowed for the property.
 
         - Access control (authentication & authorization)
         - if the HTTP method is allowed for the resource.
         - if its GET method with message id for no-block response.
+
+        Returns
+        -------
+        bool
+            True if the method is allowed, False otherwise.
         """
         if not await self.has_access_control():
             return False
@@ -371,7 +430,9 @@ class RPCHandler(BaseHandler):
 
     async def options(self) -> None:
         """
-        Options for the resource. Main functionality is to inform the client is a specific HTTP method is supported by
+        Options for the resource (HTTP OPTIONS method).
+
+        Main functionality is to inform the client if a specific HTTP method is supported by
         the property or the action (Access-Control-Allow-Methods).
         """
         if await self.has_access_control():
@@ -383,7 +444,7 @@ class RPCHandler(BaseHandler):
 
     async def handle_through_thing(self, operation: str) -> None:
         """
-        handles the `Thing` operations and writes the reply to the HTTP client.
+        Handles the `Thing` operations and writes the reply to the HTTP client.
 
         Parameters
         ----------
@@ -453,7 +514,7 @@ class RPCHandler(BaseHandler):
             self.write(response_payload.value)
 
     async def handle_no_block_response(self) -> None:
-        """handles the no-block response for the noblock calls"""
+        """Handles the response for a previously made noblock call."""
         try:
             self.logger.info("waiting for no-block response", message_id=self.message_id)
             response_message = await self.thing.recv_response(
@@ -486,9 +547,9 @@ class RPCHandler(BaseHandler):
 
 
 class PropertyHandler(RPCHandler):
-    """handles property requests"""
+    """handles property requests."""
 
-    async def get(self) -> None:
+    async def get(self) -> None:  # noqa: D102
         if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             if self.message_id is not None:
@@ -497,19 +558,19 @@ class PropertyHandler(RPCHandler):
                 await self.handle_through_thing(Operations.readproperty)
         self.finish()
 
-    async def post(self) -> None:
+    async def post(self) -> None:  # noqa: D102
         if await self.is_method_allowed("POST"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
-    async def put(self) -> None:
+    async def put(self) -> None:  # noqa: D102
         if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
-    async def delete(self) -> None:
+    async def delete(self) -> None:  # noqa: D102
         if await self.is_method_allowed("DELETE"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.deleteproperty)
@@ -517,9 +578,9 @@ class PropertyHandler(RPCHandler):
 
 
 class ActionHandler(RPCHandler):
-    """handles action requests"""
+    """handles action requests."""
 
-    async def get(self) -> None:
+    async def get(self) -> None:  # noqa: D102
         if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             if self.message_id is not None:
@@ -528,19 +589,19 @@ class ActionHandler(RPCHandler):
                 await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
-    async def post(self) -> None:
+    async def post(self) -> None:  # noqa: D102
         if await self.is_method_allowed("POST"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
-    async def put(self) -> None:
+    async def put(self) -> None:  # noqa: D102
         if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
-    async def delete(self) -> None:
+    async def delete(self) -> None:  # noqa: D102
         if await self.is_method_allowed("DELETE"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
@@ -548,7 +609,7 @@ class ActionHandler(RPCHandler):
 
 
 class RWMultiplePropertiesHandler(ActionHandler):
-    """handles read-write of multiple properties via an action"""
+    """handles read-write of multiple properties via an action."""
 
     def initialize(
         self,
@@ -562,7 +623,7 @@ class RWMultiplePropertiesHandler(ActionHandler):
         self.write_properties_resource = kwargs.get("write_properties_resource", None)
         return super().initialize(resource, config, logger, metadata)
 
-    async def get(self) -> None:
+    async def get(self) -> None:  # noqa: D102
         if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             self.resource = self.read_properties_resource
@@ -572,19 +633,19 @@ class RWMultiplePropertiesHandler(ActionHandler):
                 await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
-    async def post(self) -> None:
+    async def post(self) -> None:  # noqa: D102
         if await self.is_method_allowed("POST"):
             self.set_status(405, "method not allowed, PUT instead")
         self.finish()
 
-    async def put(self) -> None:
+    async def put(self) -> None:  # noqa: D102
         if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             self.resource = self.write_properties_resource
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
-    async def patch(self) -> None:
+    async def patch(self) -> None:  # noqa: D102
         if await self.is_method_allowed("PATCH"):
             self.set_custom_default_headers()
             self.resource = self.write_properties_resource
@@ -593,7 +654,7 @@ class RWMultiplePropertiesHandler(ActionHandler):
 
 
 class EventHandler(BaseHandler):
-    """handles events emitted by `Thing` and tunnels them as HTTP SSE"""
+    """handles events emitted by `Thing` and tunnels them as HTTP SSE."""
 
     def initialize(
         self,
@@ -607,7 +668,9 @@ class EventHandler(BaseHandler):
 
     def set_custom_default_headers(self) -> None:
         """
-        sets default headers for event handling. The general headers are listed as follows:
+        Sets default headers for event handling.
+
+        The general headers are listed as follows:
 
         ```yaml
         Content-Type: text/event-stream
@@ -623,14 +686,14 @@ class EventHandler(BaseHandler):
         super().set_custom_default_headers()
 
     async def get(self):
-        """events are support only with GET method"""
+        """Events are support only with GET method."""
         if await self.has_access_control():
             self.set_custom_default_headers()
             await self.handle_datastream()
         self.finish()
 
     async def options(self):
-        """options for the resource"""
+        """Options for the resource."""
         if await self.has_access_control():
             self.set_status(204)
             self.set_custom_default_headers()
@@ -639,11 +702,11 @@ class EventHandler(BaseHandler):
         self.finish()
 
     def receive_blocking_event(self, event_consumer: EventConsumer):
-        """deprecated, but can make a blocking call in an async loop"""
+        """Deprecated, but can make a blocking call in an async loop."""
         return event_consumer.receive(timeout=10000, deserialize=False)
 
     async def handle_datastream(self) -> None:
-        """called by GET method and handles the event publishing"""
+        """Called by GET method and handles the event publishing."""
         try:
             event_consumer = self.thing.subscribe_event(self.resource)
             self.set_status(200)
@@ -671,7 +734,7 @@ class EventHandler(BaseHandler):
 
 
 class JPEGImageEventHandler(EventHandler):
-    """handles events with images with JPEG image data header"""
+    """Handles events with images with JPEG image data header."""
 
     def initialize(
         self,
@@ -685,7 +748,7 @@ class JPEGImageEventHandler(EventHandler):
 
 
 class PNGImageEventHandler(EventHandler):
-    """handles events with images with PNG image data header"""
+    """Handles events with images with PNG image data header."""
 
     def initialize(
         self,
@@ -699,7 +762,7 @@ class PNGImageEventHandler(EventHandler):
 
 
 class StopHandler(BaseHandler):
-    """Stops the tornado HTTP server"""
+    """Stops the tornado HTTP server."""
 
     def initialize(
         self,
@@ -716,7 +779,7 @@ class StopHandler(BaseHandler):
         self.security_schemes = self.config.security_schemes
         self.server = owner_inst  # type: HTTPServer
 
-    async def post(self):
+    async def post(self):  # noqa: D102
         if not await self.has_access_control():
             return
         try:
@@ -736,7 +799,7 @@ class StopHandler(BaseHandler):
 
 
 class LivenessProbeHandler(BaseHandler):
-    """Liveness probe handler"""
+    """Liveness probe handler."""
 
     def initialize(
         self,
@@ -751,14 +814,14 @@ class LivenessProbeHandler(BaseHandler):
         self.logger = logger.bind(path=self.request.path)
         self.server = owner_inst  # type: HTTPServer
 
-    async def get(self):
+    async def get(self):  # noqa: D102
         self.set_status(200, "ok")
         self.set_custom_default_headers()
         self.finish()
 
 
 class ReadinessProbeHandler(BaseHandler):
-    """Readiness probe handler"""
+    """Readiness probe handler."""
 
     def initialize(
         self,
@@ -773,7 +836,7 @@ class ReadinessProbeHandler(BaseHandler):
         self.logger = logger.bind(path=self.request.path)
         self.server = owner_inst  # type: HTTPServer
 
-    async def get(self):
+    async def get(self):  # noqa: D102
         self.set_custom_default_headers()
         try:
             if len(self.server._disconnected_things) > 0:
@@ -794,7 +857,7 @@ class ReadinessProbeHandler(BaseHandler):
 
 
 class ThingDescriptionHandler(BaseHandler):
-    """Thing Description handler"""
+    """Thing Description handler."""
 
     def initialize(
         self,
