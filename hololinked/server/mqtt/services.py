@@ -2,7 +2,7 @@
 
 import copy
 
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -101,7 +101,7 @@ class ThingDescriptionService:
             if name in skip_names:
                 continue
             try:
-                affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
+                affordance = cast(PropertyAffordance, PropertyAffordance.from_TD(name, ZMQ_TD))
                 if not affordance.observable:
                     TD["properties"].pop(name)
                     continue

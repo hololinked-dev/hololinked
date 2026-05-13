@@ -2,7 +2,7 @@
 
 import ssl
 
-from typing import Optional, Type  # noqa: F401
+from typing import Any, Optional, Type, cast  # noqa: F401
 
 import aiomqtt
 import structlog
@@ -71,7 +71,7 @@ class MQTTPublisher(BaseProtocolServer):
         kwargs: dict
             Additional keyword arguments
         """
-        default_config = dict(
+        default_config: dict[str, Any] = dict(
             topic_publisher=kwargs.get("topic_publisher", TopicPublisher),
             thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
@@ -79,9 +79,9 @@ class MQTTPublisher(BaseProtocolServer):
             qos=qos,
         )
         default_config.update(config or dict())
-        config = RuntimeConfig(**default_config)
+        updated_config = RuntimeConfig(**default_config)
 
-        super().__init__(config=config)
+        super().__init__(config=updated_config)
 
         endpoint = f"{hostname}{f':{port}' if port else ''}"
 
@@ -151,7 +151,7 @@ class MQTTPublisher(BaseProtocolServer):
             eventloop.create_task(topic_publisher.publish())
             self.logger.info(f"MQTT will publish events for {event_name} of thing {thing.id}")
         for prop_name in TD.get("properties", {}).keys():
-            property_affordance = PropertyAffordance.from_TD(prop_name, TD)
+            property_affordance = cast(PropertyAffordance, PropertyAffordance.from_TD(prop_name, TD))
             if not property_affordance.observable:
                 continue
             topic_publisher = self.config.topic_publisher(

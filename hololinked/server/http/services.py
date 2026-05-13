@@ -2,11 +2,11 @@
 
 import copy
 
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
-from ...constants import JSONSerializable, Operations
+from ...constants import Operations
 from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
 from ...serializers import Serializers
 from ...serializers.payloads import SerializableData
@@ -53,8 +53,8 @@ class ThingDescriptionService:
         ignore_errors: bool = False,
         skip_names: list[str] = [],
         use_localhost: bool = False,
-        authority: str = None,
-    ) -> dict[str, JSONSerializable]:
+        authority: str | None = None,
+    ) -> dict[str, Any]:
         """
         Generate the HTTP Thing Description.
 
@@ -71,7 +71,7 @@ class ThingDescriptionService:
 
         Returns
         -------
-        dict[str, JSONSerializable]
+        dict[str, Any]
             The generated Thing Description as a dictionary
         """
         ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
@@ -88,9 +88,9 @@ class ThingDescriptionService:
 
     def add_properties(
         self,
-        TD: dict[str, JSONSerializable],
-        ZMQ_TD: dict[str, JSONSerializable],
-        authority: str,
+        TD: dict[str, Any],
+        ZMQ_TD: dict[str, Any],
+        authority: str | None,
         ignore_errors: bool,
         use_localhost: bool,
     ) -> None:
@@ -99,9 +99,9 @@ class ThingDescriptionService:
 
         Parameters
         ----------
-        TD: dict[str, JSONSerializable]
+        TD: dict[str, Any]
             The Thing Description to which properties are to be added
-        ZMQ_TD: dict[str, JSONSerializable]
+        ZMQ_TD: dict[str, Any]
             The ZMQ Thing Description from which properties are to be read
         authority: str
             authority (protocol + host + port) to be used in the TD URLs
@@ -113,7 +113,7 @@ class ThingDescriptionService:
         from .config import HandlerMetadata
 
         for name in ZMQ_TD.get("properties", []):
-            affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
+            affordance = cast(PropertyAffordance, PropertyAffordance.from_TD(name, ZMQ_TD))
             TD["properties"][name]["forms"] = []
             try:
                 href = self.server.router.get_href_for_affordance(
@@ -159,9 +159,9 @@ class ThingDescriptionService:
 
     def add_actions(
         self,
-        TD: dict[str, JSONSerializable],
-        ZMQ_TD: dict[str, JSONSerializable],
-        authority: str,
+        TD: dict[str, Any],
+        ZMQ_TD: dict[str, Any],
+        authority: str | None,
         ignore_errors: bool,
         use_localhost: bool,
     ) -> None:
@@ -170,9 +170,9 @@ class ThingDescriptionService:
 
         Parameters
         ----------
-        TD: dict[str, JSONSerializable]
+        TD: dict[str, Any]
             The Thing Description to which actions are to be added
-        ZMQ_TD: dict[str, JSONSerializable]
+        ZMQ_TD: dict[str, Any]
             The ZMQ Thing Description from which actions are to be read
         authority: str
             authority (protocol + host + port) to be used in the TD URLs
@@ -214,9 +214,9 @@ class ThingDescriptionService:
 
     def add_events(
         self,
-        TD: dict[str, JSONSerializable],
-        ZMQ_TD: dict[str, JSONSerializable],
-        authority: str,
+        TD: dict[str, Any],
+        ZMQ_TD: dict[str, Any],
+        authority: str | None,
         ignore_errors: bool,
         use_localhost: bool,
     ) -> None:
@@ -225,9 +225,9 @@ class ThingDescriptionService:
 
         Parameters
         ----------
-        TD: dict[str, JSONSerializable]
+        TD: dict[str, Any]
             The Thing Description to which events are to be added
-        ZMQ_TD: dict[str, JSONSerializable]
+        ZMQ_TD: dict[str, Any]
             The ZMQ Thing Description from which events are to be read
         authority: str
             authority (protocol + host + port) to be used in the TD URLs
@@ -249,7 +249,7 @@ class ThingDescriptionService:
                 )
                 http_methods = (
                     self.server.router.get_injected_dependencies(affordance)
-                    .get("metadata", HandlerMetadata(http_methods=["GET"]))
+                    .get("metadata", HandlerMetadata(http_methods=("GET",)))
                     .http_methods
                 )  # type: tuple[str]
             except ValueError as ex:
@@ -270,8 +270,8 @@ class ThingDescriptionService:
 
     def add_top_level_forms(
         self,
-        TD: dict[str, JSONSerializable],
-        authority: str,
+        TD: dict[str, Any],
+        authority: str | None,
         use_localhost: bool,
     ) -> None:
         """Adds top level forms for reading and writing multiple properties."""
@@ -308,7 +308,7 @@ class ThingDescriptionService:
         writemultipleproperties.contentType = "application/json"
         TD["forms"].append(writemultipleproperties.json())
 
-    def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
+    def add_security_definitions(self, TD: dict[str, Any]) -> None:
         """Adds security definitions to the TD."""
         from ...td.security_definitions import (
             APIKeySecurityScheme,
@@ -343,11 +343,11 @@ class ThingDescriptionService:
                 TD["securityDefinitions"][scheme.name] = oidc_sec.json()
                 TD["security"].append(scheme.name)
 
-    def add_links(self, TD: dict[str, JSONSerializable]) -> None:
+    def add_links(self, TD: dict[str, Any]) -> None:
         """Adds custom links to the TD, override this in subclass."""
         pass
 
-    async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
+    async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, Any]:
         """
         Fetch the TM or ZMQ in process queue TD.
 
@@ -360,7 +360,7 @@ class ThingDescriptionService:
 
         Returns
         -------
-        dict[str, JSONSerializable]
+        dict[str, Any]
             The generated TD as a dictionary
 
         Raises

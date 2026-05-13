@@ -328,7 +328,14 @@ class BaseHandler(RequestHandler):
 
     @property
     def message_id(self) -> str:
-        """Retrieves the message id from the request headers or query parameters."""
+        """
+        Retrieves the message id from the request headers or query parameters.
+
+        Raises
+        ------
+        AttributeError
+            If the message ID is not found in the headers or query parameters.
+        """
         try:
             return self._message_id
         except AttributeError:
@@ -337,6 +344,8 @@ class BaseHandler(RequestHandler):
                 _, _, local_execution_context, _ = self.get_execution_parameters()
                 # TODO avoid calling get_execution_parameters twice in the same request
                 message_id = local_execution_context.messageID
+            if not message_id:
+                raise AttributeError("message ID not found in headers or query parameters")
             self._message_id = message_id
             return message_id
 
@@ -364,7 +373,10 @@ class BaseHandler(RequestHandler):
                 payload.content_type = self.request.headers.get("Content-Type", "application/json")
             elif global_config.ALLOW_UNKNOWN_SERIALIZATION:
                 preserialized_payload.value = self.request.body
-                preserialized_payload.content_type = self.request.headers.get("Content-Type", None)
+                preserialized_payload.content_type = self.request.headers.get(
+                    "Content-Type",
+                    "application/octet-stream",
+                )
             else:
                 raise ValueError("Content-Type not supported")
                 # NOTE that was assume that the content type is JSON even if unspecified in the header.
@@ -391,7 +403,7 @@ class BaseHandler(RequestHandler):
         """
         raise NotImplementedError("implement DELETE request method in child handler class")
 
-    def is_method_allowed(self, method: str) -> bool:
+    async def is_method_allowed(self, method: str) -> bool:
         """Checks if the method is allowed for the property."""
         raise NotImplementedError("implement is_method_allowed in child handler class")
 
@@ -611,7 +623,7 @@ class ActionHandler(RPCHandler):
 class RWMultiplePropertiesHandler(ActionHandler):
     """handles read-write of multiple properties via an action."""
 
-    def initialize(
+    def initialize(  # type: ignore # noqa
         self,
         resource: ActionAffordance,
         config: Any,
@@ -656,7 +668,7 @@ class RWMultiplePropertiesHandler(ActionHandler):
 class EventHandler(BaseHandler):
     """handles events emitted by `Thing` and tunnels them as HTTP SSE."""
 
-    def initialize(
+    def initialize(  # noqa
         self,
         resource: InteractionAffordance | EventAffordance,
         config: Any,
@@ -701,9 +713,21 @@ class EventHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Methods", "GET")
         self.finish()
 
-    def receive_blocking_event(self, event_consumer: EventConsumer):
-        """Deprecated, but can make a blocking call in an async loop."""
-        return event_consumer.receive(timeout=10000, deserialize=False)
+    def receive_blocking_event(self, event_consumer: EventConsumer) -> Any:
+        """
+        Deprecated, but can make a blocking call in an async loop.
+
+        Parameters
+        ----------
+        event_consumer: EventConsumer
+            The event consumer to receive events from.
+
+        Returns
+        -------
+        Any
+            The received event.
+        """
+        return event_consumer.receive(timeout=10000)
 
     async def handle_datastream(self) -> None:
         """Called by GET method and handles the event publishing."""
@@ -736,7 +760,7 @@ class EventHandler(BaseHandler):
 class JPEGImageEventHandler(EventHandler):
     """Handles events with images with JPEG image data header."""
 
-    def initialize(
+    def initialize(  # noqa
         self,
         resource: InteractionAffordance | EventAffordance,
         config: Any,
@@ -750,7 +774,7 @@ class JPEGImageEventHandler(EventHandler):
 class PNGImageEventHandler(EventHandler):
     """Handles events with images with PNG image data header."""
 
-    def initialize(
+    def initialize(  # noqa
         self,
         resource: InteractionAffordance | EventAffordance,
         config: Any,
@@ -764,7 +788,7 @@ class PNGImageEventHandler(EventHandler):
 class StopHandler(BaseHandler):
     """Stops the tornado HTTP server."""
 
-    def initialize(
+    def initialize(  # type:ignore # noqa
         self,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
@@ -801,7 +825,7 @@ class StopHandler(BaseHandler):
 class LivenessProbeHandler(BaseHandler):
     """Liveness probe handler."""
 
-    def initialize(
+    def initialize(  # type: ignore # noqa
         self,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
@@ -823,7 +847,7 @@ class LivenessProbeHandler(BaseHandler):
 class ReadinessProbeHandler(BaseHandler):
     """Readiness probe handler."""
 
-    def initialize(
+    def initialize(  # type: ignore # noqa
         self,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
@@ -859,7 +883,7 @@ class ReadinessProbeHandler(BaseHandler):
 class ThingDescriptionHandler(BaseHandler):
     """Thing Description handler."""
 
-    def initialize(
+    def initialize(  # type: ignore # noqa
         self,
         resource: InteractionAffordance | PropertyAffordance,
         config: Any,
@@ -880,7 +904,7 @@ class ThingDescriptionHandler(BaseHandler):
             server=owner_inst,
         )
 
-    async def get(self):
+    async def get(self):  # noqa: D102
         if not await self.has_access_control():
             self.finish()
             return

@@ -120,7 +120,7 @@ class ThingDescriptionPublisher:
             ssl=self.client._client._ssl_context is not None,
         )
 
-    async def publish(self, ZMQ_TD: dict[str, Any]) -> dict[str, Any]:
+    async def publish(self, ZMQ_TD: dict[str, Any]) -> None:
         """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True."""
         TD = await self.thing_description.generate(ZMQ_TD)
 
