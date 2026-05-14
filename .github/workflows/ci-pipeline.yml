@@ -11,9 +11,14 @@ on:
 
 jobs:
   codestyle:
-    name: ruff codestyle check/linting
+    name: codestyle check/linting (${{ matrix.tool }})
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [ruff, ty]
+       
     steps:
       - name: checkout code
         uses: actions/checkout@v4
@@ -24,13 +29,24 @@ jobs:
           python-version: 3.11
 
       - name: install ruff
+        if: matrix.tool == 'ruff'
         run: pip install ruff
 
       - name: run ruff linter src directory
+        if: matrix.tool == 'ruff'
         run: ruff check hololinked
 
       - name: run ruff linter tests directory
+        if: matrix.tool == 'ruff'
         run: ruff check tests/*.py tests/things/*.py tests/helper-scripts/*.py
+
+      - name: install ty
+        if: matrix.tool == 'ty'
+        run: pip install ty
+
+      - name: run ty type checker
+        if: matrix.tool == 'ty'
+        run: ty check hololinked
 
   scan:
     name: security scan (${{ matrix.tool }})
