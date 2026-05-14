@@ -11,7 +11,12 @@ import zmq.asyncio
 
 from hololinked.config import global_config
 from hololinked.serializers import Serializers
-from hololinked.serializers.serializers import JSONSerializer, MsgpackSerializer, PickleSerializer, TextSerializer
+from hololinked.serializers.serializers import (
+    JSONSerializer,
+    MsgpackSerializer,
+    PickleSerializer,
+    TextSerializer,
+)
 from hololinked.server import stop
 
 
