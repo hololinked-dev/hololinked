@@ -94,7 +94,7 @@ class EventDispatcher:
     def __init__(
         self,
         unique_identifier: str,
-        publisher: "EventPublisher",
+        publisher: "EventPublisher",  # noqa TODO fix
         owner_inst: ParameterizedMetaclass,
         descriptor: Event,
     ) -> None:
@@ -104,12 +104,12 @@ class EventDispatcher:
         self.publisher = publisher
 
     @property
-    def publisher(self) -> "EventPublisher":
+    def publisher(self) -> "EventPublisher":  # noqa TODO fix
         """Event publishing PUB socket owning object"""
         return self._publisher
 
     @publisher.setter
-    def publisher(self, value: "EventPublisher") -> None:
+    def publisher(self, value: "EventPublisher") -> None:  # noqa TODO fix
         # TODO fix this once the architecture is resolved
         from .zmq.brokers import EventPublisher  # noqa: E402
 

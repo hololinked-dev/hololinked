@@ -916,7 +916,7 @@ class EventSource:
         return self._events_registry
 
     @property
-    def event_publisher(self) -> "EventPublisher":
+    def event_publisher(self) -> "EventPublisher":  # noqa TODO fix
         """
         Event publishing object `EventPublisher` that owns the zmq.PUB socket, valid only after
         creating an RPC server or calling a `run()` method on the `Thing` instance.
