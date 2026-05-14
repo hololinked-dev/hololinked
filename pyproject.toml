@@ -114,8 +114,23 @@ filterwarnings = [
 
 [tool.ruff]
 exclude = [
-    "hololinked/core/properties.py",
-    "hololinked/param"
+    "hololinked/utils.py",
+    "hololinked/constants.py",
+    "hololinked/logger.py",
+    "hololinked/config.py",
+    "hololinked/core",
+    "hololinked/param",
+    "hololinked/server",
+    "hololinked/td"
+]
+
+[tool.ty.src]
+exclude = [
+    "hololinked/*.py",
+    "hololinked/core",
+    "hololinked/param",
+    "hololinked/server",
+    "hololinked/td"
 ]
 
 [tool.ruff.lint]

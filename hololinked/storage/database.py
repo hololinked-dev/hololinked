@@ -586,7 +586,7 @@ class MongoThingDB:
             return {}
         elif config_file.endswith(".json"):
             with open(config_file, "r") as file:
-                return JSONSerializer.load(file)  # type: ignore[invalid-return-type]
+                return JSONSerializer.load(file)
         else:
             raise ValueError(f"config files of extension - ['json'] expected, given file name {config_file}")
 
