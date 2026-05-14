@@ -338,7 +338,8 @@ class Serializers(metaclass=MappableSingleton):
         cls.object_content_type_map.clear()
         cls.object_serializer_map.clear()
         cls.protocol_serializer_map.clear()
-        cls.default = cls.json
+        cls.default = BaseSerializer()
+        cls.content_types.clear()
 
     @allowed_content_types.getter
     def get_allowed_content_types(cls) -> list[str]:
@@ -354,7 +355,8 @@ class Serializers(metaclass=MappableSingleton):
             a list of allowed content types
         """
         _allowed_content_types = list(cls.content_types.keys())
-        _allowed_content_types.remove(cls.pickle.content_type)
-        if global_config.ALLOW_PICKLE:
-            _allowed_content_types.append(cls.pickle.content_type)
+        if hasattr(cls, "pickle"):
+            _allowed_content_types.remove(cls.pickle.content_type)
+            if global_config.ALLOW_PICKLE:
+                _allowed_content_types.append(cls.pickle.content_type)
         return _allowed_content_types

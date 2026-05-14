@@ -2,7 +2,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from hololinked.core.serializer_registry import Serializers
+from hololinked.core import Serializers
 from hololinked.core.zmq.message import (
     ERROR,
     EXIT,

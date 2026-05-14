@@ -11,6 +11,7 @@ from paho.mqtt.client import MQTTMessage
 
 from hololinked.client.abstractions import SSE, ConsumedThingEvent
 from hololinked.core import Serializers
+from hololinked.core.interfaces import BaseSerializer  # noqa: F401
 from hololinked.td.forms import Form
 from hololinked.td.interaction_affordance import EventAffordance, PropertyAffordance
 

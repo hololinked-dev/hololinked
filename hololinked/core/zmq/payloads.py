@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from hololinked.constants import byte_types
+from hololinked.core import Serializers
 from hololinked.core.interfaces import BaseSerializer
-from hololinked.core.serializer_registry import Serializers
 
 
 @dataclass

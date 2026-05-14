@@ -14,8 +14,8 @@ import zmq.asyncio
 
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS, Operations
+from hololinked.core import Serializers
 from hololinked.core.interfaces import BaseSerializer
-from hololinked.core.serializer_registry import Serializers
 from hololinked.utils import (
     format_exception_as_json,
     get_all_sub_things_recusively,
