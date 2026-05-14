@@ -1103,7 +1103,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         )
         return request_message.id
 
-    def recv_response(self, message_id: bytes) -> ResponseMessage:
+    def recv_response(self, message_id: str) -> ResponseMessage:
         """
         Receives response from server. Messages are identified by message id, and out of order messages are sent to
         a cache which may be popped later. This method blocks until the expected message is received or `stop_polling()`

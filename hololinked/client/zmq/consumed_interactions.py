@@ -162,7 +162,7 @@ class ZMQConsumedAffordanceMixin:
         """
         if self.owner_inst._noblock_messages.get(message_id) != self:
             raise RuntimeError(f"Message ID {message_id} does not belong to this property.")
-        response = self._sync_zmq_client.recv_response(message_id=message_id.encode())
+        response = self._sync_zmq_client.recv_response(message_id=message_id)
         if not response:
             raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
         self._last_zmq_response = response

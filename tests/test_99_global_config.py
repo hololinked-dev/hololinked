@@ -99,6 +99,8 @@ def test_05_temp_data_folders():
         assert os.path.exists(folder)
         assert os.path.isdir(folder)
 
+    if os.path.exists(os.path.join(global_config.TEMP_DIR_SECRETS, "apikeys.json")):
+        raise pytest.skip("apikeys.json already exists, skipping test to avoid overwriting existing secrets.")
     assert not os.path.exists(os.path.join(global_config.TEMP_DIR_SECRETS, "apikeys.json"))
     security = APIKeySecurity(name="test-api-key-security")
     security.create(print_value=False)
