@@ -14,6 +14,11 @@ jobs:
     name: ruff codestyle check/linting
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [ruff, ty, ruff-extensive]
+
     steps:
       - name: checkout code
         uses: actions/checkout@v4
@@ -24,13 +29,32 @@ jobs:
           python-version: 3.11
 
       - name: install ruff
+        if: matrix.tool == 'ruff'
+        run: pip install ruff==0.14.2
+
+      - name: run ruff linter src directory
+        if: matrix.tool == 'ruff'
+        run: ruff check --config pyproject.toml hololinked
+
+      - name: run ruff linter tests directory
+        if: matrix.tool == 'ruff'
+        run: ruff check --config pyproject.toml tests/*.py tests/things/*.py tests/helper-scripts/*.py
+
+      - name: install ruff
+        if: matrix.tool == 'ruff-extensive'
         run: pip install ruff
 
       - name: run ruff linter src directory
-        run: ruff check hololinked
+        if: matrix.tool == 'ruff-extensive'
+        run: ruff check --config ruff.toml hololinked/client
 
-      - name: run ruff linter tests directory
-        run: ruff check tests/*.py tests/things/*.py tests/helper-scripts/*.py
+      - name: install ty
+        if: matrix.tool == 'ty'
+        run: pip install ty==0.0.24
+
+      - name: run ty type checker
+        if: matrix.tool == 'ty'
+        run: ty check hololinked/client
 
   scan:
     name: security scan (${{ matrix.tool }})
