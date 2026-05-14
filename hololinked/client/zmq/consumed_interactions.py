@@ -35,7 +35,7 @@ from ...core.zmq.message import (
     TIMEOUT,
     ResponseMessage,
 )
-from ...serializers.payloads import SerializableData
+from ...core.zmq.payloads import SerializableData
 from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...td.forms import Form
 from ..exceptions import ReplyNotArrivedError

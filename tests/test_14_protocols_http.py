@@ -21,6 +21,7 @@ from hololinked.client import ClientFactory, ObjectProxy
 from hololinked.client.security import APIKeySecurity as ClientAPIKeySecurity
 from hololinked.client.security import OAuthDirectAccessGrant
 from hololinked.config import global_config
+from hololinked.core.interfaces import BaseSerializer
 from hololinked.core.zmq.message import (
     PreserializedData,
     SerializableData,
@@ -29,7 +30,6 @@ from hololinked.core.zmq.message import (
     default_server_execution_context,
 )
 from hololinked.serializers import (
-    BaseSerializer,
     JSONSerializer,
     MsgpackSerializer,
     PickleSerializer,
@@ -105,7 +105,7 @@ def running_thing(
     port: int = None,
     **http_server_kwargs,
 ) -> Generator[OceanOpticsSpectrometer, None, None]:
-    """same as thing fixture but to use it manually"""
+    """Same as thing fixture but to use it manually"""
     global count
     port = port or next(count)
     thing = OceanOpticsSpectrometer(id=f"{id_prefix}-{uuid_hex()}", serial_number="simulation")
@@ -340,7 +340,6 @@ def test_05_handlers(
     endpoint: tuple[str, str, Any],
 ):
     """Test request info and payload decoding in RPC handlers along with content type handling"""
-
     method, path, body = endpoint
     response = session.request(
         method=method,
@@ -380,7 +379,7 @@ def test_05_handlers(
 
 def do_a_path_e2e(session: requests.Session, endpoint: tuple[str, str, Any], **request_kwargs):
     """
-    basic end-to-end test with the HTTP server using handlers.
+    Basic end-to-end test with the HTTP server using handlers.
     Auth & other features not included, only invokation of interaction affordances.
     """
     method, path, body = endpoint
@@ -454,7 +453,7 @@ def test_06_basic_end_to_end(
     port: int,
     endpoints: list[tuple[str, str, Any]],
 ) -> None:
-    """basic end-to-end test with the HTTP server using handlers."""
+    """Basic end-to-end test with the HTTP server using handlers."""
     for method, path, body in endpoints:
         do_a_path_e2e(
             session=session,

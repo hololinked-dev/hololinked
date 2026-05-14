@@ -12,11 +12,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy import inspect as inspect_database
 from sqlalchemy.orm import sessionmaker
 
+from hololinked.core import Serializers
+from hololinked.serializers import PythonBuiltinJSONSerializer as JSONSerializer
+
 from ..config import global_config
 from ..core.property import Property
 from ..param import Parameterized
-from ..serializers.serializers import PythonBuiltinJSONSerializer as JSONSerializer
-from ..serializers.serializers import Serializers
 from .config import MongoDBConfig, SQLDBConfig, SQLiteConfig
 from .models import SerializedProperty, ThingInformation, ThingTableBase
 from .utils import get_sanitized_filename_from_thing_instance
@@ -47,7 +48,7 @@ class BaseDB:
         default_file_path: str = "",
     ) -> SQLDBConfig | SQLiteConfig | MongoDBConfig:
         """
-        load configuration file using JSON serializer
+        Load configuration file using JSON serializer
         """
         if not config_file:
             return SQLiteConfig(file=default_file_path)
@@ -131,7 +132,7 @@ class ThingDB(BaseSyncDB):
 
     def fetch_own_info(self):  # -> ThingInformation:
         """
-        fetch `Thing` instance's own information (some useful metadata which helps the `Thing` run).
+        Fetch `Thing` instance's own information (some useful metadata which helps the `Thing` run).
 
         Returns
         -------

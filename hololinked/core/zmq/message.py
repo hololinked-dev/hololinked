@@ -3,10 +3,11 @@ from uuid import uuid4
 
 import msgspec
 
-from ...constants import JSON, byte_types
-from ...param.parameters import Integer
-from ...serializers.payloads import PreserializedData, SerializableData
-from ...serializers.serializers import Serializers
+from hololinked.constants import JSON, byte_types
+from hololinked.core import Serializers
+from hololinked.param.parameters import Integer
+
+from .payloads import PreserializedData, SerializableData
 
 
 # message types
@@ -163,7 +164,7 @@ class RequestMessage:
     @property
     def byte_array(self) -> list[bytes]:
         """
-        message byte array, either after being composed or as received from the socket.
+        Message byte array, either after being composed or as received from the socket.
 
         Message indices:
 
@@ -175,14 +176,14 @@ class RequestMessage:
 
     @property
     def header(self) -> RequestHeader:
-        """header of the message, namely index 1 of the byte array, deserizalized to a dictionary"""
+        """Header of the message, namely index 1 of the byte array, deserizalized to a dictionary"""
         if self._header is None:
             self.parse_header()
         return self._header
 
     @property
     def body(self) -> tuple[SerializableData, PreserializedData]:
-        """body of the message"""
+        """Body of the message"""
         if self._body is None:
             self.parse_body()
         return self._body
@@ -209,26 +210,26 @@ class RequestMessage:
 
     @property
     def type(self) -> str:
-        """type of the message"""
+        """Type of the message"""
         return self.header["messageType"]
 
     @property
     def server_execution_context(self) -> dict[str, Any]:
-        """server execution context"""
+        """Server execution context"""
         return self.header["serverExecutionContext"]
 
     @property
     def thing_execution_context(self) -> dict[str, Any]:
-        """thing execution context"""
+        """Thing execution context"""
         return self.header["thingExecutionContext"]
 
     @property
     def qualified_operation(self) -> str:
-        """qualified objekt - a possibly unique string for the operation"""
+        """Qualified objekt - a possibly unique string for the operation"""
         return f"{self.header['thingID']}.{self.header['objekt']}.{self.header['operation']}"
 
     def parse_header(self) -> None:
-        """extract the header and deserialize it"""
+        """Extract the header and deserialize it"""
         if isinstance(self._bytes[INDEX_HEADER], RequestHeader):
             self._header = self._bytes[INDEX_HEADER]
         elif isinstance(self._bytes[INDEX_HEADER], byte_types):
@@ -237,7 +238,7 @@ class RequestMessage:
             raise ValueError(f"header must be of type RequestHeader or bytes, not {type(self._bytes[INDEX_HEADER])}")
 
     def parse_body(self) -> None:
-        """extract the body and deserialize payload"""
+        """Extract the body and deserialize payload"""
         self._body = [
             SerializableData(self._bytes[INDEX_BODY], content_type=self.header["payloadContentType"]),
             PreserializedData(
@@ -259,7 +260,7 @@ class RequestMessage:
         thing_execution_context: dict[str, Any] = default_thing_execution_context,
     ) -> "RequestMessage":
         """
-        create a request message from the given arguments
+        Create a request message from the given arguments
 
         Parameters
         ----------
@@ -317,7 +318,7 @@ class RequestMessage:
         cls, sender_id: str, receiver_id: str, message_type: bytes = HANDSHAKE
     ) -> "RequestMessage":
         """
-        create a plain message with a certain type, for example a handshake message.
+        Create a plain message with a certain type, for example a handshake message.
 
         Parameters
         ----------
@@ -333,7 +334,6 @@ class RequestMessage:
         message: RequestMessage
             the crafted message
         """
-
         message = RequestMessage([])
         message._header = RequestHeader(
             messageID=str(uuid4()),
@@ -382,7 +382,7 @@ class ResponseMessage:
 
     @property
     def byte_array(self) -> list[bytes]:
-        """the message in bytes, either after being composed or as received from the socket.
+        """The message in bytes, either after being composed or as received from the socket.
 
         Message indices:
 
@@ -399,7 +399,7 @@ class ResponseMessage:
 
     @property
     def type(self) -> str:
-        """type of the message"""
+        """Type of the message"""
         return self.header["messageType"]
 
     @property
@@ -414,21 +414,21 @@ class ResponseMessage:
 
     @property
     def header(self) -> JSON:
-        """header of the message"""
+        """Header of the message"""
         if self._header is None:
             self.parse_header()
         return self._header
 
     @property
     def body(self) -> tuple[SerializableData, PreserializedData]:
-        """body of the message"""
+        """Body of the message"""
         if self._body is None:
             self.parse_body()
         return self._body
 
     @property
     def payload(self) -> SerializableData:
-        """payload of the message"""
+        """Payload of the message"""
         return self.body[0]
 
     @property
@@ -439,7 +439,7 @@ class ResponseMessage:
     @property
     def oneof_valid_payload(self) -> SerializableData | PreserializedData:
         """
-        checks if only one of payload or preserialized payload is valid (non-empty),
+        Checks if only one of payload or preserialized payload is valid (non-empty),
         and returns that. To be used with non-multipart messages (multipart as in
         containing multiple content types). This property can lead to loss of information
         if any response contains both payload and preserialized payload.
@@ -449,7 +449,7 @@ class ResponseMessage:
         return self._body[0]
 
     def parse_header(self) -> None:
-        """parse the header"""
+        """Parse the header"""
         if isinstance(self._bytes[INDEX_HEADER], ResponseHeader):
             self._header = self._bytes[INDEX_HEADER]
         elif isinstance(self._bytes[INDEX_HEADER], byte_types):
@@ -458,7 +458,7 @@ class ResponseMessage:
             raise ValueError(f"header must be of type ResponseHeader or bytes, not {type(self._bytes[INDEX_HEADER])}")
 
     def parse_body(self) -> None:
-        """parse the body"""
+        """Parse the body"""
         self._body = [
             SerializableData(self._bytes[INDEX_BODY], content_type=self.header["payloadContentType"]),
             PreserializedData(
@@ -571,7 +571,7 @@ class ResponseMessage:
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
     ) -> "ResponseMessage":
         """
-        create a plain message with a certain type, for example a handshake message.
+        Create a plain message with a certain type, for example a handshake message.
 
         Parameters
         ----------
@@ -636,7 +636,7 @@ class EventMessage(ResponseMessage):
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
     ) -> "EventMessage":
         """
-        create a plain message with a certain type, for example a handshake message.
+        Create a plain message with a certain type, for example a handshake message.
 
         Parameters
         ----------
@@ -677,11 +677,11 @@ class EventMessage(ResponseMessage):
 
     @property
     def event_id(self) -> str:
-        """unique ID of the event by which ZMQ pub-sub works"""
+        """Unique ID of the event by which ZMQ pub-sub works"""
         return self.header["eventID"]
 
     def parse_header(self) -> None:
-        """parse the header"""
+        """Parse the header"""
         if isinstance(self._bytes[INDEX_HEADER], EventHeader):
             self._header = self._bytes[INDEX_HEADER]
         elif isinstance(self._bytes[INDEX_HEADER], byte_types):

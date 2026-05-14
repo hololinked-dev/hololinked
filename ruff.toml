@@ -22,6 +22,7 @@ lines-after-imports = 2
 
 [lint.per-file-ignores]
 "hololinked/*.py" = ["DOC502"]
+"hololinked/serializers/*.py" = ["D102"]
 
 [lint.pydocstyle]
 convention = "numpy"

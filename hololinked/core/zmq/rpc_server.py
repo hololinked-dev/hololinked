@@ -10,17 +10,18 @@ from collections import deque
 from typing import Any
 
 import structlog
-import zmq
 import zmq.asyncio
 
-from ...config import global_config
-from ...constants import ZMQ_TRANSPORTS, Operations
-from ...serializers import BaseSerializer, Serializers
-from ...utils import (
+from hololinked.config import global_config
+from hololinked.constants import ZMQ_TRANSPORTS, Operations
+from hololinked.core.interfaces import BaseSerializer
+from hololinked.core.serializer_registry import Serializers
+from hololinked.utils import (
     format_exception_as_json,
     get_all_sub_things_recusively,
     get_current_async_loop,
 )
+
 from ..actions import BoundAction  # noqa: F401
 from ..exceptions import BreakInnerLoop, BreakLoop
 from ..logger import LogHistoryHandler
@@ -234,7 +235,7 @@ class RPCServer(BaseZMQServer):
         self.logger.info(f"stopped polling at socket {server.socket_address.split(':')[0].upper()}")
 
     async def tunnel_message_to_things(self, scheduler: "Scheduler") -> None:
-        """message tunneler/coordinator between external sockets listening thread and `Thing` object executor thread"""
+        """Message tunneler/coordinator between external sockets listening thread and `Thing` object executor thread"""
         self.logger.info("started schedulers")
         eventloop = get_current_async_loop()
         while self._run and scheduler.run:
@@ -317,7 +318,7 @@ class RPCServer(BaseZMQServer):
 
     async def run_thing_instance(self, instance: Thing, scheduler: "Scheduler" | None = None) -> None:
         """
-        run a single `Thing` instance in an infinite loop by allowing the scheduler to schedule operations on it.
+        Run a single `Thing` instance in an infinite loop by allowing the scheduler to schedule operations on it.
 
         Parameters
         ----------
@@ -405,7 +406,7 @@ class RPCServer(BaseZMQServer):
                 instance.logger.info("exiting event loop")
 
                 # send a reply with None return value
-                rpayload, rpreserialized_payload = self.format_return_value(None, Serializers.json)
+                rpayload, rpreserialized_payload = self.format_return_value(None, Serializers.default)
 
                 # complete thing execution context
                 if fetch_execution_logs:
@@ -424,7 +425,7 @@ class RPCServer(BaseZMQServer):
 
                 # send a reply with error
                 rpayload, rpreserialized_payload = self.format_return_value(
-                    dict(exception=format_exception_as_json(ex)), Serializers.json
+                    dict(exception=format_exception_as_json(ex)), Serializers.default
                 )
 
                 # complete thing execution context
@@ -545,7 +546,7 @@ class RPCServer(BaseZMQServer):
         timeout_type: str,
     ) -> bool:
         """
-        replies timeout to client if timeout occured along with returning `True` to indicate that.
+        Replies timeout to client if timeout occured along with returning `True` to indicate that.
         If timeout did not occur, the `ready_to_process_event` is set to indicate that the operation can be processed.
         `False` is returned in this case.
         """
@@ -886,7 +887,7 @@ class Scheduler:
 
     @classmethod
     def extract_operation_tuple_from_request(self, request_message: RequestMessage) -> OperationRequest:
-        """thing execution info"""
+        """Thing execution info"""
         return (
             request_message.header["thingID"],
             request_message.header["objekt"],
@@ -923,7 +924,7 @@ class QueuedScheduler(Scheduler):
 
     def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
         """
-        append a request message to the queue after ticking the invokation timeout clock
+        Append a request message to the queue after ticking the invokation timeout clock
 
         Parameters
         ----------
