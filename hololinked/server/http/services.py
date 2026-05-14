@@ -4,10 +4,11 @@ from typing import Any
 
 import structlog
 
+from hololinked.core import Serializers
+
 from ...constants import JSONSerializable, Operations
 from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
 from ...core.zmq.payloads import SerializableData
-from ...serializers import Serializers
 from ...td import (
     ActionAffordance,
     EventAffordance,

@@ -7,6 +7,8 @@ from msgspec import DecodeError as MsgspecJSONDecodeError
 from tornado.iostream import StreamClosedError
 from tornado.web import RequestHandler
 
+from hololinked.core import Serializers
+
 from ...config import global_config
 from ...constants import Operations
 from ...core.zmq.brokers import EventConsumer
@@ -18,7 +20,6 @@ from ...core.zmq.message import (
     default_thing_execution_context,
 )
 from ...core.zmq.payloads import PreserializedData, SerializableData
-from ...serializers import Serializers
 from ...td import (
     ActionAffordance,
     EventAffordance,
