@@ -1,0 +1,27 @@
+exclude = [
+    "hololinked/core/properties.py",
+    "hololinked/param"
+]
+
+[lint]
+preview = true
+extend-select = [
+    "I",    # isort
+    "D",    # pydocstyle
+    "DOC"
+]
+ignore = [
+    "G201",  # logging-exc-info: do not require exc_info in logger.exception calls
+    "D401",  # imperative mode for summary line
+    "D105",  # magic methods dont need a docstring
+]
+
+[lint.isort]
+lines-between-types = 1
+lines-after-imports = 2
+
+[lint.per-file-ignores]
+"hololinked/*.py" = ["DOC502"]
+
+[lint.pydocstyle]
+convention = "numpy"
