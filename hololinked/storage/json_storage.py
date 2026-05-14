@@ -1,17 +1,21 @@
+"""JSON-based file storage engine."""
+
 import os
 import threading
 
 from typing import Any
 
-from ..core.property import Property
-from ..param import Parameterized
-from ..serializers import JSONSerializer
+from hololinked.core.interfaces import BaseConfigurationRepository
+from hololinked.core.property import Property
+from hololinked.param import Parameterized
+from hololinked.serializers import JSONSerializer
 
 
-class ThingJSONStorage:
+class ThingJSONStorage(BaseConfigurationRepository):
     """
-    JSON-based storage engine composed within `Thing`. Carries out property operations such as storing and
-    retrieving values from a plain JSON file.
+    JSON-based storage engine composed within `Thing`.
+
+    Carries out property operations such as storing and retrieving values from a plain JSON file.
 
     Parameters
     ----------
@@ -27,7 +31,7 @@ class ThingJSONStorage:
     def __init__(self, filename: str, instance: Parameterized, serializer: Any = None):
         self.filename = filename
         self.thing_instance = instance
-        self.id = instance.id
+        self.id = instance.id  # type: ignore[unresolved-attribute]
         self._serializer = serializer or JSONSerializer()
         self._lock = threading.RLock()
         self._data = self._load()
@@ -48,12 +52,12 @@ class ThingJSONStorage:
                 raw_bytes = f.read()
                 if not raw_bytes:
                     return {}
-                return self._serializer.loads(raw_bytes)
+                return self._serializer.loads(raw_bytes)  # type: ignore[invalid-return-type]
         except Exception:
             return {}
 
     def _save(self):
-        """Encode and write data to the JSON file"""
+        """Encode and write data to the JSON file."""
         raw_bytes = self._serializer.dumps(self._data)
         with open(self.filename, "wb") as f:
             f.write(raw_bytes)
@@ -71,6 +75,11 @@ class ThingJSONStorage:
         -------
         value: Any
             property value
+
+        Raises
+        ------
+        KeyError
+            If the property is not found in storage.
         """
         name = property if isinstance(property, str) else property.name
         if name not in self._data:
@@ -128,7 +137,13 @@ class ThingJSONStorage:
             self._save()
 
     def get_all_properties(self) -> dict[str, Any]:
-        """Read all properties of the `Thing` instance"""
+        """
+        Read all properties of the `Thing` instance.
+
+        Returns
+        -------
+        dict[str, Any]
+        """
         with self._lock:
             return dict(self._data)
 
@@ -138,7 +153,7 @@ class ThingJSONStorage:
         get_missing_property_names: bool = False,
     ) -> list[str] | None:
         """
-        Create any and all missing properties of `Thing` instance
+        Create any and all missing properties of `Thing` instance.
 
         Parameters
         ----------

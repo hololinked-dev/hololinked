@@ -8,6 +8,7 @@ is also included here.
 from typing import TYPE_CHECKING
 
 # Interfaces must be available to register adappters
+from .interfaces import BaseConfigurationRepository as BaseConfigurationRepository
 from .interfaces import BaseSchemaValidator as BaseSchemaValidator
 from .interfaces import BaseSerializer as BaseSerializer
 
@@ -15,6 +16,7 @@ from .interfaces import BaseSerializer as BaseSerializer
 __all__ = [
     "BaseSchemaValidator",
     "BaseSerializer",
+    "BaseConfigurationRepository",
     "action",
     "Action",
     "Event",
