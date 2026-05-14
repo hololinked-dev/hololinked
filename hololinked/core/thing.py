@@ -7,7 +7,6 @@ from typing import Any
 import structlog
 
 from ..constants import ZMQ_TRANSPORTS
-from ..serializers import Serializers
 from ..utils import forkable, getattr_without_descriptor_read
 from .actions import BoundAction, action
 from .events import EventDispatcher
@@ -124,6 +123,12 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 If using JSON storage, this filename is used to persist property values. If not provided, a default filename
                 is generated based on the instance name.
         """
+        from hololinked.core.serializer_registry import Serializers
+
+        from ..storage import prepare_object_storage  # noqa
+        from .logger import prepare_object_logger  # noqa
+        from .state_machine import prepare_object_FSM  # noqa
+
         Propertized.__init__(self, id=id, logger=logger, **kwargs)
         RemoteInvokable.__init__(self)
         EventSource.__init__(self)
@@ -131,10 +136,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             self.id = self.id[1:]
         if kwargs.get("serializer", None) is not None:
             Serializers.register_for_thing_instance(self.id, kwargs.get("serializer"))
-
-        from .logger import prepare_object_logger  # noqa
-        from .state_machine import prepare_object_FSM  # noqa
-        from ..storage import prepare_object_storage  # noqa
 
         prepare_object_logger(
             instance=self,
@@ -185,7 +186,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     @property
     def sub_things(self) -> dict[str, "Thing"]:
-        """other `Thing`s' that are composed within this `Thing`."""
+        """Other `Thing`s' that are composed within this `Thing`."""
         things = dict()
         for name, subthing in inspect._getmembers(
             self,
@@ -202,7 +203,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     @action()
     def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = []):
         """
-        generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object.
+        Generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object.
         The model is a JSON that describes the object's properties, actions, events and their metadata, without the
         protocol information. The model can be used by a client to understand the object's capabilities.
 
@@ -396,7 +397,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     @action()
     def ping(self) -> None:
         """
-        ping to see if it is alive. Successful when action succeeds with no return value and
+        Ping to see if it is alive. Successful when action succeeds with no return value and
         no timeout or exception raised on the client side.
         """
         pass

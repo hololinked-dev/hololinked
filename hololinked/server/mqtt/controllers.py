@@ -3,8 +3,9 @@ from typing import Any
 import aiomqtt
 import structlog
 
+from hololinked.core import Serializers
+
 from ...core.zmq.message import EventMessage  # noqa: F401
-from ...serializers import Serializers
 from ...td import EventAffordance, PropertyAffordance
 from ..repository import BrokerThing  # noqa: F401
 
@@ -46,7 +47,7 @@ class TopicPublisher:
         self._stop_publishing = False
 
     def stop(self):
-        """stop publishing, the client is not closed automatically"""
+        """Stop publishing, the client is not closed automatically"""
         self._stop_publishing = True
 
     async def publish(self):

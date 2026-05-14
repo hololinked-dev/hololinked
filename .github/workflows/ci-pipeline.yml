@@ -80,12 +80,14 @@ jobs:
         run: |
           source .venv/bin/activate
           ruff check --config ruff.toml hololinked/client
+          ruff check --config ruff.toml hololinked/serializers
 
       - name: run ty type checker
         if: matrix.tool == 'ty'
         run: |
           source .venv/bin/activate
           ty check hololinked/client
+          ty check hololinked/serializers
 
   scan:
     name: security scan (${{ matrix.tool }})

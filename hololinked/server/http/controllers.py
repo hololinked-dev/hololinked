@@ -7,6 +7,8 @@ from msgspec import DecodeError as MsgspecJSONDecodeError
 from tornado.iostream import StreamClosedError
 from tornado.web import RequestHandler
 
+from hololinked.core import Serializers
+
 from ...config import global_config
 from ...constants import Operations
 from ...core.zmq.brokers import EventConsumer
@@ -17,8 +19,7 @@ from ...core.zmq.message import (
     default_server_execution_context,
     default_thing_execution_context,
 )
-from ...serializers import Serializers
-from ...serializers.payloads import PreserializedData, SerializableData
+from ...core.zmq.payloads import PreserializedData, SerializableData
 from ...td import (
     ActionAffordance,
     EventAffordance,
@@ -116,7 +117,7 @@ class BaseHandler(RequestHandler):
         return False  # keep False always at the end
 
     async def is_authenticated(self) -> bool:
-        """enforces authentication using the defined security schemes, freshly computed everytime"""
+        """Enforces authentication using the defined security schemes, freshly computed everytime"""
         authenticated = False
         # 1. Basic Authentication
         authorization_header = self.request.headers.get("Authorization", None)  # type: str
@@ -180,7 +181,7 @@ class BaseHandler(RequestHandler):
 
     async def is_authorized(self) -> bool:
         """
-        enforces authorization using the defined security schemes, freshly computed everytime.
+        Enforces authorization using the defined security schemes, freshly computed everytime.
         Do not call this method without doing authentication first and having a userinfo property.
         """
         if not self.userinfo:
@@ -202,7 +203,7 @@ class BaseHandler(RequestHandler):
 
     def set_custom_default_headers(self) -> None:
         """
-        sets general default headers, override in child classes to add more headers.
+        Sets general default headers, override in child classes to add more headers.
 
         ```yaml
         Content-Type: application/json
@@ -289,7 +290,7 @@ class BaseHandler(RequestHandler):
 
     @property
     def message_id(self) -> str:
-        """retrieves the message id from the request headers"""
+        """Retrieves the message id from the request headers"""
         try:
             return self._message_id
         except AttributeError:
@@ -302,7 +303,7 @@ class BaseHandler(RequestHandler):
             return message_id
 
     def get_request_payload(self) -> tuple[SerializableData, PreserializedData]:
-        """retrieves the payload from the request body, does not necessarily deserialize it"""
+        """Retrieves the payload from the request body, does not necessarily deserialize it"""
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
         if self.request.body:
@@ -319,26 +320,26 @@ class BaseHandler(RequestHandler):
         return payload, preserialized_payload
 
     async def get(self) -> None:
-        """runs property or action if accessible by 'GET' method. Default for property reads"""
+        """Runs property or action if accessible by 'GET' method. Default for property reads"""
         raise NotImplementedError("implement GET request method in child handler class")
 
     async def post(self) -> None:
-        """runs property or action if accessible by 'POST' method. Default for action execution"""
+        """Runs property or action if accessible by 'POST' method. Default for action execution"""
         raise NotImplementedError("implement POST request method in child handler class")
 
     async def put(self) -> None:
-        """runs property or action if accessible by 'PUT' method. Default for property writes"""
+        """Runs property or action if accessible by 'PUT' method. Default for property writes"""
         raise NotImplementedError("implement PUT request method in child handler class")
 
     async def delete(self) -> None:
         """
-        runs property or action if accessible by 'DELETE' method. Default for property deletes
+        Runs property or action if accessible by 'DELETE' method. Default for property deletes
         (not a valid operation as per web of things semantics).
         """
         raise NotImplementedError("implement DELETE request method in child handler class")
 
     def is_method_allowed(self, method: str) -> bool:
-        """checks if the method is allowed for the property"""
+        """Checks if the method is allowed for the property"""
         raise NotImplementedError("implement is_method_allowed in child handler class")
 
 
@@ -383,7 +384,7 @@ class RPCHandler(BaseHandler):
 
     async def handle_through_thing(self, operation: str) -> None:
         """
-        handles the `Thing` operations and writes the reply to the HTTP client.
+        Handles the `Thing` operations and writes the reply to the HTTP client.
 
         Parameters
         ----------
@@ -453,7 +454,7 @@ class RPCHandler(BaseHandler):
             self.write(response_payload.value)
 
     async def handle_no_block_response(self) -> None:
-        """handles the no-block response for the noblock calls"""
+        """Handles the no-block response for the noblock calls"""
         try:
             self.logger.info("waiting for no-block response", message_id=self.message_id)
             response_message = await self.thing.recv_response(
@@ -607,7 +608,7 @@ class EventHandler(BaseHandler):
 
     def set_custom_default_headers(self) -> None:
         """
-        sets default headers for event handling. The general headers are listed as follows:
+        Sets default headers for event handling. The general headers are listed as follows:
 
         ```yaml
         Content-Type: text/event-stream
@@ -623,14 +624,14 @@ class EventHandler(BaseHandler):
         super().set_custom_default_headers()
 
     async def get(self):
-        """events are support only with GET method"""
+        """Events are support only with GET method"""
         if await self.has_access_control():
             self.set_custom_default_headers()
             await self.handle_datastream()
         self.finish()
 
     async def options(self):
-        """options for the resource"""
+        """Options for the resource"""
         if await self.has_access_control():
             self.set_status(204)
             self.set_custom_default_headers()
@@ -643,7 +644,7 @@ class EventHandler(BaseHandler):
         return event_consumer.receive(timeout=10000, deserialize=False)
 
     async def handle_datastream(self) -> None:
-        """called by GET method and handles the event publishing"""
+        """Called by GET method and handles the event publishing"""
         try:
             event_consumer = self.thing.subscribe_event(self.resource)
             self.set_status(200)

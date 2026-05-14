@@ -4,10 +4,11 @@ from typing import Any
 
 import structlog
 
+from hololinked.core import Serializers
+
 from ...constants import JSONSerializable, Operations
 from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
-from ...serializers import Serializers
-from ...serializers.payloads import SerializableData
+from ...core.zmq.payloads import SerializableData
 from ...td import (
     ActionAffordance,
     EventAffordance,
@@ -54,7 +55,7 @@ class ThingDescriptionService:
         authority: str = None,
     ) -> dict[str, JSONSerializable]:
         """
-        generate the HTTP Thing Description
+        Generate the HTTP Thing Description
 
         Parameters
         ----------
@@ -88,7 +89,7 @@ class ThingDescriptionService:
         use_localhost: bool,
     ) -> None:
         """
-        add properties to the TD with forms
+        Add properties to the TD with forms
 
         Parameters
         ----------
@@ -159,7 +160,7 @@ class ThingDescriptionService:
         use_localhost: bool,
     ) -> None:
         """
-        add actions to the TD with forms
+        Add actions to the TD with forms
 
         Parameters
         ----------
@@ -214,7 +215,7 @@ class ThingDescriptionService:
         use_localhost: bool,
     ) -> None:
         """
-        add events to the TD with forms
+        Add events to the TD with forms
 
         Parameters
         ----------
@@ -267,8 +268,7 @@ class ThingDescriptionService:
         authority: str,
         use_localhost: bool,
     ) -> None:
-        """adds top level forms for reading and writing multiple properties"""
-
+        """Adds top level forms for reading and writing multiple properties"""
         properties_end_point = f"{self.server.router.get_basepath(authority, use_localhost)}/{TD['id']}/properties"
 
         if TD.get("forms", None) is None:
@@ -303,7 +303,7 @@ class ThingDescriptionService:
         TD["forms"].append(writemultipleproperties.json())
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
-        """adds security definitions to the TD"""
+        """Adds security definitions to the TD"""
         from ...td.security_definitions import (
             APIKeySecurityScheme,
             BasicSecurityScheme,
@@ -338,11 +338,11 @@ class ThingDescriptionService:
                 TD["security"].append(scheme.name)
 
     def add_links(self, TD: dict[str, JSONSerializable]) -> None:
-        """adds custom links to the TD, override this in subclass"""
+        """Adds custom links to the TD, override this in subclass"""
         pass
 
     async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
-        """fetch the TM or ZMQ in process queue TD"""
+        """Fetch the TM or ZMQ in process queue TD"""
         response_message = await self.thing.execute(
             objekt=self.resource.name,
             operation=Operations.invokeaction,

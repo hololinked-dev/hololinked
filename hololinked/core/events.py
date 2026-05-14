@@ -94,7 +94,7 @@ class EventDispatcher:
     def __init__(
         self,
         unique_identifier: str,
-        publisher: "EventPublisher",
+        publisher: "EventPublisher",  # noqa TODO fix
         owner_inst: ParameterizedMetaclass,
         descriptor: Event,
     ) -> None:
@@ -104,12 +104,15 @@ class EventDispatcher:
         self.publisher = publisher
 
     @property
-    def publisher(self) -> "EventPublisher":
+    def publisher(self) -> "EventPublisher":  # noqa TODO fix
         """Event publishing PUB socket owning object"""
         return self._publisher
 
     @publisher.setter
-    def publisher(self, value: "EventPublisher") -> None:
+    def publisher(self, value: "EventPublisher") -> None:  # noqa TODO fix
+        # TODO fix this once the architecture is resolved
+        from .zmq.brokers import EventPublisher  # noqa: E402
+
         if not hasattr(self, "_publisher"):
             self._publisher = value
         elif not isinstance(value, EventPublisher):
@@ -119,7 +122,7 @@ class EventDispatcher:
 
     def push(self, data: Any) -> None:
         """
-        publish the event. Multipart payloads are not supported. Supply either a serializable object or a
+        Publish the event. Multipart payloads are not supported. Supply either a serializable object or a
         bytes object for binary data, not both.
 
         Parameters
@@ -146,9 +149,6 @@ class EventDispatcher:
         """
         raise NotImplementedError("Event acknowledgement is not implemented yet.")
         self._synchronize_event.set()
-
-
-from .zmq.brokers import EventPublisher  # noqa: E402
 
 
 __all__ = [
