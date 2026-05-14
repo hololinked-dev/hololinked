@@ -34,11 +34,11 @@ jobs:
 
       - name: run ruff linter src directory
         if: matrix.tool == 'ruff'
-        run: ruff check hololinked
+        run: ruff check --config pyproject.toml hololinked
 
       - name: run ruff linter tests directory
         if: matrix.tool == 'ruff'
-        run: ruff check tests/*.py tests/things/*.py tests/helper-scripts/*.py
+        run: ruff check --config pyproject.toml tests/*.py tests/things/*.py tests/helper-scripts/*.py
 
       - name: install ty
         if: matrix.tool == 'ty'
@@ -46,7 +46,7 @@ jobs:
 
       - name: run ty type checker
         if: matrix.tool == 'ty'
-        run: ty check hololinked
+        run: ty check --config pyproject.toml hololinked
 
   scan:
     name: security scan (${{ matrix.tool }})
