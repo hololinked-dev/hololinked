@@ -2,8 +2,8 @@ import pytest
 
 from things import TestThing
 
-from hololinked.serializers import Serializers
-from hololinked.serializers.serializers import BaseSerializer
+from hololinked import Serializers
+from hololinked.core.interfaces import BaseSerializer
 
 
 class YAMLSerializer(BaseSerializer):
@@ -22,7 +22,6 @@ def yaml_serializer() -> BaseSerializer:
 
 def test_01_singleton():
     """Test the singleton nature of the Serializers class."""
-
     serializers = Serializers()
     assert serializers == Serializers()
     assert Serializers != Serializers()
@@ -53,7 +52,6 @@ def test_01_singleton():
 
 def test_02_protocol_registration(yaml_serializer: BaseSerializer):
     """i.e. test if a new serializer (protocol) can be registered"""
-
     # get existing number of serializers
     num_serializers = len(Serializers.content_types)
 
@@ -109,7 +107,7 @@ def test_04_registration_for_objects_by_name():
 
 
 def test_05_registration_dict():
-    """test the dictionary where all serializers are stored"""
+    """Test the dictionary where all serializers are stored"""
     # depends on test 3
     assert "test_thing" in Serializers.object_content_type_map
     assert "base_property" in Serializers.object_content_type_map["test_thing"]
@@ -132,7 +130,7 @@ def test_06_retrieval():
 
 
 def test_07_set_default():
-    """test setting the default serializer"""
+    """Test setting the default serializer"""
     # get existing default
     old_default = Serializers.default
     # set new default and check if default is set
@@ -146,7 +144,7 @@ def test_07_set_default():
 
 
 def test_08_unknown_content_types():
-    """test registration of unknown content types for objects"""
+    """Test registration of unknown content types for objects"""
     Serializers.register_content_type_for_object(TestThing.number_prop, "application/unknown")
     assert Serializers.for_object(None, "TestThing", "number_prop") is None
     assert Serializers.get_content_type_for_object(None, "TestThing", "number_prop") == "application/unknown"

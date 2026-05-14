@@ -2,6 +2,8 @@ from typing import Any, ClassVar, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
+from hololinked import JSONSchema
+
 from ..constants import JSON, JSONSerializable
 from ..core import Property
 from ..core.properties import (
@@ -21,7 +23,6 @@ from ..core.properties import (
     TypedKeyMappingsDict,
     TypedList,
 )
-from ..schema_validators.json_schema import JSONSchema
 from ..utils import issubklass
 from .base import Schema
 from .utils import get_summary
@@ -57,7 +58,7 @@ class DataSchema(Schema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property: Property) -> None:
-        """populates schema information from property descriptor object"""
+        """Populates schema information from property descriptor object"""
         self.title = get_summary(property.doc)
         if property.constant:
             self.const = property.constant
@@ -87,7 +88,7 @@ class DataSchema(Schema):
     # you dont know what you are building, whether the data schema or something else when viewed from property affordance
     def ds_build_from_property(self, property: Property) -> None:
         """
-        generates the schema specific to the property type,
+        Generates the schema specific to the property type,
         calls `ds_build_fields_from_property()` after choosing the right type
         """
         if self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
@@ -135,7 +136,7 @@ class DataSchema(Schema):
                 setattr(self, field_name, field_value)
 
     def _move_own_type_to_oneOf(self):
-        """move a type to oneOf"""
+        """Move a type to oneOf"""
         pass
 
 
@@ -149,7 +150,7 @@ class BooleanSchema(DataSchema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+        """Generates the schema"""
         self.type = "boolean"
         super().ds_build_fields_from_property(property)
 
@@ -176,7 +177,7 @@ class StringSchema(DataSchema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+        """Generates the schema"""
         self.type = "string"
         if isinstance(property, String):
             if property.regex is not None:
@@ -212,7 +213,7 @@ class NumberSchema(DataSchema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+        """Generates the schema"""
         if isinstance(property, Integer):
             self.type = "integer"
         elif isinstance(property, Number):  # dont change order - one is subclass of other
@@ -260,7 +261,7 @@ class ArraySchema(DataSchema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+        """Generates the schema"""
         self.type = "array"
         self.items = []
         if isinstance(property, (List, Tuple, TypedList)) and property.item_type is not None:
@@ -315,7 +316,7 @@ class ObjectSchema(DataSchema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+        """Generates the schema"""
         super().ds_build_fields_from_property(property)
         properties = None
         required = None
@@ -356,7 +357,7 @@ class SelectorSchema(DataSchema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+        """Generates the schema"""
         self.oneOf = []
         if isinstance(property, ClassSelector):
             if not property.isinstance:
@@ -428,7 +429,7 @@ class EnumSchema(SelectorSchema):
         super().__init__()
 
     def ds_build_fields_from_property(self, property) -> None:
-        """generates the schema"""
+        """Generates the schema"""
         if not isinstance(property, Selector):
             raise TypeError(f"EnumSchema compatible property is only Selector, not {property.__class__}")
         self.enum = list(property.objects)

@@ -7,6 +7,7 @@ from enum import StrEnum
 
 import numpy
 
+from hololinked import JSONSchema
 from hololinked.core import Event, Thing, action
 from hololinked.core.properties import (
     Boolean,
@@ -19,7 +20,6 @@ from hololinked.core.properties import (
     TypedList,
 )
 from hololinked.core.state_machine import StateMachine
-from hololinked.schema_validators import JSONSchema
 from hololinked.serializers import JSONSerializer
 from hololinked.server.http import HTTPServer
 

@@ -5,8 +5,9 @@ from typing import Any, Callable, Type
 
 from pydantic import BaseModel, ConfigDict, RootModel, create_model
 
+from hololinked import SchemaValidatorClasses
+
 from ..param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
-from ..schema_validators import JSONSchemaValidator
 from ..utils import issubklass
 from .dataklasses import RemoteResourceInfoValidator
 from .events import Event, EventDispatcher  # noqa: F401
@@ -63,7 +64,6 @@ class Property(Parameter):
         """
         Parameters
         ----------
-
         default: None or corresponding to property type
             The default value of the property.
 
@@ -180,7 +180,7 @@ class Property(Parameter):
         if model:
             if isinstance(model, dict):
                 self.model = model
-                self.validator = JSONSchemaValidator(model).validate
+                self.validator = SchemaValidatorClasses.json_schema(model).validate
             else:
                 self.model = wrap_plain_types_in_rootmodel(model)  # type: BaseModel
                 self.validator = self.model.model_validate
@@ -252,7 +252,7 @@ class Property(Parameter):
 
     def external_set(self, obj: Parameterized, value: Any) -> None:
         """
-        method called when the value of the property is set from an external source, e.g. a remote client.
+        Method called when the value of the property is set from an external source, e.g. a remote client.
         Usually introduces a state machine check before allowing the set operation.
         """
         if self.execution_info.state is None or (

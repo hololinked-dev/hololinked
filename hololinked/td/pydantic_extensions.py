@@ -6,8 +6,8 @@ from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._core_utils import CoreSchemaOrField, is_core_schema
 from pydantic.json_schema import GenerateJsonSchema
 
+from hololinked.constants import JSONSchema
 
-JSONSchema = dict[str, Any]  # A type to represent JSONSchema
 
 AnyUri = str
 Description = str
