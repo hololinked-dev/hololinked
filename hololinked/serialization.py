@@ -1,11 +1,12 @@
 """A serializer registry for content types and serializers."""
 
+from __future__ import annotations
+
 import warnings
 
 from typing import Any
 
 from hololinked.config import global_config
-from hololinked.core import Action, Event, Property, Thing  # noqa
 from hololinked.core.interfaces import BaseSerializer
 from hololinked.param.parameters import Parameter, String
 from hololinked.utils import MappableSingleton, issubklass
@@ -20,9 +21,8 @@ class Serializers(metaclass=MappableSingleton):
     The default serializer is `JSONSerializer`, which will be provided to any unregistered object.
     """
 
-    default = BaseSerializer()
+    default: BaseSerializer
     """The default serializer."""
-
     # some known types:
     json: BaseSerializer
     msgpack: BaseSerializer
@@ -192,6 +192,8 @@ class Serializers(metaclass=MappableSingleton):
         ValueError
             if the object is not a Property, Action or Event, or Thing class
         """
+        from hololinked.core import Action, Event, Property, Thing  # noqa
+
         if not isinstance(serializer, BaseSerializer):
             raise ValueError("serializer must be an instance of BaseSerializer, given : {}".format(type(serializer)))
         if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
@@ -229,6 +231,8 @@ class Serializers(metaclass=MappableSingleton):
         ValueError
             if the object is not a Property, Action or Event
         """
+        from hololinked.core import Action, Event, Property, Thing  # noqa
+
         if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
             raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
         if issubklass(objekt, Thing):
@@ -273,6 +277,8 @@ class Serializers(metaclass=MappableSingleton):
         ValueError
             if the object is not a Property, Action or Event
         """
+        from hololinked.core import Action, Event, Property, Thing  # noqa
+
         if not isinstance(objekt, (Property, Action, Event, str)):
             raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
         if not isinstance(objekt, str):

@@ -9,11 +9,11 @@ from typing import Any
 
 from pydantic import BaseModel, RootModel
 
-from ..constants import USE_OBJECT_NAME
-from ..param.parameterized import ParameterizedMetaclass
-from ..param.parameters import Boolean, ClassSelector, Parameter, String, Tuple
-from ..schema_validators import BaseSchemaValidator
-from ..utils import issubklass
+from hololinked.constants import USE_OBJECT_NAME
+from hololinked.core.interfaces import BaseSchemaValidator
+from hololinked.param.parameterized import ParameterizedMetaclass
+from hololinked.param.parameters import Boolean, ClassSelector, Parameter, String, Tuple
+from hololinked.utils import issubklass
 
 
 # TODO, this class will be removed in future and merged directly into the corresponding object

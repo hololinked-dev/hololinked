@@ -15,9 +15,9 @@ import zmq.asyncio
 
 from zmq.utils.monitor import parse_monitor_message
 
+from hololinked import Serializers
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS
-from hololinked.core import Serializers
 from hololinked.core.exceptions import BreakLoop
 from hololinked.utils import (
     format_exception_as_json,

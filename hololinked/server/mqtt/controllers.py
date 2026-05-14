@@ -3,7 +3,7 @@ from typing import Any
 import aiomqtt
 import structlog
 
-from hololinked.core import Serializers
+from hololinked import Serializers
 
 from ...core.zmq.message import EventMessage  # noqa: F401
 from ...td import EventAffordance, PropertyAffordance

@@ -1,38 +1,31 @@
-class BreakInnerLoop(Exception):
-    """raise to break an inner loop"""
+"""Exception classes."""
 
-    pass
+
+class BreakInnerLoop(Exception):
+    """Raise to break an inner loop."""
 
 
 class BreakAllLoops(Exception):
-    """raise to exit all loops"""
-
-    pass
+    """Raise to exit all loops."""
 
 
 class BreakLoop(Exception):
-    """raise and catch to exit a loop from within another function or method"""
-
-    pass
+    """Raise and catch to exit a loop from within another function or method."""
 
 
 class BreakFlow(Exception):
-    """raised to break the flow of the program"""
-
-    pass
+    """Raise to break the flow of the program."""
 
 
 # TODO - remove unused and reduce number of definitions
 
 
 class StateMachineError(Exception):
-    """raise to show errors while calling actions or writing properties in wrong state"""
-
-    pass
+    """Raise to show errors while calling actions or writing properties in wrong state."""
 
 
 class DatabaseError(Exception):
-    """raise to show database related errors"""
+    """Raise to show database related errors."""
 
 
 __all__ = ["BreakInnerLoop", "BreakAllLoops", "BreakLoop", "BreakFlow", "StateMachineError", "DatabaseError"]

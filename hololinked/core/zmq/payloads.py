@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from hololinked import Serializers
 from hololinked.constants import byte_types
-from hololinked.core import Serializers
 from hololinked.core.interfaces import BaseSerializer
 
 

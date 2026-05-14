@@ -8,6 +8,7 @@ import numpy as np
 
 from pydantic import BaseModel, Field, WithJsonSchema
 
+from hololinked import JSONSchema
 from hololinked.core import Event, Property, Thing, action
 from hololinked.core.actions import Action, BoundAction
 from hololinked.core.properties import (
@@ -19,7 +20,6 @@ from hololinked.core.properties import (
     String,
 )
 from hololinked.param import ParameterizedFunction
-from hololinked.schema_validators import JSONSchema
 
 
 class TestThing(Thing):
@@ -460,7 +460,7 @@ class TestThing(Thing):
         output_schema=analog_offset_output_schema,
     )
     def get_analogue_offset(self, voltage_range: str, coupling: str) -> tuple[float, float]:
-        """analogue offset for a voltage range and coupling"""
+        """Analogue offset for a voltage range and coupling"""
         print(f"get_analogue_offset called with voltage_range={voltage_range}, coupling={coupling}")
         return 0.0, 0.0
 
@@ -591,7 +591,7 @@ class TestThing(Thing):
     @action()
     def execute_instruction(self, command: str, return_data_size: Annotated[int, Field(ge=0)] = 0) -> str:
         """
-        executes instruction given by the ASCII string parameter 'command'.
+        Executes instruction given by the ASCII string parameter 'command'.
         If return data size is greater than 0, it reads the response and returns the response.
         Return Data Size - in bytes - 1 ASCII character = 1 Byte.
         """

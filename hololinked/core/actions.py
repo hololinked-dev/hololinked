@@ -9,23 +9,25 @@ import jsonschema
 
 from pydantic import BaseModel, RootModel
 
-from ..constants import JSON
-from ..param.parameterized import ParameterizedFunction
-from ..schema_validators.validators import JSONSchemaValidator, PydanticSchemaValidator
-from ..utils import (
+from hololinked import SchemaValidatorClasses
+from hololinked.constants import JSON
+from hololinked.core.exceptions import StateMachineError
+from hololinked.param.parameterized import ParameterizedFunction
+from hololinked.utils import (
     get_input_model_from_signature,
     get_return_type_from_signature,
     has_async_def,
     isclassmethod,
     issubklass,
 )
+
 from .dataklasses import ActionInfoValidator
-from .exceptions import StateMachineError
 
 
 class Action:
     """
     Object that models an action.
+
     These actions are unbound and return a bound action when accessed using the owning object.
     """
 
@@ -33,6 +35,8 @@ class Action:
 
     def __init__(self, obj: MethodType) -> None:
         """
+        Initialize an Action.
+
         Parameters
         ----------
         obj: MethodType
@@ -69,13 +73,13 @@ class Action:
 
     @property
     def name(self) -> str:
-        """name of the action"""
+        """Name of the action."""
         return self.obj.__name__
 
     @property
     def execution_info(self) -> ActionInfoValidator:
         """
-        internal dataclass that holds all information about the action
+        Internal dataclass that holds all information about the action.
 
         TODO: this can be refactored
         """
@@ -107,9 +111,7 @@ class Action:
 
 
 class BoundAction:
-    """
-    A bound action - base class for both sync and async methods.
-    """
+    """A bound action, base class for both sync and async methods."""
 
     __slots__ = [
         "obj",
@@ -173,14 +175,14 @@ class BoundAction:
 
     @property
     def name(self) -> str:
-        """name of the action"""
+        """Name of the action."""
         return self.obj.__name__
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError("call must be implemented by subclass")
 
     def external_call(self, *args, **kwargs):
-        """validated call to the action with state machine and payload checks"""
+        """Validated call to the action with state machine and payload checks."""
         raise NotImplementedError("external_call must be implemented by subclass")
 
     def __str__(self):
@@ -224,7 +226,7 @@ class BoundSyncAction(BoundAction):
     """
 
     def external_call(self, *args, **kwargs):
-        """validated call to the action with state machine and payload checks"""
+        """Validated call to the action with state machine and payload checks"""
         self.validate_call(args, kwargs)
         return self.__call__(*args, **kwargs)
 
@@ -241,7 +243,7 @@ class BoundAsyncAction(BoundAction):
     """
 
     async def external_call(self, *args, **kwargs):
-        """validated call to the action with state machine and payload checks"""
+        """Validated call to the action with state machine and payload checks"""
         self.validate_call(args, kwargs)
         return await self.__call__(*args, **kwargs)
 
@@ -358,9 +360,9 @@ def action(
                 )
         if input_schema:
             if isinstance(input_schema, dict):
-                execution_info_validator.schema_validator = JSONSchemaValidator(input_schema)
+                execution_info_validator.schema_validator = SchemaValidatorClasses.json_schema(input_schema)
             elif issubklass(input_schema, (BaseModel, RootModel)):
-                execution_info_validator.schema_validator = PydanticSchemaValidator(input_schema)
+                execution_info_validator.schema_validator = SchemaValidatorClasses.pydantic(input_schema)
             else:
                 raise TypeError(
                     "input schema must be a JSON schema or a Pydantic model, got {}".format(type(input_schema))

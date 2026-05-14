@@ -4,7 +4,7 @@ from typing import Any
 
 import structlog
 
-from hololinked.core import Serializers
+from hololinked import Serializers
 
 from ...constants import JSONSerializable, Operations
 from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
