@@ -1,3 +1,5 @@
+"""HTTP server protocol implementation."""
+
 from .controllers import (  # noqa: F401
     ActionHandler,
     BaseHandler,

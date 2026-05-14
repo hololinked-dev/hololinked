@@ -1,3 +1,5 @@
+"""Base protocol server to be subclassed by all protocols."""
+
 import asyncio
 import logging
 import threading
@@ -5,6 +7,7 @@ import warnings
 
 from io import StringIO
 from types import SimpleNamespace  # noqa: F401
+from typing import Sequence
 
 import structlog
 
@@ -76,12 +79,15 @@ class BaseProtocolServer(Parameterized):
             self.add_thing(thing)
 
     def add_property(self, property: PropertyAffordance | Property) -> None:
+        """Overload property endpoint."""
         raise NotImplementedError("Not implemented for this protocol")
 
     def add_action(self, action: ActionAffordance | Action) -> None:
+        """Overload action endpoint."""
         raise NotImplementedError("Not implemented for this protocol")
 
     def add_event(self, event: EventAffordance | Event) -> None:
+        """Overload event endpoint."""
         raise NotImplementedError("Not implemented for this protocol")
 
     async def _instantiate_broker(
@@ -122,7 +128,7 @@ class BaseProtocolServer(Parameterized):
                 self.zmq_client_pool.register(client, thing_id)
                 broker_thing.req_rep_client = self.zmq_client_pool
 
-            self.config.thing_repository[thing_id] = broker_thing
+            self.config.thing_repository[thing_id] = broker_thing  # type: ignore[unresolved-attribute]
 
         except ConnectionError:
             self.logger.warning(
@@ -133,10 +139,12 @@ class BaseProtocolServer(Parameterized):
             self.logger.exception(ex)
 
     async def setup(self) -> None:
+        """Setup the server."""
         # This method should not block, just create side-effects
         raise NotImplementedError("Not implemented for this protocol")
 
     async def start(self) -> None:
+        """Start the server."""
         # This method should not block, just create side-effects
         # await self.setup()  # call setup() here, this is only an example
         raise NotImplementedError("Not implemented for this protocol")
@@ -144,7 +152,7 @@ class BaseProtocolServer(Parameterized):
     @forkable
     def run(self, forked: bool = False, print_welcome_message: bool = True) -> None:
         """
-        Run the server and serve your things
+        Run the server and serve your things.
 
         Parameters
         ----------
@@ -158,13 +166,14 @@ class BaseProtocolServer(Parameterized):
         run(self, print_welcome_message=print_welcome_message)
 
     def stop(self):
+        """Stop the server."""
         raise NotImplementedError("Not implemented for this protocol")
 
 
 @forkable
 def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_message: bool = True) -> None:
     """
-    run servers and serve your things
+    Run servers and serve your things.
 
     Parameters
     ----------
@@ -174,6 +183,11 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
         whether to run in a forked thread
     print_welcome_message: bool, default True
         whether to print a welcome message on startup, like the ports and access points
+
+    Raises
+    ------
+    ValueError
+        If more than one ZMQServer or RPCServer instances are provided, since they are not designed to run in parallel.
     """
     from . import ZMQServer
 
@@ -223,7 +237,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
 
 
 def stop():
-    """shutdown all running servers started with run()"""
+    """Shutdown all running servers started with `run()`."""
     if hasattr(run, "shutdown_event"):
         run.shutdown_event.set()
         return
@@ -234,6 +248,31 @@ def stop():
 
 
 def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list[str]]]) -> list[BaseProtocolServer]:
+    """
+    Utility function to parse parameters passed to servers.
+
+    Parameters
+    ----------
+    id: str
+        Unique identifier for the server, used for things like the RPCServer broker.
+    access_points: list of tuples (protocol, params)
+        List of tuples where the first element is the protocol name (e.g., "HTTP", "MQTT", "ZMQ") and
+        the second element is either a port number (int), a string (e.g., hostname for MQTT or access point for ZMQ),
+        a dict of parameters, or a list of strings (e.g., multiple access points for ZMQ).
+
+    Returns
+    -------
+    list[BaseProtocolServer]
+        A list of instantiated protocol server objects based on the provided parameters.
+
+    Raises
+    ------
+    TypeError
+        If access_points is not provided as a list of tuples.
+    ValueError
+        If the parameters for a protocol are not in the expected format (e.g., HTTP params not being an int or dict).
+    """
+    # TODO improve input argument names
     from .http import HTTPServer
     from .mqtt import MQTTPublisher
     from .zmq import ZMQServer
@@ -249,7 +288,7 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
                 params = dict(port=params)
             if not isinstance(params, dict):
                 raise ValueError("HTTP server parameters must be supplied as a dict or just the port as an integer.")
-            http_server = HTTPServer(**params)
+            http_server = HTTPServer(**params)  # type: ignore
             servers.append(http_server)
         elif protocol.upper() == "ZMQ":
             if isinstance(params, int):
@@ -259,21 +298,21 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
             elif isinstance(params, list):
                 params = dict(access_points=params)
             if not isinstance(params.get("access_points", None), list):
-                params["access_points"] = [params["access_points"]]
+                params["access_points"] = [params["access_points"]]  # type: ignore
             if not any(isinstance(ap, str) and ap.upper().startswith("INPROC") for ap in params["access_points"]):
                 params["access_points"].append("INPROC")
 
             if len(params["access_points"]) == 1 and params["access_points"][0] == "INPROC":
-                server = RPCServer(id=id, **params)
+                server = RPCServer(id=id, **params)  # type: ignore
             else:
-                server = ZMQServer(id=id, **params)
+                server = ZMQServer(id=id, **params)  # type: ignore
             servers.append(server)
         elif protocol.upper() == "MQTT":
             if isinstance(params, str):
                 params = dict(hostname=params)
             if not isinstance(params, dict):
                 raise ValueError("MQTT parameters must be supplied as a dictionary or the broker hostname as a string.")
-            mqtt_publisher = MQTTPublisher(**params)
+            mqtt_publisher = MQTTPublisher(**params)  # type: ignore
             servers.append(mqtt_publisher)
         else:
             warnings.warn(f"Unsupported protocol: {protocol}", category=UserWarning)
@@ -281,8 +320,8 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
     return servers
 
 
-def _print_welcome_message(servers: list[BaseProtocolServer]) -> None:
-    """prints a welcome message to the console/log"""
+def _print_welcome_message(servers: Sequence[BaseProtocolServer]) -> None:
+    """Prints a welcome message to the console/log."""
     from . import HTTPServer, MQTTPublisher
 
     buffer = StringIO()

@@ -1,6 +1,8 @@
+"""MQTT Publisher."""
+
 import ssl
 
-from typing import Optional, Type  # noqa: F401
+from typing import Any, Optional, Type, cast  # noqa: F401
 
 import aiomqtt
 import structlog
@@ -17,7 +19,9 @@ from .services import ThingDescriptionService
 
 class MQTTPublisher(BaseProtocolServer):
     """
-    MQTT Publisher. All events and observable properties defined on the Thing will be published to MQTT topics
+    MQTT Event Publisher.
+
+    All events and observable properties defined on the Thing will be published to MQTT topics
     with topic name "{thing id}/{event name}".
 
     For setting up an MQTT broker if one does not exist,
@@ -45,6 +49,8 @@ class MQTTPublisher(BaseProtocolServer):
         **kwargs,
     ):
         """
+        Initializes the `MQTTPublisher`.
+
         Parameters
         ----------
         hostname: str
@@ -65,7 +71,7 @@ class MQTTPublisher(BaseProtocolServer):
         kwargs: dict
             Additional keyword arguments
         """
-        default_config = dict(
+        default_config: dict[str, Any] = dict(
             topic_publisher=kwargs.get("topic_publisher", TopicPublisher),
             thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
@@ -73,9 +79,9 @@ class MQTTPublisher(BaseProtocolServer):
             qos=qos,
         )
         default_config.update(config or dict())
-        config = RuntimeConfig(**default_config)
+        updated_config = RuntimeConfig(**default_config)
 
-        super().__init__(config=config)
+        super().__init__(config=updated_config)
 
         endpoint = f"{hostname}{f':{port}' if port else ''}"
 
@@ -92,6 +98,7 @@ class MQTTPublisher(BaseProtocolServer):
     async def start(self):
         """
         Sets up the MQTT client and starts publishing events from the `Thing`s.
+
         All events are dispatched to their own async tasks. This method returns and
         creates side-effects only & does not block. Use the `run()` method instead for a blocking call.
         """
@@ -112,7 +119,19 @@ class MQTTPublisher(BaseProtocolServer):
         await self.setup()
 
     async def start_publishers(self, thing: CoreThing) -> None:
-        """Start the publishers for a given `Thing`"""
+        """
+        Start the publishers for a given `Thing`.
+
+        Parameters
+        ----------
+        thing: CoreThing
+            The `Thing` for which to start the publishers
+
+        Raises
+        ------
+        ValueError
+            If the `Thing` is not associated with any RPC server
+        """
         eventloop = get_current_async_loop()
         if not thing.rpc_server:
             raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
@@ -132,7 +151,7 @@ class MQTTPublisher(BaseProtocolServer):
             eventloop.create_task(topic_publisher.publish())
             self.logger.info(f"MQTT will publish events for {event_name} of thing {thing.id}")
         for prop_name in TD.get("properties", {}).keys():
-            property_affordance = PropertyAffordance.from_TD(prop_name, TD)
+            property_affordance = cast(PropertyAffordance, PropertyAffordance.from_TD(prop_name, TD))
             if not property_affordance.observable:
                 continue
             topic_publisher = self.config.topic_publisher(
@@ -155,18 +174,18 @@ class MQTTPublisher(BaseProtocolServer):
         eventloop.create_task(td_publisher.publish(TD))
 
     async def setup(self) -> None:
-        """Setup MQTT publishers per `Thing` post connection to broker"""
+        """Setup MQTT publishers per `Thing` post connection to broker."""
         eventloop = get_current_async_loop()
         for thing in self.things:
             eventloop.create_task(self.start_publishers(thing))
 
     def stop(self):
-        """stop publishing, the client is not closed automatically"""
+        """Stop publishing, the client is not closed automatically."""
         for publisher in self.publishers.values():
             publisher.stop()
 
     def add_thing(self, thing: CoreThing):
-        """Add a `Thing` to the MQTT publisher and start publishing its events/observable properties"""
+        """Add a `Thing` to the MQTT publisher and start publishing its events/observable properties."""
         if self.things is None:
             self.things = list()
         self.things.append(thing)
