@@ -10,9 +10,36 @@ on:
       - main
 
 jobs:
+  setup-venv:
+    name: set up shared virtual environment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: set up python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: cache virtual environment
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ runner.os }}-shared-venv-${{ github.run_id }}
+
+      - name: sync virtual environment
+        run: |
+          uv sync --group all
+    
   codestyle:
     name: ruff codestyle check/linting
     runs-on: ubuntu-latest
+    needs: setup-venv
 
     strategy:
       fail-fast: false
@@ -23,38 +50,42 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
 
-      - name: set up python 3.11
-        uses: actions/setup-python@v3
+      - name: set up python 3.13
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: "3.13"
 
-      - name: install ruff
-        if: matrix.tool == 'ruff'
-        run: pip install ruff==0.14.2
+      - name: restore virtual environment
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ runner.os }}-shared-venv-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-shared-venv-
 
       - name: run ruff linter src directory
         if: matrix.tool == 'ruff'
-        run: ruff check --config pyproject.toml hololinked
+        run: |
+          source .venv/bin/activate
+          ruff check --config pyproject.toml hololinked
 
       - name: run ruff linter tests directory
         if: matrix.tool == 'ruff'
-        run: ruff check --config pyproject.toml tests/*.py tests/things/*.py tests/helper-scripts/*.py
-
-      - name: install ruff
-        if: matrix.tool == 'ruff-extensive'
-        run: pip install ruff
+        run: |
+          source .venv/bin/activate
+          ruff check --config pyproject.toml tests/*.py tests/things/*.py tests/helper-scripts/*.py
 
       - name: run ruff linter src directory
         if: matrix.tool == 'ruff-extensive'
-        run: ruff check --config ruff.toml hololinked/client
-
-      - name: install ty
-        if: matrix.tool == 'ty'
-        run: pip install ty==0.0.24
+        run: |
+          source .venv/bin/activate
+          ruff check --config ruff.toml hololinked/client
 
       - name: run ty type checker
         if: matrix.tool == 'ty'
-        run: ty check hololinked/client
+        run: |
+          source .venv/bin/activate
+          ty check hololinked/client
 
   scan:
     name: security scan (${{ matrix.tool }})
@@ -73,25 +104,32 @@ jobs:
           fetch-depth: 0
 
       # ---------------- Bandit branch ----------------
-      - name: set up python 3.11
+      - name: set up python 3.13
         if: matrix.tool == 'bandit'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
-      - name: install bandit
+      - name: restore virtual environment
         if: matrix.tool == 'bandit'
-        run: pip install bandit
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ runner.os }}-shared-venv-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-shared-venv-
 
       - name: run bandit scan
         if: matrix.tool == 'bandit'
         run: |
+          source .venv/bin/activate
           bandit -c pyproject.toml -r hololinked/ -b .bandit-baseline.json
           # this is the step that will fail the job if new issues are found
 
       - name: generate JSON report
         if: matrix.tool == 'bandit'
         run: |
+          source .venv/bin/activate
           echo "Rerunning to generate bandit report in JSON format..."
           bandit -c pyproject.toml -r hololinked/ -f json -b .bandit-baseline.json -o bandit-report.json
 
@@ -105,6 +143,7 @@ jobs:
       - name: display existing issues, which have already been accounted
         if: matrix.tool == 'bandit'
         run: |
+          source .venv/bin/activate
           echo "Rerunning to display existing issues which are included in the baseline..."
           bandit -c pyproject.toml -r hololinked/ || true
 
