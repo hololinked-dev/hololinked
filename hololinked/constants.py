@@ -8,6 +8,7 @@ import zmq
 # types
 JSONSerializable = typing.Union[str, int, float, bool, None, typing.Dict[str, typing.Any], typing.List]
 JSON = typing.Dict[str, JSONSerializable]
+JSONSchema = typing.Dict[str, str | typing.Dict[str, typing.Any] | typing.List[typing.Dict[str, typing.Any]]]
 
 byte_types = (bytes, bytearray, memoryview)
 

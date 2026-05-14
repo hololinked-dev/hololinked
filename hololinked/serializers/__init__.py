@@ -1,6 +1,6 @@
 """Concrete implementations of serializers."""
 
-from hololinked.core import Serializers
+from hololinked import Serializers
 
 from .serializers import (
     JSONSerializer,

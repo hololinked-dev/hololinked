@@ -81,6 +81,7 @@ jobs:
           source .venv/bin/activate
           ruff check --config ruff.toml hololinked/client
           ruff check --config ruff.toml hololinked/serializers
+          ruff check --config ruff.toml hololinked/schema_validators
 
       - name: run ty type checker
         if: matrix.tool == 'ty'
@@ -88,6 +89,7 @@ jobs:
           source .venv/bin/activate
           ty check hololinked/client
           ty check hololinked/serializers
+          ty check hololinked/schema_validators
 
   scan:
     name: security scan (${{ matrix.tool }})

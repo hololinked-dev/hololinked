@@ -3,8 +3,8 @@ from uuid import uuid4
 
 import msgspec
 
+from hololinked import Serializers
 from hololinked.constants import JSON, byte_types
-from hololinked.core import Serializers
 from hololinked.param.parameters import Integer
 
 from .payloads import PreserializedData, SerializableData

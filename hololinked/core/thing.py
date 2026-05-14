@@ -123,7 +123,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 If using JSON storage, this filename is used to persist property values. If not provided, a default filename
                 is generated based on the instance name.
         """
-        from hololinked.core.serializer_registry import Serializers
+        from hololinked import Serializers
 
         from ..storage import prepare_object_storage  # noqa
         from .logger import prepare_object_logger  # noqa

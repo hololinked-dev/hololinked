@@ -13,6 +13,7 @@ import structlog
 from paho.mqtt.client import CallbackAPIVersion, MQTTMessage, MQTTProtocolVersion
 from paho.mqtt.client import Client as PahoMQTTClient
 
+from hololinked import Serializers
 from hololinked.client.abstractions import (
     ConsumedThingAction,
     ConsumedThingEvent,
@@ -25,7 +26,7 @@ from hololinked.client.security import (
     OAuthDirectAccessGrant,
 )
 from hololinked.constants import ZMQ_TRANSPORTS
-from hololinked.core import Serializers, Thing
+from hololinked.core import Thing
 from hololinked.td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,

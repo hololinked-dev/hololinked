@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy import inspect as inspect_database
 from sqlalchemy.orm import sessionmaker
 
-from hololinked.core import Serializers
+from hololinked import Serializers
 from hololinked.serializers import PythonBuiltinJSONSerializer as JSONSerializer
 
 from ..config import global_config

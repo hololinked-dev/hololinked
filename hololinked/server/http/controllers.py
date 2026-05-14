@@ -7,7 +7,7 @@ from msgspec import DecodeError as MsgspecJSONDecodeError
 from tornado.iostream import StreamClosedError
 from tornado.web import RequestHandler
 
-from hololinked.core import Serializers
+from hololinked import Serializers
 
 from ...config import global_config
 from ...constants import Operations
