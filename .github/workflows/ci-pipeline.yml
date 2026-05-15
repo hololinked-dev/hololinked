@@ -85,6 +85,7 @@ jobs:
           ruff check --config ruff.toml hololinked/storage
           ruff check --config ruff.toml hololinked/serialization.py
           ruff check --config ruff.toml hololinked/schemas.py
+          ruff check --config ruff.toml hololinked/persistence.py
 
       - name: run ty type checker
         if: matrix.tool == 'ty'
@@ -96,6 +97,7 @@ jobs:
           ty check hololinked/storage
           ty check hololinked/serialization.py
           ty check hololinked/schemas.py
+          ty check hololinked/persistence.py
 
   scan:
     name: security scan (${{ matrix.tool }})

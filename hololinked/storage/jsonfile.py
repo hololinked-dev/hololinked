@@ -23,7 +23,7 @@ class JSONFileStorage(BaseConfigurationRepository):
     Carries out property operations such as storing and retrieving values from a plain JSON file.
     """
 
-    def __init__(self, thing: Thing, filename: str, serializer: BaseSerializer = None):
+    def __init__(self, thing: Thing, filename: str, serializer: BaseSerializer | None = None):
         """
         Initialize JSONFileStorage for a Thing instance.
 
@@ -33,7 +33,7 @@ class JSONFileStorage(BaseConfigurationRepository):
             The `Thing` instance which uses this storage for configuration storage.
         filename: str
             Path to the JSON file to use for storage.
-        serializer: BaseSerializer, optional
+        serializer: BaseSerializer | None, optional
             Serializer for encoding and decoding JSON data. Defaults to an instance of `JSONSerializer`.
         """
         self.filename = filename
@@ -53,14 +53,11 @@ class JSONFileStorage(BaseConfigurationRepository):
         """
         if not os.path.exists(self.filename) or os.path.getsize(self.filename) == 0:
             return {}
-        try:
-            with open(self.filename, "rb") as f:
-                raw_bytes = f.read()
-                if not raw_bytes:
-                    return {}
-                return self._serializer.loads(raw_bytes)  # type: ignore[invalid-return-type]
-        except Exception:
-            return {}
+        with open(self.filename, "rb") as f:
+            raw_bytes = f.read()
+            if not raw_bytes:
+                return {}
+            return self._serializer.loads(raw_bytes)  # type: ignore[invalid-return-type]
 
     def _save(self):
         """Encode and write data to the JSON file."""
@@ -68,7 +65,7 @@ class JSONFileStorage(BaseConfigurationRepository):
         with open(self.filename, "wb") as f:
             f.write(raw_bytes)
 
-    def get_property(self, property: str | Property) -> Any:
+    def get_property(self, property: str | Property, **kwargs) -> Any:  # ty: ignore[invalid-method-override]
         """
         Fetch a single property value from the JSON file.
 
@@ -76,6 +73,9 @@ class JSONFileStorage(BaseConfigurationRepository):
         ----------
         property: str | Property
             string name or descriptor object
+        deserialized: bool, default True
+            Ignored for this storage engine since JSON file storage is always deserialized.
+            Included for interface compatibility.
 
         Returns
         -------
@@ -109,7 +109,11 @@ class JSONFileStorage(BaseConfigurationRepository):
             self._data[name] = value
             self._save()
 
-    def get_properties(self, properties: dict[str | Property, Any]) -> dict[str, Any]:
+    def get_properties(
+        self,
+        properties: dict[str | Property, Any],
+        **kwargs,
+    ) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
         """
         Get multiple properties at once from the JSON file.
 
@@ -117,6 +121,9 @@ class JSONFileStorage(BaseConfigurationRepository):
         ----------
         properties: List[str | Property]
             string names or the descriptor of the properties as a list
+        deserialized: bool, default True
+            Ignored for this storage engine since JSON file storage is always deserialized.
+            Included for interface compatibility.
 
         Returns
         -------
@@ -142,9 +149,15 @@ class JSONFileStorage(BaseConfigurationRepository):
                 self._data[name] = value
             self._save()
 
-    def get_all_properties(self) -> dict[str, Any]:
+    def get_all_properties(self, **kwargs) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
         """
         Get all properties stored in the JSON file.
+
+        Parameters
+        ----------
+        deserialized: bool, default True
+            Ignored for this storage engine since JSON file storage is always deserialized.
+            Included for interface compatibility.
 
         Returns
         -------

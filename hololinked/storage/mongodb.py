@@ -11,6 +11,7 @@ from pymongo import errors as mongo_errors
 
 from hololinked import Serializers
 from hololinked.storage.bases import BaseDB
+from hololinked.storage.config import MongoDBConfig
 
 
 if TYPE_CHECKING:
@@ -41,8 +42,15 @@ class MongoDB(BaseDB):
             The `Thing` instance which uses this database engine for configuration storage.
         config_file: str
             Path to the MongoDB configuration file.
+
+        Raises
+        ------
+        ValueError
+            If the loaded configuration is not a valid Mongo DB Config (but a valid config of another type).
         """
         super().__init__(thing=thing, config_file=config_file)
+        if not isinstance(self.config, MongoDBConfig):
+            raise ValueError(f"You might have provided invalid MongoDB config. Loaded config: {self.config}")
         self.client = MongoClient(self.config.URL)
         self.db = self.client[self.config.database]
         self.properties = self.db["properties"]

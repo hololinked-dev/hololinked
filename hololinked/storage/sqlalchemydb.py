@@ -14,7 +14,12 @@ from sqlalchemy.orm import sessionmaker
 
 from hololinked import Serializers
 from hololinked.storage.bases import BaseDB
-from hololinked.storage.models import SerializedProperty, ThingInformation, ThingTableBase
+from hololinked.storage.config import SQLDBConfig, SQLiteConfig
+from hololinked.storage.models import (
+    SerializedProperty,
+    ThingInformation,
+    ThingTableBase,
+)
 
 
 if TYPE_CHECKING:
@@ -72,8 +77,16 @@ class BaseSyncDB(BaseDB):
             The `Thing` instance which uses this database engine for configuration storage.
         config_file: str, optional
             Path to the database configuration file. `sqlite` backend with default settings will be used if not provided.
+
+        Raises
+        ------
+        ValueError
+            If the loaded configuration is not a valid config for SQLAlchemy-based database engines
+            (but a valid config of another type).
         """
         super().__init__(thing=thing, config_file=config_file)
+        if not isinstance(self.config, (SQLDBConfig, SQLiteConfig)):
+            raise ValueError(f"You might have provided invalid SQLAlchemy config. Loaded config: {self.config}")
         self.engine = create_engine(self.config.URL)
         self.sync_session = sessionmaker(self.engine, expire_on_commit=True)
         if self.config.provider == "sqlite":
@@ -206,7 +219,7 @@ class SQLAlchemyDB(BaseSyncDB):
                 )
                 now = datetime.now().isoformat()
                 prop = SerializedProperty(
-                    id=None,  # type: ignore[invalid-argument-type]
+                    id=None,  # ty: ignore[invalid-argument-type]
                     name=name,
                     serialized_value=serializer.dumps(value),
                     thing_id=self.thing.id,
@@ -316,7 +329,7 @@ class SQLAlchemyDB(BaseSyncDB):
                     )
                     now = datetime.now().isoformat()
                     prop = SerializedProperty(
-                        id=None,  # type: ignore[invalid-argument-type]
+                        id=None,  # ty: ignore[invalid-argument-type]
                         name=name,
                         serialized_value=serializer.dumps(value),
                         thing_id=self.thing.id,
@@ -393,7 +406,7 @@ class SQLAlchemyDB(BaseSyncDB):
                     )
                     now = datetime.now().isoformat()
                     prop = SerializedProperty(
-                        id=None,  # type: ignore[invalid-argument-type]
+                        id=None,  # ty: ignore[invalid-argument-type]
                         name=prop.name,
                         serialized_value=serializer.dumps(getattr(self.thing, prop.name)),
                         thing_id=self.thing.id,
@@ -428,7 +441,7 @@ class SQLAlchemyDB(BaseSyncDB):
                 serializer = Serializers.for_object(thing_id, thing_class, name)
                 now = datetime.now().isoformat()
                 prop = SerializedProperty(
-                    id=None,  # type: ignore[invalid-argument-type]
+                    id=None,  # ty: ignore[invalid-argument-type]
                     name=name,
                     serialized_value=serializer.dumps(value),
                     thing_id=thing_id,
