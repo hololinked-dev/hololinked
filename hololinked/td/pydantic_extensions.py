@@ -6,7 +6,7 @@ from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._core_utils import CoreSchemaOrField, is_core_schema
 from pydantic.json_schema import GenerateJsonSchema
 
-from hololinked.constants import JSONSchema
+from hololinked.constants import JSONSchemaType
 
 
 AnyUri = str
@@ -19,7 +19,7 @@ Scopes = Union[List[str], str]
 TypeDeclaration = Union[str, List[str]]
 
 
-def is_a_reference(d: JSONSchema) -> bool:
+def is_a_reference(d: JSONSchemaType) -> bool:
     """
     Return True if a JSONSchema dict is a reference
 
@@ -30,7 +30,7 @@ def is_a_reference(d: JSONSchema) -> bool:
     return "$ref" in d
 
 
-def look_up_reference(reference: str, d: JSONSchema) -> JSONSchema:
+def look_up_reference(reference: str, d: JSONSchemaType) -> JSONSchemaType:
     """
     Look up a reference in a JSONSchema
 
@@ -43,7 +43,7 @@ def look_up_reference(reference: str, d: JSONSchema) -> JSONSchema:
             "Built-in resolver can only dereference internal JSON references (i.e. starting with #)."
         )
     try:
-        resolved: JSONSchema = d
+        resolved: JSONSchemaType = d
         for key in reference[2:].split("/"):
             resolved = resolved[key]
         return resolved
@@ -51,14 +51,14 @@ def look_up_reference(reference: str, d: JSONSchema) -> JSONSchema:
         raise KeyError(f"The JSON reference {reference} was not found in the schema (original error {ke}).")
 
 
-def is_an_object(d: JSONSchema) -> bool:
+def is_an_object(d: JSONSchemaType) -> bool:
     """Determine whether a JSON schema dict is an object"""
     return "type" in d and d["type"] == "object"
 
 
-def convert_object(d: JSONSchema) -> JSONSchema:
-    """Convert an object from JSONSchema to Thing Description"""
-    out: JSONSchema = d.copy()
+def convert_object(d: JSONSchemaType) -> JSONSchemaType:
+    """Convert an object from JSONSchemaType to Thing Description"""
+    out: JSONSchemaType = d.copy()
     # AdditionalProperties is not supported by Thing Description, and it is ambiguous
     # whether this implies it's false or absent. I will, for now, ignore it, so we
     # delete the key below.
@@ -67,7 +67,7 @@ def convert_object(d: JSONSchema) -> JSONSchema:
     return out
 
 
-def convert_anyof(d: JSONSchema) -> JSONSchema:
+def convert_anyof(d: JSONSchemaType) -> JSONSchemaType:
     """
     Convert the anyof key to oneof
 
@@ -78,13 +78,13 @@ def convert_anyof(d: JSONSchema) -> JSONSchema:
     """
     if "anyOf" not in d:
         return d
-    out: JSONSchema = d.copy()
+    out: JSONSchemaType = d.copy()
     out["oneOf"] = out["anyOf"]
     del out["anyOf"]
     return out
 
 
-def convert_prefixitems(d: JSONSchema) -> JSONSchema:
+def convert_prefixitems(d: JSONSchemaType) -> JSONSchemaType:
     """
     Convert the prefixitems key to items
 
@@ -101,7 +101,7 @@ def convert_prefixitems(d: JSONSchema) -> JSONSchema:
     """
     if "prefixItems" not in d:
         return d
-    out: JSONSchema = d.copy()
+    out: JSONSchemaType = d.copy()
     if "items" in out:
         raise ValueError(f"Overwrote the `items` key on {out}.")
     out["items"] = out["prefixItems"]
@@ -109,11 +109,11 @@ def convert_prefixitems(d: JSONSchema) -> JSONSchema:
     return out
 
 
-def convert_additionalproperties(d: JSONSchema) -> JSONSchema:
+def convert_additionalproperties(d: JSONSchemaType) -> JSONSchemaType:
     """Move additionalProperties into properties, or remove it"""
     if "additionalProperties" not in d:
         return d
-    out: JSONSchema = d.copy()
+    out: JSONSchemaType = d.copy()
     if "properties" in out and "additionalProperties" not in out["properties"]:
         out["properties"]["additionalProperties"] = out["additionalProperties"]
     del out["additionalProperties"]
@@ -127,11 +127,11 @@ def check_recursion(depth: int, limit: int):
 
 
 def jsonschema_to_dataschema(
-    d: JSONSchema,
-    root_schema: Optional[JSONSchema] = None,
+    d: JSONSchemaType,
+    root_schema: Optional[JSONSchemaType] = None,
     recursion_depth: int = 0,
     recursion_limit: int = 99,
-) -> JSONSchema:
+) -> JSONSchemaType:
     """
     Remove references and change field formats
 
@@ -170,7 +170,7 @@ def jsonschema_to_dataschema(
         "recursion_depth": recursion_depth + 1,
         "recursion_limit": recursion_limit,
     }
-    output: JSONSchema = {}
+    output: JSONSchemaType = {}
     for k, v in d.items():
         if isinstance(v, dict):
             # Any items that are Mappings (i.e. sub-dictionaries) must be recursed into

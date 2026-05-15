@@ -81,6 +81,13 @@ class ThingMeta(ParameterizedMetaclass):
         """Container object for Event descriptors"""
         return cls._events_registry
 
+    use_json_file: bool
+    """Set to `True` to activate JSON file based configuration management."""
+    use_default_db: bool
+    """Set to `True` to activate default SQLite based configuration management."""
+    use_mongo_db: bool
+    """Set to `True` to activate MongoDB based configuration management."""
+
 
 class DescriptorRegistry:
     """

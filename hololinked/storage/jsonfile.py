@@ -1,37 +1,43 @@
 """JSON-based file storage engine."""
 
+from __future__ import annotations
+
 import os
 import threading
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from hololinked.core.interfaces import BaseConfigurationRepository
-from hololinked.core.property import Property
-from hololinked.param import Parameterized
+from hololinked.core.interfaces import BaseConfigurationRepository, BaseSerializer
 from hololinked.serializers import JSONSerializer
 
 
-class ThingJSONStorage(BaseConfigurationRepository):
+if TYPE_CHECKING:
+    from hololinked.core.property import Property
+    from hololinked.core.thing import Thing
+
+
+class JSONFileStorage(BaseConfigurationRepository):
     """
-    JSON-based storage engine composed within `Thing`.
+    JSON file based storage engine composed within `Thing`.
 
     Carries out property operations such as storing and retrieving values from a plain JSON file.
-
-    Parameters
-    ----------
-    filename : str
-        Path to the JSON file to use for storage.
-    instance : Parameterized
-        The `Thing` instance which uses this storage. Required to read default property values when
-        creating missing properties.
-    serializer : JSONSerializer, optional
-        Serializer used for encoding and decoding JSON data. Defaults to an instance of `JSONSerializer`.
     """
 
-    def __init__(self, filename: str, instance: Parameterized, serializer: Any = None):
+    def __init__(self, thing: Thing, filename: str, serializer: BaseSerializer = None):
+        """
+        Initialize JSONFileStorage for a Thing instance.
+
+        Parameters
+        ----------
+        thing: Thing
+            The `Thing` instance which uses this storage for configuration storage.
+        filename: str
+            Path to the JSON file to use for storage.
+        serializer: BaseSerializer, optional
+            Serializer for encoding and decoding JSON data. Defaults to an instance of `JSONSerializer`.
+        """
         self.filename = filename
-        self.thing_instance = instance
-        self.id = instance.id  # type: ignore[unresolved-attribute]
+        self.thing = thing
         self._serializer = serializer or JSONSerializer()
         self._lock = threading.RLock()
         self._data = self._load()
@@ -64,7 +70,7 @@ class ThingJSONStorage(BaseConfigurationRepository):
 
     def get_property(self, property: str | Property) -> Any:
         """
-        Fetch a single property.
+        Fetch a single property value from the JSON file.
 
         Parameters
         ----------
@@ -73,7 +79,7 @@ class ThingJSONStorage(BaseConfigurationRepository):
 
         Returns
         -------
-        value: Any
+        Any
             property value
 
         Raises
@@ -89,7 +95,7 @@ class ThingJSONStorage(BaseConfigurationRepository):
 
     def set_property(self, property: str | Property, value: Any) -> None:
         """
-        Change the value of an already existing property.
+        Change the value of an already existing property in the JSON file.
 
         Parameters
         ----------
@@ -105,7 +111,7 @@ class ThingJSONStorage(BaseConfigurationRepository):
 
     def get_properties(self, properties: dict[str | Property, Any]) -> dict[str, Any]:
         """
-        Get multiple properties at once.
+        Get multiple properties at once from the JSON file.
 
         Parameters
         ----------
@@ -114,7 +120,7 @@ class ThingJSONStorage(BaseConfigurationRepository):
 
         Returns
         -------
-        value: Dict[str, Any]
+        dict[str, Any]
             property names and values as items
         """
         names = [key if isinstance(key, str) else key.name for key in properties.keys()]
@@ -123,7 +129,7 @@ class ThingJSONStorage(BaseConfigurationRepository):
 
     def set_properties(self, properties: dict[str | Property, Any]) -> None:
         """
-        Change the values of already existing properties at once.
+        Change the values of already existing properties at once in the JSON file.
 
         Parameters
         ----------
@@ -138,11 +144,12 @@ class ThingJSONStorage(BaseConfigurationRepository):
 
     def get_all_properties(self) -> dict[str, Any]:
         """
-        Read all properties of the `Thing` instance.
+        Get all properties stored in the JSON file.
 
         Returns
         -------
         dict[str, Any]
+            property names and values as items
         """
         with self._lock:
             return dict(self._data)
@@ -153,7 +160,7 @@ class ThingJSONStorage(BaseConfigurationRepository):
         get_missing_property_names: bool = False,
     ) -> list[str] | None:
         """
-        Create any and all missing properties of `Thing` instance.
+        Create any and all missing properties in the JSON file.
 
         Parameters
         ----------
@@ -164,7 +171,7 @@ class ThingJSONStorage(BaseConfigurationRepository):
 
         Returns
         -------
-        missing_props: List[str]
+        List[str]
             list of missing properties if get_missing_property_names is True
         """
         missing_props = []
@@ -172,7 +179,7 @@ class ThingJSONStorage(BaseConfigurationRepository):
             existing_props = self.get_all_properties()
             for name, new_prop in properties.items():
                 if name not in existing_props:
-                    self._data[name] = getattr(self.thing_instance, new_prop.name)
+                    self._data[name] = getattr(self.thing, new_prop.name)
                     missing_props.append(name)
             self._save()
         if get_missing_property_names:
@@ -180,5 +187,5 @@ class ThingJSONStorage(BaseConfigurationRepository):
 
 
 __all__ = [
-    ThingJSONStorage.__name__,
+    JSONFileStorage.__name__,
 ]
