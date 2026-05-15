@@ -6,6 +6,8 @@ from typing import Any
 
 import structlog
 
+from hololinked.core.interfaces import BaseConfigurationRepository
+
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import forkable, getattr_without_descriptor_read
 from .actions import BoundAction, action
@@ -123,9 +125,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 If using JSON storage, this filename is used to persist property values. If not provided, a default filename
                 is generated based on the instance name.
         """
-        from hololinked import Serializers
+        from hololinked import Serializers, prepare_object_storage
 
-        from ..storage import prepare_object_storage  # noqa
         from .logger import prepare_object_logger  # noqa
         from .state_machine import prepare_object_FSM  # noqa
 
@@ -153,13 +154,12 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
 
     def __post_init__(self):
-        from ..storage.database import ThingDB
         from .logger import RemoteAccessHandler
         from .zmq.rpc_server import RPCServer  # noqa: F401
 
         # Type definitions
         self.rpc_server = None  # type: RPCServer | None
-        self.db_engine: ThingDB | None
+        self.db_engine: BaseConfigurationRepository | None
         self._owners = None if not hasattr(self, "_owners") else self._owners  # type: list[Thing] | None
         self._remote_access_loghandler: RemoteAccessHandler | None
         self._internal_fixed_attributes: list[str]

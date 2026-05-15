@@ -9,9 +9,9 @@ from uuid import uuid4
 import pytest
 import zmq.asyncio
 
+from hololinked import Serializers
 from hololinked.config import global_config
-from hololinked.serializers import Serializers
-from hololinked.serializers.serializers import (
+from hololinked.serializers import (
     JSONSerializer,
     MsgpackSerializer,
     PickleSerializer,

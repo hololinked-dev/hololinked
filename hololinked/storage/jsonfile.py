@@ -1,33 +1,43 @@
+"""JSON-based file storage engine."""
+
+from __future__ import annotations
+
 import os
 import threading
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..core.property import Property
-from ..param import Parameterized
-from ..serializers import JSONSerializer
+from hololinked.core.interfaces import BaseConfigurationRepository, BaseSerializer
+from hololinked.serializers import JSONSerializer
 
 
-class ThingJSONStorage:
+if TYPE_CHECKING:
+    from hololinked.core.property import Property
+    from hololinked.core.thing import Thing
+
+
+class JSONFileStorage(BaseConfigurationRepository):
     """
-    JSON-based storage engine composed within `Thing`. Carries out property operations such as storing and
-    retrieving values from a plain JSON file.
+    JSON file based storage engine composed within `Thing`.
 
-    Parameters
-    ----------
-    filename : str
-        Path to the JSON file to use for storage.
-    instance : Parameterized
-        The `Thing` instance which uses this storage. Required to read default property values when
-        creating missing properties.
-    serializer : JSONSerializer, optional
-        Serializer used for encoding and decoding JSON data. Defaults to an instance of `JSONSerializer`.
+    Carries out property operations such as storing and retrieving values from a plain JSON file.
     """
 
-    def __init__(self, filename: str, instance: Parameterized, serializer: Any = None):
+    def __init__(self, thing: Thing, filename: str, serializer: BaseSerializer | None = None):
+        """
+        Initialize JSONFileStorage for a Thing instance.
+
+        Parameters
+        ----------
+        thing: Thing
+            The `Thing` instance which uses this storage for configuration storage.
+        filename: str
+            Path to the JSON file to use for storage.
+        serializer: BaseSerializer | None, optional
+            Serializer for encoding and decoding JSON data. Defaults to an instance of `JSONSerializer`.
+        """
         self.filename = filename
-        self.thing_instance = instance
-        self.id = instance.id
+        self.thing = thing
         self._serializer = serializer or JSONSerializer()
         self._lock = threading.RLock()
         self._data = self._load()
@@ -43,34 +53,39 @@ class ThingJSONStorage:
         """
         if not os.path.exists(self.filename) or os.path.getsize(self.filename) == 0:
             return {}
-        try:
-            with open(self.filename, "rb") as f:
-                raw_bytes = f.read()
-                if not raw_bytes:
-                    return {}
-                return self._serializer.loads(raw_bytes)
-        except Exception:
-            return {}
+        with open(self.filename, "rb") as f:
+            raw_bytes = f.read()
+            if not raw_bytes:
+                return {}
+            return self._serializer.loads(raw_bytes)  # type: ignore[invalid-return-type]
 
     def _save(self):
-        """Encode and write data to the JSON file"""
+        """Encode and write data to the JSON file."""
         raw_bytes = self._serializer.dumps(self._data)
         with open(self.filename, "wb") as f:
             f.write(raw_bytes)
 
-    def get_property(self, property: str | Property) -> Any:
+    def get_property(self, property: str | Property, **kwargs) -> Any:  # ty: ignore[invalid-method-override]
         """
-        Fetch a single property.
+        Fetch a single property value from the JSON file.
 
         Parameters
         ----------
         property: str | Property
             string name or descriptor object
+        deserialized: bool, default True
+            Ignored for this storage engine since JSON file storage is always deserialized.
+            Included for interface compatibility.
 
         Returns
         -------
-        value: Any
+        Any
             property value
+
+        Raises
+        ------
+        KeyError
+            If the property is not found in storage.
         """
         name = property if isinstance(property, str) else property.name
         if name not in self._data:
@@ -80,7 +95,7 @@ class ThingJSONStorage:
 
     def set_property(self, property: str | Property, value: Any) -> None:
         """
-        Change the value of an already existing property.
+        Change the value of an already existing property in the JSON file.
 
         Parameters
         ----------
@@ -94,18 +109,25 @@ class ThingJSONStorage:
             self._data[name] = value
             self._save()
 
-    def get_properties(self, properties: dict[str | Property, Any]) -> dict[str, Any]:
+    def get_properties(
+        self,
+        properties: dict[str | Property, Any],
+        **kwargs,
+    ) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
         """
-        Get multiple properties at once.
+        Get multiple properties at once from the JSON file.
 
         Parameters
         ----------
         properties: List[str | Property]
             string names or the descriptor of the properties as a list
+        deserialized: bool, default True
+            Ignored for this storage engine since JSON file storage is always deserialized.
+            Included for interface compatibility.
 
         Returns
         -------
-        value: Dict[str, Any]
+        dict[str, Any]
             property names and values as items
         """
         names = [key if isinstance(key, str) else key.name for key in properties.keys()]
@@ -114,7 +136,7 @@ class ThingJSONStorage:
 
     def set_properties(self, properties: dict[str | Property, Any]) -> None:
         """
-        Change the values of already existing properties at once.
+        Change the values of already existing properties at once in the JSON file.
 
         Parameters
         ----------
@@ -127,8 +149,21 @@ class ThingJSONStorage:
                 self._data[name] = value
             self._save()
 
-    def get_all_properties(self) -> dict[str, Any]:
-        """Read all properties of the `Thing` instance"""
+    def get_all_properties(self, **kwargs) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
+        """
+        Get all properties stored in the JSON file.
+
+        Parameters
+        ----------
+        deserialized: bool, default True
+            Ignored for this storage engine since JSON file storage is always deserialized.
+            Included for interface compatibility.
+
+        Returns
+        -------
+        dict[str, Any]
+            property names and values as items
+        """
         with self._lock:
             return dict(self._data)
 
@@ -138,7 +173,7 @@ class ThingJSONStorage:
         get_missing_property_names: bool = False,
     ) -> list[str] | None:
         """
-        Create any and all missing properties of `Thing` instance
+        Create any and all missing properties in the JSON file.
 
         Parameters
         ----------
@@ -149,7 +184,7 @@ class ThingJSONStorage:
 
         Returns
         -------
-        missing_props: List[str]
+        List[str]
             list of missing properties if get_missing_property_names is True
         """
         missing_props = []
@@ -157,7 +192,7 @@ class ThingJSONStorage:
             existing_props = self.get_all_properties()
             for name, new_prop in properties.items():
                 if name not in existing_props:
-                    self._data[name] = getattr(self.thing_instance, new_prop.name)
+                    self._data[name] = getattr(self.thing, new_prop.name)
                     missing_props.append(name)
             self._save()
         if get_missing_property_names:
@@ -165,5 +200,5 @@ class ThingJSONStorage:
 
 
 __all__ = [
-    ThingJSONStorage.__name__,
+    JSONFileStorage.__name__,
 ]

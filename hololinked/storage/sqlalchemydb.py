@@ -1,80 +1,37 @@
-import base64
-import os
+"""Implementation of SQLAlchemy-based database engines."""
+
+from __future__ import annotations
+
 import threading
 
 from datetime import datetime
 from sqlite3 import DatabaseError
-from typing import Any
+from typing import TYPE_CHECKING, Any, Sequence
 
-from pymongo import MongoClient
-from pymongo import errors as mongo_errors
 from sqlalchemy import create_engine, select
 from sqlalchemy import inspect as inspect_database
 from sqlalchemy.orm import sessionmaker
 
 from hololinked import Serializers
-from hololinked.serializers import PythonBuiltinJSONSerializer as JSONSerializer
+from hololinked.storage.bases import BaseDB
+from hololinked.storage.config import SQLDBConfig, SQLiteConfig
+from hololinked.storage.models import (
+    SerializedProperty,
+    ThingInformation,
+    ThingTableBase,
+)
 
-from ..config import global_config
-from ..core.property import Property
-from ..param import Parameterized
-from .config import MongoDBConfig, SQLDBConfig, SQLiteConfig
-from .models import SerializedProperty, ThingInformation, ThingTableBase
-from .utils import get_sanitized_filename_from_thing_instance
 
-
-class BaseDB:
-    """
-    Database base class irrespective of sync or async implementation.
-    Implements configuration file reader.
-    """
-
-    def __init__(self, instance: Parameterized, config_file: str | None = None) -> None:
-        self.thing_instance = instance
-        self.conf = BaseDB.load_conf(
-            config_file,
-            default_file_path=os.path.join(
-                global_config.TEMP_DIR_DB,
-                get_sanitized_filename_from_thing_instance(instance),
-            ),
-        )
-        self.URL = self.conf.URL
-        self._batch_call_context = {}
-
-    @classmethod
-    def load_conf(
-        cls,
-        config_file: str,
-        default_file_path: str = "",
-    ) -> SQLDBConfig | SQLiteConfig | MongoDBConfig:
-        """
-        Load configuration file using JSON serializer
-        """
-        if not config_file:
-            return SQLiteConfig(file=default_file_path)
-        elif config_file.endswith(".json"):
-            file = open(config_file, "r")
-            conf = JSONSerializer.load(file)
-            if conf.get("provider", None) in ["postgresql", "mysql"]:
-                return SQLDBConfig.model_validate(conf, strict=True, from_attributes=True)
-            elif conf.get("provider", None) == "sqlite":
-                return SQLiteConfig.model_validate(conf, strict=True, from_attributes=True)
-            elif conf.get("provider", None) == "mongo":
-                return MongoDBConfig.model_validate(conf, strict=True, from_attributes=True)
-            raise NotImplementedError("only postgresql, mysql, sqlite and mongo are supported")
-        raise ValueError("config files of extension {} expected, given file name {}".format(["json"], config_file))
-
-    @property
-    def in_batch_call_context(self):
-        return threading.get_ident() in self._batch_call_context
-
+if TYPE_CHECKING:
+    from hololinked.core.property import Property
+    from hololinked.core.thing import Thing
 
 """
-class BaseAsyncDB(BaseDB):
+class BaseAsyncDB(DBEngineMixin, BaseConfigurationRepository):
     Base class for an async database engine, creates sqlalchemy engine & session.
 
-    This class is not fully implemented yet. 
-    
+    This class is not fully implemented yet.
+
     Set `async_db_engine` boolean flag to True in `Thing` class to use this engine.
     Database operations are then scheduled in the event loop instead of blocking the current thread.
     Scheduling happens after properties are set/written.
@@ -88,17 +45,17 @@ class BaseAsyncDB(BaseDB):
         property serializing before writing to database). Will be the same as zmq_serializer supplied to `Thing`.
     config_file: str
         absolute path to database server configuration file
-    
+
     def __init__(
         self,
-        instance: Parameterized,
+        thing,
         serializer: BaseSerializer | None = None,
         config_file: str | None = None,
     ) -> None:
-        super().__init__(instance=instance, serializer=serializer, config_file=config_file)
-        self.engine = asyncio_ext.create_async_engine(self.URL)
+        super().__init__(thing=thing, serializer=serializer, config_file=config_file)
+        self.engine = asyncio_ext.create_async_engine(self.config.URL)
         self.async_session = sessionmaker(self.engine, expire_on_commit=True, class_=asyncio_ext.AsyncSession)
-        if self.conf.provider == "sqlite":
+        if self.config.provider == "sqlite":
             ThingTableBase.metadata.create_all(self.engine)
 """
 
@@ -106,44 +63,59 @@ class BaseAsyncDB(BaseDB):
 class BaseSyncDB(BaseDB):
     """
     Base class for a synchronous (blocking) database engine, implements sqlalchemy engine & session creation.
-    Default DB engine for `Thing` & called immediately after properties are set/written.
 
-    Parameters
-    ----------
-    instance: Parameterized
-        The `Thing` instance to which this database engine belongs
-    config_file: str
-        path to database server configuration file
+    Default DB engine for `Thing` & called immediately after properties are set/written.
     """
 
-    def __init__(self, instance: Parameterized, config_file: str | None = None) -> None:
-        super().__init__(instance=instance, config_file=config_file)
-        self.engine = create_engine(self.URL)
+    def __init__(self, thing: Thing, config_file: str | None = None) -> None:
+        """
+        Initialize BaseSyncDB for a Thing instance.
+
+        Parameters
+        ----------
+        thing: Thing
+            The `Thing` instance which uses this database engine for configuration storage.
+        config_file: str, optional
+            Path to the database configuration file. `sqlite` backend with default settings will be used if not provided.
+
+        Raises
+        ------
+        ValueError
+            If the loaded configuration is not a valid config for SQLAlchemy-based database engines
+            (but a valid config of another type).
+        """
+        super().__init__(thing=thing, config_file=config_file)
+        if not isinstance(self.config, (SQLDBConfig, SQLiteConfig)):
+            raise ValueError(f"You might have provided invalid SQLAlchemy config. Loaded config: {self.config}")
+        self.engine = create_engine(self.config.URL)
         self.sync_session = sessionmaker(self.engine, expire_on_commit=True)
-        if self.conf.provider == "sqlite":
+        if self.config.provider == "sqlite":
             ThingTableBase.metadata.create_all(self.engine)
 
 
-class ThingDB(BaseSyncDB):
-    """
-    Synchronous database engine composed within `Thing`.
-    Carries out database operations like storing object information, properties etc.
-    """
+class SQLAlchemyDB(BaseSyncDB):
+    """SQLAlchemy-based database engine composed within `Thing`."""
 
     def fetch_own_info(self):  # -> ThingInformation:
         """
         Fetch `Thing` instance's own information (some useful metadata which helps the `Thing` run).
 
+        Highly unused and irrelevant currently.
+
         Returns
         -------
         `ThingInformation`
+
+        Raises
+        ------
+        DatabaseError
         """
         if not inspect_database(self.engine).has_table("things"):
             return
         with self.sync_session() as session:
             stmt = select(ThingInformation).filter_by(
-                thing_id=self.thing_instance.id,
-                thing_class=self.thing_instance.__class__.__name__,
+                thing_id=self.thing.id,
+                thing_class=self.thing.__class__.__name__,
             )
             data = session.execute(stmt)
             data = data.scalars().all()
@@ -151,14 +123,14 @@ class ThingDB(BaseSyncDB):
                 return None
             elif len(data) == 1:
                 return data[0]
-            else:
+            else:  # TODO raise different exception?
                 raise DatabaseError(
                     "Multiple things with same instance name found, either cleanup database/detach/make new"
                 )
 
     def get_property(self, property: str | Property, deserialized: bool = True) -> Any:
         """
-        Fetch a single property.
+        Fetch a single property value from the database.
 
         Parameters
         ----------
@@ -171,12 +143,17 @@ class ThingDB(BaseSyncDB):
         -------
         Any
             property value
+
+        Raises
+        ------
+        DatabaseError
+            if the property is not found in database or multiple properties with same name are found
         """
         with self.sync_session() as session:
             name = property if isinstance(property, str) else property.name
             stmt = select(SerializedProperty).filter_by(
-                thing_id=self.thing_instance.id,
-                thing_class=self.thing_instance.__class__.__name__,
+                thing_id=self.thing.id,
+                thing_class=self.thing.__class__.__name__,
                 name=name,
             )
             data = session.execute(stmt)
@@ -188,13 +165,15 @@ class ThingDB(BaseSyncDB):
             if not deserialized:
                 return prop[0]
             serializer = Serializers.content_types.get(prop[0].content_type, None) or Serializers.for_object(
-                self.thing_instance.id, self.thing_instance.__class__.__name__, name
+                self.thing.id,
+                self.thing.__class__.__name__,
+                name,
             )
             return serializer.loads(prop[0].serialized_value)
 
     def set_property(self, property: str | Property, value: Any) -> None:
         """
-        Change the value of an already existing property.
+        Change the value of an already existing property in the database.
 
         Parameters
         ----------
@@ -202,15 +181,20 @@ class ThingDB(BaseSyncDB):
             string name or descriptor object
         value: Any
             value of the property
+
+        Raises
+        ------
+        DatabaseError
+            if multiple properties with same name are found
         """
+        name = property if isinstance(property, str) else property.name
         if self.in_batch_call_context:
-            self._batch_call_context[threading.get_ident()][property.name] = value
+            self._batch_call_context[threading.get_ident()][name] = value
             return
         with self.sync_session() as session:
-            name = property if isinstance(property, str) else property.name
             stmt = select(SerializedProperty).filter_by(
-                thing_id=self.thing_instance.id,
-                thing_class=self.thing_instance.__class__.__name__,
+                thing_id=self.thing.id,
+                thing_class=self.thing.__class__.__name__,
                 name=name,
             )
             data = session.execute(stmt)
@@ -220,22 +204,26 @@ class ThingDB(BaseSyncDB):
             if len(prop) == 1:
                 prop = prop[0]
                 serializer = Serializers.content_types.get(prop.content_type, None) or Serializers.for_object(
-                    self.thing_instance.id, self.thing_instance.__class__.__name__, name
+                    self.thing.id,
+                    self.thing.__class__.__name__,
+                    name,
                 )
                 prop.serialized_value = serializer.dumps(value)
                 prop.updated_at = datetime.now().isoformat()
                 prop.content_type = serializer.content_type
             else:
                 serializer = Serializers.for_object(
-                    self.thing_instance.id, self.thing_instance.__class__.__name__, name
+                    self.thing.id,
+                    self.thing.__class__.__name__,
+                    name,
                 )
                 now = datetime.now().isoformat()
                 prop = SerializedProperty(
-                    id=None,
+                    id=None,  # ty: ignore[invalid-argument-type]
                     name=name,
                     serialized_value=serializer.dumps(value),
-                    thing_id=self.thing_instance.id,
-                    thing_class=self.thing_instance.__class__.__name__,
+                    thing_id=self.thing.id,
+                    thing_class=self.thing.__class__.__name__,
                     created_at=now,
                     updated_at=now,
                     content_type=serializer.content_type,
@@ -245,7 +233,7 @@ class ThingDB(BaseSyncDB):
 
     def get_properties(self, properties: dict[str | Property, Any], deserialized: bool = True) -> dict[str, Any]:
         """
-        Get multiple properties at once.
+        Get multiple properties at once from the database.
 
         Parameters
         ----------
@@ -265,7 +253,10 @@ class ThingDB(BaseSyncDB):
                 names.append(obj if isinstance(obj, str) else obj.name)
             stmt = (
                 select(SerializedProperty)
-                .filter_by(thing_id=self.thing_instance.id, thing_class=self.thing_instance.__class__.__name__)
+                .filter_by(
+                    thing_id=self.thing.id,
+                    thing_class=self.thing.__class__.__name__,
+                )
                 .filter(SerializedProperty.name.in_(names))
             )
             data = session.execute(stmt)
@@ -273,8 +264,8 @@ class ThingDB(BaseSyncDB):
             props = dict()
             for prop in unserialized_props:
                 serializer = Serializers.content_types.get(prop.content_type, None) or Serializers.for_object(
-                    self.thing_instance.id,
-                    self.thing_instance.__class__.__name__,
+                    self.thing.id,
+                    self.thing.__class__.__name__,
                     prop.name,
                 )
                 props[prop.name] = (
@@ -284,12 +275,17 @@ class ThingDB(BaseSyncDB):
 
     def set_properties(self, properties: dict[str | Property, Any]) -> None:
         """
-        Change the values of already existing properties at once
+        Change the values of already existing properties at once in the database.
 
         Parameters
         ----------
         properties: Dict[str | Property, Any]
             string names or the descriptor of the property and any value as dictionary pairs
+
+        Raises
+        ------
+        DatabaseError
+            if multiple properties with same name are found
         """
         if self.in_batch_call_context:
             for obj, value in properties.items():
@@ -302,7 +298,10 @@ class ThingDB(BaseSyncDB):
                 names.append(obj if isinstance(obj, str) else obj.name)
             stmt = (
                 select(SerializedProperty)
-                .filter_by(thing_id=self.thing_instance.id, thing_class=self.thing_instance.__class__.__name__)
+                .filter_by(
+                    thing_id=self.thing.id,
+                    thing_class=self.thing.__class__.__name__,
+                )
                 .filter(SerializedProperty.name.in_(names))
             )
             data = session.execute(stmt)
@@ -315,22 +314,26 @@ class ThingDB(BaseSyncDB):
                 if len(db_prop) == 1:
                     db_prop = db_prop[0]  # type: SerializedProperty
                     serializer = Serializers.content_types.get(db_prop.content_type, None) or Serializers.for_object(
-                        self.thing_instance.id, self.thing_instance.__class__.__name__, name
+                        self.thing.id,
+                        self.thing.__class__.__name__,
+                        name,
                     )
                     db_prop.serialized_value = serializer.dumps(value)
                     db_prop.updated_at = datetime.now().isoformat()
                     db_prop.content_type = serializer.content_type
                 else:
                     serializer = Serializers.for_object(
-                        self.thing_instance.id, self.thing_instance.__class__.__name__, name
+                        self.thing.id,
+                        self.thing.__class__.__name__,
+                        name,
                     )
                     now = datetime.now().isoformat()
                     prop = SerializedProperty(
-                        id=None,
+                        id=None,  # ty: ignore[invalid-argument-type]
                         name=name,
                         serialized_value=serializer.dumps(value),
-                        thing_id=self.thing_instance.id,
-                        thing_class=self.thing_instance.__class__.__name__,
+                        thing_id=self.thing.id,
+                        thing_class=self.thing.__class__.__name__,
                         created_at=now,
                         updated_at=now,
                         content_type=serializer.content_type,
@@ -338,9 +341,9 @@ class ThingDB(BaseSyncDB):
                     session.add(prop)
             session.commit()
 
-    def get_all_properties(self, deserialized: bool = True) -> dict[str, Any]:
+    def get_all_properties(self, deserialized: bool = True) -> dict[str, Any] | Sequence[SerializedProperty]:
         """
-        Get all properties of the `Thing` instance.
+        Get all properties stored in the database.
 
         Parameters
         ----------
@@ -354,7 +357,8 @@ class ThingDB(BaseSyncDB):
         """
         with self.sync_session() as session:
             stmt = select(SerializedProperty).filter_by(
-                thing_id=self.thing_instance.id, thing_class=self.thing_instance.__class__.__name__
+                thing_id=self.thing.id,
+                thing_class=self.thing.__class__.__name__,
             )
             data = session.execute(stmt)
             existing_props = data.scalars().all()  # type: list[SerializedProperty]
@@ -363,7 +367,9 @@ class ThingDB(BaseSyncDB):
             props = dict()
             for prop in existing_props:
                 serializer = Serializers.content_types.get(prop.content_type, None) or Serializers.for_object(
-                    self.thing_instance.id, self.thing_instance.__class__.__name__, prop.name
+                    self.thing.id,
+                    self.thing.__class__.__name__,
+                    prop.name,
                 )
                 props[prop.name] = serializer.loads(prop.serialized_value)
             return props
@@ -374,7 +380,7 @@ class ThingDB(BaseSyncDB):
         get_missing_property_names: bool = False,
     ) -> None | list[str]:
         """
-        Create any and all missing properties of `Thing` instance in database.
+        Create any and all missing properties in the database.
 
         Parameters
         ----------
@@ -394,15 +400,17 @@ class ThingDB(BaseSyncDB):
             for prop in properties.values():
                 if prop.name not in existing_props:
                     serializer = Serializers.for_object(
-                        self.thing_instance.id, self.thing_instance.__class__.__name__, prop.name
+                        self.thing.id,
+                        self.thing.__class__.__name__,
+                        prop.name,
                     )
                     now = datetime.now().isoformat()
                     prop = SerializedProperty(
-                        id=None,
+                        id=None,  # ty: ignore[invalid-argument-type]
                         name=prop.name,
-                        serialized_value=serializer.dumps(getattr(self.thing_instance, prop.name)),
-                        thing_id=self.thing_instance.id,
-                        thing_class=self.thing_instance.__class__.__name__,
+                        serialized_value=serializer.dumps(getattr(self.thing, prop.name)),
+                        thing_id=self.thing.id,
+                        thing_class=self.thing.__class__.__name__,
                         created_at=now,
                         updated_at=now,
                         content_type=serializer.content_type,
@@ -413,10 +421,11 @@ class ThingDB(BaseSyncDB):
         if get_missing_property_names:
             return missing_props
 
-    def create_db_init_properties(self, thing_id: str = None, thing_class: str = None, **properties: Any) -> None:
+    def create_init_properties(self, thing_id: str, thing_class: str, **properties: Any) -> None:
         """
         Create properties that are supposed to be initialized from database for a thing instance.
-        Invoke this method once before running the thing instance to store its initial value in database.
+
+        Invoke this method once before running the thing instance to store its initial value.
 
         Parameters
         ----------
@@ -432,7 +441,7 @@ class ThingDB(BaseSyncDB):
                 serializer = Serializers.for_object(thing_id, thing_class, name)
                 now = datetime.now().isoformat()
                 prop = SerializedProperty(
-                    id=None,
+                    id=None,  # ty: ignore[invalid-argument-type]
                     name=name,
                     serialized_value=serializer.dumps(value),
                     thing_id=thing_id,
@@ -447,18 +456,19 @@ class ThingDB(BaseSyncDB):
 
 class batch_db_commit:
     """
-    Context manager to write multiple properties to database at once. Useful for sequential sets/writes of multiple properties
-    which has db_commit or db_persist set to True, but only write their values to database at once.
+    Write multiple properties to a database at once.
+
+    Useful for optimizing sequential sets/writes of multiple properties which are stored onto a database.
     """
 
-    def __init__(self, db_engine: ThingDB) -> None:
+    def __init__(self, db_engine: SQLAlchemyDB) -> None:
         self.db_engine = db_engine
 
     def __enter__(self) -> None:
-        self.db_engine._context[threading.get_ident()] = dict()
+        self.db_engine._batch_call_context[threading.get_ident()] = dict()
 
     def __exit__(self, exc_type, exc_value, exc_tb) -> None:
-        data = self.db_engine._context.pop(threading.get_ident(), dict())  # dict[str, Any]
+        data = self.db_engine._batch_call_context.pop(threading.get_ident(), dict())
         if exc_type is None:
             self.db_engine.set_properties(data)
             return
@@ -466,146 +476,14 @@ class batch_db_commit:
             try:
                 self.db_engine.set_property(name, value)
             except Exception as ex:
-                self.db_engine.thing_instance.logger.error(
+                self.db_engine.thing.logger.error(
                     f"failed to set property {name} to value {value} during batch commit due to exception {ex}"
                 )
-
-
-class MongoThingDB:
-    """
-    MongoDB-backed database engine for Thing properties and info.
-
-    This class provides persistence for Thing properties using MongoDB.
-    Properties are stored in the 'properties' collection, with fields:
-    - id: Thing instance identifier
-    - name: property name
-    - serialized_value: serialized property value
-
-    Methods mirror the interface of ThingDB for compatibility.
-    """
-
-    def __init__(self, instance: Parameterized, config_file: str | None = None) -> None:
-        """
-        Initialize MongoThingDB for a Thing instance.
-        Connects to MongoDB and sets up collections.
-        """
-        self.thing_instance = instance
-        self.id = instance.id
-        self.config = self.load_conf(config_file)
-        self.client = MongoClient(self.config.get("mongo_uri", "mongodb://localhost:27017"))
-        self.db = self.client[self.config.get("database", "hololinked")]
-        self.properties = self.db["properties"]
-        self.things = self.db["things"]
-
-    @classmethod
-    def load_conf(cls, config_file: str | None) -> dict[str, Any]:
-        """
-        Load configuration from JSON file if provided.
-        """
-        if not config_file:
-            return {}
-        elif config_file.endswith(".json"):
-            with open(config_file, "r") as file:
-                return JSONSerializer.load(file)
-        else:
-            raise ValueError(f"config files of extension - ['json'] expected, given file name {config_file}")
-
-    def fetch_own_info(self):
-        """
-        Fetch Thing instance metadata from the 'things' collection.
-        """
-        doc = self.things.find_one({"id": self.id})
-        return doc
-
-    def get_property(self, property: str | Property, deserialized: bool = True) -> Any:
-        """
-        Get a property value from MongoDB for this Thing.
-        If deserialized=True, returns the Python value.
-        """
-        name = property if isinstance(property, str) else property.name
-        doc = self.properties.find_one({"id": self.id, "name": name})
-        if not doc:
-            raise mongo_errors.PyMongoError(f"property {name} not found in database")
-        if not deserialized:
-            return doc
-        serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
-        return serializer.loads(base64.b64decode(doc["serialized_value"]))
-
-    def set_property(self, property: str | Property, value: Any) -> None:
-        """
-        Set a property value in MongoDB for this Thing.
-        Value is serialized before storage.
-        """
-        name = property if isinstance(property, str) else property.name
-        serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
-        serialized_value = base64.b64encode(serializer.dumps(value)).decode("utf-8")
-        self.properties.update_one(
-            {"id": self.id, "name": name}, {"$set": {"serialized_value": serialized_value}}, upsert=True
-        )
-
-    def get_properties(self, properties: dict[str | Property, Any], deserialized: bool = True) -> dict[str, Any]:
-        """
-        Get multiple property values from MongoDB for this Thing.
-        Returns a dict of property names to values.
-        """
-        names = [obj if isinstance(obj, str) else obj.name for obj in properties.keys()]
-        cursor = self.properties.find({"id": self.id, "name": {"$in": names}})
-        result = {}
-        for doc in cursor:
-            serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, doc["name"])
-            result[doc["name"]] = (
-                doc["serialized_value"]
-                if not deserialized
-                else serializer.loads(base64.b64decode(doc["serialized_value"]))
-            )
-        return result
-
-    def set_properties(self, properties: dict[str | Property, Any]) -> None:
-        """
-        Set multiple property values in MongoDB for this Thing.
-        """
-        for obj, value in properties.items():
-            name = obj if isinstance(obj, str) else obj.name
-            serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, name)
-            serialized_value = base64.b64encode(serializer.dumps(value)).decode("utf-8")
-            self.properties.update_one(
-                {"id": self.id, "name": name}, {"$set": {"serialized_value": serialized_value}}, upsert=True
-            )
-
-    def get_all_properties(self, deserialized: bool = True) -> dict[str, Any]:
-        cursor = self.properties.find({"id": self.id})
-        result = {}
-        for doc in cursor:
-            serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, doc["name"])
-            result[doc["name"]] = (
-                doc["serialized_value"]
-                if not deserialized
-                else serializer.loads(base64.b64decode(doc["serialized_value"]))
-            )
-        return result
-
-    def create_missing_properties(
-        self,
-        properties: dict[str, Property],
-        get_missing_property_names: bool = False,
-    ) -> Any:
-        missing_props = []
-        existing_props = self.get_all_properties()
-        for name, new_prop in properties.items():
-            if name not in existing_props:
-                serializer = Serializers.for_object(self.id, self.thing_instance.__class__.__name__, new_prop.name)
-                serialized_value = base64.b64encode(
-                    serializer.dumps(getattr(self.thing_instance, new_prop.name))
-                ).decode("utf-8")
-                self.properties.insert_one({"id": self.id, "name": new_prop.name, "serialized_value": serialized_value})
-                missing_props.append(name)
-        if get_missing_property_names:
-            return missing_props
 
 
 __all__ = [
     # BaseAsyncDB.__name__,
     BaseSyncDB.__name__,
-    ThingDB.__name__,
+    SQLAlchemyDB.__name__,
     batch_db_commit.__name__,
 ]

@@ -4,7 +4,7 @@ import jsonschema
 
 from pydantic import BaseModel
 
-from hololinked.constants import JSONSchema
+from hololinked.constants import JSONSchemaType
 from hololinked.core.interfaces import BaseSchemaValidator
 from hololinked.utils import (
     json_schema_merge_args_to_kwargs,
@@ -35,13 +35,13 @@ class JSONSchemaValidator(BaseSchemaValidator):
     pydantic annotation based validation for performance if necessary.
     """
 
-    def __init__(self, schema: JSONSchema) -> None:
+    def __init__(self, schema: JSONSchemaType) -> None:
         """
         Initialize the validator.
 
         Parameters
         ----------
-        schema: JSONSchema
+        schema: JSONSchemaType
             The JSON schema to validate against
         """
         jsonschema.Draft7Validator.check_schema(schema)
@@ -57,13 +57,13 @@ class JSONSchemaValidator(BaseSchemaValidator):
             # TODO fix type definition
         self.validate(kwargs)
 
-    def json(self) -> JSONSchema:  # noqa: D102
+    def json(self) -> JSONSchemaType:  # noqa: D102
         return self.schema
 
-    def __get_state__(self):
+    def __get_state__(self) -> JSONSchemaType:
         return self.schema
 
-    def __set_state__(self, schema):
+    def __set_state__(self, schema: JSONSchemaType):
         return JSONSchemaValidator(schema)
 
 
@@ -103,13 +103,13 @@ class PydanticSchemaValidator(BaseSchemaValidator):
     def validate_method_call(self, args, kwargs) -> None:  # noqa: D102
         pydantic_validate_args_kwargs(self.schema, args, kwargs)
 
-    def json(self) -> JSONSchema:  # noqa: D102
+    def json(self) -> JSONSchemaType:  # noqa: D102
         return self.schema.model_dump_json()
 
-    def __get_state__(self):
+    def __get_state__(self) -> JSONSchemaType:
         return self.json()
 
-    def __set_state__(self, schema: JSONSchema):
+    def __set_state__(self, schema: JSONSchemaType):
         return PydanticSchemaValidator(BaseModel(**schema))
 
 
@@ -140,7 +140,7 @@ try:
         # which msgspec has no built in support. Normally, for speed,
         # one should try to use msgspec's struct concept.
 
-        def __init__(self, schema: JSONSchema) -> None:
+        def __init__(self, schema: JSONSchemaType) -> None:
             super().__init__(schema)
             self.validator = fastjsonschema.compile(schema)
 
@@ -153,13 +153,13 @@ try:
                 # TODO fix type definition
             self.validate(kwargs)
 
-        def json(self) -> JSONSchema:  # noqa: D102
+        def json(self) -> JSONSchemaType:  # noqa: D102
             return self.schema
 
-        def __get_state__(self):
+        def __get_state__(self) -> JSONSchemaType:
             return self.schema
 
-        def __set_state__(self, schema: JSONSchema):
+        def __set_state__(self, schema: JSONSchemaType):
             return FastJSONSchemaValidator(schema)
 
 except ImportError:
