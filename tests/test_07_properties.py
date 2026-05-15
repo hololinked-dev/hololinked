@@ -9,7 +9,8 @@ import pydantic
 import pytest
 
 from hololinked.core.properties import Number
-from hololinked.storage.database import BaseDB, ThingDB
+from hololinked.storage.bases import BaseDB
+from hololinked.storage.sqlalchemydb import SQLAlchemyDB
 from hololinked.utils import uuid_hex
 
 
@@ -210,21 +211,21 @@ def test_08_db_config():
         json.dump(sql_db_config, f)
 
     # correct config
-    ThingDB(thing, config_file="test_sql_config.json")
+    SQLAlchemyDB(thing, config_file="test_sql_config.json")
     # foreign field
     sql_db_config_2 = copy.deepcopy(sql_db_config)
     sql_db_config_2["passworda"] = "postgresnonadminpassword"
     with open("test_sql_config.json", "w") as f:
         json.dump(sql_db_config_2, f)
     with pytest.raises(pydantic.ValidationError):
-        ThingDB(thing, config_file="test_sql_config.json")
+        SQLAlchemyDB(thing, config_file="test_sql_config.json")
     # missing field
     sql_db_config_3 = copy.deepcopy(sql_db_config)
     sql_db_config_3.pop("password")
     with open("test_sql_config.json", "w") as f:
         json.dump(sql_db_config_3, f)
     with pytest.raises(ValueError):
-        ThingDB(thing, config_file="test_sql_config.json")
+        SQLAlchemyDB(thing, config_file="test_sql_config.json")
     # URI instead of other fields
     sql_db_config = dict(
         provider="postgresql",
@@ -232,7 +233,7 @@ def test_08_db_config():
     )
     with open("test_sql_config.json", "w") as f:
         json.dump(sql_db_config, f)
-    ThingDB(thing, config_file="test_sql_config.json")
+    SQLAlchemyDB(thing, config_file="test_sql_config.json")
 
     os.remove("test_sql_config.json")
 
@@ -287,7 +288,7 @@ def test_08_db_config():
         json.dump(sqlite_db_config, f)
 
     # correct config
-    ThingDB(thing, config_file="test_sqlite_config.json")
+    SQLAlchemyDB(thing, config_file="test_sqlite_config.json")
 
     os.remove("test_sqlite_config.json")
 

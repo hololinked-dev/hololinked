@@ -51,7 +51,7 @@ def prepare_object_storage(thing: Thing, **kwargs) -> None:
     if use_json_file:
         json_filename = os.path.join(
             global_config.TEMP_DIR_DB,
-            kwargs.get("json_filename", f"{get_sanitized_filename_from_random_string(thing, extension='json')}"),
+            kwargs.get("json_filename", f"{get_sanitized_filename_from_random_string(thing.id, extension='json')}"),
         )
         json_filename = os.path.join(global_config.TEMP_DIR_DB, json_filename)
         thing.db_engine = JSONFileStorage(filename=json_filename, thing=thing)  # serializer= # TODO
