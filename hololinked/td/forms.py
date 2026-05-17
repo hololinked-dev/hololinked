@@ -6,7 +6,6 @@ from typing import Any, Optional
 
 from pydantic import Field
 
-from hololinked.constants import JSON
 from hololinked.td.base import WoTSchema
 
 
@@ -32,7 +31,8 @@ class AdditionalExpectedResponse(WoTSchema):
 
     success: bool = Field(default=False)
     contentType: str = Field(default="application/json")
-    response_schema: Optional[JSON] = Field(default="exception", alias="schema")
+    # response_schema: Optional[JSON] = Field(default="exception", alias="schema")
+    # TODO reinstate
 
     def __init__(self):
         super().__init__()
@@ -45,10 +45,10 @@ class Form(WoTSchema):
     https://www.w3.org/TR/wot-thing-description11/#form
     """
 
-    href: str = None
-    op: str = None
-    htv_methodName: str = Field(default=None, alias="htv:methodName")
-    mqv_topic: str = Field(default=None, alias="mqv:topic")
+    href: Optional[str] = None
+    op: Optional[str] = None
+    htv_methodName: Optional[str] = Field(default=None, alias="htv:methodName")
+    mqv_topic: Optional[str] = Field(default=None, alias="mqv:topic")
     contentType: Optional[str] = "application/json"
     additionalResponses: Optional[list[AdditionalExpectedResponse]] = None
     contentEncoding: Optional[str] = None

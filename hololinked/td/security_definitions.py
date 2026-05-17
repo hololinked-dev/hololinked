@@ -16,8 +16,8 @@ class SecurityScheme(WoTSchema):
     https://www.w3.org/TR/wot-thing-description11/#sec-security-vocabulary-definition
     """
 
-    scheme: str = None
-    description: str = None
+    scheme: Optional[str] = None
+    description: Optional[str] = None
     descriptions: Optional[dict[str, str]] = None
     proxy: Optional[str] = None
 
@@ -66,7 +66,11 @@ class OIDCSecurityScheme(SecurityScheme):
     token: str = ""
     scopes: list[str] = Field(default_factory=list)
 
-    def build(self, token_url: str, scopes: list[str] | None = ["openid"]):  # noqa: D102
+    def build(  # noqa: D102
+        self,
+        token_url: str,
+        scopes: list[str] | None = ["openid"],
+    ) -> None:  # ty: ignore[invalid-method-override]
         self.description = "OpenID Connect Authentication"
         self.token = token_url
         if scopes is not None:

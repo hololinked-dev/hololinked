@@ -42,7 +42,7 @@ class WoTSchema(BaseModel):
         ]
         return super().model_dump(**kwargs)
 
-    def json(self) -> dict[str, Any]:  # noqa
+    def json(self) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
         """
         Same as model_dump.
 

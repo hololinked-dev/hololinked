@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Self
 
 from pydantic import BaseModel, ConfigDict
 
-from hololinked.constants import JSON, ResourceTypes
+from hololinked.constants import ResourceTypes
 
 
 if TYPE_CHECKING:
@@ -88,7 +88,7 @@ class InteractionMetadata(BaseModel):
     actions or events, and could be common to different metadata or device description standards.
     """
 
-    _custom_schema_generators: dict
+    _custom_schema_generators: ClassVar[dict]
 
     def __init__(self):
         super().__init__()
@@ -119,22 +119,70 @@ class InteractionMetadata(BaseModel):
 
     @property
     def objekt(self) -> Property | Action | Event:
-        """Object instance of the interaction, instance of `Property`, `Action` or `Event`."""
+        """
+        Object instance of the interaction, instance of `Property`, `Action` or `Event`.
+
+        Raises
+        ------
+        AttributeError
+            If the metadata is not bound to any interaction affordance object. This usually happens
+            when the metadata is not generated from an interaction object, but created manually or from a
+            different source. Use `Thing<instance>.<property>.to_metadata()` only method to generate the metadata
+            from a property object, and similarly for action and event.
+        """
+        if self._objekt is None:
+            raise AttributeError("Metadata bound to unknown object (property, action or event).")
         return self._objekt
 
     @property
     def name(self) -> str:
-        """Name of the interaction that could be used as a key in the metadata."""
+        """
+        Name of the interaction that could be used as a key in the metadata.
+
+        Raises
+        ------
+        AttributeError
+            If the metadata is not bound to any interaction affordance object. This usually happens
+            when the metadata is not generated from an interaction object, but created manually or from a
+            different source. Use `Thing<instance>.<property>.to_metadata()` only method to generate the metadata
+            from a property object, and similarly for action and event.
+        """
+        if self._name is None:
+            raise AttributeError("Metadata bound to unknown object (property, action or event).")
         return self._name
 
     @property
     def thing_id(self) -> str:
-        """ID of the `Thing` instance owning the interaction, if available, otherwise None."""
+        """
+        ID of the `Thing` instance owning the interaction, if available, otherwise None.
+
+        Raises
+        ------
+        AttributeError
+            If the metadata is not bound to any `Thing` instance. This usually happens
+            when the metadata is not generated from a `Thing` instance, but created manually or from a
+            different source. Use `thing.properties.descriptors[<property>].to_metadata()`
+            only method to generate the metadata from a property object, and similarly for action and event.
+        """
+        if self._thing_id is None:
+            raise AttributeError("Metadata bound to unknown Thing (property, action or event's owner unknown).")
         return self._thing_id
 
     @property
     def thing_cls(self) -> ThingMeta:
-        """`Thing` class owning the interaction."""
+        """
+        `Thing` class owning the interaction.
+
+        Raises
+        ------
+        AttributeError
+            If the metadata is not bound to any `Thing` class. This usually happens
+            when the metadata is not generated from a `Thing` class, but created manually or from a
+            different source. Use `thing.properties.descriptors[<property>].to_metadata()` or `Thing.properties.descriptors[<property>].to_metadata()` only method to generate the metadata from a property object, and similarly for action and event.
+            only method to generate the metadata from a property object, and similarly for action and event.
+        """
+        if self._thing_cls is None:
+            raise AttributeError("Metadata bound to unknown Thing class (property, action or event's owner unknown).")
         return self._thing_cls
 
     def build(self) -> None:
@@ -145,8 +193,8 @@ class InteractionMetadata(BaseModel):
     def generate(
         cls,
         interaction: Property | Action | Event,
-        owner: Thing | ThingMeta = None,
-    ) -> PropertyMetadata | ActionMetadata | EventMetadata:
+        owner: Thing | ThingMeta,
+    ) -> Self:
         """
         Instantitate and build the metadata for the specific interaction.
 
@@ -170,7 +218,7 @@ class InteractionMetadata(BaseModel):
         raise NotImplementedError("generate() must be implemented in subclass of InteractionMetadata")
 
     @classmethod
-    def from_metadata(cls, name: str, metadata: JSON) -> PropertyMetadata | ActionMetadata | EventMetadata:
+    def from_metadata(cls, name: str, metadata: dict[str, Any]) -> Self:
         """
         Populate the metadata from the provided JSON and return it as an instance of this class.
 
@@ -185,7 +233,7 @@ class InteractionMetadata(BaseModel):
 
         Returns
         -------
-        PropertyMetadata | ActionMetadata | EventMetadata
+        Self
             Instance of this class.
 
         Raises
@@ -199,7 +247,7 @@ class InteractionMetadata(BaseModel):
     def register_descriptor(
         cls,
         descriptor: Property | Action | Event,
-        schema_generator: InteractionMetadata,
+        schema_generator: type[InteractionMetadata],
     ) -> None:
         """
         Register a custom schema generator for a descriptor.
@@ -208,7 +256,7 @@ class InteractionMetadata(BaseModel):
         ----------
         descriptor: Property | Action | Event
             The descriptor class
-        schema_generator: InteractionMetadata
+        schema_generator: type[InteractionMetadata]
             `InteractionMetadata` subclass that implements the custom schema generation logic for the descriptor.
             Either override the `generate()` method or the `build()` method.
 
@@ -294,7 +342,7 @@ class PropertyMetadata(InteractionMetadata):
         return ResourceTypes.PROPERTY
 
     @classmethod
-    def generate(cls, property: Property, owner: Thing | ThingMeta = None) -> PropertyMetadata:  # noqa: D102
+    def generate(cls, property: Property, owner: Thing | ThingMeta) -> PropertyMetadata:  # noqa: D102
         raise NotImplementedError
 
 
@@ -306,7 +354,7 @@ class ActionMetadata(InteractionMetadata):
         return ResourceTypes.ACTION
 
     @classmethod
-    def generate(cls, action: Action, owner: Thing | ThingMeta = None) -> ActionMetadata:  # noqa: D102
+    def generate(cls, action: Action, owner: Thing | ThingMeta) -> ActionMetadata:  # noqa: D102
         raise NotImplementedError
 
 
@@ -318,5 +366,5 @@ class EventMetadata(InteractionMetadata):
         return ResourceTypes.EVENT
 
     @classmethod
-    def generate(cls, event: Event, owner: Thing | ThingMeta = None) -> EventMetadata:  # noqa: D102
+    def generate(cls, event: Event, owner: Thing | ThingMeta) -> EventMetadata:  # noqa: D102
         raise NotImplementedError

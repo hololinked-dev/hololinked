@@ -39,9 +39,9 @@ class DataSchema(WoTSchema):
     - [Supported Fields](https://www.w3.org/TR/wot-thing-description11/#data-schema-fields)
     """
 
-    title: str = None
+    title: Optional[str] = None
     titles: Optional[dict[str, str]] = None
-    description: str = None
+    description: Optional[str] = None
     descriptions: Optional[dict[str, str]] = None
     const: Optional[bool] = None
     default: Optional[Any] = None
@@ -51,7 +51,7 @@ class DataSchema(WoTSchema):
     format: Optional[str] = None
     unit: Optional[str] = None
     type: Optional[str] = None
-    oneOf: Optional[list[JSON]] = None
+    oneOf: Optional[list[dict[str, Any]]] = None
 
     model_config = ConfigDict(extra="allow")
     _custom_schema_generators: ClassVar = dict()
@@ -61,7 +61,8 @@ class DataSchema(WoTSchema):
 
     def ds_build_fields_from_property(self, property: Property) -> None:
         """Populates schema information from property descriptor object."""
-        self.title = get_summary(property.doc)
+        if property.doc:
+            self.title = get_summary(property.doc)
         if property.constant:
             self.const = property.constant
         if property.readonly:
@@ -71,8 +72,7 @@ class DataSchema(WoTSchema):
         if property.doc:
             self.description = WoTSchema.format_doc(property.doc)
             if self.title and self.description.startswith(self.title):
-                self.description.lstrip(self.title)
-                self.description.lstrip(".").lstrip()
+                self.description = self.description.lstrip(self.title).lstrip(".").lstrip()
                 self.title = ""
         if property.metadata and property.metadata.get("unit", None) is not None:
             self.unit = property.metadata["unit"]
@@ -152,6 +152,12 @@ class DataSchema(WoTSchema):
     def _move_own_type_to_oneOf(self):
         """Move a type to oneOf, usually when allow None is True."""
         pass
+
+    def __getitem__(self, item):
+        if hasattr(self, item):
+            return getattr(self, item)
+        else:
+            raise KeyError(f"{item} is not a valid field of {self.__class__}")
 
 
 class BooleanSchema(DataSchema):
@@ -268,7 +274,7 @@ class ArraySchema(DataSchema):
     Used by List, Tuple, TypedList and TupleSelector.
     """
 
-    items: Optional[DataSchema | list[DataSchema] | JSON | JSONSerializable] = None
+    items: Optional[DataSchema | list[DataSchema | dict[str, Any]] | dict[str, Any]] = None
     maxItems: Optional[int] = Field(None, ge=0)
     minItems: Optional[int] = Field(None, ge=0)
 
@@ -334,6 +340,8 @@ class ObjectSchema(DataSchema):
         super().ds_build_fields_from_property(property)
         properties = None
         required = None
+        if not self.oneOf:
+            self.oneOf = []
         if hasattr(property, "json_schema"):
             # Code will not reach here for now as have not implemented schema for typed dictionaries.
             properties = property.json_schema["properties"]
@@ -450,14 +458,13 @@ class EnumSchema(SelectorSchema):
         super().ds_build_fields_from_property(property)
 
     def _move_own_type_to_oneOf(self):
+        schema: dict[str, Any] = dict()
         if hasattr(self, "type") and self.type is not None:
-            schema = dict(type=self.type)
+            schema["type"] = self.type
             del self.type
         elif hasattr(self, "oneOf") and self.oneOf:
-            schema = dict(oneOf=self.oneOf)
+            schema["oneOf"] = self.oneOf
             del self.oneOf
-        else:
-            schema = dict()
         if self.enum is not None:
             schema["enum"] = self.enum
             del self.enum

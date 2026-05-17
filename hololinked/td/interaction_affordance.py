@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 
 from enum import Enum
-from typing import Any, Callable, ClassVar, Optional  # noqa: F401
+from typing import Any, Callable, ClassVar, Optional, Self, cast  # noqa: F401
 
 from pydantic import BaseModel, ConfigDict, RootModel
 
@@ -54,7 +54,15 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         Owning `Thing` instance or `Thing` class of the interaction affordance.
 
         Depending on how this object was created, returns either an instance or a class.
+
+        Raises
+        ------
+        AttributeError
+            If the owner is not set, which means this affordance is not properly bound to a `Thing`
+            instance or class.
         """
+        if self._owner is None:
+            raise AttributeError("owner is not set for this affordance")
         return self._owner
 
     @owner.setter
@@ -75,7 +83,17 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
 
     @property
     def objekt(self) -> Property | Action | Event:
-        """Object instance of the interaction affordance, instance of `Property`, `Action` or `Event`."""
+        """
+        Object instance of the interaction affordance, instance of `Property`, `Action` or `Event`.
+
+        Raises
+        ------
+        AttributeError
+            If the object is not set, which means this affordance is not properly bound to a
+            `Property`, `Action` or `Event` instance.
+        """
+        if self._objekt is None:
+            raise AttributeError("Metadata bound to unknown object (property, action or event).")
         return self._objekt
 
     @objekt.setter
@@ -148,7 +166,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         return default
 
     @classmethod
-    def from_metadata(cls, name: str, TD: JSON) -> "PropertyAffordance | ActionAffordance | EventAffordance":
+    def from_metadata(cls, name: str, metadata: dict[str, Any]) -> Self:
         """
         Populate the schema from the TD and return it as an instance of this class.
 
@@ -159,12 +177,12 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         ----------
         name: str
             name of the interaction affordance used as key in the TD
-        TD: JSON
+        metadata: dict[str, Any]
             Thing Description JSON dictionary (the entire one, not just the component of the affordance)
 
         Returns
         -------
-        "PropertyAffordance | ActionAffordance | EventAffordance"
+        PropertyAffordance | ActionAffordance | EventAffordance
             Instance of this class with the schema fields populated from the TD.
 
         Raises
@@ -180,7 +198,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
             affordance_name = "events"
         else:
             raise ValueError(f"unknown affordance type - {cls}, cannot create object from TD")
-        affordance_json = TD[affordance_name][name]  # type: dict[str, JSON]
+        affordance_json = metadata[affordance_name][name]  # type: dict[str, JSON]
         affordance = cls()
         for field in cls.model_fields:
             if field in affordance_json:
@@ -189,11 +207,11 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
                 else:
                     setattr(affordance, field, affordance_json[field])
         affordance._name = name
-        affordance._thing_id = TD["id"]
+        affordance._thing_id = metadata["id"]
         return affordance
 
     @classmethod
-    def from_TD(self, name: str, TD: JSON) -> None:
+    def from_TD(self, name: str, TD: JSON) -> Self:
         """
         Populate the schema from the TD and return it as an instance of this class.
 
@@ -207,6 +225,11 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         TD: JSON
             Thing Description JSON dictionary (the entire one, not just the component of the affordance)
 
+        Returns
+        -------
+        PropertyAffordance | ActionAffordance | EventAffordance
+            Instance of this class with the schema fields populated from the TD.
+
         Raises
         ------
         ValueError
@@ -218,7 +241,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
     def register_descriptor(
         cls,
         descriptor: Property | Action | Event,
-        schema_generator: "InteractionAffordance",
+        schema_generator: type[InteractionAffordance] | type[InteractionMetadata],
     ) -> None:
         """
         Register a custom schema generator for a descriptor.
@@ -261,14 +284,14 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
                 setattr(result, k, copy.deepcopy(v, memo))
         return result
 
-    def json(self) -> str:
+    def json(self) -> dict[str, Any]:
         """
-        Return the JSON string representation of the schema.
+        Return the JSON representation.
 
         Returns
         -------
-        str
-            JSON string representation
+        dict[str, Any]
+            JSON representation
         """
         return WoTSchema.json(self)
 
@@ -292,13 +315,13 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
         return ResourceTypes.PROPERTY
 
     def build(self) -> None:  # noqa: D102
-        property = self.objekt
+        property = cast(Property, self.objekt)
         self.ds_build_from_property(property)
         if property.observable:
             self.observable = property.observable
 
     @classmethod
-    def generate(cls, property: Property, owner: Thing | ThingMeta = None):  # noqa: D102
+    def generate(cls, property: Property, owner: Thing | ThingMeta):  # noqa: D102
         if not isinstance(property, Property):
             raise TypeError(f"property must be instance of Property, given type {type(property)}")
         affordance = PropertyAffordance()
@@ -318,11 +341,11 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
     """
 
     # [Supported Fields]() <br>
-    input: JSON = None
-    output: JSON = None
-    safe: bool = None
-    idempotent: bool = None
-    synchronous: bool = None
+    input: Optional[JSON] = None
+    output: Optional[JSON] = None
+    safe: Optional[bool] = None
+    idempotent: Optional[bool] = None
+    synchronous: Optional[bool] = None
 
     def __init__(self):
         super().__init__()
@@ -332,7 +355,7 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
         return ResourceTypes.ACTION
 
     def build(self) -> None:  # noqa: D102
-        action = self.objekt  # type: Action
+        action = cast(Action, self.objekt)
         if action.obj.__doc__:
             title = get_summary(action.obj.__doc__)
             description = self.format_doc(action.obj.__doc__)
@@ -374,7 +397,7 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
             self.safe = action.execution_info.safe
 
     @classmethod
-    def generate(cls, action: Action, owner: Thing | ThingMeta = None, **kwargs) -> "ActionAffordance":  # noqa: D102
+    def generate(cls, action: Action, owner: Thing | ThingMeta, **kwargs) -> "ActionAffordance":  # noqa: D102
         if not isinstance(action, Action):
             raise TypeError(f"action must be instance of Action, given type {type(action)}")
         affordance = ActionAffordance()
@@ -394,8 +417,8 @@ class EventAffordance(InteractionAffordance, EventMetadata):
     """
 
     # [Supported Fields]() <br>
-    subscription: str = None
-    data: JSON = None
+    subscription: Optional[str] = None
+    data: Optional[JSON] = None
 
     def __init__(self):
         super().__init__()
@@ -405,10 +428,11 @@ class EventAffordance(InteractionAffordance, EventMetadata):
         return ResourceTypes.EVENT
 
     def build(self) -> None:  # noqa: D102
-        event = self.objekt  # type: Event
-        if event.__doc__:
-            title = get_summary(event.doc)
-            description = self.format_doc(event.doc)
+        event = cast(Event, self.objekt)
+        doc = event.__doc__ or event.doc
+        if doc:
+            title = get_summary(doc)
+            description = self.format_doc(doc)
             if title and not description.startswith(title):
                 self.title = title
                 self.description = description
@@ -423,7 +447,7 @@ class EventAffordance(InteractionAffordance, EventMetadata):
                 raise ValueError(f"unknown schema definition for event data, given type: {type(event.schema)}")
 
     @classmethod
-    def generate(cls, event: Event, owner: Thing | ThingMeta = None, **kwargs) -> "EventAffordance":  # noqa: D102
+    def generate(cls, event: Event, owner: Thing | ThingMeta, **kwargs) -> "EventAffordance":  # noqa: D102
         if not isinstance(event, Event):
             raise TypeError(f"event must be instance of Event, given type {type(event)}")
         affordance = EventAffordance()
