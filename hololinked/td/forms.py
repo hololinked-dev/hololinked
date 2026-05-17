@@ -1,15 +1,19 @@
+"""Implementation of Forms."""
+
+from __future__ import annotations
+
 from typing import Any, Optional
 
 from pydantic import Field
 
-from ..constants import JSON
-from .base import Schema
+from hololinked.td.base import WoTSchema
 
 
-class ExpectedResponse(Schema):
+class ExpectedResponse(WoTSchema):
     """
-    Form property.
-    schema - https://www.w3.org/TR/wot-thing-description11/#expectedresponse
+    Form field for the expected response of an interaction.
+
+    https://www.w3.org/TR/wot-thing-description11/#expectedresponse
     """
 
     contentType: str
@@ -18,30 +22,33 @@ class ExpectedResponse(Schema):
         super().__init__()
 
 
-class AdditionalExpectedResponse(Schema):
+class AdditionalExpectedResponse(WoTSchema):
     """
     Form field for additional responses which are different from the usual response.
-    schema - https://www.w3.org/TR/wot-thing-description11/#additionalexpectedresponse
+
+    https://www.w3.org/TR/wot-thing-description11/#additionalexpectedresponse
     """
 
     success: bool = Field(default=False)
     contentType: str = Field(default="application/json")
-    response_schema: Optional[JSON] = Field(default="exception", alias="schema")
+    # response_schema: Optional[JSON] = Field(default="exception", alias="schema")
+    # TODO reinstate
 
     def __init__(self):
         super().__init__()
 
 
-class Form(Schema):
+class Form(WoTSchema):
     """
     Form hypermedia.
-    schema - https://www.w3.org/TR/wot-thing-description11/#form
+
+    https://www.w3.org/TR/wot-thing-description11/#form
     """
 
-    href: str = None
-    op: str = None
-    htv_methodName: str = Field(default=None, alias="htv:methodName")
-    mqv_topic: str = Field(default=None, alias="mqv:topic")
+    href: Optional[str] = None
+    op: Optional[str] = None
+    htv_methodName: Optional[str] = Field(default=None, alias="htv:methodName")
+    mqv_topic: Optional[str] = Field(default=None, alias="mqv:topic")
     contentType: Optional[str] = "application/json"
     additionalResponses: Optional[list[AdditionalExpectedResponse]] = None
     contentEncoding: Optional[str] = None
@@ -78,5 +85,5 @@ class Form(Schema):
                 setattr(form, field, form_json[field])
         return form
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:  # noqa: D105
         return f"Form(href={self.href}, op={self.op}, htv_methodName={self.htv_methodName}, contentType={self.contentType})"

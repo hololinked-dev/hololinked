@@ -1,14 +1,19 @@
+"""Include a general metadata like links, version info, etc. here."""
+
+from __future__ import annotations
+
 from typing import Optional
 
 from pydantic import Field
 
-from .base import Schema
+from hololinked.td.base import WoTSchema
 
 
-class Link(Schema):
+class Link(WoTSchema):
     """
-    Represents a link in the link section of the TD
-    schema - https://www.w3.org/TR/wot-thing-description11/#link
+    Impelements the Link schema for linking to other resources.
+
+    https://www.w3.org/TR/wot-thing-description11/#link
     """
 
     href: str
@@ -17,10 +22,11 @@ class Link(Schema):
     type: Optional[str] = Field(default="application/json")
 
 
-class VersionInfo(Schema):
+class VersionInfo(WoTSchema):
     """
     Represents version info.
-    schema - https://www.w3.org/TR/wot-thing-description11/#versioninfo
+
+    https://www.w3.org/TR/wot-thing-description11/#versioninfo
     """
 
     instance: str
