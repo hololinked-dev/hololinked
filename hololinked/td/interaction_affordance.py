@@ -10,7 +10,12 @@ from typing import Any, Callable, ClassVar, Optional  # noqa: F401
 from pydantic import BaseModel, ConfigDict, RootModel
 
 from hololinked.constants import JSON, ResourceTypes
-from hololinked.core.interfaces import ActionMetadata, EventMetadata, InteractionMetadata, PropertyMetadata
+from hololinked.core.interfaces import (
+    ActionMetadata,
+    EventMetadata,
+    InteractionMetadata,
+    PropertyMetadata,
+)
 from hololinked.td.base import WoTSchema
 from hololinked.td.data_schema import DataSchema
 from hololinked.td.forms import Form
