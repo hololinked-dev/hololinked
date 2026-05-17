@@ -1,4 +1,6 @@
-from typing import Any, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Optional
 
 import structlog
 import zmq.asyncio
@@ -22,8 +24,11 @@ from ..core.zmq.brokers import (
     default_thing_execution_context,
 )
 from ..core.zmq.message import EMPTY_BYTE
-from ..td.interaction_affordance import EventAffordance, PropertyAffordance
 from ..utils import uuid_hex
+
+
+if TYPE_CHECKING:
+    from hololinked.core.interfaces import EventMetadata, PropertyMetadata
 
 
 class BrokerThing(BaseModel):
@@ -208,7 +213,7 @@ class BrokerThing(BaseModel):
             timeout=timeout,
         )
 
-    def subscribe_event(self, resource: EventAffordance | PropertyAffordance) -> AsyncEventConsumer:
+    def subscribe_event(self, resource: EventMetadata | PropertyMetadata) -> AsyncEventConsumer:
         """
         Subscribe to events from a `Thing` through the internal pub-sub broker.
 

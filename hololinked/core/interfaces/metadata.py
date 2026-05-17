@@ -85,7 +85,7 @@ class InteractionMetadata(BaseModel):
 
     A property, action or event is called as an interaction affordance, and the metadata generated for it
     is called as interaction metadata. This base class defines metadata methods common to all of properties,
-    actions or events, and which could be common to different metadata standards.
+    actions or events, and could be common to different metadata or device description standards.
     """
 
     _custom_schema_generators: dict

@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 
 from enum import Enum
-from typing import Any, Callable, ClassVar, Optional
+from typing import Any, Callable, ClassVar, Optional  # noqa: F401
 
 from pydantic import BaseModel, ConfigDict, RootModel
 
@@ -187,7 +187,27 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         affordance._thing_id = TD["id"]
         return affordance
 
-    from_TD: Callable[[str, JSON], PropertyAffordance | ActionAffordance | EventAffordance] = from_metadata
+    @classmethod
+    def from_TD(self, name: str, TD: JSON) -> None:
+        """
+        Populate the schema from the TD and return it as an instance of this class.
+
+        You need to supply both the TD and the name of the affordance, because the affordance definition in the TD
+        does not include its name and determine its type.
+
+        Parameters
+        ----------
+        name: str
+            name of the interaction affordance used as key in the TD
+        TD: JSON
+            Thing Description JSON dictionary (the entire one, not just the component of the affordance)
+
+        Raises
+        ------
+        ValueError
+            If the affordance type cannot be determined from the TD.
+        """
+        return self.from_metadata(name, TD)
 
     @classmethod
     def register_descriptor(
