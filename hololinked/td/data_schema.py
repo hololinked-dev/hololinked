@@ -1,17 +1,15 @@
 """Implementations of Data Schema."""
 
+from __future__ import annotations
+
 from typing import Any, ClassVar, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from hololinked import JSONSchema
 from hololinked.constants import JSON, JSONSerializable
-from hololinked.td.base import WoTSchema
-from hololinked.td.utils import get_summary
-from hololinked.utils import issubklass
-
-from ..core import Property
-from ..core.properties import (
+from hololinked.core import Property
+from hololinked.core.properties import (
     Boolean,
     ClassSelector,
     Filename,
@@ -28,6 +26,9 @@ from ..core.properties import (
     TypedKeyMappingsDict,
     TypedList,
 )
+from hololinked.td.base import WoTSchema
+from hololinked.td.utils import get_summary
+from hololinked.utils import issubklass
 
 
 class DataSchema(WoTSchema):

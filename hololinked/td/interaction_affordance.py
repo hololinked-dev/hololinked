@@ -1,26 +1,31 @@
 """Implementation of Interaction Affordances."""
 
+from __future__ import annotations
+
 import copy
 
 from enum import Enum
-from typing import Any, ClassVar, Optional
+from typing import Any, Callable, ClassVar, Optional
 
 from pydantic import BaseModel, ConfigDict, RootModel
 
-from ..constants import JSON, ResourceTypes
-from ..core.actions import Action
-from ..core.events import Event
-from ..core.property import Property
-from ..core.thing import Thing, ThingMeta
-from ..utils import issubklass
-from .base import Schema
-from .data_schema import DataSchema
-from .forms import Form
-from .pydantic_extensions import type_to_dataschema
-from .utils import get_summary
+from hololinked.constants import JSON, ResourceTypes
+from hololinked.core.interfaces import ActionMetadata, EventMetadata, InteractionMetadata, PropertyMetadata
+from hololinked.td.base import WoTSchema
+from hololinked.td.data_schema import DataSchema
+from hololinked.td.forms import Form
+from hololinked.td.pydantic_extensions import type_to_dataschema
+from hololinked.td.utils import get_summary
+from hololinked.utils import issubklass
 
 
-class InteractionAffordance(Schema):
+from hololinked.core.actions import Action  # isort: skip
+from hololinked.core.events import Event  # isort: skip
+from hololinked.core.property import Property  # isort: skip
+from hololinked.core.thing import Thing, ThingMeta  # isort: skip
+
+
+class InteractionAffordance(WoTSchema, InteractionMetadata):
     """
     Implements schema fields common to all interaction affordances, property, action or event.
 
@@ -37,19 +42,6 @@ class InteractionAffordance(Schema):
 
     _custom_schema_generators: ClassVar = dict()
     model_config = ConfigDict(extra="allow")
-
-    def __init__(self):
-        super().__init__()
-        self._name = None
-        self._objekt = None
-        self._thing_id = None
-        self._thing_cls = None
-        self._owner = None
-
-    @property
-    def what(self) -> Enum:
-        """Whether it is a property, action or event."""
-        raise NotImplementedError("Unknown interaction affordance - implement in subclass of InteractionAffordance")
 
     @property
     def owner(self) -> Thing:
@@ -102,25 +94,6 @@ class InteractionAffordance(Schema):
         self._objekt = value
         self._name = value.name
 
-    @property
-    def name(self) -> str:
-        """Name of the interaction affordance used as key in the TD."""
-        return self._name
-
-    @property
-    def thing_id(self) -> str:
-        """ID of the `Thing` instance owning the interaction affordance, if available, otherwise None."""
-        return self._thing_id
-
-    @property
-    def thing_cls(self) -> ThingMeta:
-        """`Thing` class owning the interaction affordance."""
-        return self._thing_cls
-
-    def build(self) -> None:
-        """Populate the fields of the schema for the specific interaction affordance."""
-        raise NotImplementedError("build must be implemented in subclass of InteractionAffordance")
-
     def retrieve_form(self, op: str, default: Any = None) -> Form:
         """
         Retrieve form for a certain operation, return default if not found.
@@ -170,35 +143,7 @@ class InteractionAffordance(Schema):
         return default
 
     @classmethod
-    def generate(
-        cls,
-        interaction: Property | Action | Event,
-        owner: Thing,
-    ) -> "PropertyAffordance | ActionAffordance | EventAffordance":
-        """
-        Instantitate and build the schema for the specific interaction affordance.
-
-        Use the `json()` method to get the JSON representation of the schema.
-
-        Note that this method is different from `build()` method as its supposed to be used as a classmethod
-        to create an instance. Although, it internally calls `build()`, and some additional steps are included.
-
-        Parameters
-        ----------
-        interaction: Property | Action | Event
-            interaction object for which the schema is to be built
-        owner: Thing
-            owner of the interaction affordance
-
-        Returns
-        -------
-        "PropertyAffordance | ActionAffordance | EventAffordance"
-            Instance of this class with the schema fields populated.
-        """
-        raise NotImplementedError("generate_schema must be implemented in subclass of InteractionAffordance")
-
-    @classmethod
-    def from_TD(cls, name: str, TD: JSON) -> "PropertyAffordance | ActionAffordance | EventAffordance":
+    def from_metadata(cls, name: str, TD: JSON) -> "PropertyAffordance | ActionAffordance | EventAffordance":
         """
         Populate the schema from the TD and return it as an instance of this class.
 
@@ -242,6 +187,8 @@ class InteractionAffordance(Schema):
         affordance._thing_id = TD["id"]
         return affordance
 
+    from_TD: Callable[[str, JSON], PropertyAffordance | ActionAffordance | EventAffordance] = from_metadata
+
     @classmethod
     def register_descriptor(
         cls,
@@ -276,53 +223,6 @@ class InteractionAffordance(Schema):
             )
         InteractionAffordance._custom_schema_generators[descriptor] = schema_generator
 
-    def build_non_compliant_metadata(self) -> None:
-        """If there is additional non standard metadata to be added, they can be added here."""
-        pass
-
-    def override_defaults(self, **kwargs):
-        """
-        Override default values with provided keyword arguments, especially thing_id, owner name, object name etc.
-
-        Any logic to trigger side effects while setting those values should be handled here.
-        """
-        for key, value in kwargs.items():
-            if key == "name":
-                self._name = value
-            elif key == "thing_id":
-                self._thing_id = value
-            elif key == "owner":
-                self._owner = value
-            elif key == "thing_cls":
-                self._thing_cls = value
-            elif hasattr(self, key) or key in self.model_fields:
-                setattr(self, key, value)
-
-    def __hash__(self):  # noqa: D105
-        return hash(
-            self.thing_id if self.thing_id else "" + self.thing_cls.__name__ if self.thing_cls else "" + self.name
-        )
-
-    def __str__(self):  # noqa: D105
-        if self.thing_cls:
-            return f"{self.__class__.__name__}({self.thing_cls.__name__}({self.thing_id}).{self.name})"
-        return f"{self.__class__.__name__}({self.name} of {self.thing_id})"
-
-    def __eq__(self, value):  # noqa: D105
-        if not isinstance(value, self.__class__):
-            return False
-        if self.thing_id is None or value.thing_id is None:
-            if self.owner is None or value.owner is None:
-                # cannot determine anymore
-                return False
-            # basically you need to have an owner for the interaction affordance
-            # and a name to determine its equality. We should never check the owner
-            # by the name, but by the object, otherwise the equality cannot be gauranteed
-            if (self.owner == value.owner or self.thing_cls == value.thing_cls) and self.name == value.name:
-                return True
-            return False
-        return self.thing_id == value.thing_id and self.name == value.name
-
     def __deepcopy__(self, memo):  # noqa: D105
         if self.__class__ == PropertyAffordance:
             result = PropertyAffordance()
@@ -336,19 +236,19 @@ class InteractionAffordance(Schema):
                 setattr(result, k, copy.deepcopy(v, memo))
         return result
 
-    def __getstate__(self):  # noqa: D105
-        state = self.__dict__.copy()
-        # Remove possibly unpicklable entries
-        if "_owner" in state:
-            del state["_owner"]
-        if "_thing_cls" in state:
-            del state["_thing_cls"]
-        if "_objekt" in state:
-            del state["_objekt"]
-        return state
+    def json(self) -> str:
+        """
+        Return the JSON string representation of the schema.
+
+        Returns
+        -------
+        str
+            JSON string representation
+        """
+        return WoTSchema.json(self)
 
 
-class PropertyAffordance(DataSchema, InteractionAffordance):
+class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
     """
     Implements property affordance schema from `Property` descriptor object.
 
@@ -373,7 +273,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance):
             self.observable = property.observable
 
     @classmethod
-    def generate(cls, property, owner=None):  # noqa: D102
+    def generate(cls, property: Property, owner: Thing | ThingMeta = None):  # noqa: D102
         if not isinstance(property, Property):
             raise TypeError(f"property must be instance of Property, given type {type(property)}")
         affordance = PropertyAffordance()
@@ -384,7 +284,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance):
         return affordance
 
 
-class ActionAffordance(InteractionAffordance):
+class ActionAffordance(InteractionAffordance, ActionMetadata):
     """
     creates action affordance schema from actions (or methods).
 
@@ -449,7 +349,7 @@ class ActionAffordance(InteractionAffordance):
             self.safe = action.execution_info.safe
 
     @classmethod
-    def generate(cls, action: Action, owner, **kwargs) -> "ActionAffordance":  # noqa: D102
+    def generate(cls, action: Action, owner: Thing | ThingMeta = None, **kwargs) -> "ActionAffordance":  # noqa: D102
         if not isinstance(action, Action):
             raise TypeError(f"action must be instance of Action, given type {type(action)}")
         affordance = ActionAffordance()
@@ -460,7 +360,7 @@ class ActionAffordance(InteractionAffordance):
         return affordance
 
 
-class EventAffordance(InteractionAffordance):
+class EventAffordance(InteractionAffordance, EventMetadata):
     """
     creates event affordance schema from events.
 
@@ -498,7 +398,7 @@ class EventAffordance(InteractionAffordance):
                 raise ValueError(f"unknown schema definition for event data, given type: {type(event.schema)}")
 
     @classmethod
-    def generate(cls, event: Event, owner, **kwargs) -> "EventAffordance":  # noqa: D102
+    def generate(cls, event: Event, owner: Thing | ThingMeta = None, **kwargs) -> "EventAffordance":  # noqa: D102
         if not isinstance(event, Event):
             raise TypeError(f"event must be instance of Event, given type {type(event)}")
         affordance = EventAffordance()

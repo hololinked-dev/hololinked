@@ -1,5 +1,7 @@
 """Base Schema class for all WoT schema components."""
 
+from __future__ import annotations
+
 import inspect
 
 from typing import Any, ClassVar
@@ -11,7 +13,7 @@ class WoTSchema(BaseModel):
     """
     Base pydantic model for all WoT schema components (as in, parts within the schema).
 
-    Call `model_dump` or `json` method to get the JSON representation of the schema.
+    Call `model_dump` or `json` method to get the JSON representation of the schema (or the JSON Schema).
     """
 
     skip_keys: ClassVar = []  # override this to skip some dataclass attributes in the schema

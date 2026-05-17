@@ -1,14 +1,16 @@
 """Implementation of Forms."""
 
+from __future__ import annotations
+
 from typing import Any, Optional
 
 from pydantic import Field
 
-from ..constants import JSON
-from .base import Schema
+from hololinked.constants import JSON
+from hololinked.td.base import WoTSchema
 
 
-class ExpectedResponse(Schema):
+class ExpectedResponse(WoTSchema):
     """
     Form field for the expected response of an interaction.
 
@@ -21,7 +23,7 @@ class ExpectedResponse(Schema):
         super().__init__()
 
 
-class AdditionalExpectedResponse(Schema):
+class AdditionalExpectedResponse(WoTSchema):
     """
     Form field for additional responses which are different from the usual response.
 
@@ -36,7 +38,7 @@ class AdditionalExpectedResponse(Schema):
         super().__init__()
 
 
-class Form(Schema):
+class Form(WoTSchema):
     """
     Form hypermedia.
 

@@ -1,13 +1,15 @@
 """Implements security scheme definitions for the TD."""
 
+from __future__ import annotations
+
 from typing import Optional
 
 from pydantic import Field
 
-from .base import Schema
+from hololinked.td.base import WoTSchema
 
 
-class SecurityScheme(Schema):
+class SecurityScheme(WoTSchema):
     """
     Subclass from here to implement Security Scheme metadata.
 
