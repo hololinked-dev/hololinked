@@ -12,14 +12,14 @@ from typing import Any, Optional
 from pydantic import ConfigDict, Field
 
 from hololinked.core.interfaces import Metadata
-from hololinked.td.base import WoTSchema
-from hololinked.td.data_schema import DataSchema
-from hololinked.td.interaction_affordance import (
+from hololinked.metadata.td.base import WoTSchema
+from hololinked.metadata.td.data_schema import DataSchema
+from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
     PropertyAffordance,
 )
-from hololinked.td.metadata import VersionInfo
+from hololinked.metadata.td.metadata import VersionInfo
 
 
 from hololinked.core import Thing  # noqa  # isort: skip

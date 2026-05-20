@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import Field
 
-from hololinked.td.base import WoTSchema
+from hololinked.metadata.td.base import WoTSchema
 
 
 class SecurityScheme(WoTSchema):

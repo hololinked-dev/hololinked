@@ -27,7 +27,7 @@ from hololinked.client.security import (
 )
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core import Thing
-from hololinked.td.interaction_affordance import (
+from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
     PropertyAffordance,

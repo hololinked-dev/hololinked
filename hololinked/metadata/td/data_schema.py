@@ -26,8 +26,8 @@ from hololinked.core.properties import (
     TypedKeyMappingsDict,
     TypedList,
 )
-from hololinked.td.base import WoTSchema
-from hololinked.td.utils import get_summary
+from hololinked.metadata.td.base import WoTSchema
+from hololinked.metadata.td.utils import get_summary
 from hololinked.utils import issubklass
 
 

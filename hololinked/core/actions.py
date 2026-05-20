@@ -3,7 +3,7 @@ import warnings
 from enum import Enum
 from inspect import getfullargspec, iscoroutinefunction
 from types import FunctionType, MethodType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jsonschema
 
@@ -22,6 +22,10 @@ from hololinked.utils import (
 )
 
 from .dataklasses import ActionInfoValidator
+
+
+if TYPE_CHECKING:
+    from hololinked.core.thing import Thing
 
 
 class Action:
@@ -91,7 +95,7 @@ class Action:
             raise TypeError("execution_info must be of type ActionInfoValidator")
         self._execution_info = value  # type: ActionInfoValidator
 
-    def to_affordance(self, owner_inst=None):
+    def to_affordance(self, owner_inst: Thing | None = None):
         """
         Generates a `ActionAffordance` TD fragment for this Action.
 
@@ -107,7 +111,7 @@ class Action:
         """
         from ..td import ActionAffordance
 
-        return ActionAffordance.generate(self, owner_inst or self.owner)
+        return ActionAffordance.from_descriptor(self, owner_inst or self.owner)
 
 
 class BoundAction:

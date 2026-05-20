@@ -21,8 +21,8 @@ from hololinked.core.zmq.brokers import (  # noqa: F401
     SyncZMQClient,
 )
 from hololinked.core.zmq.rpc_server import RPCServer
-from hololinked.td import ActionAffordance, EventAffordance, PropertyAffordance
-from hololinked.td.forms import Form
+from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.td.forms import Form
 from hololinked.utils import get_all_sub_things_recusively, uuid_hex
 
 
@@ -588,7 +588,7 @@ class TestRPCBroker:
         assert "validation error for 'int'" in str(ex.value)
 
     def test_17_creation_defaults(self, thing: TestThing, server: RPCServer):
-        """test server configuration defaults"""
+        """Test server configuration defaults"""
         all_things = get_all_sub_things_recusively(thing)
         # assert len(all_things) > 1  # run the test only if there are sub things
         for thing in all_things:
@@ -618,8 +618,7 @@ class TestRPCBroker:
         event_name: str,
         expected_data: Any,
     ):
-        """test if event can be streamed by a synchronous threaded client"""
-
+        """Test if event can be streamed by a synchronous threaded client"""
         resource = getattr(TestThing, event_name).to_affordance(thing)  # type: EventAffordance
 
         form = Form()
@@ -676,7 +675,7 @@ class TestRPCBroker:
         event_name: str,
         expected_data: Any,
     ):
-        """test if event can be streamed by an asynchronous client in an async loop"""
+        """Test if event can be streamed by an asynchronous client in an async loop"""
         resource = getattr(TestThing, event_name).to_affordance(thing)  # type: EventAffordance
 
         form = Form()

@@ -12,8 +12,8 @@ from hololinked.core.actions import (
 )
 from hololinked.core.dataklasses import ActionInfoValidator
 from hololinked.core.thing import action
+from hololinked.metadata.td.interaction_affordance import ActionAffordance
 from hololinked.schema_validators import JSONSchemaValidator
-from hololinked.td.interaction_affordance import ActionAffordance
 from hololinked.utils import isclassmethod
 
 

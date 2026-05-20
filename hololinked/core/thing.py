@@ -225,13 +225,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         Returns
         -------
-        hololinked.td.ThingModel
+        hololinked.metadata.td.ThingModel
             represented as an object in python, gets automatically serialized to JSON when pushed out of the socket.
         """
         # allow_loose_schema: bool, optional, Default False
         #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable
         #     inaccurate but truthy value. In other words, schema validation will always pass.
-        from hololinked.td.tm import ThingModel
+        from hololinked.metadata.td.tm import ThingModel
 
         return ThingModel(thing=self, ignore_errors=ignore_errors, skip_names=skip_names).generate()
 

@@ -2,7 +2,7 @@ import pytest
 
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
-from hololinked.td.interaction_affordance import EventAffordance
+from hololinked.metadata.td.interaction_affordance import EventAffordance
 from hololinked.utils import uuid_hex
 
 

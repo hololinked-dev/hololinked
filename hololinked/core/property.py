@@ -325,7 +325,7 @@ class Property(Parameter):
         """
         from ..td import PropertyAffordance
 
-        return PropertyAffordance.generate(self, owner_inst or self.owner)
+        return PropertyAffordance.from_descriptor(self, owner_inst or self.owner)
 
 
 class ModelRoot(RootModel):

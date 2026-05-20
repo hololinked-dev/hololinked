@@ -35,8 +35,8 @@ from hololinked.core.zmq.message import (
     ResponseMessage,
 )
 from hololinked.core.zmq.payloads import SerializableData
-from hololinked.td import ActionAffordance, EventAffordance, PropertyAffordance
-from hololinked.td.forms import Form
+from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.td.forms import Form
 
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]

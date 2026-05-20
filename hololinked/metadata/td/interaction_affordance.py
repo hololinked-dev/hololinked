@@ -16,11 +16,11 @@ from hololinked.core.interfaces import (
     InteractionMetadata,
     PropertyMetadata,
 )
-from hololinked.td.base import WoTSchema
-from hololinked.td.data_schema import DataSchema
-from hololinked.td.forms import Form
-from hololinked.td.pydantic_extensions import type_to_dataschema
-from hololinked.td.utils import get_summary
+from hololinked.metadata.td.base import WoTSchema
+from hololinked.metadata.td.data_schema import DataSchema
+from hololinked.metadata.td.forms import Form
+from hololinked.metadata.td.pydantic_extensions import type_to_dataschema
+from hololinked.metadata.td.utils import get_summary
 from hololinked.utils import issubklass
 
 

@@ -14,8 +14,8 @@ from hololinked.core.properties import (
     Selector,
     String,
 )
-from hololinked.td.data_schema import DataSchema
-from hololinked.td.interaction_affordance import (
+from hololinked.metadata.td.data_schema import DataSchema
+from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,

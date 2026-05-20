@@ -80,7 +80,7 @@ class Event:
         """
         from ..td import EventAffordance
 
-        return EventAffordance.generate(self, owner_inst or self.owner)
+        return EventAffordance.from_descriptor(self, owner_inst or self.owner)
 
 
 class EventDispatcher:
