@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Optional
 
-
-def get_summary(docs: str) -> Optional[str]:
+def get_summary(docs: str) -> str:
     """
     Return the first line of the docstring of an object.
 

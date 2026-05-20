@@ -23,10 +23,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     """
     Subclass from here to expose hardware or python objects on the network.
 
-    Remotely accessible members of a `Thing` are
-    segregated into properties, actions & events. Utilize properties for data that can be read and written,
-    actions to instruct the object to perform tasks and events to get notified of any relevant information. State Machines
-    can be used to constrain operations on properties and actions.
+    Remotely accessible members of a `Thing` are segregated into properties, actions & events.
+    Utilize properties for data that can be read and written, actions to instruct the object to perform tasks
+    and events to get notified of any relevant information. State Machines can be used to constrain operations on
+    properties and actions.
 
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/Thing.pdf)
     """

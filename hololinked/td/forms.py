@@ -45,7 +45,7 @@ class Form(WoTSchema):
     https://www.w3.org/TR/wot-thing-description11/#form
     """
 
-    href: Optional[str] = None
+    href: str = ""
     op: Optional[str] = None
     htv_methodName: Optional[str] = Field(default=None, alias="htv:methodName")
     mqv_topic: Optional[str] = Field(default=None, alias="mqv:topic")

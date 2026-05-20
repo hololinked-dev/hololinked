@@ -23,7 +23,6 @@ from hololinked.td.metadata import VersionInfo
 
 
 from hololinked.core import Thing  # noqa  # isort: skip
-from hololinked.core.state_machine import BoundFSM  # isort: skip
 
 
 class ThingModel(WoTSchema, Metadata):
@@ -78,10 +77,10 @@ class ThingModel(WoTSchema, Metadata):
         ------
         ValueError
             If the thing instance is not attached to the thing model. Usually, when API first approach is used,
-            the thing instance could not yet instantiated. This method is not to be used at that time.
+            the thing instance could not yet be instantiated. This method is not to be used at that time.
         """
         if self.thing is None:
-            raise ValueError("This object is not attached to a Thing instance to generate metadata.")
+            raise ValueError("Thing Model instance not attached to a Thing instance to generate metadata.")
         self.id = self.thing.id
         self.title = self.thing.__class__.__name__
         self.context = ["https://www.w3.org/2022/wot/td/v1.1"]
@@ -117,16 +116,16 @@ class ThingModel(WoTSchema, Metadata):
 
     def add_interaction_affordances(self) -> None:
         """
-        Add interaction affordances to thing model.
+        Add interaction affordances to the thing model.
 
         Raises
         ------
         ValueError
             If the thing instance is not attached to the thing model. Usually, when API first approach is used,
-            the thing instance could not yet instantiated. This method is not to be used at that time.
+            the thing instance could not yet be instantiated. This method is not to be used at that time.
         """
         if self.thing is None:
-            raise ValueError("This object is not attached to a Thing instance to generate metadata.")
+            raise ValueError("Thing Model instance not attached to a Thing instance to generate metadata.")
         affordances: list[
             tuple[str, ItemsView[str, Any], type[PropertyAffordance | ActionAffordance | EventAffordance], list[str]]
         ] = [
@@ -138,15 +137,11 @@ class ThingModel(WoTSchema, Metadata):
             for name, obj in items:
                 if name in skip_list or name in self.skip_names:
                     continue
-                if (
-                    name == "state"
-                    and affordance == "properties"
-                    and (not hasattr(self.thing, "state_machine") or not isinstance(self.thing.state_machine, BoundFSM))
-                ):
+                if name == "state" and affordance == "properties" and not hasattr(self.thing, "state_machine"):
                     continue
                 try:
                     affordance_dict = getattr(self, affordance)
-                    affordance_dict[name] = affordance_cls.generate(obj, self.thing)
+                    affordance_dict[name] = affordance_cls.from_descriptor(obj, self.thing)
                 except Exception as ex:
                     if not self.ignore_errors:
                         raise ex from None
@@ -155,7 +150,7 @@ class ThingModel(WoTSchema, Metadata):
 
     def model_dump(self, **kwargs) -> dict[str, Any]:
         """
-        Return the JSON representation of the schema.
+        Return the JSON representation.
 
         Returns
         -------

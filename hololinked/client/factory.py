@@ -193,7 +193,7 @@ class ClientFactory:
 
         # add properties
         for name in TD.get("properties", []):
-            affordance = cast(PropertyAffordance, PropertyAffordance.from_TD(name, TD))
+            affordance = PropertyAffordance.from_TD(name, TD)
             consumed_property = ZMQProperty(
                 resource=affordance,
                 sync_client=sync_zmq_client,
@@ -213,7 +213,7 @@ class ClientFactory:
                 ClientFactory.add_event(object_proxy, consumed_observable)
         # add actions
         for action in TD.get("actions", []):
-            affordance = cast(ActionAffordance, ActionAffordance.from_TD(action, TD))
+            affordance = ActionAffordance.from_TD(action, TD)
             consumed_action = ZMQAction(
                 resource=affordance,
                 sync_client=sync_zmq_client,
@@ -226,7 +226,7 @@ class ClientFactory:
             ClientFactory.add_action(object_proxy, consumed_action)
         # add events
         for event in TD.get("events", []):
-            affordance = cast(EventAffordance, EventAffordance.from_TD(event, TD))
+            affordance = EventAffordance.from_TD(event, TD)
             consumed_event = ZMQEvent(
                 resource=affordance,
                 owner_inst=object_proxy,
@@ -395,7 +395,7 @@ class ClientFactory:
         object_proxy = ObjectProxy(id, td=TD, logger=logger, security=security, **kwargs)
 
         for name in TD.get("properties", []):
-            affordance = cast(PropertyAffordance, PropertyAffordance.from_TD(name, TD))
+            affordance = PropertyAffordance.from_TD(name, TD)
             consumed_property = HTTPProperty(
                 resource=affordance,
                 sync_client=req_rep_sync_client,
@@ -418,7 +418,7 @@ class ClientFactory:
                 )
                 ClientFactory.add_event(object_proxy, consumed_event)
         for action in TD.get("actions", []):
-            affordance = cast(ActionAffordance, ActionAffordance.from_TD(action, TD))
+            affordance = ActionAffordance.from_TD(action, TD)
             consumed_action = HTTPAction(
                 resource=affordance,
                 sync_client=req_rep_sync_client,
@@ -430,7 +430,7 @@ class ClientFactory:
             )
             ClientFactory.add_action(object_proxy, consumed_action)
         for event in TD.get("events", []):
-            affordance = cast(EventAffordance, EventAffordance.from_TD(event, TD))
+            affordance = EventAffordance.from_TD(event, TD)
             consumed_event = HTTPEvent(
                 resource=affordance,
                 sync_client=sse_sync_client,

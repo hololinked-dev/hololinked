@@ -29,7 +29,7 @@ class Metadata(BaseModel):
         skip_names: Optional[list[str]] = [],
     ) -> None:
         """
-        Initialize the Metadata handler.
+        Initialize the Metadata.
 
         Parameters
         ----------
@@ -47,25 +47,38 @@ class Metadata(BaseModel):
         self.skip_names = skip_names or []
 
     def generate(self) -> Metadata:
-        """Populate the metadata."""
-        raise NotImplementedError("implement generate() in subclass")
+        """Populate the metadata from the Thing instance."""
+        raise NotImplementedError("Implement generate() in subclass")
 
     def produce(self) -> Thing:
         """Produce a Thing instance from the metadata."""
-        raise NotImplementedError("This will be implemented in a future release for an API first approach")
+        raise NotImplementedError("Implement produce() in subclass")
 
     skip_properties: list[str]
-    """list of default property names to skip when generating the metadata."""
+    """
+    List of default property names to skip when generating the metadata. Different from `skip_names` as
+    this list is supposed to be used as a builtin blacklist.
+    """
 
     skip_actions: list[str]
-    """list of default action names to skip when generating the metadata."""
+    """
+    List of default action names to skip when generating the metadata. Different from `skip_names` as
+    this list is supposed to be used as a builtin blacklist.
+    """
 
     skip_events: list[str]
-    """list of default event names to skip when generating the metadata."""
+    """
+    List of default event names to skip when generating the metadata. Different from `skip_names` as
+    this list is supposed to be used as a builtin blacklist.
+    """
 
     def add_interactions(self) -> None:
-        """Add interaction (affordances) to the metadata."""
-        ...
+        """
+        Add interaction(-affordances) to the metadata - properties, actions and events.
+
+        This is to be tailored for the specific standard.
+        """
+        raise NotImplementedError("Implement add_interactions() in subclass")
 
     def json(self, **kwargs) -> dict[str, Any]:
         """
@@ -83,9 +96,10 @@ class InteractionMetadata(BaseModel):
     """
     Generate metadata for a property, action or event.
 
-    A property, action or event is called as an interaction affordance, and the metadata generated for it
-    is called as interaction metadata. This base class defines metadata methods common to all of properties,
-    actions or events, and could be common to different metadata or device description standards.
+    A property, action or event is called as an interaction(-affordance), and the metadata generated for it
+    is named here as interaction metadata. This base class defines metadata methods common to all of properties,
+    actions or events, and could be common to different metadata or device description standards. Specific standards
+    need to extend this class.
     """
 
     _custom_schema_generators: ClassVar[dict]
@@ -101,7 +115,7 @@ class InteractionMetadata(BaseModel):
     @property
     def what(self) -> Enum:
         """Whether it is a property, action or event."""
-        raise NotImplementedError("Unknown interaction (property, action, or event?) implement in subclass")
+        raise NotImplementedError("Unknown interaction (property, action, or event?), implement in subclass")
 
     @property
     def owner(self) -> Thing:
@@ -109,12 +123,32 @@ class InteractionMetadata(BaseModel):
         Owning `Thing` instance or `Thing` class of the interaction.
 
         Depending on how this object was created, returns either an instance or a class.
+
+        Raises
+        ------
+        AttributeError
+            If the owner is not set, which means this interaction is not properly bound to a `Thing`
+            instance or class. Dont explicitly instantiate this class without the context of a `Thing` instance
+            or class, or at least dont prematurely access this attribute.
         """
+        if self._owner is None:
+            raise AttributeError("owner is not set for this interaction")
         return self._owner
 
     @property
     def owner_cls(self) -> ThingMeta:
-        """Return the owning `Thing` class of the interaction."""
+        """
+        Return the owning `Thing` class of the interaction.
+
+        Raises
+        ------
+        AttributeError
+            If the owner is not set, which means this interaction is not properly bound to a `Thing`
+            instance or class. Dont explicitly instantiate this class without the context of a `Thing` instance
+            or class, or at least dont prematurely access this attribute.
+        """
+        if self._thing_cls is None:
+            raise AttributeError("owner_cls is not set for this interaction")
         return self._thing_cls
 
     @property
@@ -125,10 +159,9 @@ class InteractionMetadata(BaseModel):
         Raises
         ------
         AttributeError
-            If the metadata is not bound to any interaction affordance object. This usually happens
-            when the metadata is not generated from an interaction object, but created manually or from a
-            different source. Use `Thing<instance>.<property>.to_metadata()` only method to generate the metadata
-            from a property object, and similarly for action and event.
+            If the metadata is not bound to any interaction object.
+            Use `Thing<instance>.<property>.to_metadata()` only method to generate this metadata
+            from a property object or similarly for action and event.
         """
         if self._objekt is None:
             raise AttributeError("Metadata bound to unknown object (property, action or event).")
@@ -142,9 +175,9 @@ class InteractionMetadata(BaseModel):
         Raises
         ------
         AttributeError
-            If the metadata is not bound to any interaction affordance object. This usually happens
+            If the metadata is not bound to any interaction object. This usually happens
             when the metadata is not generated from an interaction object, but created manually or from a
-            different source. Use `Thing<instance>.<property>.to_metadata()` only method to generate the metadata
+            different source. Use `Thing<instance>.<property>.to_metadata()` only to generate the metadata
             from a property object, and similarly for action and event.
         """
         if self._name is None:
@@ -160,9 +193,9 @@ class InteractionMetadata(BaseModel):
         ------
         AttributeError
             If the metadata is not bound to any `Thing` instance. This usually happens
-            when the metadata is not generated from a `Thing` instance, but created manually or from a
+            when the metadata is not generated from an interaction object, but created manually or from a
             different source. Use `thing.properties.descriptors[<property>].to_metadata()`
-            only method to generate the metadata from a property object, and similarly for action and event.
+            only to generate the metadata from a property object, and similarly for an action and event.
         """
         if self._thing_id is None:
             raise AttributeError("Metadata bound to unknown Thing (property, action or event's owner unknown).")
@@ -190,7 +223,7 @@ class InteractionMetadata(BaseModel):
         raise NotImplementedError("build must be implemented in subclass of InteractionMetadata")
 
     @classmethod
-    def generate(
+    def from_descriptor(
         cls,
         interaction: Property | Action | Event,
         owner: Thing | ThingMeta,
@@ -215,7 +248,7 @@ class InteractionMetadata(BaseModel):
         PropertyMetadata | ActionMetadata | EventMetadata
             Instance of this class with the metadata fields populated.
         """
-        raise NotImplementedError("generate() must be implemented in subclass of InteractionMetadata")
+        raise NotImplementedError("from_descriptor() must be implemented in subclass of InteractionMetadata")
 
     @classmethod
     def from_metadata(cls, name: str, metadata: dict[str, Any]) -> Self:
@@ -247,23 +280,23 @@ class InteractionMetadata(BaseModel):
     def register_descriptor(
         cls,
         descriptor: Property | Action | Event,
-        schema_generator: type[InteractionMetadata],
+        metadata_generator: type[InteractionMetadata],
     ) -> None:
         """
-        Register a custom schema generator for a descriptor.
+        Register a custom metadata generator for a descriptor.
 
         Parameters
         ----------
         descriptor: Property | Action | Event
             The descriptor class
-        schema_generator: type[InteractionMetadata]
-            `InteractionMetadata` subclass that implements the custom schema generation logic for the descriptor.
-            Either override the `generate()` method or the `build()` method.
+        metadata_generator: type[InteractionMetadata]
+            `InteractionMetadata` subclass that implements the custom metadata generation logic for the descriptor.
+            Either override the `from_descriptor()` method or the `build()` method.
 
         Raises
         ------
         TypeError
-            If the descriptor is not an instance of `Property`, `Action` or `Event`, or if the schema generator is not an
+            If the descriptor is not an instance of `Property`, `Action` or `Event`, or if the metadata generator is not an
             instance of `InteractionMetadata`.
         """
         raise NotImplementedError
@@ -276,7 +309,8 @@ class InteractionMetadata(BaseModel):
         """
         Override default values with provided keyword arguments, especially thing_id, owner name, object name etc.
 
-        Any logic to trigger side effects while setting those values should be handled here.
+        Any logic to trigger side effects while setting those values should be handled here, either by
+        reimplementing the method in the subclass or calling the super().override_defaults(**kwargs).
         """
         for key, value in kwargs.items():
             if key == "name":
@@ -335,36 +369,36 @@ class InteractionMetadata(BaseModel):
 
 
 class PropertyMetadata(InteractionMetadata):
-    """Implements property affordance schema from `Property` descriptor object."""
+    """Generate property metadata from `Property` descriptor object."""
 
     @property
     def what(self) -> Enum:  # noqa: D102
         return ResourceTypes.PROPERTY
 
     @classmethod
-    def generate(cls, property: Property, owner: Thing | ThingMeta) -> PropertyMetadata:  # noqa: D102
+    def from_descriptor(cls, property: Property, owner: Thing | ThingMeta) -> PropertyMetadata:  # noqa: D102
         raise NotImplementedError
 
 
 class ActionMetadata(InteractionMetadata):
-    """Implements action affordance schema from `Action` descriptor object."""
+    """Generate action metadata from `Action` descriptor object."""
 
     @property
     def what(self) -> Enum:  # noqa: D102
         return ResourceTypes.ACTION
 
     @classmethod
-    def generate(cls, action: Action, owner: Thing | ThingMeta) -> ActionMetadata:  # noqa: D102
+    def from_descriptor(cls, action: Action, owner: Thing | ThingMeta) -> ActionMetadata:  # noqa: D102
         raise NotImplementedError
 
 
 class EventMetadata(InteractionMetadata):
-    """Implements event affordance schema from `Event` descriptor object."""
+    """Generate event metadata from `Event` descriptor object."""
 
     @property
     def what(self) -> Enum:  # noqa: D102
         return ResourceTypes.EVENT
 
     @classmethod
-    def generate(cls, event: Event, owner: Thing | ThingMeta) -> EventMetadata:  # noqa: D102
+    def from_descriptor(cls, event: Event, owner: Thing | ThingMeta) -> EventMetadata:  # noqa: D102
         raise NotImplementedError

@@ -58,8 +58,9 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         Raises
         ------
         AttributeError
-            If the owner is not set, which means this affordance is not properly bound to a `Thing`
-            instance or class.
+            If the owner is not set, which means this interaction is not properly bound to a `Thing`
+            instance or class. Dont explicitly instantiate this class without the context of a `Thing` instance
+            or class, or at least dont prematurely access this attribute.
         """
         if self._owner is None:
             raise AttributeError("owner is not set for this affordance")
@@ -89,8 +90,9 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         Raises
         ------
         AttributeError
-            If the object is not set, which means this affordance is not properly bound to a
-            `Property`, `Action` or `Event` instance.
+            If the metadata is not bound to any interaction object.
+            Use `Thing<instance>.<property>.to_metadata()` only method to generate this metadata
+            from a property object or similarly for action and event.
         """
         if self._objekt is None:
             raise AttributeError("Metadata bound to unknown object (property, action or event).")
@@ -252,7 +254,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
             The descriptor class
         schema_generator: `InteractionAffordance`
             `InteractionAffordance` subclass that implements the custom schema generation logic for the descriptor.
-            Either override the `generate()` method or the `build()` method.
+            Either override the `from_descriptor()` method or the `build()` method.
 
         Raises
         ------
@@ -321,7 +323,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             self.observable = property.observable
 
     @classmethod
-    def generate(cls, property: Property, owner: Thing | ThingMeta):  # noqa: D102
+    def from_descriptor(cls, property: Property, owner: Thing | ThingMeta):  # noqa: D102
         if not isinstance(property, Property):
             raise TypeError(f"property must be instance of Property, given type {type(property)}")
         affordance = PropertyAffordance()
@@ -397,7 +399,7 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
             self.safe = action.execution_info.safe
 
     @classmethod
-    def generate(cls, action: Action, owner: Thing | ThingMeta, **kwargs) -> "ActionAffordance":  # noqa: D102
+    def from_descriptor(cls, action: Action, owner: Thing | ThingMeta, **kwargs) -> "ActionAffordance":  # noqa: D102
         if not isinstance(action, Action):
             raise TypeError(f"action must be instance of Action, given type {type(action)}")
         affordance = ActionAffordance()
@@ -447,7 +449,7 @@ class EventAffordance(InteractionAffordance, EventMetadata):
                 raise ValueError(f"unknown schema definition for event data, given type: {type(event.schema)}")
 
     @classmethod
-    def generate(cls, event: Event, owner: Thing | ThingMeta, **kwargs) -> "EventAffordance":  # noqa: D102
+    def from_descriptor(cls, event: Event, owner: Thing | ThingMeta, **kwargs) -> "EventAffordance":  # noqa: D102
         if not isinstance(event, Event):
             raise TypeError(f"event must be instance of Event, given type {type(event)}")
         affordance = EventAffordance()
