@@ -334,7 +334,7 @@ async def consume_broker_queue(
 
     # fetch ZMQ INPROC TD
     Thing.get_thing_model  # type: Action
-    FetchTMAffordance = Thing.get_thing_model.to_affordance()
+    FetchTMAffordance = Thing.get_thing_model.to_metadata()
     FetchTMAffordance.override_defaults(thing_id=thing_id, name="get_thing_description")
     fetch_td = ZMQAction(
         resource=FetchTMAffordance,

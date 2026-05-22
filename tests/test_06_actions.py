@@ -375,7 +375,7 @@ def test_05_thing_cls_actions(thing: TestThing):
 def test_06_action_affordance(thing: TestThing):
     """Test if action affordance is correctly created"""
     assert isinstance(thing.action_echo, BoundAction)
-    affordance = thing.action_echo.to_affordance()
+    affordance = thing.action_echo.to_metadata()
     assert isinstance(affordance, ActionAffordance)
     assert affordance.idempotent is None
     assert affordance.synchronous is True
@@ -385,7 +385,7 @@ def test_06_action_affordance(thing: TestThing):
     assert affordance.description is None
 
     assert isinstance(thing.action_echo_with_classmethod, BoundAction)
-    affordance = thing.action_echo_with_classmethod.to_affordance()
+    affordance = thing.action_echo_with_classmethod.to_metadata()
     assert isinstance(affordance, ActionAffordance)
     assert affordance.idempotent is None
     assert affordance.synchronous is True
@@ -395,7 +395,7 @@ def test_06_action_affordance(thing: TestThing):
     assert affordance.description is None
 
     assert isinstance(thing.action_echo_async, BoundAction)
-    affordance = thing.action_echo_async.to_affordance()
+    affordance = thing.action_echo_async.to_metadata()
     assert isinstance(affordance, ActionAffordance)
     assert affordance.idempotent is None
     assert affordance.synchronous is True
@@ -405,7 +405,7 @@ def test_06_action_affordance(thing: TestThing):
     assert affordance.description is None
 
     assert isinstance(thing.action_echo_async_with_classmethod, BoundAction)
-    affordance = thing.action_echo_async_with_classmethod.to_affordance()
+    affordance = thing.action_echo_async_with_classmethod.to_metadata()
     assert isinstance(affordance, ActionAffordance)
     assert affordance.idempotent is None
     assert affordance.synchronous is True
@@ -415,7 +415,7 @@ def test_06_action_affordance(thing: TestThing):
     assert affordance.description is None
 
     assert isinstance(thing.parameterized_action, BoundAction)
-    affordance = thing.parameterized_action.to_affordance()
+    affordance = thing.parameterized_action.to_metadata()
     assert isinstance(affordance, ActionAffordance)
     assert affordance.idempotent is None
     assert affordance.synchronous is True
@@ -425,7 +425,7 @@ def test_06_action_affordance(thing: TestThing):
     assert affordance.description is None
 
     assert isinstance(thing.parameterized_action_without_call, BoundAction)
-    affordance = thing.parameterized_action_without_call.to_affordance()
+    affordance = thing.parameterized_action_without_call.to_metadata()
     assert isinstance(affordance, ActionAffordance)
     assert affordance.idempotent is True
     assert affordance.synchronous is True
@@ -435,7 +435,7 @@ def test_06_action_affordance(thing: TestThing):
     assert affordance.description is None
 
     assert isinstance(thing.parameterized_action_async, BoundAction)
-    affordance = thing.parameterized_action_async.to_affordance()
+    affordance = thing.parameterized_action_async.to_metadata()
     assert isinstance(affordance, ActionAffordance)
     assert affordance.idempotent is None
     assert affordance.synchronous is True
@@ -445,7 +445,7 @@ def test_06_action_affordance(thing: TestThing):
     assert affordance.description is None
 
     assert isinstance(thing.json_schema_validated_action, BoundAction)
-    affordance = thing.json_schema_validated_action.to_affordance()
+    affordance = thing.json_schema_validated_action.to_metadata()
     assert isinstance(affordance, ActionAffordance)
     assert affordance.idempotent is None
     assert affordance.synchronous is True

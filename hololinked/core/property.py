@@ -336,7 +336,7 @@ class Property(Parameter):
         """`True` if the property pushes change events on read and write."""
         return self._observable_event_descriptor is not None
 
-    def to_affordance(self, owner_inst: Thing | None = None, format: str = "wot") -> PropertyMetadata:
+    def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> PropertyMetadata:
         """
         Generates a `PropertyAffordance` TD fragment for this Property.
 

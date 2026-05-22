@@ -15,7 +15,7 @@ from hololinked.param.parameterized import Parameterized, ParameterizedMetaclass
 if TYPE_CHECKING:
     from hololinked.core.events import EventMetadata
     from hololinked.core.thing import Thing
-    from hololinked.core.zmq.brokers import EventPublisher  # TODO remove this if possible
+    from hololinked.core.zmq.brokers import EventPublisher
 
 
 class Event:
@@ -78,7 +78,7 @@ class Event:
                 "Event object not yet initialized, please dont access now." + " Access after Thing is running."
             )
 
-    def to_affordance(self, owner_inst: Thing | None = None, format: str = "wot") -> EventMetadata:
+    def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> EventMetadata:
         """
         Generates a `EventAffordance` TD fragment for this Event.
 

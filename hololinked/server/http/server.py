@@ -278,7 +278,7 @@ class HTTPServer(BaseProtocolServer):
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(property, Property):
-            property = property.to_affordance()
+            property = property.to_metadata()
         read_http_method = write_http_method = delete_http_method = None
         http_methods = self.router.adapt_http_methods(http_methods)
         if len(http_methods) == 1:
@@ -329,7 +329,7 @@ class HTTPServer(BaseProtocolServer):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         http_methods = self.router.adapt_http_methods(http_method)
         if isinstance(action, Action):
-            action = action.to_affordance()  # type: ActionAffordance
+            action = action.to_metadata()  # type: ActionAffordance
         kwargs["resource"] = action
         kwargs["config"] = self.config
         kwargs["logger"] = self.logger
@@ -364,7 +364,7 @@ class HTTPServer(BaseProtocolServer):
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(event, Event):
-            event = event.to_affordance()
+            event = event.to_metadata()
         kwargs["resource"] = event
         kwargs["config"] = self.config
         kwargs["logger"] = self.logger
@@ -568,8 +568,8 @@ class ApplicationRouter:
         )
 
         # RW multiple properties handler
-        read_properties = Thing._get_properties.to_affordance(Thing)
-        write_properties = Thing._set_properties.to_affordance(Thing)
+        read_properties = Thing._get_properties.to_metadata(Thing)
+        write_properties = Thing._set_properties.to_metadata(Thing)
         read_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
         write_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
         self.server.add_action(
@@ -654,7 +654,7 @@ class ApplicationRouter:
                 if rule[0] == item:
                     return True
         elif isinstance(item, (Property, Action, Event)):
-            item = item.to_affordance()
+            item = item.to_metadata()
         if isinstance(item, (PropertyAffordance, ActionAffordance, EventAffordance)):
             for rule in self.app.wildcard_router.rules:
                 if rule.target_kwargs.get("resource", None) == item:

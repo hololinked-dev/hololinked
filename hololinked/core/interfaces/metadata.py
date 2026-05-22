@@ -276,6 +276,22 @@ class InteractionMetadata(BaseModel):
         """
         raise NotImplementedError
 
+    def to_descriptor(self) -> Property | Action | Event:
+        """
+        Convert the metadata back to a `Property`, `Action` or `Event` descriptor object.
+
+        Returns
+        -------
+        Property | Action | Event
+            The corresponding descriptor object of the interaction.
+
+        Raises
+        ------
+        NotImplementedError
+            If the method is not implemented in the subclass, or if the metadata cannot be converted to any of the descriptor objects.
+        """
+        raise NotImplementedError("to_descriptor() must be implemented in subclass of InteractionMetadata")
+
     @classmethod
     def register_descriptor(
         cls,

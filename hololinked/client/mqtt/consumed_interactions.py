@@ -13,7 +13,10 @@ from hololinked import Serializers
 from hololinked.client.abstractions import SSE, ConsumedThingEvent
 from hololinked.core.interfaces import BaseSerializer  # noqa: F401
 from hololinked.metadata.td.forms import Form
-from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
+from hololinked.metadata.td.interaction_affordance import (
+    EventAffordance,
+    PropertyAffordance,
+)
 
 
 class MQTTConsumer(ConsumedThingEvent):  # noqa: D101

@@ -164,7 +164,7 @@ class ClientFactory:
 
         # Fetch the TD
         Thing.get_thing_model  # noqa: B018  # type: Action
-        FetchTDAffordance = Thing.get_thing_model.to_affordance()
+        FetchTDAffordance = Thing.get_thing_model.to_metadata()
         FetchTDAffordance.override_defaults(name="get_thing_description", thing_id=thing_id)
         FetchTD = ZMQAction(
             resource=FetchTDAffordance,

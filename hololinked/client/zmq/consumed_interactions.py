@@ -602,7 +602,7 @@ class WriteMultipleProperties(ZMQAction):
                 timeout for execution of action or property read/write
         """
         action = Thing._set_properties  # type: Action
-        resource = action.to_affordance(Thing)
+        resource = action.to_metadata(Thing)
         resource._thing_id = owner_inst.thing_id
         super().__init__(
             resource=resource,
@@ -643,7 +643,7 @@ class ReadMultipleProperties(ZMQAction):
                 timeout for execution of action or property read/write
         """
         action = Thing._get_properties  # type: Action
-        resource = action.to_affordance(Thing)
+        resource = action.to_metadata(Thing)
         resource._thing_id = owner_inst.thing_id
         super().__init__(
             resource=resource,

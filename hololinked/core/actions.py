@@ -101,7 +101,7 @@ class Action:
             raise TypeError("execution_info must be of type ActionInfoValidator")
         self._execution_info = value  # type: ActionInfoValidator
 
-    def to_affordance(self, owner_inst: Thing | None = None, format: str = "wot") -> ActionMetadata:
+    def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> ActionMetadata:
         """
         Generates a `ActionAffordance` TD fragment for this Action.
 
@@ -223,7 +223,7 @@ class BoundAction:
             return self.obj.__doc__
         return super().__getattribute__(name)
 
-    def to_affordance(self):
+    def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> ActionMetadata:
         """
         Generates a `ActionAffordance` TD fragment for this Action.
 
@@ -237,17 +237,19 @@ class BoundAction:
         ActionAffordance
             the affordance TD fragment for this action
         """
-        return Action.to_affordance(self.descriptor, self.owner_inst or self.owner)
+        return Action.to_metadata(self.descriptor, owner_inst or self.owner_inst or self.owner, format=format)
 
 
 class BoundSyncAction(BoundAction):
     """
-    non async(io) action call. The call is passed to the method as-it-is to allow local
+    Non-async(io) action call.
+
+    The call is passed to the method as-it-is to allow local
     invocation without state machine checks. Use `external_call` to have validation.
     """
 
     def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks"""
+        """Validated call to the action with state machine and payload checks."""
         self.validate_call(args, kwargs)
         return self.__call__(*args, **kwargs)
 
@@ -259,12 +261,14 @@ class BoundSyncAction(BoundAction):
 
 class BoundAsyncAction(BoundAction):
     """
-    async(io) action call. The call is passed to the method as-it-is to allow local
+    async(io) action call.
+
+    The call is passed to the method as-it-is to allow local
     invocation without state machine checks. Use `external_call` to have validation.
     """
 
     async def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks"""
+        """Validated call to the action with state machine and payload checks."""
         self.validate_call(args, kwargs)
         return await self.__call__(*args, **kwargs)
 
@@ -284,8 +288,9 @@ def action(
     **kwargs,
 ) -> Action:
     """
-    Decorate on your methods to make them accessible remotely or create 'actions' out of them. When used with hardware,
-    actions generally command the hardware to do something.
+    Decorate on your methods to make them accessible remotely or create 'actions' out of them.
+
+    When used with hardware, actions generally command the hardware to do something.
 
     Parameters
     ----------
@@ -319,6 +324,13 @@ def action(
     Action
         returns the callable object wrapped in an `Action` object. When accessed at instance level,
         a `BoundSyncAction` or `BoundAsyncAction` object is returned.
+
+    Raises
+    ------
+    TypeError
+        if the decorated object is not a function or method, or if the input/output schema is of invalid type
+    ValueError
+        if the decorated function is a dunder method, or if unknown keyword arguments are provided
     """
 
     def inner(obj):

@@ -359,7 +359,7 @@ class TestRPCBroker:
 
         assert isinstance(thing.action_echo, BoundAction)
         action_echo = ZMQAction(
-            resource=thing.action_echo.to_affordance(),
+            resource=thing.action_echo.to_metadata(),
             sync_client=client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -369,7 +369,7 @@ class TestRPCBroker:
 
         assert isinstance(thing.action_echo_with_classmethod, BoundAction)
         action_echo_with_classmethod = ZMQAction(
-            resource=thing.action_echo_with_classmethod.to_affordance(),
+            resource=thing.action_echo_with_classmethod.to_metadata(),
             sync_client=client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -379,7 +379,7 @@ class TestRPCBroker:
 
         assert isinstance(thing.action_echo_async, BoundAction)
         action_echo_async = ZMQAction(
-            resource=thing.action_echo_async.to_affordance(),
+            resource=thing.action_echo_async.to_metadata(),
             sync_client=client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -389,7 +389,7 @@ class TestRPCBroker:
 
         assert isinstance(thing.action_echo_async_with_classmethod, BoundAction)
         action_echo_async_with_classmethod = ZMQAction(
-            resource=thing.action_echo_async_with_classmethod.to_affordance(),
+            resource=thing.action_echo_async_with_classmethod.to_metadata(),
             sync_client=client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -399,7 +399,7 @@ class TestRPCBroker:
 
         assert isinstance(thing.parameterized_action, BoundAction)
         parameterized_action = ZMQAction(
-            resource=thing.parameterized_action.to_affordance(),
+            resource=thing.parameterized_action.to_metadata(),
             sync_client=client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -409,7 +409,7 @@ class TestRPCBroker:
 
         assert isinstance(thing.parameterized_action_async, BoundAction)
         parameterized_action_async = ZMQAction(
-            resource=thing.parameterized_action_async.to_affordance(),
+            resource=thing.parameterized_action_async.to_metadata(),
             sync_client=client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -419,7 +419,7 @@ class TestRPCBroker:
 
         assert isinstance(thing.parameterized_action_without_call, BoundAction)
         parameterized_action_without_call = ZMQAction(
-            resource=thing.parameterized_action_without_call.to_affordance(),
+            resource=thing.parameterized_action_without_call.to_metadata(),
             sync_client=client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -432,7 +432,7 @@ class TestRPCBroker:
 
     def test_12_json_schema_validation(self, thing: TestThing, sync_client: SyncZMQClient):
         assert isinstance(thing.json_schema_validated_action, BoundAction)
-        action_affordance = thing.json_schema_validated_action.to_affordance()
+        action_affordance = thing.json_schema_validated_action.to_metadata()
         json_schema_validated_action = ZMQAction(
             resource=action_affordance,
             sync_client=sync_client,
@@ -463,7 +463,7 @@ class TestRPCBroker:
 
     def test_13_pydantic_validation(self, thing: TestThing, sync_client: SyncZMQClient):
         assert isinstance(thing.pydantic_validated_action, BoundAction)
-        action_affordance = thing.pydantic_validated_action.to_affordance()
+        action_affordance = thing.pydantic_validated_action.to_metadata()
         pydantic_validated_action = ZMQAction(
             resource=action_affordance,
             sync_client=sync_client,
@@ -525,7 +525,7 @@ class TestRPCBroker:
         descriptor = thing.properties["number_prop"]
         # Property type check is omitted since Property is not imported
         number_prop = ZMQProperty(
-            resource=descriptor.to_affordance(thing),
+            resource=descriptor.to_metadata(thing),
             sync_client=sync_client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -540,7 +540,7 @@ class TestRPCBroker:
     def test_15_json_schema_property(self, thing: TestThing, sync_client: SyncZMQClient):
         """Test json schema based property"""
         json_schema_prop = ZMQProperty(
-            resource=TestThing.json_schema_prop.to_affordance(thing),
+            resource=TestThing.json_schema_prop.to_metadata(thing),
             sync_client=sync_client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -558,7 +558,7 @@ class TestRPCBroker:
     def test_16_pydantic_model_property(self, thing: TestThing, sync_client: SyncZMQClient):
         """Test pydantic model based property"""
         pydantic_prop = ZMQProperty(
-            resource=TestThing.pydantic_prop.to_affordance(thing),
+            resource=TestThing.pydantic_prop.to_metadata(thing),
             sync_client=sync_client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -575,7 +575,7 @@ class TestRPCBroker:
         assert "validation error for PydanticProp" in str(ex.value)
 
         pydantic_simple_prop = ZMQProperty(
-            resource=TestThing.pydantic_simple_prop.to_affordance(thing),
+            resource=TestThing.pydantic_simple_prop.to_metadata(thing),
             sync_client=sync_client,
             async_client=None,
             logger=structlog.get_logger(),
@@ -619,7 +619,7 @@ class TestRPCBroker:
         expected_data: Any,
     ):
         """Test if event can be streamed by a synchronous threaded client"""
-        resource = getattr(TestThing, event_name).to_affordance(thing)  # type: EventAffordance
+        resource = getattr(TestThing, event_name).to_metadata(thing)  # type: EventAffordance
 
         form = Form()
         form.href = server.event_publisher.socket_address
@@ -676,7 +676,7 @@ class TestRPCBroker:
         expected_data: Any,
     ):
         """Test if event can be streamed by an asynchronous client in an async loop"""
-        resource = getattr(TestThing, event_name).to_affordance(thing)  # type: EventAffordance
+        resource = getattr(TestThing, event_name).to_metadata(thing)  # type: EventAffordance
 
         form = Form()
         form.href = thing.rpc_server.event_publisher.socket_address
