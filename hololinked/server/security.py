@@ -14,8 +14,8 @@ import structlog
 
 from pydantic import BaseModel, PrivateAttr, field_serializer, field_validator
 
-from ..config import global_config
-from ..utils import uuid_hex
+from hololinked.config import global_config
+from hololinked.utils import uuid_hex
 
 
 logger = structlog.get_logger()
@@ -77,7 +77,7 @@ try:
 
         def validate_input(self, username: str, password: str) -> bool:
             """
-            plain validate a username and password
+            Plain validate a username and password
 
             Returns
             -------
@@ -168,7 +168,7 @@ try:
 
         def validate_input(self, username: str, password: str) -> bool:
             """
-            plain validate a username and password
+            Plain validate a username and password
 
             Returns
             -------
@@ -373,7 +373,7 @@ try:
                 json.dump(existing_data, file, indent=4)
 
         def load(self) -> None:
-            """load the security scheme data from persistent storage"""
+            """Load the security scheme data from persistent storage"""
             if not os.path.exists(self.file):
                 return
             with open(self.file, "r") as file:

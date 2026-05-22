@@ -16,7 +16,7 @@ class BaseConfigurationRepository:
     """
     Repository/Persistence for a `Thing` instance that can be used for storing configuration.
 
-    Model your device setting's as properties and set `db_persist=True` in the property's argument to `True`
+    Model your device setting's as properties and set `db_persist=True`/`db_commit=True` in the property's argument
     to activate persistance. If your server dies and restarts, the settings will be reloaded and applied to your device.
 
     Different storage backends (like JSON file, SQLAlchemy, MongoDB) are supported and custom backends can be
@@ -26,7 +26,7 @@ class BaseConfigurationRepository:
     def __init__(self, thing: Thing) -> None:
         self.thing = thing
 
-    def fetch_own_info(self):  # -> ThingInformation:
+    def fetch_own_info(self) -> Any:
         """Fetch `Thing` instance's own information (some useful metadata which could help the `Thing` run)."""
 
     def get_property(self, property: str | Property, deserialized: bool = True) -> Any:

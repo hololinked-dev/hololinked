@@ -5,7 +5,7 @@ from typing import Any
 import structlog
 
 from ...constants import Operations
-from ...td.interaction_affordance import EventAffordance, PropertyAffordance
+from ...metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
 
 
 class ThingDescriptionService:

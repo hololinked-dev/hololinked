@@ -6,7 +6,7 @@ import structlog
 from hololinked import Serializers
 
 from ...core.zmq.message import EventMessage  # noqa: F401
-from ...td import EventAffordance, PropertyAffordance
+from ...metadata.td import EventAffordance, PropertyAffordance
 from ..repository import BrokerThing  # noqa: F401
 
 

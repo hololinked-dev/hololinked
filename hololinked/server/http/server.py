@@ -18,10 +18,10 @@ from ...core.events import Event
 from ...core.property import Property
 from ...core.thing import Thing, ThingMeta
 from ...core.zmq.brokers import MessageMappedZMQClientPool
+from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
 from ...param.parameters import ClassSelector, IPAddress
-from ...td import ActionAffordance, EventAffordance, PropertyAffordance
 from ...utils import (
     get_current_async_loop,
     issubklass,
@@ -176,7 +176,7 @@ class HTTPServer(BaseProtocolServer):
         self.add_things(*(things or []))
 
     def setup(self) -> None:
-        """check if all the requirements are met before starting the server, auto invoked by listen()"""
+        """Check if all the requirements are met before starting the server, auto invoked by listen()"""
         # Add only those code here that needs to be redone always before restarting the server.
         # One time creation attributes/activities must be in init
 
@@ -278,7 +278,7 @@ class HTTPServer(BaseProtocolServer):
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(property, Property):
-            property = property.to_affordance()
+            property = property.to_metadata()
         read_http_method = write_http_method = delete_http_method = None
         http_methods = self.router.adapt_http_methods(http_methods)
         if len(http_methods) == 1:
@@ -329,7 +329,7 @@ class HTTPServer(BaseProtocolServer):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         http_methods = self.router.adapt_http_methods(http_method)
         if isinstance(action, Action):
-            action = action.to_affordance()  # type: ActionAffordance
+            action = action.to_metadata()  # type: ActionAffordance
         kwargs["resource"] = action
         kwargs["config"] = self.config
         kwargs["logger"] = self.logger
@@ -364,7 +364,7 @@ class HTTPServer(BaseProtocolServer):
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(event, Event):
-            event = event.to_affordance()
+            event = event.to_metadata()
         kwargs["resource"] = event
         kwargs["config"] = self.config
         kwargs["logger"] = self.logger
@@ -568,8 +568,8 @@ class ApplicationRouter:
         )
 
         # RW multiple properties handler
-        read_properties = Thing._get_properties.to_affordance(Thing)
-        write_properties = Thing._set_properties.to_affordance(Thing)
+        read_properties = Thing._get_properties.to_metadata(Thing)
+        write_properties = Thing._set_properties.to_metadata(Thing)
         read_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
         write_properties.override_defaults(thing_id=get_thing_model_action.thing_id)
         self.server.add_action(
@@ -584,7 +584,7 @@ class ApplicationRouter:
     # can add an entire thing instance at once
     def add_thing(self, thing: Thing) -> None:
         """
-        internal method to add a thing instance to be served by the HTTP server. Iterates through the
+        Internal method to add a thing instance to be served by the HTTP server. Iterates through the
         interaction affordances and adds a route for each property, action and event.
         """
         # Prepare affordance lists with error handling (single loop)
@@ -654,7 +654,7 @@ class ApplicationRouter:
                 if rule[0] == item:
                     return True
         elif isinstance(item, (Property, Action, Event)):
-            item = item.to_affordance()
+            item = item.to_metadata()
         if isinstance(item, (PropertyAffordance, ActionAffordance, EventAffordance)):
             for rule in self.app.wildcard_router.rules:
                 if rule.target_kwargs.get("resource", None) == item:
@@ -728,13 +728,13 @@ class ApplicationRouter:
     basepath = property(fget=get_basepath, doc="basepath of the server")
 
     def adapt_route(self, interaction_affordance_name: str) -> str:
-        """adapt the URL path to default conventions"""
+        """Adapt the URL path to default conventions"""
         if interaction_affordance_name == "get_thing_model":
             return "/resources/wot-tm"
         return f"/{pep8_to_dashed_name(interaction_affordance_name)}"
 
     def adapt_http_methods(self, http_methods: Any):
-        """comply the supplied HTTP method to the router to a tuple and check if the method is supported"""
+        """Comply the supplied HTTP method to the router to a tuple and check if the method is supported"""
         if isinstance(http_methods, str):
             http_methods = (http_methods,)
         if not isinstance(http_methods, tuple):

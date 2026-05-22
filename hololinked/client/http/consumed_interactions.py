@@ -21,8 +21,8 @@ from hololinked.client.abstractions import (
 )
 from hololinked.client.exceptions import raise_local_exception
 from hololinked.constants import Operations
-from hololinked.td.forms import Form
-from hololinked.td.interaction_affordance import (
+from hololinked.metadata.td.forms import Form
+from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
     PropertyAffordance,

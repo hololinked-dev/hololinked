@@ -36,8 +36,8 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from hololinked.constants import Operations
-from hololinked.td import ActionAffordance, EventAffordance, PropertyAffordance
-from hololinked.td.forms import Form
+from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.td.forms import Form
 from hololinked.utils import get_current_async_loop
 
 

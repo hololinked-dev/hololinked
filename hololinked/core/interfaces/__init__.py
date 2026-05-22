@@ -8,3 +8,12 @@ Follows Hexagonal Architecture.
 from .configuration import BaseConfigurationRepository as BaseConfigurationRepository
 from .schema_validators import BaseSchemaValidator as BaseSchemaValidator
 from .serializer import BaseSerializer as BaseSerializer
+
+
+from .metadata import (  # isort: skip
+    Metadata as Metadata,
+    PropertyMetadata as PropertyMetadata,
+    ActionMetadata as ActionMetadata,
+    EventMetadata as EventMetadata,
+    InteractionMetadata as InteractionMetadata,
+)

@@ -1,7 +1,9 @@
+"""Concrete implementation of a `Property` through python's descriptor procotol."""
+
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Type
+from typing import TYPE_CHECKING, Any, Callable, Type
 
 from pydantic import BaseModel, ConfigDict, RootModel, create_model
 
@@ -14,9 +16,15 @@ from .events import Event, EventDispatcher  # noqa: F401
 from .exceptions import StateMachineError
 
 
+if TYPE_CHECKING:
+    from hololinked.core.interfaces import PropertyMetadata
+    from hololinked.core.thing import Thing
+
+
 class Property(Parameter):
     """
     get/set/delete an object/instance attribute with type definitions, validations, post-set effects, metadata and more.
+
     Please note the capital 'P' in `Property` to differentiate from python's own `property`.
     `Property` objects are similar to python's `property` but not a subclass of it due to limitations and redundancy.
     """
@@ -62,6 +70,8 @@ class Property(Parameter):
         metadata: dict | None = None,
     ) -> None:
         """
+        Initialize a `Property` object.
+
         Parameters
         ----------
         default: None or corresponding to property type
@@ -203,10 +213,11 @@ class Property(Parameter):
         self.push_change_event(obj, read_value)
         return read_value
 
-    def push_change_event(self, obj, value: Any) -> None:
+    def push_change_event(self, obj: Thing, value: Any) -> None:
         """
-        Pushes change event both on read and write if an event publisher object is available
-        on the owning `Thing`.
+        Pushes change event both on read and write if an event publisher object is available on the owning `Thing`.
+
+        An event publisher will be available upon serving the `Thing` instance.
 
         Parameters
         ----------
@@ -233,8 +244,19 @@ class Property(Parameter):
 
     def validate_and_adapt(self, value) -> Any:
         """
-        Validate the given value and adapt it if a proper logical reasoning can be given,
-        for example, cropping a number to its bounds. Returns modified value.
+        Validate the given value and adapt it if a proper logical reasoning can be given.
+
+        For example, cropping a number to its bounds.
+
+        Returns
+        -------
+        Any
+            modified or original value.
+
+        Raises
+        ------
+        ValueError
+            If the value is None but None is not allowed.
         """
         if value is None:
             if self.allow_None:
@@ -252,8 +274,14 @@ class Property(Parameter):
 
     def external_set(self, obj: Parameterized, value: Any) -> None:
         """
-        Method called when the value of the property is set from an external source, e.g. a remote client.
-        Usually introduces a state machine check before allowing the set operation.
+        Called when the value of the property is set from an external source, e.g. a remote client.
+
+        Introduces a state machine check before allowing the set operation.
+
+        Raises
+        ------
+        StateMachineError
+            If the `Thing` instance is in a state where this property cannot be written.
         """
         if self.execution_info.state is None or (
             hasattr(obj, "state_machine") and obj.state_machine.current_state in self.execution_info.state
@@ -274,8 +302,7 @@ class Property(Parameter):
 
     def comparator(self, func: Callable) -> Callable:
         """
-        Register a comparator method using this decorator to decide when to push
-        a change event.
+        Register a comparator method using this decorator to decide when to push a change event.
 
         Signature of the comparator method must be:
         ```
@@ -301,31 +328,40 @@ class Property(Parameter):
 
     @property
     def is_remote(self):
-        """`False` if the property is not remotely accessible"""
+        """`False` if the property is not remotely accessible."""
         return self._execution_info_validator is not None
 
     @property
     def observable(self) -> bool:
-        """`True` if the property pushes change events on read and write"""
+        """`True` if the property pushes change events on read and write."""
         return self._observable_event_descriptor is not None
 
-    def to_affordance(self, owner_inst=None):
+    def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> PropertyMetadata:
         """
-        Generates a `PropertyAffordance` TD fragment for this Property
+        Generates a `PropertyAffordance` TD fragment for this Property.
 
         Parameters
         ----------
         owner_inst: Thing, optional
             The instance of the owning `Thing` object. If not supplied, the class is used.
+        format: str, default "wot"
+            The metadata format to generate the affordance in. Currently, the only supported format is "wot" or
+            W3C Web of Things.
 
         Returns
         -------
         PropertyAffordance
             the affordance TD fragment for this property
-        """
-        from ..td import PropertyAffordance
 
-        return PropertyAffordance.generate(self, owner_inst or self.owner)
+        Raises
+        ------
+        ValueError
+            If the specified format is not supported. Currently, the only supported format is
+            "wot" or W3C Web of Things.
+        """
+        from hololinked.ddl import MetadataFormats
+
+        return MetadataFormats.get(format).property.from_descriptor(self, owner_inst or self.owner)
 
 
 class ModelRoot(RootModel):
@@ -340,6 +376,12 @@ def wrap_plain_types_in_rootmodel(model: type) -> Type[BaseModel] | Type[RootMod
     through unchanged. Otherwise, we wrap the type in a RootModel.
     In the future, we may explicitly check that the argument is a type
     and not a model instance.
+
+    Returns
+    -------
+    Type[BaseModel] | Type[RootModel]
+        a `BaseModel` subclass which can be used for validation. If the input was already a `BaseModel` subclass,
+        it is returned unchanged. Otherwise, a new `RootModel` subclass is returned which wraps the input type.
     """
     if model is None:
         return

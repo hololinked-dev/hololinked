@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import threading
@@ -5,8 +7,16 @@ import warnings
 
 from io import StringIO
 from types import SimpleNamespace  # noqa: F401
+from typing import TYPE_CHECKING
 
 import structlog
+
+from hololinked.utils import (
+    cancel_pending_tasks_in_current_loop,
+    forkable,
+    get_current_async_loop,
+    uuid_hex,
+)
 
 from ..config import global_config
 from ..core import Action, Event, Property, Thing
@@ -14,22 +24,19 @@ from ..core.properties import ClassSelector, Integer, TypedList
 from ..core.zmq.rpc_server import ZMQ_TRANSPORTS, RPCServer
 from ..param import Parameterized
 from ..param.parameters import String
-from ..td.interaction_affordance import (
-    ActionAffordance,
-    EventAffordance,
-    PropertyAffordance,
-)
-from ..utils import (
-    cancel_pending_tasks_in_current_loop,
-    forkable,
-    get_current_async_loop,
-    uuid_hex,
-)
 from .repository import (
     BrokerThing,
     consume_broker_pubsub,
     consume_broker_queue,
 )
+
+
+if TYPE_CHECKING:
+    from hololinked.core.interfaces import (
+        ActionMetadata,
+        EventMetadata,
+        PropertyMetadata,
+    )
 
 
 class BaseProtocolServer(Parameterized):
@@ -75,13 +82,13 @@ class BaseProtocolServer(Parameterized):
         for thing in things:
             self.add_thing(thing)
 
-    def add_property(self, property: PropertyAffordance | Property) -> None:
+    def add_property(self, property: PropertyMetadata | Property) -> None:
         raise NotImplementedError("Not implemented for this protocol")
 
-    def add_action(self, action: ActionAffordance | Action) -> None:
+    def add_action(self, action: ActionMetadata | Action) -> None:
         raise NotImplementedError("Not implemented for this protocol")
 
-    def add_event(self, event: EventAffordance | Event) -> None:
+    def add_event(self, event: EventMetadata | Event) -> None:
         raise NotImplementedError("Not implemented for this protocol")
 
     async def _instantiate_broker(
@@ -164,7 +171,7 @@ class BaseProtocolServer(Parameterized):
 @forkable
 def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_message: bool = True) -> None:
     """
-    run servers and serve your things
+    Run servers and serve your things
 
     Parameters
     ----------
@@ -223,7 +230,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
 
 
 def stop():
-    """shutdown all running servers started with run()"""
+    """Shutdown all running servers started with run()"""
     if hasattr(run, "shutdown_event"):
         run.shutdown_event.set()
         return
@@ -282,7 +289,7 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
 
 
 def _print_welcome_message(servers: list[BaseProtocolServer]) -> None:
-    """prints a welcome message to the console/log"""
+    """Prints a welcome message to the console/log"""
     from . import HTTPServer, MQTTPublisher
 
     buffer = StringIO()

@@ -9,13 +9,13 @@ from hololinked import Serializers
 from ...constants import JSONSerializable, Operations
 from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
 from ...core.zmq.payloads import SerializableData
-from ...td import (
+from ...metadata.td import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,
     PropertyAffordance,
 )
-from ...td.forms import Form
+from ...metadata.td.forms import Form
 from ..repository import BrokerThing  # noqa: F401
 from ..security import (
     APIKeySecurity,
@@ -304,7 +304,7 @@ class ThingDescriptionService:
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
         """Adds security definitions to the TD"""
-        from ...td.security_definitions import (
+        from ...metadata.td.security_definitions import (
             APIKeySecurityScheme,
             BasicSecurityScheme,
             NoSecurityScheme,

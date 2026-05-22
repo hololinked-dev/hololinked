@@ -83,9 +83,11 @@ jobs:
           ruff check --config ruff.toml hololinked/serializers
           ruff check --config ruff.toml hololinked/schema_validators
           ruff check --config ruff.toml hololinked/storage
+          ruff check --config ruff.toml hololinked/metadata/td
           ruff check --config ruff.toml hololinked/serialization.py
           ruff check --config ruff.toml hololinked/schemas.py
           ruff check --config ruff.toml hololinked/persistence.py
+          ruff check --config ruff.toml hololinked/ddl.py
 
       - name: run ty type checker
         if: matrix.tool == 'ty'
@@ -95,9 +97,11 @@ jobs:
           ty check hololinked/serializers
           ty check hololinked/schema_validators
           ty check hololinked/storage
+          ty check hololinked/metadata/td
           ty check hololinked/serialization.py
           ty check hololinked/schemas.py
           ty check hololinked/persistence.py
+          ty check hololinked/ddl.py
 
   scan:
     name: security scan (${{ matrix.tool }})

@@ -14,8 +14,8 @@ from hololinked.core.properties import (
     Selector,
     String,
 )
-from hololinked.td.data_schema import DataSchema
-from hololinked.td.interaction_affordance import (
+from hololinked.metadata.td.data_schema import DataSchema
+from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,
@@ -56,13 +56,6 @@ def test_01_associated_objects(thing):
     assert isinstance(affordance.objekt, Property)
     assert affordance.name == OceanOpticsSpectrometer.integration_time.name
 
-    affordance = PropertyAffordance()
-    assert affordance.owner is None
-    assert affordance.objekt is None
-    assert affordance.name is None
-    assert affordance.thing_id is None
-    assert affordance.thing_cls is None
-
     affordance = ActionAffordance()
     with pytest.raises(ValueError) as ex:
         affordance.objekt = OceanOpticsSpectrometer.integration_time
@@ -91,7 +84,7 @@ def test_01_associated_objects(thing):
 
 
 def test_02_number_schema(thing):
-    schema = OceanOpticsSpectrometer.integration_time.to_affordance(owner_inst=thing)
+    schema = OceanOpticsSpectrometer.integration_time.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert schema.type == "number"
 
@@ -104,7 +97,7 @@ def test_02_number_schema(thing):
         metadata=dict(unit="ms"),
     )
     integration_time.__set_name__(OceanOpticsSpectrometer, "integration_time")
-    schema = integration_time.to_affordance(owner_inst=thing)
+    schema = integration_time.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert schema.type == "number"
     assert schema.minimum == integration_time.bounds[0]
@@ -116,7 +109,7 @@ def test_02_number_schema(thing):
         _ = schema.exclusiveMaximum
     integration_time.inclusive_bounds = (False, False)
     integration_time.step = None
-    schema = integration_time.to_affordance(owner_inst=thing)
+    schema = integration_time.to_metadata(owner_inst=thing)
     assert schema.exclusiveMinimum == integration_time.bounds[0]
     assert schema.exclusiveMaximum == integration_time.bounds[1]
     with pytest.raises(AttributeError):
@@ -126,7 +119,7 @@ def test_02_number_schema(thing):
     with pytest.raises(AttributeError):
         _ = schema.multipleOf
     integration_time.allow_None = True
-    schema = integration_time.to_affordance(owner_inst=thing)
+    schema = integration_time.to_metadata(owner_inst=thing)
     assert any(subtype["type"] == "null" for subtype in schema.oneOf)
     assert any(subtype["type"] == "number" for subtype in schema.oneOf)
     assert len(schema.oneOf) == 2
@@ -145,7 +138,7 @@ def test_02_number_schema(thing):
 
 
 def test_03_string_schema(thing):
-    schema = OceanOpticsSpectrometer.status.to_affordance(owner_inst=thing)
+    schema = OceanOpticsSpectrometer.status.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
 
     status = String(
@@ -154,12 +147,12 @@ def test_03_string_schema(thing):
         doc="status of the spectrometer",
     )
     status.__set_name__(OceanOpticsSpectrometer, "status")
-    schema = status.to_affordance(owner_inst=thing)
+    schema = status.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert schema.type == "string"
     assert schema.pattern == status.regex
     status.allow_None = True
-    schema = status.to_affordance(owner_inst=thing)
+    schema = status.to_metadata(owner_inst=thing)
     assert any(subtype["type"] == "null" for subtype in schema.oneOf)
     assert any(subtype["type"] == "string" for subtype in schema.oneOf)
     assert len(schema.oneOf) == 2
@@ -170,16 +163,16 @@ def test_03_string_schema(thing):
 
 
 def test_04_boolean_schema(thing):
-    schema = OceanOpticsSpectrometer.nonlinearity_correction.to_affordance(owner_inst=thing)
+    schema = OceanOpticsSpectrometer.nonlinearity_correction.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
 
     nonlinearity_correction = Boolean(default=True, doc="nonlinearity correction enabled")
     nonlinearity_correction.__set_name__(OceanOpticsSpectrometer, "nonlinearity_correction")
-    schema = nonlinearity_correction.to_affordance(owner_inst=thing)
+    schema = nonlinearity_correction.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert schema.type == "boolean"
     nonlinearity_correction.allow_None = True
-    schema = nonlinearity_correction.to_affordance(owner_inst=thing)
+    schema = nonlinearity_correction.to_metadata(owner_inst=thing)
     assert any(subtype["type"] == "null" for subtype in schema.oneOf)
     assert any(subtype["type"] == "boolean" for subtype in schema.oneOf)
     assert len(schema.oneOf) == 2
@@ -188,7 +181,7 @@ def test_04_boolean_schema(thing):
 
 
 def test_05_array_schema(thing):
-    schema = OceanOpticsSpectrometer.wavelengths.to_affordance(owner_inst=thing)
+    schema = OceanOpticsSpectrometer.wavelengths.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
 
     wavelengths = List(
@@ -199,7 +192,7 @@ def test_05_array_schema(thing):
         doc="wavelength bins of measurement",
     )
     wavelengths.__set_name__(OceanOpticsSpectrometer, "wavelengths")
-    schema = wavelengths.to_affordance(owner_inst=thing)
+    schema = wavelengths.to_metadata(owner_inst=thing)
     assert isinstance(schema, BaseModel)
     assert isinstance(schema, DataSchema)
     assert isinstance(schema, PropertyAffordance)
@@ -209,7 +202,7 @@ def test_05_array_schema(thing):
     if OceanOpticsSpectrometer.wavelengths.default is not None:
         assert schema.default == OceanOpticsSpectrometer.wavelengths.default
     OceanOpticsSpectrometer.wavelengths.allow_None = True
-    schema = OceanOpticsSpectrometer.wavelengths.to_affordance(owner_inst=thing)
+    schema = OceanOpticsSpectrometer.wavelengths.to_metadata(owner_inst=thing)
     assert any(subtype["type"] == "null" for subtype in schema.oneOf)
     assert any(subtype["type"] == "array" for subtype in schema.oneOf)
     assert len(schema.oneOf) == 2
@@ -221,7 +214,7 @@ def test_05_array_schema(thing):
     for bounds in [(5, 1000), (None, 100), (50, None), (51, 101)]:
         wavelengths.bounds = bounds
         wavelengths.allow_None = False
-        schema = wavelengths.to_affordance(owner_inst=thing)
+        schema = wavelengths.to_metadata(owner_inst=thing)
         if bounds[0] is not None:
             assert schema.minItems == bounds[0]
         else:
@@ -232,7 +225,7 @@ def test_05_array_schema(thing):
             assert not hasattr(schema, "maxItems") or schema.maxItems is None
         wavelengths.bounds = bounds
         wavelengths.allow_None = True
-        schema = wavelengths.to_affordance(owner_inst=thing)
+        schema = wavelengths.to_metadata(owner_inst=thing)
         subtype = next(subtype for subtype in schema.oneOf if subtype["type"] == "array")
         if bounds[0] is not None:
             assert subtype["minItems"] == bounds[0]
@@ -247,7 +240,7 @@ def test_05_array_schema(thing):
 
 
 def test_06_enum_schema(thing):
-    schema = OceanOpticsSpectrometer.trigger_mode.to_affordance(owner_inst=thing)
+    schema = OceanOpticsSpectrometer.trigger_mode.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
 
     trigger_mode = Selector(
@@ -258,7 +251,7 @@ def test_06_enum_schema(thing):
                     3 = Ext. Trigger Synchro/ Shutter mode, 4 = Ext. Trigger Edge""",
     )
     trigger_mode.__set_name__(OceanOpticsSpectrometer, "trigger_mode")
-    schema = trigger_mode.to_affordance(owner_inst=thing)
+    schema = trigger_mode.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert schema.type == "integer"
     assert schema.default == 0
@@ -267,7 +260,7 @@ def test_06_enum_schema(thing):
     trigger_mode.allow_None = True
     trigger_mode.default = 3
     trigger_mode.objects = [0, 1, 2, 3, 4, "0", "1", "2", "3", "4"]
-    schema = trigger_mode.to_affordance(owner_inst=thing)
+    schema = trigger_mode.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert not hasattr(schema, "type") or schema.type is None
     assert schema.default == 3
@@ -288,13 +281,13 @@ def test_07_class_selector_custom_schema(thing):
         doc="last measurement intensity (in arbitrary units)",
     )
     last_intensity.__set_name__(OceanOpticsSpectrometer, "last_intensity")
-    schema = last_intensity.to_affordance(owner_inst=thing)
+    schema = last_intensity.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert schema.type == "object"
     assert schema.properties == Intensity.schema["properties"]
 
     last_intensity.allow_None = True
-    schema = last_intensity.to_affordance(owner_inst=thing)
+    schema = last_intensity.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert not hasattr(schema, "type") or schema.type is None
     subschema = next(subtype for subtype in schema.oneOf if subtype.get("type", None) == "object")
@@ -306,13 +299,13 @@ def test_07_class_selector_custom_schema(thing):
 def test_08_json_schema_properties(thing):
     json_schema_prop = TestThing.json_schema_prop  # type: Property
     json_schema_prop.allow_None = False
-    schema = json_schema_prop.to_affordance(owner_inst=thing)
+    schema = json_schema_prop.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     for key in json_schema_prop.model:
         assert getattr(schema, key, NotImplemented) == json_schema_prop.model[key]
 
     json_schema_prop.allow_None = True
-    schema = json_schema_prop.to_affordance(owner_inst=thing)
+    schema = json_schema_prop.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     subschema = next(
         subtype
@@ -327,7 +320,7 @@ def test_08_json_schema_properties(thing):
 def test_09_pydantic_properties(thing):
     pydantic_prop = TestThing.pydantic_prop  # type: Property
     pydantic_prop.allow_None = False
-    schema = pydantic_prop.to_affordance(owner_inst=thing)
+    schema = pydantic_prop.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     if issubklass(pydantic_prop.model, BaseModel):
         assert schema.type == "object"
@@ -335,7 +328,7 @@ def test_09_pydantic_properties(thing):
             assert field in schema.properties
 
     pydantic_prop.allow_None = True
-    schema = pydantic_prop.to_affordance(owner_inst=thing)
+    schema = pydantic_prop.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     subschema = next(subtype for subtype in schema.oneOf if subtype.get("type", None) == "object")
     assert isinstance(subschema, dict)
@@ -344,12 +337,12 @@ def test_09_pydantic_properties(thing):
 
     pydantic_simple_prop = TestThing.pydantic_simple_prop  # type: Property # its an integer
     pydantic_simple_prop.allow_None = False
-    schema = pydantic_simple_prop.to_affordance(owner_inst=thing)
+    schema = pydantic_simple_prop.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     assert schema.type == "integer"
 
     pydantic_simple_prop.allow_None = True
-    schema = pydantic_simple_prop.to_affordance(owner_inst=thing)
+    schema = pydantic_simple_prop.to_metadata(owner_inst=thing)
     assert isinstance(schema, PropertyAffordance)
     subschema = next(subtype for subtype in schema.oneOf if subtype.get("type", None) == "integer")
     assert subschema["type"] == "integer"

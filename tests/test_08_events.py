@@ -2,7 +2,7 @@ import pytest
 
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.zmq.brokers import EventPublisher
-from hololinked.td.interaction_affordance import EventAffordance
+from hololinked.metadata.td.interaction_affordance import EventAffordance
 from hololinked.utils import uuid_hex
 
 
@@ -69,7 +69,7 @@ def test_02_observable_events():
 def test_03_event_affordance():
     """Test event affordance generation"""
     thing = TestThing(id=f"test-event-affordance-{uuid_hex()}")
-    event = TestThing.test_event.to_affordance(thing)
+    event = TestThing.test_event.to_metadata(thing)
     assert isinstance(event, EventAffordance)
 
 

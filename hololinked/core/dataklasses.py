@@ -1,7 +1,11 @@
 """
-The following is a list of all dataclasses used to store information on the exposed
-resources on the network. These classese are generally not for consumption by the package-end-user.
+The following is a list of all dataclasses used to store information on the exposed resources on the network.
+
+These will be deprecated ASAP, initially used for validation purposes as the related objects were not so well defined,
+currently a nuisance. These classese are generally not for consumption by the package-end-user.
 """
+
+from __future__ import annotations
 
 from enum import Enum
 from types import FunctionType, MethodType
@@ -19,9 +23,11 @@ from hololinked.utils import issubklass
 # TODO, this class will be removed in future and merged directly into the corresponding object
 class RemoteResourceInfoValidator:
     """
-    A validator class for saving remote access related information on a resource. Currently callables (functions,
-    methods and those with__call__) and class/instance property store this information as their own attribute under
-    the variable ``_execution_info_validator``. This is later split into information suitable for HTTP server, ZMQ client & ``EventLoop``.
+    A validator class for saving remote access related information on a resource.
+
+    Currently callables (functions, methods and those with__call__) and class/instance property store this information
+    as their own attribute under the variable ``_execution_info_validator``. This is later split into information
+    suitable for HTTP server, ZMQ client & ``EventLoop``.
 
     Attributes
     ----------
@@ -78,7 +84,9 @@ class RemoteResourceInfoValidator:
 
 class ActionInfoValidator(RemoteResourceInfoValidator):
     """
-    request_as_argument : bool, default False
+    Action validator.
+
+    request_as_argument: bool, default False
         if True, http/ZMQ request object will be passed as an argument to the callable.
         The user is warned to not use this generally.
     argument_schema: JSON, default None
@@ -156,7 +164,7 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
         value = self.action_payload_schema_validator(value)
         setattr(self, "_return_value_schema", value)
 
-    def action_payload_schema_validator(self, value: Any) -> Any:
+    def action_payload_schema_validator(self, value: Any) -> Any:  # noqa
         if value is None or isinstance(value, dict) or issubklass(value, (BaseModel, RootModel)):
             return value
         raise TypeError("Schema must be None, a dict, or a subclass of BaseModel or RootModel")

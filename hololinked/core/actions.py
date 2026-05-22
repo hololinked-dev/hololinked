@@ -1,9 +1,13 @@
+"""Concrete definition of an Action. Implemention of async and sync versions, action decorator."""
+
+from __future__ import annotations
+
 import warnings
 
 from enum import Enum
 from inspect import getfullargspec, iscoroutinefunction
 from types import FunctionType, MethodType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jsonschema
 
@@ -12,6 +16,7 @@ from pydantic import BaseModel, RootModel
 from hololinked import SchemaValidatorClasses
 from hololinked.constants import JSON
 from hololinked.core.exceptions import StateMachineError
+from hololinked.core.interfaces.metadata import ActionMetadata
 from hololinked.param.parameterized import ParameterizedFunction
 from hololinked.utils import (
     get_input_model_from_signature,
@@ -22,6 +27,11 @@ from hololinked.utils import (
 )
 
 from .dataklasses import ActionInfoValidator
+
+
+if TYPE_CHECKING:
+    from hololinked.core.interfaces import ActionMetadata
+    from hololinked.core.thing import Thing
 
 
 class Action:
@@ -91,7 +101,7 @@ class Action:
             raise TypeError("execution_info must be of type ActionInfoValidator")
         self._execution_info = value  # type: ActionInfoValidator
 
-    def to_affordance(self, owner_inst=None):
+    def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> ActionMetadata:
         """
         Generates a `ActionAffordance` TD fragment for this Action.
 
@@ -105,9 +115,12 @@ class Action:
         ActionAffordance
             the affordance TD fragment for this action
         """
-        from ..td import ActionAffordance
+        from hololinked.ddl import MetadataFormats
 
-        return ActionAffordance.generate(self, owner_inst or self.owner)
+        return MetadataFormats.get(format).action.from_descriptor(
+            self,
+            owner_inst or self.owner,
+        )
 
 
 class BoundAction:
@@ -132,7 +145,7 @@ class BoundAction:
 
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
-        from .thing import Thing, ThingMeta
+        from .thing import ThingMeta
 
         # owner class and instance
         self.owner: ThingMeta
@@ -145,6 +158,7 @@ class BoundAction:
     def validate_call(self, args, kwargs: dict[str, Any]) -> None:
         """
         Validate the call to the action, like payload, state machine state etc.
+
         Errors are raised as exceptions.
 
         Parameters
@@ -153,6 +167,13 @@ class BoundAction:
             positional arguments to the action
         kwargs: dict
             keyword arguments to the action
+
+        Raises
+        ------
+        StateMachineError
+            if the action cannot be executed in the current state of the owning thing
+        RuntimeError
+            if the action explicity accepts only keyword arguments but some positional arguments are given
         """
         if self.execution_info.isparameterized and len(args) > 0:
             raise RuntimeError("parameterized functions cannot have positional arguments")
@@ -202,7 +223,7 @@ class BoundAction:
             return self.obj.__doc__
         return super().__getattribute__(name)
 
-    def to_affordance(self):
+    def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> ActionMetadata:
         """
         Generates a `ActionAffordance` TD fragment for this Action.
 
@@ -216,17 +237,19 @@ class BoundAction:
         ActionAffordance
             the affordance TD fragment for this action
         """
-        return Action.to_affordance(self.descriptor, self.owner_inst or self.owner)
+        return Action.to_metadata(self.descriptor, owner_inst or self.owner_inst or self.owner, format=format)
 
 
 class BoundSyncAction(BoundAction):
     """
-    non async(io) action call. The call is passed to the method as-it-is to allow local
+    Non-async(io) action call.
+
+    The call is passed to the method as-it-is to allow local
     invocation without state machine checks. Use `external_call` to have validation.
     """
 
     def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks"""
+        """Validated call to the action with state machine and payload checks."""
         self.validate_call(args, kwargs)
         return self.__call__(*args, **kwargs)
 
@@ -238,12 +261,14 @@ class BoundSyncAction(BoundAction):
 
 class BoundAsyncAction(BoundAction):
     """
-    async(io) action call. The call is passed to the method as-it-is to allow local
+    async(io) action call.
+
+    The call is passed to the method as-it-is to allow local
     invocation without state machine checks. Use `external_call` to have validation.
     """
 
     async def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks"""
+        """Validated call to the action with state machine and payload checks."""
         self.validate_call(args, kwargs)
         return await self.__call__(*args, **kwargs)
 
@@ -263,8 +288,9 @@ def action(
     **kwargs,
 ) -> Action:
     """
-    Decorate on your methods to make them accessible remotely or create 'actions' out of them. When used with hardware,
-    actions generally command the hardware to do something.
+    Decorate on your methods to make them accessible remotely or create 'actions' out of them.
+
+    When used with hardware, actions generally command the hardware to do something.
 
     Parameters
     ----------
@@ -298,6 +324,13 @@ def action(
     Action
         returns the callable object wrapped in an `Action` object. When accessed at instance level,
         a `BoundSyncAction` or `BoundAsyncAction` object is returned.
+
+    Raises
+    ------
+    TypeError
+        if the decorated object is not a function or method, or if the input/output schema is of invalid type
+    ValueError
+        if the decorated function is a dunder method, or if unknown keyword arguments are provided
     """
 
     def inner(obj):

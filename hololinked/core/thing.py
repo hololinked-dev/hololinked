@@ -1,3 +1,7 @@
+"""Concrete Implementation of a `Thing` that represents a physical or virtual object."""
+
+from __future__ import annotations
+
 import inspect
 import logging
 import ssl
@@ -6,7 +10,7 @@ from typing import Any
 
 import structlog
 
-from hololinked.core.interfaces import BaseConfigurationRepository
+from hololinked.core.interfaces import BaseConfigurationRepository, Metadata
 
 from ..constants import ZMQ_TRANSPORTS
 from ..utils import forkable, getattr_without_descriptor_read
@@ -19,10 +23,12 @@ from .property import Property
 
 class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     """
-    Subclass from here to expose hardware or python objects on the network. Remotely accessible members of a `Thing` are
-    segregated into properties, actions & events. Utilize properties for data that can be read and written,
-    actions to instruct the object to perform tasks and events to get notified of any relevant information. State Machines
-    can be used to constrain operations on properties and actions.
+    Subclass from here to expose hardware or python objects on the network.
+
+    Remotely accessible members of a `Thing` are segregated into properties, actions & events.
+    Utilize properties for data that can be read and written, actions to instruct the object to perform tasks
+    and events to get notified of any relevant information. State Machines can be used to constrain operations on
+    properties and actions.
 
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/Thing.pdf)
     """
@@ -94,6 +100,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         **kwargs: dict[str, Any],
     ) -> None:
         """
+        Initialize a `Thing`.
+
         Parameters
         ----------
         id: str
@@ -201,9 +209,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         return things
 
     @action()
-    def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = []):
+    def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = [], format: str = "wot") -> Metadata:
         """
         Generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object.
+
         The model is a JSON that describes the object's properties, actions, events and their metadata, without the
         protocol information. The model can be used by a client to understand the object's capabilities.
 
@@ -218,15 +227,23 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         Returns
         -------
-        hololinked.td.ThingModel
+        hololinked.metadata.td.ThingModel
             represented as an object in python, gets automatically serialized to JSON when pushed out of the socket.
         """
         # allow_loose_schema: bool, optional, Default False
         #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable
         #     inaccurate but truthy value. In other words, schema validation will always pass.
-        from ..td.tm import ThingModel
+        from hololinked.ddl import MetadataFormats
 
-        return ThingModel(instance=self, ignore_errors=ignore_errors, skip_names=skip_names).generate()
+        return (
+            MetadataFormats.get(format)
+            .thing(
+                thing=self,
+                ignore_errors=ignore_errors,
+                skip_names=skip_names,
+            )
+            .generate()
+        )
 
     thing_model = property(get_thing_model, doc=get_thing_model.__doc__)
 
@@ -238,8 +255,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         **kwargs: dict[str, Any],
     ) -> None:
         """
-        Quick-start to serve `Thing` over ZMQ. This method is fully blocking, call `exit()` (`hololinked.server.exit()`)
-        to unblock.
+        Quick-start to serve `Thing` over ZMQ.
+
+        This method is fully blocking, call `exit()` (`hololinked.server.exit()`) to unblock.
 
         Parameters
         ----------
@@ -293,8 +311,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         **kwargs: dict[str, Any],
     ) -> None:
         """
-        Quick-start to serve `Thing` over HTTP. This method is fully blocking, call `exit()` (`hololinked.server.exit()`)
-        to unblock.
+        Quick-start to serve `Thing` over HTTP.
+
+        This method is fully blocking, call `exit()` (`hololinked.server.exit()`) to unblock.
 
         Parameters
         ----------
@@ -341,8 +360,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         **kwargs: dict[str, Any],
     ) -> None:
         """
-        Expose the object with the given servers. This method is blocking until `exit()` (`hololinked.server.exit()`)
-        is called.
+        Expose the object with the given servers.
+
+        This method is blocking until `exit()` (`hololinked.server.exit()`) is called.
 
         >>> Thing(id='example_id').run(servers=[http_server, zmq_server, mqtt_publisher])
 
@@ -361,6 +381,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
             - `servers`: list[BaseProtocolServer]
                 list of instantiated servers to expose the object.
+
+        Raises
+        ------
+        ValueError
+            if neither `access_points` nor `servers` is provided, or if both are provided.
         """
         from ..server.server import BaseProtocolServer, parse_params, run  # noqa: F401
 
@@ -381,7 +406,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     @action()
     def exit(self) -> None:
         """
-        Stop serving the object. This method usually needs to be called remotely.
+        Stop serving the object.
+
+        This method usually needs to be called remotely.
         The servers are not stopped, just the object run loop is exited.
         """
         if self.rpc_server is None:
@@ -397,7 +424,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     @action()
     def ping(self) -> None:
         """
-        Ping to see if it is alive. Successful when action succeeds with no return value and
+        Ping to see if it is alive.
+
+        Successful when action succeeds with no return value and
         no timeout or exception raised on the client side.
         """
         pass

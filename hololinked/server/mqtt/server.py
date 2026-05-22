@@ -6,8 +6,8 @@ import aiomqtt
 import structlog
 
 from ...core import Thing as CoreThing
+from ...metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
 from ...param.parameters import ClassSelector, String
-from ...td.interaction_affordance import EventAffordance, PropertyAffordance
 from ...utils import get_current_async_loop
 from ..server import BaseProtocolServer
 from .config import RuntimeConfig
@@ -161,7 +161,7 @@ class MQTTPublisher(BaseProtocolServer):
             eventloop.create_task(self.start_publishers(thing))
 
     def stop(self):
-        """stop publishing, the client is not closed automatically"""
+        """Stop publishing, the client is not closed automatically"""
         for publisher in self.publishers.values():
             publisher.stop()
 
