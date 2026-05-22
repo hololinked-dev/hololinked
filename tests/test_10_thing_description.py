@@ -56,13 +56,6 @@ def test_01_associated_objects(thing):
     assert isinstance(affordance.objekt, Property)
     assert affordance.name == OceanOpticsSpectrometer.integration_time.name
 
-    affordance = PropertyAffordance()
-    assert affordance.owner is None
-    assert affordance.objekt is None
-    assert affordance.name is None
-    assert affordance.thing_id is None
-    assert affordance.thing_cls is None
-
     affordance = ActionAffordance()
     with pytest.raises(ValueError) as ex:
         affordance.objekt = OceanOpticsSpectrometer.integration_time

@@ -235,10 +235,14 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         #     inaccurate but truthy value. In other words, schema validation will always pass.
         from hololinked.ddl import MetadataFormats
 
-        return MetadataFormats.get(format).thing.generate(
-            thing=self,
-            ignore_errors=ignore_errors,
-            skip_names=skip_names,
+        return (
+            MetadataFormats.get(format)
+            .thing(
+                thing=self,
+                ignore_errors=ignore_errors,
+                skip_names=skip_names,
+            )
+            .generate()
         )
 
     thing_model = property(get_thing_model, doc=get_thing_model.__doc__)
