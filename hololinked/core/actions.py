@@ -12,6 +12,7 @@ from pydantic import BaseModel, RootModel
 from hololinked import SchemaValidatorClasses
 from hololinked.constants import JSON
 from hololinked.core.exceptions import StateMachineError
+from hololinked.core.interfaces.metadata import ActionMetadata
 from hololinked.param.parameterized import ParameterizedFunction
 from hololinked.utils import (
     get_input_model_from_signature,
@@ -25,6 +26,7 @@ from .dataklasses import ActionInfoValidator
 
 
 if TYPE_CHECKING:
+    from hololinked.core.interfaces import ActionMetadata
     from hololinked.core.thing import Thing
 
 
@@ -95,7 +97,7 @@ class Action:
             raise TypeError("execution_info must be of type ActionInfoValidator")
         self._execution_info = value  # type: ActionInfoValidator
 
-    def to_affordance(self, owner_inst: Thing | None = None):
+    def to_affordance(self, owner_inst: Thing | None = None, format: str = "wot") -> ActionMetadata:
         """
         Generates a `ActionAffordance` TD fragment for this Action.
 
@@ -109,9 +111,12 @@ class Action:
         ActionAffordance
             the affordance TD fragment for this action
         """
-        from ..td import ActionAffordance
+        from hololinked.ddl import MetadataFormats
 
-        return ActionAffordance.from_descriptor(self, owner_inst or self.owner)
+        return MetadataFormats.generator_class(format).action.from_descriptor(
+            self,
+            owner_inst or self.owner,
+        )
 
 
 class BoundAction:

@@ -1,10 +1,17 @@
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 
 import jsonschema
 
-from ..config import global_config
-from ..constants import JSON
-from ..param.parameterized import Parameterized, ParameterizedMetaclass
+from hololinked.config import global_config
+from hololinked.constants import JSON
+from hololinked.core.interfaces.metadata import EventMetadata
+from hololinked.param.parameterized import Parameterized, ParameterizedMetaclass
+
+
+if TYPE_CHECKING:
+    from hololinked.core.events import EventMetadata
+    from hololinked.core.thing import Thing
+    from hololinked.core.zmq.brokers import EventPublisher  # TODO remove this if possible
 
 
 class Event:
@@ -64,7 +71,7 @@ class Event:
                 "Event object not yet initialized, please dont access now." + " Access after Thing is running."
             )
 
-    def to_affordance(self, owner_inst: Any = None):
+    def to_affordance(self, owner_inst: Thing | None = None, format: str = "wot") -> EventMetadata:
         """
         Generates a `EventAffordance` TD fragment for this Event
 
@@ -78,9 +85,9 @@ class Event:
         EventAffordance
             the affordance TD fragment for this event
         """
-        from ..td import EventAffordance
+        from hololinked.ddl import MetadataFormats
 
-        return EventAffordance.from_descriptor(self, owner_inst or self.owner)
+        return MetadataFormats.get(format).event.from_descriptor(self, owner_inst or self.owner)
 
 
 class EventDispatcher:

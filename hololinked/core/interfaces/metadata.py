@@ -102,7 +102,7 @@ class InteractionMetadata(BaseModel):
     need to extend this class.
     """
 
-    _custom_schema_generators: ClassVar[dict]
+    _custom_metadata_generators: ClassVar[dict]
 
     def __init__(self):
         super().__init__()

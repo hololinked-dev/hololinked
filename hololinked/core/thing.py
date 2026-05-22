@@ -207,7 +207,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         return things
 
     @action()
-    def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = []) -> Metadata:
+    def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = [], format: str = "wot") -> Metadata:
         """
         Generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object.
 
@@ -231,9 +231,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # allow_loose_schema: bool, optional, Default False
         #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable
         #     inaccurate but truthy value. In other words, schema validation will always pass.
-        from hololinked.metadata.td.tm import ThingModel
+        from hololinked.ddl import MetadataFormats
 
-        return ThingModel(thing=self, ignore_errors=ignore_errors, skip_names=skip_names).generate()
+        return MetadataFormats.get(format).thing.generate(
+            thing=self,
+            ignore_errors=ignore_errors,
+            skip_names=skip_names,
+        )
 
     thing_model = property(get_thing_model, doc=get_thing_model.__doc__)
 

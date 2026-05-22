@@ -45,7 +45,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
     forms: Optional[list[Form]] = None
     # uri variables
 
-    _custom_schema_generators: ClassVar = dict()
+    _custom_metadata_generators: ClassVar = dict()
     model_config = ConfigDict(extra="allow")
 
     @property
@@ -243,7 +243,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
     def register_descriptor(
         cls,
         descriptor: Property | Action | Event,
-        schema_generator: type[InteractionAffordance] | type[InteractionMetadata],
+        metadata_generator: type[InteractionAffordance] | type[InteractionMetadata],
     ) -> None:
         """
         Register a custom schema generator for a descriptor.
@@ -252,7 +252,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         ----------
         descriptor: Property | Action | Event
             The descriptor class
-        schema_generator: `InteractionAffordance`
+        metadata_generator: `InteractionAffordance`
             `InteractionAffordance` subclass that implements the custom schema generation logic for the descriptor.
             Either override the `from_descriptor()` method or the `build()` method.
 
@@ -266,12 +266,12 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
             raise TypeError(
                 "custom schema generator can also be registered for Property." + f" Given type {type(descriptor)}"
             )
-        if not isinstance(schema_generator, InteractionAffordance):
+        if not isinstance(metadata_generator, InteractionAffordance):
             raise TypeError(
-                "schema generator for Property must be subclass of PropertyAfforance. "
-                + f"Given type {type(schema_generator)}"
+                "metadata generator for Property must be subclass of PropertyAfforance. "
+                + f"Given type {type(metadata_generator)}"
             )
-        InteractionAffordance._custom_schema_generators[descriptor] = schema_generator
+        InteractionAffordance._custom_metadata_generators[descriptor] = metadata_generator
 
     def __deepcopy__(self, memo):  # noqa: D105
         if self.__class__ == PropertyAffordance:
@@ -323,7 +323,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             self.observable = property.observable
 
     @classmethod
-    def from_descriptor(cls, property: Property, owner: Thing | ThingMeta):  # noqa: D102
+    def from_descriptor(cls, property: Property, owner: Thing | ThingMeta) -> "PropertyAffordance":  # noqa: D102
         if not isinstance(property, Property):
             raise TypeError(f"property must be instance of Property, given type {type(property)}")
         affordance = PropertyAffordance()
