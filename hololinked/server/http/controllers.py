@@ -20,7 +20,7 @@ from ...core.zmq.message import (
     default_thing_execution_context,
 )
 from ...core.zmq.payloads import PreserializedData, SerializableData
-from ...td import (
+from ...metadata.td import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,

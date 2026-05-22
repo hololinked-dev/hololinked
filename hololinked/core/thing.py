@@ -1,5 +1,7 @@
 """Concrete Implementation of a `Thing` that represents a physical or virtual object."""
 
+from __future__ import annotations
+
 import inspect
 import logging
 import ssl

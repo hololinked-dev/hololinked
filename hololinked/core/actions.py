@@ -1,3 +1,7 @@
+"""Concrete definition of an Action. Implemention of async and sync versions, action decorator."""
+
+from __future__ import annotations
+
 import warnings
 
 from enum import Enum
@@ -113,7 +117,7 @@ class Action:
         """
         from hololinked.ddl import MetadataFormats
 
-        return MetadataFormats.generator_class(format).action.from_descriptor(
+        return MetadataFormats.get(format).action.from_descriptor(
             self,
             owner_inst or self.owner,
         )
@@ -141,7 +145,7 @@ class BoundAction:
 
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
-        from .thing import Thing, ThingMeta
+        from .thing import ThingMeta
 
         # owner class and instance
         self.owner: ThingMeta
@@ -154,6 +158,7 @@ class BoundAction:
     def validate_call(self, args, kwargs: dict[str, Any]) -> None:
         """
         Validate the call to the action, like payload, state machine state etc.
+
         Errors are raised as exceptions.
 
         Parameters
@@ -162,6 +167,13 @@ class BoundAction:
             positional arguments to the action
         kwargs: dict
             keyword arguments to the action
+
+        Raises
+        ------
+        StateMachineError
+            if the action cannot be executed in the current state of the owning thing
+        RuntimeError
+            if the action explicity accepts only keyword arguments but some positional arguments are given
         """
         if self.execution_info.isparameterized and len(args) > 0:
             raise RuntimeError("parameterized functions cannot have positional arguments")

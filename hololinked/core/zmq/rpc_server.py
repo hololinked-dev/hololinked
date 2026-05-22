@@ -667,8 +667,8 @@ class RPCServer(BaseZMQServer):
         """
         TM = instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()  # type: dict[str, Any]
         TD = copy.deepcopy(TM)
-        from ...td import ActionAffordance, EventAffordance, PropertyAffordance
-        from ...td.forms import Form
+        from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+        from ...metadata.td.forms import Form
 
         if protocol.lower() == "inproc":
             req_rep_socket_address = self.req_rep_server.socket_address

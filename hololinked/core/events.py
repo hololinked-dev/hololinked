@@ -1,3 +1,7 @@
+"""Concrete definition of an Event."""
+
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, overload
 
 import jsonschema
@@ -16,9 +20,10 @@ if TYPE_CHECKING:
 
 class Event:
     """
-    Asynchronously push arbitrary messages to clients (as-in messages that cannot be properly timed) without
-    the client requesting the data every time. Events are pushed from the server to the clients
-    that have subscribed to them.
+    Asynchronously push arbitrary messages to clients without the client requesting the data every time.
+
+    Asynchronous as-in messages that cannot be properly timed, not necessary `async`. Events are pushed from the server
+    to the clients that have subscribed to them.
     """
 
     __slots__ = ["name", "_internal_name", "_publisher", "_observable", "doc", "schema", "label", "owner"]
@@ -30,6 +35,8 @@ class Event:
         label: str | None = None,
     ) -> None:
         """
+        Initialize an event.
+
         Parameters
         ----------
         doc: str
@@ -73,7 +80,7 @@ class Event:
 
     def to_affordance(self, owner_inst: Thing | None = None, format: str = "wot") -> EventMetadata:
         """
-        Generates a `EventAffordance` TD fragment for this Event
+        Generates a `EventAffordance` TD fragment for this Event.
 
         Parameters
         ----------
@@ -92,8 +99,9 @@ class Event:
 
 class EventDispatcher:
     """
-    The worker that pushes an event. The separation is necessary between `Event` and
-    `EventDispatcher` to allow class level definitions of the `Event`
+    The worker that pushes an event.
+
+    The separation is necessary between `Event` and `EventDispatcher` to allow class level definitions of the `Event`
     """
 
     __slots__ = ["_unique_identifier", "_publisher", "_owner_inst", "_descriptor"]
@@ -101,7 +109,7 @@ class EventDispatcher:
     def __init__(
         self,
         unique_identifier: str,
-        publisher: "EventPublisher",  # noqa TODO fix
+        publisher: EventPublisher,
         owner_inst: ParameterizedMetaclass,
         descriptor: Event,
     ) -> None:
@@ -111,12 +119,12 @@ class EventDispatcher:
         self.publisher = publisher
 
     @property
-    def publisher(self) -> "EventPublisher":  # noqa TODO fix
-        """Event publishing PUB socket owning object"""
+    def publisher(self) -> EventPublisher:
+        """Event publishing PUB socket owning object."""
         return self._publisher
 
     @publisher.setter
-    def publisher(self, value: "EventPublisher") -> None:  # noqa TODO fix
+    def publisher(self, value: EventPublisher) -> None:
         # TODO fix this once the architecture is resolved
         from .zmq.brokers import EventPublisher  # noqa: E402
 
@@ -129,7 +137,9 @@ class EventDispatcher:
 
     def push(self, data: Any) -> None:
         """
-        Publish the event. Multipart payloads are not supported. Supply either a serializable object or a
+        Publish the event.
+
+        Multipart payloads are not supported. Supply either a serializable object or a
         bytes object for binary data, not both.
 
         Parameters
@@ -141,18 +151,28 @@ class EventDispatcher:
 
     def receive_acknowledgement(self, timeout: float | int | None) -> bool:
         """
+        Receive acknowledgement for an event that was just pushed.
+
         Not Implemented.
 
-        Receive acknowledgement for an event that was just pushed.
+        Parameters
+        ----------
+        timeout: float | int | None
+            timeout for receiving the acknowledgement, in seconds. If None, wait indefinitely.
+
+        Returns
+        -------
+        bool
+            True if acknowledgement is received, False if timeout is reached.
         """
         raise NotImplementedError("Event acknowledgement is not implemented yet.")
         return self._synchronize_event.wait(timeout=timeout)
 
     def _set_acknowledgement(self, *args, **kwargs) -> None:
         """
-        Not Implemented.
-
         Once an acknowledgement is received from the client, this function is called to set the event.
+
+        Not Implemented.
         """
         raise NotImplementedError("Event acknowledgement is not implemented yet.")
         self._synchronize_event.set()

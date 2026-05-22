@@ -13,7 +13,9 @@ from .thing import Thing
 
 class StateMachine:
     """
-    A finite state machine to constrain property and action execution. Each `Thing` class can only have one state machine
+    A finite state machine to constrain property and action execution.
+
+    Each `Thing` class can only have one state machine
     instantiated in a reserved class-level attribute named `state_machine`. Other instantiations are not respected.
     The `state` attribute defined as a `Thing`'s property reflects the current state of the state machine and
     can be subscribed for state change events. When `state_machine` is accessed by a `Thing` instance,
@@ -134,8 +136,7 @@ class StateMachine:
         self.owner = owner
 
     def validate(self, owner: Thing) -> None:
-        """validate the state machine, whether the properties, actions and states are correctly specified"""
-
+        """Validate the state machine, whether the properties, actions and states are correctly specified"""
         # cannot merge this with __set_name__ because descriptor objects are not ready at that time.
         # reason - metaclass __init__ is called after __set_name__ of descriptors, therefore the new "proper" desriptor
         # registries are available only after that. Until then only the inherited descriptor registries are available,
@@ -276,7 +277,7 @@ class BoundFSM:
 
     def get_state(self) -> str | StrEnum | None:
         """
-        return the current state, one can also access it using the property `current state`.
+        Return the current state, one can also access it using the property `current state`.
 
         Returns
         -------
@@ -290,7 +291,7 @@ class BoundFSM:
 
     def set_state(self, value: str | StrEnum | Enum, push_event: bool = True, skip_callbacks: bool = False) -> None:
         """
-        set state of state machine. Also triggers state change callbacks if `skip_callbacks=False` and pushes a state
+        Set state of state machine. Also triggers state change callbacks if `skip_callbacks=False` and pushes a state
         change event when `push_event=True` (when __init__ argument `push_state_change_event=True`).
         One can also set state using the '=' operator of the `current_state` property,
         in which case `skip_callbacks=False` and `push_event=True` will be used.
@@ -361,32 +362,32 @@ class BoundFSM:
 
     @property
     def initial_state(self):
-        """initial state of the machine"""
+        """Initial state of the machine"""
         return self.descriptor.initial_state
 
     @property
     def states(self):
-        """list of allowed states"""
+        """List of allowed states"""
         return self.descriptor.states
 
     @property
     def on_enter(self):
-        """callbacks to execute when a certain state is entered"""
+        """Callbacks to execute when a certain state is entered"""
         return self.descriptor.on_enter
 
     @property
     def on_exit(self):
-        """callbacks to execute when certain state is exited"""
+        """Callbacks to execute when certain state is exited"""
         return self.descriptor.on_exit
 
     @property
     def machine(self):
-        """the machine specification with state as key and objects as list"""
+        """The machine specification with state as key and objects as list"""
         return self.descriptor.machine
 
 
 def prepare_object_FSM(instance: Thing) -> None:
-    """validate and prepare the state machine attached to a Thing class"""
+    """Validate and prepare the state machine attached to a Thing class"""
     cls = instance.__class__
     if cls.state_machine and isinstance(cls.state_machine, StateMachine):
         cls.state_machine.validate(instance)
