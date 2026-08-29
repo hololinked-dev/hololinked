@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Type
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, RootModel, create_model
 
-from hololinked import SchemaValidatorClasses
+from hololinked import SchemaValidators
+from hololinked.config import global_config
 
 from ..param.parameterized import Parameter, ParameterizedMetaclass
 from ..param.parameters import Tuple
@@ -17,7 +19,7 @@ from .exceptions import StateMachineError
 
 
 if TYPE_CHECKING:
-    from hololinked.core.interfaces import PropertyMetadata
+    from hololinked.core.interfaces import BaseSchemaValidator, PropertyMetadata
     from hololinked.core.thing import Thing
 
 
@@ -30,20 +32,20 @@ class Property(Parameter):
     """
 
     __slots__ = [
-        "db_persist",
-        "db_init",
-        "db_commit",
-        "model",
-        "metadata",
-        "fcomparator",
-        "validator",
-        "state",
-        "_remote",
         "_observable_event_descriptor",
         "_old_value_internal_name",
+        "_remote",
+        "_validator",
+        "db_commit",
+        "db_init",
+        "db_persist",
+        "fcomparator",
+        "metadata",
+        "model",
+        "state",
     ]
 
-    state: "tuple[Enum | str] | None"
+    state: tuple[Enum | str] | None
     """state machine state(s) in which this property can be written, any state when None"""
 
     def __init__(
@@ -193,11 +195,12 @@ class Property(Parameter):
         ).validate_and_adapt(state)
 
         self.model = None
-        self.validator = None
+        self._validator = None
         if model:
-            if isinstance(model, dict):
+            if SchemaValidators.is_supported(model):
                 self.model = model
-                self.validator = SchemaValidatorClasses.json_schema(model).validate
+                if global_config.VALIDATE_SCHEMAS:
+                    SchemaValidators.check_schema(model)
             else:
                 self.model = wrap_plain_types_in_rootmodel(model)
 
@@ -211,6 +214,13 @@ class Property(Parameter):
             self._observable_event_descriptor.__set_name__(owner, _observable_event_name)
             # This is a descriptor object, so we need to set it on the owner class
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
+
+    @property
+    def validator(self) -> BaseSchemaValidator | None:
+        """Validator for the value of this property, None if the property is validated by a pydantic model instead."""
+        if self._validator is None and self.model is not None and not issubklass(self.model, BaseModel):
+            self._validator = SchemaValidators.for_schema(self.model)(self.model)
+        return self._validator
 
     def __get__(self, obj: Thing, objtype: ParameterizedMetaclass) -> Any:  # ty: ignore[invalid-method-override]
         read_value = super().__get__(obj, objtype)
@@ -268,12 +278,12 @@ class Property(Parameter):
             else:
                 raise ValueError(f"Property {self.name} does not allow None values")
         if self.model:
-            if isinstance(self.model, dict):
-                self.validator(value)  # ty: ignore[call-non-callable]
-            elif issubklass(self.model, RootModel):
+            if issubklass(self.model, RootModel):
                 value = self.model(value)  # ty: ignore[too-many-positional-arguments]
             elif issubklass(self.model, BaseModel):
                 value = self.model(**value)
+            else:
+                self.validator.validate(value)
         return super().validate_and_adapt(value)
 
     def external_set(self, obj: Thing, value: Any) -> None:
@@ -376,7 +386,7 @@ class ModelRoot(RootModel):
 
 def wrap_plain_types_in_rootmodel(
     model: type | None,
-) -> Type[BaseModel] | Type[RootModel]:
+) -> type[BaseModel | RootModel]:
     """
     Ensure a type is a subclass of BaseModel.
 

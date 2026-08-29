@@ -125,10 +125,7 @@ class Action:
         Further calls return the cached instance.
         """
         if self._schema_validator is None and self.argument_schema:
-            if isinstance(self.argument_schema, dict):
-                self._schema_validator = SchemaValidators.json_schema(self.argument_schema)
-            else:
-                self._schema_validator = SchemaValidators.pydantic(self.argument_schema)
+            self._schema_validator = SchemaValidators.for_schema(self.argument_schema)(self.argument_schema)
         return self._schema_validator
 
     def to_metadata(self, owner_inst: Thing | ThingMeta | None = None, format: str = "wot") -> ActionMetadata:
@@ -443,11 +440,15 @@ def action(
                     category=RuntimeWarning,
                 )
         if input_schema:
-            if isinstance(input_schema, dict):
-                if global_config.VALIDATE_SCHEMAS:
-                    SchemaValidators.check_schema(input_schema)
-            elif not issubklass(input_schema, (BaseModel, RootModel)):
-                raise TypeError(f"input schema must be a JSON schema or a Pydantic model, got {type(input_schema)}")
+            if not SchemaValidators.is_supported(input_schema):
+                raise TypeError(
+                    "no registered schema validator can validate against the input schema "
+                    + f"of {obj.__name__}, which is of type {type(input_schema)}. Supply a JSON schema, "
+                    + "a pydantic model, or register a validator that matches it with "
+                    + "SchemaValidators.register()."
+                )
+            if global_config.VALIDATE_SCHEMAS:
+                SchemaValidators.check_schema(input_schema)
         action.argument_schema = input_schema
 
         if not output_schema:
@@ -462,14 +463,16 @@ def action(
 
         if output_schema:
             # output is not validated by us, so we just check the schema and dont create a validator
-            if isinstance(output_schema, dict):
-                if global_config.VALIDATE_SCHEMAS:
-                    SchemaValidators.check_schema(output_schema)
-                action.return_value_schema = output_schema
-            elif issubklass(output_schema, (BaseModel, RootModel)):
-                action.return_value_schema = output_schema
-            else:
-                raise TypeError(f"output schema must be a JSON schema or a Pydantic model, got {type(output_schema)}")
+            if not SchemaValidators.is_supported(output_schema):
+                raise TypeError(
+                    "no registered schema validator can validate against the output schema "
+                    + f"of {obj.__name__}, which is of type {type(output_schema)}. Supply a JSON schema, "
+                    + "a pydantic model, or register a validator that matches it with "
+                    + "SchemaValidators.register()."
+                )
+            if global_config.VALIDATE_SCHEMAS:
+                SchemaValidators.check_schema(output_schema)
+            action.return_value_schema = output_schema
 
         return action
 
