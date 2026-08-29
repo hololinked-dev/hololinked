@@ -24,7 +24,14 @@ logger = structlog.get_logger()
 class Security(BaseModel):
     """Type definition for security schemes"""
 
-    pass
+    def __init__(self, **data: Any) -> None:
+        """
+        Parameters
+        ----------
+        data: dict
+            field values of the concrete security scheme, forwarded to `pydantic.BaseModel`
+        """
+        super().__init__(**data)
 
 
 try:
@@ -143,7 +150,7 @@ try:
         name: str
 
         _password_hash: str = PrivateAttr()
-        _ph: argon2.PasswordHasher | None = PrivateAttr(default=None)
+        _ph: argon2.PasswordHasher = PrivateAttr()
 
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             """
@@ -336,8 +343,8 @@ try:
                 id=id,
                 apikey_hash=hash,
                 description=description,
-                created_at=datetime.now().isoformat(),
-                expiry_at=(datetime.now() + timedelta(minutes=validity_period_minutes)).isoformat(),
+                created_at=datetime.now(),
+                expiry_at=datetime.now() + timedelta(minutes=validity_period_minutes),
                 hasher="argon2",  # currently only argon2 is supported
             )
             self.save(record=record, filename=file, override=override)
@@ -423,7 +430,8 @@ except ImportError:
 try:
     import jwt
 
-    from jwt import PyJWKClient
+    from jwt import PyJWKClient, PyJWKSet
+    from jwt.types import Options
 
     class OIDCSecurity(Security):
         """
@@ -453,7 +461,7 @@ try:
         role_claim_paths: list[str] | None = None
 
         _jwk_client: PyJWKClient = PrivateAttr()
-        _verify_options: dict[str, bool] = PrivateAttr(default_factory=dict)
+        _verify_options: Options = PrivateAttr(default_factory=dict)
 
         def __init__(
             self,
@@ -516,7 +524,7 @@ try:
             #   ]
             # }
             self._jwk_client = self._get_jwk_client(issuer=issuer, jwks_uri=jwks_url, verify_ssl=verify_ssl)
-            self._verify_options = dict(
+            self._verify_options = Options(
                 verify_signature=True,
                 verify_exp=True,
                 verify_aud=self.audience is not None,
@@ -551,8 +559,8 @@ try:
                         raise ValueError(f"Failed to fetch JWKS from {jwks_uri}: {ex}") from None
 
             jwk_client = PyJWKClient(jwks_uri, headers={"User-Agent": "Python-httpx/3.x"})
-            if jwks:
-                jwk_client.jwk_set_cache(jwks)
+            if jwks and jwk_client.jwk_set_cache is not None:
+                jwk_client.jwk_set_cache.put(PyJWKSet.from_dict(jwks))
             else:
                 jwk_client.fetch_data()
 

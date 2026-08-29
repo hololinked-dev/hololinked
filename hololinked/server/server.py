@@ -5,9 +5,10 @@ import logging
 import threading
 import warnings
 
+from collections.abc import Sequence
 from io import StringIO
 from types import SimpleNamespace  # noqa: F401
-from typing import TYPE_CHECKING
+from typing import Any
 
 import structlog
 
@@ -19,7 +20,7 @@ from hololinked.utils import (
 )
 
 from ..config import global_config
-from ..core import Action, Event, Property, Thing
+from ..core import Thing
 from ..core.properties import ClassSelector, Integer, TypedList
 from ..core.zmq.rpc_server import ZMQ_TRANSPORTS, RPCServer
 from ..param import Parameterized
@@ -29,14 +30,6 @@ from .repository import (
     consume_broker_pubsub,
     consume_broker_queue,
 )
-
-
-if TYPE_CHECKING:
-    from hololinked.core.interfaces import (
-        ActionMetadata,
-        EventMetadata,
-        PropertyMetadata,
-    )
 
 
 class BaseProtocolServer(Parameterized):
@@ -67,7 +60,7 @@ class BaseProtocolServer(Parameterized):
 
     def __init__(self, **kwargs) -> None:
         self.zmq_client_pool = None
-        self.config = None  # type: SimpleNamespace
+        self.config: Any = None
         super().__init__(**kwargs)
         if self.things is None:
             self.things = []
@@ -82,13 +75,13 @@ class BaseProtocolServer(Parameterized):
         for thing in things:
             self.add_thing(thing)
 
-    def add_property(self, property: PropertyMetadata | Property) -> None:
+    def add_property(self, *args, **kwargs) -> None:
         raise NotImplementedError("Not implemented for this protocol")
 
-    def add_action(self, action: ActionMetadata | Action) -> None:
+    def add_action(self, *args, **kwargs) -> None:
         raise NotImplementedError("Not implemented for this protocol")
 
-    def add_event(self, event: EventMetadata | Event) -> None:
+    def add_event(self, *args, **kwargs) -> None:
         raise NotImplementedError("Not implemented for this protocol")
 
     async def _instantiate_broker(
@@ -251,36 +244,47 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
     servers = []
 
     for protocol, params in access_points:
+        protocol_params: dict[str, Any] = {}
         if protocol.upper() == "HTTP":
             if isinstance(params, int):
-                params = dict(port=params)
-            if not isinstance(params, dict):
+                protocol_params = dict(port=params)
+            elif isinstance(params, dict):
+                protocol_params = params
+            else:
                 raise ValueError("HTTP server parameters must be supplied as a dict or just the port as an integer.")
-            http_server = HTTPServer(**params)
+            http_server = HTTPServer(**protocol_params)
             servers.append(http_server)
         elif protocol.upper() == "ZMQ":
             if isinstance(params, int):
-                params = dict(access_points=[f"tcp://*:{params}"])
+                protocol_params = dict(access_points=[f"tcp://*:{params}"])
             elif isinstance(params, (str, ZMQ_TRANSPORTS)):
-                params = dict(access_points=[params])
+                protocol_params = dict(access_points=[params])
             elif isinstance(params, list):
-                params = dict(access_points=params)
-            if not isinstance(params.get("access_points", None), list):
-                params["access_points"] = [params["access_points"]]
-            if not any(isinstance(ap, str) and ap.upper().startswith("INPROC") for ap in params["access_points"]):
-                params["access_points"].append("INPROC")
-
-            if len(params["access_points"]) == 1 and params["access_points"][0] == "INPROC":
-                server = RPCServer(id=id, **params)
+                protocol_params = dict(access_points=params)
             else:
-                server = ZMQServer(id=id, **params)
+                protocol_params = dict(params)
+            zmq_access_points = protocol_params.get("access_points", None)
+            if not isinstance(zmq_access_points, list):
+                zmq_access_points = [protocol_params["access_points"]]
+            else:
+                zmq_access_points = list(zmq_access_points)
+            if not any(isinstance(ap, str) and ap.upper().startswith("INPROC") for ap in zmq_access_points):
+                zmq_access_points.append("INPROC")
+            protocol_params["access_points"] = zmq_access_points
+
+            if len(zmq_access_points) == 1 and zmq_access_points[0] == "INPROC":
+                server = RPCServer(id=id, **protocol_params)
+            else:
+                server = ZMQServer(id=id, **protocol_params)
             servers.append(server)
         elif protocol.upper() == "MQTT":
             if isinstance(params, str):
-                params = dict(hostname=params)
-            if not isinstance(params, dict):
+                protocol_params = dict(hostname=params)
+            elif isinstance(params, dict):
+                protocol_params = params
+            else:
                 raise ValueError("MQTT parameters must be supplied as a dictionary or the broker hostname as a string.")
-            mqtt_publisher = MQTTPublisher(**params)
+            mqtt_publisher = MQTTPublisher(**protocol_params)
             servers.append(mqtt_publisher)
         else:
             warnings.warn(f"Unsupported protocol: {protocol}", category=UserWarning)
@@ -288,7 +292,7 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
     return servers
 
 
-def _print_welcome_message(servers: list[BaseProtocolServer]) -> None:
+def _print_welcome_message(servers: Sequence[BaseProtocolServer]) -> None:
     """Prints a welcome message to the console/log"""
     from . import HTTPServer, MQTTPublisher
 

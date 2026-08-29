@@ -3,7 +3,7 @@ import ssl
 import warnings
 
 from copy import deepcopy
-from typing import Any, Iterable, Type
+from typing import Any, Iterable, Type, cast
 
 import structlog
 
@@ -113,7 +113,7 @@ class HTTPServer(BaseProtocolServer):
 
             or RuntimeConfig attributes can be passed as keyword arguments.
         """
-        default_config = dict(
+        default_config: dict[str, Any] = dict(
             cors=global_config.ALLOW_CORS,
             property_handler=kwargs.get("property_handler", PropertyHandler),
             action_handler=kwargs.get("action_handler", ActionHandler),
@@ -129,14 +129,13 @@ class HTTPServer(BaseProtocolServer):
             security_schemes=security_schemes,
         )
         default_config.update(config or dict())
-        config = RuntimeConfig(**default_config)
         # need to be extended when more options are added
         super().__init__(
             port=port,
             address=address,
             logger=logger,
             ssl_context=ssl_context,
-            config=config,
+            config=RuntimeConfig(**default_config),
         )
 
         self._IP = f"{self.address}:{self.port}"  # TODO, remove this variable later?
@@ -175,7 +174,7 @@ class HTTPServer(BaseProtocolServer):
         )
         self.add_things(*(things or []))
 
-    def setup(self) -> None:
+    async def setup(self) -> None:
         """Check if all the requirements are met before starting the server, auto invoked by listen()"""
         # Add only those code here that needs to be redone always before restarting the server.
         # One time creation attributes/activities must be in init
@@ -187,6 +186,8 @@ class HTTPServer(BaseProtocolServer):
         # 2. sets async loop for a non-possessing thread as well
         event_loop = get_current_async_loop()
         # 3. schedule the ZMQ client pool polling
+        if self.zmq_client_pool is None:
+            raise RuntimeError("ZMQ client pool was not created, cannot poll for responses")
         event_loop.create_task(self.zmq_client_pool.poll_responses())
         # self.zmq_client_pool.handshake(), NOTE - handshake better done upfront as we already poll_responses here
         # which will prevent handshake function to succeed (although handshake will be done)
@@ -207,7 +208,9 @@ class HTTPServer(BaseProtocolServer):
         self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)  # type: TornadoHTTP1Server
 
     async def start(self) -> None:
-        self.setup()
+        await self.setup()
+        if self.tornado_instance is None:
+            raise RuntimeError("tornado server was not created by setup(), cannot start")
         self.tornado_instance.listen(port=self.port, address=self.address)
         self.logger.info(f"started HTTP webserver at {self._IP}, ready to receive requests.")
 
@@ -225,7 +228,8 @@ class HTTPServer(BaseProtocolServer):
         if attempt_async_stop:
             run_callable_somehow(self.async_stop())
             return
-        self.zmq_client_pool.stop_polling()
+        if self.zmq_client_pool is not None:
+            self.zmq_client_pool.stop_polling()
         if not self.tornado_instance:
             return
         self.tornado_instance.stop()
@@ -236,7 +240,8 @@ class HTTPServer(BaseProtocolServer):
         Stop the HTTP server. A stop handler at the path `/stop` with POST method is already implemented
         that invokes this method for the clients.
         """
-        self.zmq_client_pool.stop_polling()
+        if self.zmq_client_pool is not None:
+            self.zmq_client_pool.stop_polling()
         if not self.tornado_instance:
             return
         try:
@@ -252,8 +257,8 @@ class HTTPServer(BaseProtocolServer):
         self,
         URL_path: str,
         property: Property | PropertyAffordance,
-        http_methods: str | tuple[str, str, str] = ("GET", "PUT"),
-        handler: BaseHandler | PropertyHandler = PropertyHandler,
+        http_methods: str | tuple[str, ...] = ("GET", "PUT"),
+        handler: type[BaseHandler] = PropertyHandler,
         **kwargs,
     ) -> None:
         """
@@ -278,7 +283,9 @@ class HTTPServer(BaseProtocolServer):
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(property, Property):
-            property = property.to_metadata()
+            affordance = cast(PropertyAffordance, property.to_metadata())
+        else:
+            affordance = property
         read_http_method = write_http_method = delete_http_method = None
         http_methods = self.router.adapt_http_methods(http_methods)
         if len(http_methods) == 1:
@@ -293,18 +300,18 @@ class HTTPServer(BaseProtocolServer):
             raise ValueError("write method should be POST or PUT")
         if delete_http_method and delete_http_method != "DELETE":
             raise ValueError("delete method should be DELETE")
-        kwargs["resource"] = property
+        kwargs["resource"] = affordance
         kwargs["logger"] = self.logger
         kwargs["config"] = self.config
         kwargs["metadata"] = HandlerMetadata(http_methods=http_methods)
-        self.router.add_rule(affordance=property, URL_path=URL_path, handler=handler, kwargs=kwargs)
+        self.router.add_rule(affordance=affordance, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_action(
         self,
         URL_path: str,
         action: Action | ActionAffordance,
-        http_method: str | None = "POST",
-        handler: BaseHandler | ActionHandler = ActionHandler,
+        http_method: str | tuple[str, ...] | None = "POST",
+        handler: type[BaseHandler] = ActionHandler,
         **kwargs,
     ) -> None:
         """
@@ -329,18 +336,20 @@ class HTTPServer(BaseProtocolServer):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         http_methods = self.router.adapt_http_methods(http_method)
         if isinstance(action, Action):
-            action = action.to_metadata()  # type: ActionAffordance
-        kwargs["resource"] = action
+            affordance = cast(ActionAffordance, action.to_metadata())
+        else:
+            affordance = action
+        kwargs["resource"] = affordance
         kwargs["config"] = self.config
         kwargs["logger"] = self.logger
         kwargs["metadata"] = HandlerMetadata(http_methods=http_methods)
-        self.router.add_rule(affordance=action, URL_path=URL_path, handler=handler, kwargs=kwargs)
+        self.router.add_rule(affordance=affordance, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_event(
         self,
         URL_path: str,
         event: Event | EventAffordance | PropertyAffordance,
-        handler: BaseHandler | EventHandler = EventHandler,
+        handler: type[BaseHandler] = EventHandler,
         **kwargs,
     ) -> None:
         """
@@ -364,12 +373,14 @@ class HTTPServer(BaseProtocolServer):
         if not issubklass(handler, BaseHandler):
             raise TypeError(f"handler should be subclass of BaseHandler, given type {type(handler)}")
         if isinstance(event, Event):
-            event = event.to_metadata()
-        kwargs["resource"] = event
+            affordance = cast(EventAffordance, event.to_metadata())
+        else:
+            affordance = event
+        kwargs["resource"] = affordance
         kwargs["config"] = self.config
         kwargs["logger"] = self.logger
         kwargs["metadata"] = HandlerMetadata(http_methods=("GET",))
-        self.router.add_rule(affordance=event, URL_path=URL_path, handler=handler, kwargs=kwargs)
+        self.router.add_rule(affordance=affordance, URL_path=URL_path, handler=handler, kwargs=kwargs)
 
     def add_thing(self, thing: Thing) -> None:
         self.router.add_thing(thing)
@@ -493,7 +504,7 @@ class ApplicationRouter:
         properties: Iterable[PropertyAffordance],
         actions: Iterable[ActionAffordance],
         events: Iterable[EventAffordance],
-        thing_id: str = None,
+        thing_id: str | None = None,
     ) -> None:
         """
         Can add multiple properties, actions and events at once to the application router.
@@ -550,6 +561,8 @@ class ApplicationRouter:
 
         # thing model handler
         get_thing_model_action = next((action for action in actions if action.name == "get_thing_model"), None)
+        if get_thing_model_action is None:
+            raise ValueError("no 'get_thing_model' action found, cannot add thing description routes")
         self.server.add_action(
             URL_path=f"/{thing_id}/resources/wot-tm" if thing_id else "/resources/wot-tm",
             action=get_thing_model_action,
@@ -644,6 +657,7 @@ class ApplicationRouter:
         Not exact for torando's rules when a string is provided for the URL path,
         as you need to provide the Matcher object
         """
+        affordance = item
         if isinstance(item, str):
             for rule in self.app.wildcard_router.rules:
                 if rule.matcher == item:
@@ -654,17 +668,17 @@ class ApplicationRouter:
                 if rule[0] == item:
                     return True
         elif isinstance(item, (Property, Action, Event)):
-            item = item.to_metadata()
-        if isinstance(item, (PropertyAffordance, ActionAffordance, EventAffordance)):
+            affordance = item.to_metadata()
+        if isinstance(affordance, (PropertyAffordance, ActionAffordance, EventAffordance)):
             for rule in self.app.wildcard_router.rules:
-                if rule.target_kwargs.get("resource", None) == item:
+                if rule.target_kwargs.get("resource", None) == affordance:
                     return True
             for rule in self._pending_rules:
-                if rule[2].get("resource", None) == item:
+                if rule[2].get("resource", None) == affordance:
                     return True
         return False
 
-    def get_href_for_affordance(self, affordance, authority: str = None, use_localhost: bool = False) -> str:
+    def get_href_for_affordance(self, affordance, authority: str | None = None, use_localhost: bool = False) -> str:
         """
         Get the full URL path for the affordance in the application router.
 
@@ -688,6 +702,7 @@ class ApplicationRouter:
             if rule.target_kwargs.get("resource", None) == affordance:
                 path = str(rule.matcher.regex.pattern).rstrip("$")
                 return f"{self.get_basepath(authority, use_localhost)}{path}"
+        raise ValueError(f"affordance {affordance} has no route in the application router yet")
 
     def get_injected_dependencies(self, affordance) -> dict[str, Any]:
         """Get the target kwargs for the affordance in the application router"""
@@ -701,7 +716,7 @@ class ApplicationRouter:
                 return rule[2]
         raise ValueError(f"affordance {affordance} not found in the application router rules")
 
-    def get_basepath(self, authority: str = None, use_localhost: bool = False) -> str:
+    def get_basepath(self, authority: str | None = None, use_localhost: bool = False) -> str:
         """
         Get the basepath of the server.
 
@@ -750,7 +765,7 @@ class ApplicationRouter:
         prettytable is used if available, otherwise a simple print is done.
         """
         try:
-            from prettytable import PrettyTable
+            from prettytable import PrettyTable  # ty: ignore[unresolved-import]
 
             table = PrettyTable()
             table.field_names = ["URL Path", "Handler", "Resource Name"]

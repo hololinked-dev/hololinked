@@ -41,12 +41,15 @@ class LocalExecutionContext(msgspec.Struct):
     messageID: Optional[str] = None
 
 
+# tornado declares `initialize` and the HTTP verb hooks as class attributes typed `Callable[..., ...]`
+# rather than as methods, so overriding them with a real `def` is always reported as an invariant
+# mismatch - its own ErrorHandler/RedirectHandler/StaticFileHandler override them the same way.
 class BaseHandler(RequestHandler):
     """Base request handler for running operations on the `Thing`"""
 
     # Would be a Controller in layered architecture.
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
         config: Any,
@@ -289,7 +292,7 @@ class BaseHandler(RequestHandler):
         return server_execution_context, thing_execution_context, local_execution_context, additional_payload
 
     @property
-    def message_id(self) -> str:
+    def message_id(self) -> str | None:
         """Retrieves the message id from the request headers"""
         try:
             return self._message_id
@@ -312,33 +315,35 @@ class BaseHandler(RequestHandler):
                 payload.content_type = self.request.headers.get("Content-Type", "application/json")
             elif global_config.ALLOW_UNKNOWN_SERIALIZATION:
                 preserialized_payload.value = self.request.body
-                preserialized_payload.content_type = self.request.headers.get("Content-Type", None)
+                content_type = self.request.headers.get("Content-Type", None)
+                if content_type:
+                    preserialized_payload.content_type = content_type
             else:
                 raise ValueError("Content-Type not supported")
                 # NOTE that was assume that the content type is JSON even if unspecified in the header.
                 # This error will be raised only when a specified content type is not supported.
         return payload, preserialized_payload
 
-    async def get(self) -> None:
+    async def get(self) -> None:  # ty: ignore[invalid-method-override]
         """Runs property or action if accessible by 'GET' method. Default for property reads"""
         raise NotImplementedError("implement GET request method in child handler class")
 
-    async def post(self) -> None:
+    async def post(self) -> None:  # ty: ignore[invalid-method-override]
         """Runs property or action if accessible by 'POST' method. Default for action execution"""
         raise NotImplementedError("implement POST request method in child handler class")
 
-    async def put(self) -> None:
+    async def put(self) -> None:  # ty: ignore[invalid-method-override]
         """Runs property or action if accessible by 'PUT' method. Default for property writes"""
         raise NotImplementedError("implement PUT request method in child handler class")
 
-    async def delete(self) -> None:
+    async def delete(self) -> None:  # ty: ignore[invalid-method-override]
         """
         Runs property or action if accessible by 'DELETE' method. Default for property deletes
         (not a valid operation as per web of things semantics).
         """
         raise NotImplementedError("implement DELETE request method in child handler class")
 
-    def is_method_allowed(self, method: str) -> bool:
+    async def is_method_allowed(self, method: str) -> bool:
         """Checks if the method is allowed for the property"""
         raise NotImplementedError("implement is_method_allowed in child handler class")
 
@@ -370,7 +375,7 @@ class RPCHandler(BaseHandler):
         self.set_status(405, "method not allowed")
         return False
 
-    async def options(self) -> None:
+    async def options(self) -> None:  # ty: ignore[invalid-method-override]
         """
         Options for the resource. Main functionality is to inform the client is a specific HTTP method is supported by
         the property or the action (Access-Control-Allow-Methods).
@@ -456,9 +461,12 @@ class RPCHandler(BaseHandler):
     async def handle_no_block_response(self) -> None:
         """Handles the no-block response for the noblock calls"""
         try:
-            self.logger.info("waiting for no-block response", message_id=self.message_id)
+            message_id = self.message_id
+            if message_id is None:
+                raise ValueError("no message id available to wait for a no-block response")
+            self.logger.info("waiting for no-block response", message_id=message_id)
             response_message = await self.thing.recv_response(
-                message_id=self.message_id,
+                message_id=message_id,
                 timeout=default_server_execution_context.invokationTimeout
                 + default_server_execution_context.executionTimeout,
             )
@@ -551,7 +559,7 @@ class ActionHandler(RPCHandler):
 class RWMultiplePropertiesHandler(ActionHandler):
     """handles read-write of multiple properties via an action"""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         resource: ActionAffordance,
         config: Any,
@@ -585,7 +593,7 @@ class RWMultiplePropertiesHandler(ActionHandler):
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
-    async def patch(self) -> None:
+    async def patch(self) -> None:  # ty: ignore[invalid-method-override]
         if await self.is_method_allowed("PATCH"):
             self.set_custom_default_headers()
             self.resource = self.write_properties_resource
@@ -630,7 +638,7 @@ class EventHandler(BaseHandler):
             await self.handle_datastream()
         self.finish()
 
-    async def options(self):
+    async def options(self):  # ty: ignore[invalid-method-override]
         """Options for the resource"""
         if await self.has_access_control():
             self.set_status(204)
@@ -641,7 +649,7 @@ class EventHandler(BaseHandler):
 
     def receive_blocking_event(self, event_consumer: EventConsumer):
         """deprecated, but can make a blocking call in an async loop"""
-        return event_consumer.receive(timeout=10000, deserialize=False)
+        return event_consumer.receive(timeout=10000)
 
     async def handle_datastream(self) -> None:
         """Called by GET method and handles the event publishing"""
@@ -702,7 +710,7 @@ class PNGImageEventHandler(EventHandler):
 class StopHandler(BaseHandler):
     """Stops the tornado HTTP server"""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
@@ -739,7 +747,7 @@ class StopHandler(BaseHandler):
 class LivenessProbeHandler(BaseHandler):
     """Liveness probe handler"""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
@@ -761,7 +769,7 @@ class LivenessProbeHandler(BaseHandler):
 class ReadinessProbeHandler(BaseHandler):
     """Readiness probe handler"""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
@@ -797,7 +805,7 @@ class ReadinessProbeHandler(BaseHandler):
 class ThingDescriptionHandler(BaseHandler):
     """Thing Description handler"""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         resource: InteractionAffordance | PropertyAffordance,
         config: Any,
