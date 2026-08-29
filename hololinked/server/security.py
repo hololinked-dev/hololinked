@@ -248,13 +248,27 @@ try:
 
         @field_serializer("created_at", "expiry_at")
         def serialize_datetime(self, dt: datetime, _info) -> str:
-            """Serialize datetime to ISO format string."""
+            """
+            Serialize datetime to ISO format string.
+
+            Returns
+            -------
+            str
+                the datetime in ISO 8601 format
+            """
             return dt.isoformat()
 
         @field_validator("created_at", "expiry_at", mode="before")
         @classmethod
         def parse_datetime(cls, value):
-            """Parse datetime from string or return datetime object."""
+            """
+            Parse datetime from string or return datetime object.
+
+            Returns
+            -------
+            datetime
+                the parsed value, or the value unchanged when it is already a datetime
+            """
             if isinstance(value, str):
                 return datetime.fromisoformat(value)
             return value
@@ -588,7 +602,14 @@ try:
 
         @staticmethod
         def _get_dict_attr_by_path(payload: dict[str, Any], path: str) -> Any:
-            """Get a nested value from a dict using dot-separated keys."""
+            """
+            Get a nested value from a dict using dot-separated keys.
+
+            Returns
+            -------
+            Any
+                the value at that path, or `None` if any key along the path is missing
+            """
             cur: Any = payload
             for part in path.split("."):
                 if not isinstance(cur, dict):
@@ -597,7 +618,14 @@ try:
             return cur
 
         def decode_and_validate(self, token: str) -> dict[str, Any]:
-            """Decode and validate a JWT, returning the verified payload."""
+            """
+            Decode and validate a JWT, returning the verified payload.
+
+            Returns
+            -------
+            dict[str, Any]
+                the verified claims carried by the token
+            """
             signing_key = self._jwk_client.get_signing_key_from_jwt(token).key
 
             return jwt.decode(
@@ -610,7 +638,14 @@ try:
             )
 
         def validate_input(self, jwt_token: str) -> bool:
-            """Validate a JWT access token."""
+            """
+            Validate a JWT access token.
+
+            Returns
+            -------
+            bool
+                `True` if the token passed signature and claim validation, `False` otherwise
+            """
             try:
                 self.decode_and_validate(jwt_token)
                 return True
@@ -619,11 +654,25 @@ try:
                 return False
 
         def userinfo(self, jwt_token: str) -> dict[str, Any]:
-            """Return the verified JWT claims. This does not call a remote userinfo endpoint."""
+            """
+            Return the verified JWT claims. This does not call a remote userinfo endpoint.
+
+            Returns
+            -------
+            dict[str, Any]
+                the verified claims carried by the token
+            """
             return self.decode_and_validate(jwt_token)
 
         def user_has_role(self, claims: dict[str, Any]) -> bool:
-            """Return True if any configured allowed role is present in the JWT claims."""
+            """
+            Return True if any configured allowed role is present in the JWT claims.
+
+            Returns
+            -------
+            bool
+                `True` if no roles are configured, or one of the allowed roles is present in the claims
+            """
             if not self.allowed_roles:
                 return True
 

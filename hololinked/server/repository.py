@@ -61,7 +61,14 @@ class BrokerThing(BaseModel):
 
     @model_validator(mode="before")
     def validate_access_point(cls, values):
-        """Validates the access point format before setting."""
+        """
+        Validates the access point format before setting.
+
+        Returns
+        -------
+        dict
+            the field values unchanged, once the access point has been accepted
+        """
         access_point = values.get("access_point")
         if access_point is not None and access_point.upper() not in ["TCP", "IPC", "INPROC"]:
             raise ValueError("Access point must be 'TCP', 'IPC', or 'INPROC'")
@@ -93,6 +100,11 @@ class BrokerThing(BaseModel):
             The server execution context
         thing_execution_context: ThingExecutionContext, optional
             The thing execution context
+
+        Returns
+        -------
+        ResponseMessage
+            the response received from the `Thing` for this operation
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
@@ -374,6 +386,11 @@ def consume_broker_pubsub(id: str, access_point: str) -> AsyncEventConsumer:
         Unique identifier for the event consumer
     access_point: str
         The qualified ZMQ address (`tcp://`, `ipc://`, `inproc://`) of the pub-sub broker
+
+    Returns
+    -------
+    AsyncEventConsumer
+        a consumer subscribed to every event published on that broker
     """
     return AsyncEventConsumer(
         id=id or f"EventTunnel|{uuid_hex()}",

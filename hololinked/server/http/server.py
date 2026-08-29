@@ -671,6 +671,11 @@ class ApplicationRouter:
 
         Not exact for torando's rules when a string is provided for the URL path,
         as you need to provide the Matcher object.
+
+        Returns
+        -------
+        bool
+            `True` if a rule exists for the item, whether already registered or still pending
         """
         affordance = item
         if isinstance(item, str):
@@ -720,7 +725,14 @@ class ApplicationRouter:
         raise ValueError(f"affordance {affordance} has no route in the application router yet")
 
     def get_injected_dependencies(self, affordance) -> dict[str, Any]:
-        """Get the target kwargs for the affordance in the application router."""
+        """
+        Get the target kwargs for the affordance in the application router.
+
+        Returns
+        -------
+        dict[str, Any]
+            the keyword arguments injected into the handler serving that affordance
+        """
         if affordance not in self:
             raise ValueError(f"affordance {affordance} not found in the application router")
         for rule in self.app.wildcard_router.rules:
@@ -741,6 +753,11 @@ class ApplicationRouter:
             authority (protocol + host + port) to be used in the basepath. If None, the machine's hostname is used.
         use_localhost: bool, default `False`
             if `True`, localhost is used in the basepath instead of the server's hostname.
+
+        Returns
+        -------
+        str
+            the protocol, host and port that prefixes every route of this server
         """
         if authority:
             return authority
@@ -758,13 +775,27 @@ class ApplicationRouter:
     basepath = property(fget=get_basepath, doc="basepath of the server")
 
     def adapt_route(self, interaction_affordance_name: str) -> str:
-        """Adapt the URL path to default conventions."""
+        """
+        Adapt the URL path to default conventions.
+
+        Returns
+        -------
+        str
+            the URL path under which the affordance is served
+        """
         if interaction_affordance_name == "get_thing_model":
             return "/resources/wot-tm"
         return f"/{pep8_to_dashed_name(interaction_affordance_name)}"
 
     def adapt_http_methods(self, http_methods: Any):
-        """Comply the supplied HTTP method to the router to a tuple and check if the method is supported."""
+        """
+        Comply the supplied HTTP method to the router to a tuple and check if the method is supported.
+
+        Returns
+        -------
+        tuple[str, ...]
+            the supplied HTTP methods as a tuple
+        """
         if isinstance(http_methods, str):
             http_methods = (http_methods,)
         if not isinstance(http_methods, tuple):

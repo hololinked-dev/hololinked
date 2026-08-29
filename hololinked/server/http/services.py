@@ -69,6 +69,11 @@ class ThingDescriptionService:
             if `True`, localhost is used in the TD URLs instead of the server's hostname.
         authority: str, optional
             custom authority (protocol + host + port) to be used in the TD URLs. If None, the machine's hostname is used.
+
+        Returns
+        -------
+        dict[str, JSONSerializable]
+            the Thing Description, with HTTP forms added to every affordance
         """
         ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
         TD = copy.deepcopy(ZMQ_TD)
@@ -362,7 +367,14 @@ class ThingDescriptionService:
         pass
 
     async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
-        """Fetch the TM or ZMQ in process queue TD."""
+        """
+        Fetch the TM or ZMQ in process queue TD.
+
+        Returns
+        -------
+        dict[str, JSONSerializable]
+            the Thing Description as served over the internal INPROC transport
+        """
         response_message = await self.thing.execute(
             objekt=self.resource.name,
             operation=Operations.invokeaction,

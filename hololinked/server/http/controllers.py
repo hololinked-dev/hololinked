@@ -94,6 +94,11 @@ class BaseHandler(RequestHandler):
 
         Custom web request handlers can use this property to check if a client has access control on the server or `Thing`
         and let this property automatically generate a 401/403.
+
+        Returns
+        -------
+        bool
+            `True` if the client may proceed, `False` if a 401/403 was already set on the response
         """
         if not self.allowed_clients and not self.security_schemes:
             return True
@@ -125,7 +130,14 @@ class BaseHandler(RequestHandler):
         return False  # keep False always at the end
 
     async def is_authenticated(self) -> bool:
-        """Enforces authentication using the defined security schemes, freshly computed everytime."""
+        """
+        Enforces authentication using the defined security schemes, freshly computed everytime.
+
+        Returns
+        -------
+        bool
+            `True` if one of the security schemes accepted the credentials supplied with the request
+        """
         authenticated = False
         # 1. Basic Authentication
         authorization_header = self.request.headers.get("Authorization", None)  # type: str
@@ -192,6 +204,11 @@ class BaseHandler(RequestHandler):
         Enforces authorization using the defined security schemes, freshly computed everytime.
 
         Do not call this method without doing authentication first and having a userinfo property.
+
+        Returns
+        -------
+        bool
+            `True` if there is no user info to check against, or the user carries one of the allowed roles
         """
         if not self.userinfo:
             return True
@@ -314,7 +331,15 @@ class BaseHandler(RequestHandler):
             return message_id
 
     def get_request_payload(self) -> tuple[SerializableData, PreserializedData]:
-        """Retrieves the payload from the request body, does not necessarily deserialize it."""
+        """
+        Retrieves the payload from the request body, does not necessarily deserialize it.
+
+        Returns
+        -------
+        tuple[SerializableData, PreserializedData]
+            the request body as serializable data and as preserialized data - the body is carried by whichever
+            of the two matches the request's content type
+        """
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
         if self.request.body:
@@ -374,6 +399,11 @@ class RPCHandler(BaseHandler):
         - Access control (authentication & authorization)
         - if the HTTP method is allowed for the resource.
         - if its GET method with message id for no-block response.
+
+        Returns
+        -------
+        bool
+            `True` if the method may be served, `False` if a 401/403/405 was already set on the response
         """  # noqa: D400
         if not await self.has_access_control():
             return False
@@ -659,7 +689,14 @@ class EventHandler(BaseHandler):
         self.finish()
 
     def receive_blocking_event(self, event_consumer: EventConsumer):
-        """deprecated, but can make a blocking call in an async loop."""
+        """
+        deprecated, but can make a blocking call in an async loop.
+
+        Returns
+        -------
+        EventMessage | None
+            the event received within the timeout, or `None` if none arrived
+        """
         return event_consumer.receive(timeout=10000)
 
     async def handle_datastream(self) -> None:
