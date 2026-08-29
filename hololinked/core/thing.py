@@ -210,7 +210,12 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         return things
 
     @action()
-    def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = [], format: str = "wot") -> Metadata:
+    def get_thing_model(
+        self,
+        ignore_errors: bool = False,
+        skip_names: list[str] = [],
+        format: str = "wot",
+    ) -> Metadata:
         """
         Generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object.
 
@@ -291,7 +296,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         from ..server.server import parse_params, run
 
-        servers = parse_params(self.id, [("ZMQ", dict(access_points=access_points, logger=self.logger, **kwargs))])
+        servers = parse_params(
+            self.id,
+            [("ZMQ", dict(access_points=access_points, logger=self.logger, **kwargs))],
+        )
 
         for server in servers:
             server.add_thing(self)

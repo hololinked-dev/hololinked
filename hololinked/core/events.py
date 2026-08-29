@@ -25,7 +25,16 @@ class Event:
     to the clients that have subscribed to them.
     """
 
-    __slots__ = ["name", "_internal_name", "_publisher", "_observable", "doc", "schema", "label", "owner"]
+    __slots__ = [
+        "name",
+        "_internal_name",
+        "_publisher",
+        "_observable",
+        "doc",
+        "schema",
+        "label",
+        "owner",
+    ]
 
     def __init__(
         self,

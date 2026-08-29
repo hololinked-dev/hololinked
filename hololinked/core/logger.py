@@ -77,7 +77,13 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
     ```
     """
 
-    def __init__(self, id: str = "logger", maxlen: int = 500, stream_interval: float = 1.0, **kwargs) -> None:
+    def __init__(
+        self,
+        id: str = "logger",
+        maxlen: int = 500,
+        stream_interval: float = 1.0,
+        **kwargs,
+    ) -> None:
         """
         Initialize the handler.
 
@@ -229,16 +235,39 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
                 self.diff_logs.clear()
         # self.owner.logger.info("ending log events.")
 
-    debug_logs = List(default=[], readonly=True, fget=lambda self: self._debug_logs, doc="logs at logging.DEBUG level")  # type: list[dict[str, Any]]
+    debug_logs = List(
+        default=[],
+        readonly=True,
+        fget=lambda self: self._debug_logs,
+        doc="logs at logging.DEBUG level",
+    )  # type: list[dict[str, Any]]
 
-    warn_logs = List(default=[], readonly=True, fget=lambda self: self._warn_logs, doc="logs at logging.WARN level")  # type: list[dict[str, Any]]
+    warn_logs = List(
+        default=[],
+        readonly=True,
+        fget=lambda self: self._warn_logs,
+        doc="logs at logging.WARN level",
+    )  # type: list[dict[str, Any]]
 
-    info_logs = List(default=[], readonly=True, fget=lambda self: self._info_logs, doc="logs at logging.INFO level")  # type: list[dict[str, Any]]
+    info_logs = List(
+        default=[],
+        readonly=True,
+        fget=lambda self: self._info_logs,
+        doc="logs at logging.INFO level",
+    )  # type: list[dict[str, Any]]
 
-    error_logs = List(default=[], readonly=True, fget=lambda self: self._error_logs, doc="logs at logging.ERROR level")  # type: list[dict[str, Any]]
+    error_logs = List(
+        default=[],
+        readonly=True,
+        fget=lambda self: self._error_logs,
+        doc="logs at logging.ERROR level",
+    )  # type: list[dict[str, Any]]
 
     critical_logs = List(
-        default=[], readonly=True, fget=lambda self: self._critical_logs, doc="logs at logging.CRITICAL level"
+        default=[],
+        readonly=True,
+        fget=lambda self: self._critical_logs,
+        doc="logs at logging.CRITICAL level",
     )  # type: list[dict[str, Any]]
 
     execution_logs = List(

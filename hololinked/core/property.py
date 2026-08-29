@@ -372,7 +372,9 @@ class ModelRoot(RootModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-def wrap_plain_types_in_rootmodel(model: type | None) -> Type[BaseModel] | Type[RootModel]:
+def wrap_plain_types_in_rootmodel(
+    model: type | None,
+) -> Type[BaseModel] | Type[RootModel]:
     """
     Ensure a type is a subclass of BaseModel.
 

@@ -325,7 +325,12 @@ class BoundFSM:
         except AttributeError:
             return self.initial_state
 
-    def set_state(self, value: str | StrEnum | Enum, push_event: bool = True, skip_callbacks: bool = False) -> None:
+    def set_state(
+        self,
+        value: str | StrEnum | Enum,
+        push_event: bool = True,
+        skip_callbacks: bool = False,
+    ) -> None:
         """
         Set state of state machine.
 
@@ -364,7 +369,12 @@ class BoundFSM:
         else:
             raise ValueError("given state '{}' not in set of allowed states : {}.".format(value, self.states))
 
-    current_state = property(get_state, set_state, None, doc="""read and write current state of the state machine""")
+    current_state = property(
+        get_state,
+        set_state,
+        None,
+        doc="""read and write current state of the state machine""",
+    )
 
     def contains_object(self, object: Property | Callable) -> bool:
         """

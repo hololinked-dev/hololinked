@@ -281,7 +281,8 @@ class RequestMessage:
         self._body = [
             SerializableData(self._bytes[INDEX_BODY], content_type=self.header["payloadContentType"]),
             PreserializedData(
-                self._bytes[INDEX_PRESERIALIZED_BODY], content_type=self.header["preencodedPayloadContentType"]
+                self._bytes[INDEX_PRESERIALIZED_BODY],
+                content_type=self.header["preencodedPayloadContentType"],
             ),
         ]
 
@@ -295,8 +296,8 @@ class RequestMessage:
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> "RequestMessage":
         """
         Create a request message from the given arguments.
@@ -334,13 +335,14 @@ class RequestMessage:
             senderID=sender_id,
             receiverID=receiver_id,
             # i.e. the message type is 'OPERATION', not 'HANDSHAKE', 'REPLY', 'TIMEOUT' etc.
-            serverExecutionContext=server_execution_context,
+            # clients may pass a plain dict; msgspec stores it as given and it serializes the same way
+            serverExecutionContext=server_execution_context,  # ty: ignore[invalid-argument-type]
             thingID=thing_id,
             objekt=objekt,
             operation=operation,
             payloadContentType=payload.content_type,
             preencodedPayloadContentType=preserialized_payload.content_type,
-            thingExecutionContext=thing_execution_context,
+            thingExecutionContext=thing_execution_context,  # ty: ignore[invalid-argument-type]  # see above
         )
         message._body = [payload, preserialized_payload]
         message._bytes = [
@@ -520,7 +522,8 @@ class ResponseMessage:
         self._body = [
             SerializableData(self._bytes[INDEX_BODY], content_type=self.header["payloadContentType"]),
             PreserializedData(
-                self._bytes[INDEX_PRESERIALIZED_BODY], content_type=self.header["preencodedPayloadContentType"]
+                self._bytes[INDEX_PRESERIALIZED_BODY],
+                content_type=self.header["preencodedPayloadContentType"],
             ),
         ]
 

@@ -91,7 +91,7 @@ class String(Property):
         )
         self.regex = regex
 
-    def validate_and_adapt(self, value: typing.Any) -> str:
+    def validate_and_adapt(self, value: typing.Any) -> str | None:
         if value is None:
             if self.allow_None:
                 return
@@ -115,7 +115,7 @@ class Bytes(String):
     this property only allows objects of type bytes (e.g. b'bytes').
     """
 
-    def validate_and_adapt(self, value: typing.Any) -> bytes:
+    def validate_and_adapt(self, value: typing.Any) -> bytes | None:  # ty: ignore[invalid-method-override]  # Bytes deliberately narrows String to bytes
         """
         verify if given value is a bytes confirming to regex.
 
@@ -207,7 +207,7 @@ class IPAddress(Property):
         self.allow_ipv4 = allow_ipv4
         self.allow_ipv6 = allow_ipv6
 
-    def validate_and_adapt(self, value: typing.Any) -> str:
+    def validate_and_adapt(self, value: typing.Any) -> str | None:
         if value is None and self.allow_None:
             return
         if not isinstance(value, str):
@@ -490,7 +490,7 @@ class Number(Property):
         Set to the given value, but cropped to be within the legal bounds.
         See crop_to_bounds for details on how cropping is done.
         """
-        value = self.validate_and_adapt(value)
+        value = self.validate_and_adapt(value)  # ty: ignore[invalid-assignment]  # None only when allow_None, which _crop_to_bounds handles
         bounded_value = self._crop_to_bounds(value)
         super().__set__(obj, bounded_value)
 
@@ -508,7 +508,7 @@ class Number(Property):
         """
         # Values outside the bounds are silently cropped to
         # be inside the bounds.
-        vmin, vmax = self.bounds
+        vmin, vmax = self.bounds  # ty: ignore[not-iterable]  # bounds is always a 2-tuple when set
         incmin, incmax = self.inclusive_bounds
         if vmin is not None:
             if value < vmin:
@@ -524,7 +524,7 @@ class Number(Property):
                     return vmax - self.step
         return value
 
-    def validate_and_adapt(self, value: typing.Any) -> typing.Union[int, float]:
+    def validate_and_adapt(self, value: typing.Any) -> typing.Union[int, float, None]:
         if self.allow_None and value is None:
             return
         if self.dtype is None:
@@ -650,9 +650,9 @@ class Integer(Number):
         )
         self.dtype = (int,)
 
-    def _validate_step(self, step: int):
-        if step is not None and not isinstance(step, int):
-            raise_ValueError("Step can only be None or an integer value, not type {}".format(type(step)), self)
+    def _validate_step(self, value: typing.Any) -> None:
+        if value is not None and not isinstance(value, int):
+            raise_ValueError("Step can only be None or an integer value, not type {}".format(type(value)), self)
 
 
 class Boolean(Property):
@@ -785,7 +785,7 @@ class Iterable(Property):
     length is not allowed to change after instantiation.
     """
 
-    def validate_and_adapt(self, value: typing.Any) -> typing.Union[typing.List, typing.Tuple]:
+    def validate_and_adapt(self, value: typing.Any) -> typing.Union[typing.List, typing.Tuple, None]:
         if value is None and self.allow_None:
             return
         if not isinstance(value, self.dtype):
@@ -880,7 +880,7 @@ class Tuple(Iterable):
     def validate_and_adapt(self, value: typing.Any) -> typing.Tuple:
         if self.accept_list and isinstance(value, list):
             value = tuple(value)
-        return super().validate_and_adapt(value)
+        return super().validate_and_adapt(value)  # ty: ignore[invalid-return-type]  # dtype is fixed to tuple
 
     @classmethod
     def serialize(cls, value):
@@ -973,7 +973,7 @@ class List(Iterable):
     def validate_and_adapt(self, value: typing.Any) -> typing.Tuple:
         if self.accept_tuple and isinstance(value, tuple):
             value = list(value)
-        return super().validate_and_adapt(value)
+        return super().validate_and_adapt(value)  # ty: ignore[invalid-return-type]  # dtype is fixed to list
 
 
 class Callable(Property):
@@ -1067,7 +1067,7 @@ class Composite(Property):
                 else:
                     self.attribs.append(attrib)
 
-    def __get__(self, obj: Parameterized, objtype: typing.Type[Parameterized]) -> typing.List[typing.Any]:
+    def __get__(self, obj: Parameterized, objtype: typing.Type[Parameterized]) -> typing.List[typing.Any]:  # ty: ignore[invalid-method-override]  # a Composite reads several attributes at once
         """
         Return the values of all the attribs, as a list.
         """
@@ -1136,7 +1136,7 @@ class Selector(SelectorBase):
     def __init__(
         self,
         *,
-        objects: typing.List[typing.Any],
+        objects: typing.List[typing.Any] | None,
         default: typing.Any = None,
         empty_default: bool = False,
         doc: typing.Optional[str] = None,
@@ -1520,7 +1520,7 @@ class Path(Property):
             self.search_paths = []
 
     def _resolve(self, path):
-        return resolve_path(path, path_to_file=None, search_paths=self.search_paths)
+        return resolve_path(path, path_to_file=None, search_paths=self.search_paths)  # ty: ignore[too-many-positional-arguments]  # ParameterizedFunction is called, not instantiated
 
     def validate_and_adapt(self, value: typing.Any) -> typing.Any:
         if value is None and self.allow_None:
@@ -1533,7 +1533,7 @@ class Path(Property):
         Return an absolute, normalized path (see resolve_path).
         """
         raw_path = super().__get__(obj, objtype)
-        return None if raw_path is None else self._resolve(raw_path)
+        return None if raw_path is None else self._resolve(raw_path)  # ty: ignore[invalid-return-type]  # None is returned only when the path is unset
 
     def __getstate__(self):
         # don't want to pickle the search_paths
@@ -1562,7 +1562,7 @@ class Filename(Path):
     """
 
     def _resolve(self, path):
-        return resolve_path(path, path_to_file=True, search_paths=self.search_paths)
+        return resolve_path(path, path_to_file=True, search_paths=self.search_paths)  # ty: ignore[too-many-positional-arguments]  # ParameterizedFunction is called, not instantiated
 
 
 class Foldername(Path):
@@ -1584,7 +1584,7 @@ class Foldername(Path):
     """
 
     def _resolve(self, path):
-        return resolve_path(path, path_to_file=False, search_paths=self.search_paths)
+        return resolve_path(path, path_to_file=False, search_paths=self.search_paths)  # ty: ignore[too-many-positional-arguments]  # ParameterizedFunction is called, not instantiated
 
 
 def abbreviate_paths(pathspec, named_paths):
@@ -1608,7 +1608,7 @@ class FileSelector(Selector):
         self,
         default: typing.Any,
         *,
-        objects: typing.List,
+        objects: typing.Optional[typing.List],
         path: str = "",
         doc: typing.Optional[str] = None,
         constant: bool = False,
@@ -1809,9 +1809,9 @@ class Date(Number):
         )
         self.dtype = dt_types
 
-    def _validate_step(self, val):
+    def _validate_step(self, value: typing.Any) -> None:
         if self.step is not None and not isinstance(self.step, dt_types):
-            raise ValueError(f"Step can only be None, a datetime or datetime type, not type {type(val)}")
+            raise ValueError(f"Step can only be None, a datetime or datetime type, not type {type(value)}")
 
     @classmethod
     def serialize(cls, value):
@@ -1895,8 +1895,8 @@ class CalendarDate(Number):
         )
         self.dtype = dt.date
 
-    def _validate_step(self, step):
-        if step is not None and not isinstance(step, self.dtype):
+    def _validate_step(self, value: typing.Any) -> None:
+        if value is not None and not isinstance(value, self.dtype):
             raise ValueError("Step can only be None or a date type.")
 
     @classmethod
@@ -2229,7 +2229,7 @@ class Range(Tuple):
 
     @property
     def rangestr(self):
-        vmin, vmax = self.bounds
+        vmin, vmax = self.bounds  # ty: ignore[not-iterable]  # bounds is always a 2-tuple when set
         incmin, incmax = self.inclusive_bounds
         incmin = "[" if incmin else "("
         incmax = "]" if incmax else ")"
@@ -2366,7 +2366,7 @@ class TypedList(ClassSelector):
         **kwargs,
     ) -> None:
         if default is not None:
-            default = TypeConstrainedList(
+            default = TypeConstrainedList(  # ty: ignore[invalid-assignment]  # a constrained container stands in for the plain one
                 default=default, item_type=item_type, bounds=bounds, constant=constant, skip_validate=False
             )
         super().__init__(
@@ -2450,7 +2450,7 @@ class TypedDict(ClassSelector):
         **kwargs,
     ) -> None:
         if default is not None:
-            default = TypeConstrainedDict(
+            default = TypeConstrainedDict(  # ty: ignore[invalid-assignment]  # a constrained container stands in for the plain one
                 default, key_type=key_type, item_type=item_type, bounds=bounds, constant=constant, skip_validate=False
             )
         self.key_type = key_type
@@ -2537,7 +2537,7 @@ class TypedKeyMappingsDict(ClassSelector):
         **kwargs,
     ) -> None:
         if default is not None:
-            default = TypedKeyMappingsConstrainedDict(
+            default = TypedKeyMappingsConstrainedDict(  # ty: ignore[invalid-assignment]  # a constrained container stands in for the plain one
                 default=default,
                 type_mapping=type_mapping,
                 allow_unspecified_keys=allow_unspecified_keys,

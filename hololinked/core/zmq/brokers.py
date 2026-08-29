@@ -1123,8 +1123,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
         Send request message to server.
@@ -1141,9 +1141,9 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext
+        server_execution_context: ServerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: ThingExecutionContext
+        thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -1241,8 +1241,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> ResponseMessage:
         """
         Send an operation and receive the response for it.
@@ -1259,9 +1259,9 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext
+        server_execution_context: ServerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: ThingExecutionContext
+        thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -1462,8 +1462,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
         Send request message to server.
@@ -1480,9 +1480,9 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext
+        server_execution_context: ServerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: ThingExecutionContext
+        thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -1580,8 +1580,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> ResponseMessage:
         """
         Send an operation and receive the response for it.
@@ -1598,9 +1598,9 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext
+        server_execution_context: ServerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: ThingExecutionContext
+        thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -1958,7 +1958,10 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                     self.logger.debug("message cancelled, not retrieving response", msg_id=message_id)
                     return
                 if i >= max_number_of_retries - 1:
-                    self.logger.error("unknown message id without corresponding event object", msg_id=message_id)
+                    self.logger.error(
+                        "unknown message id without corresponding event object",
+                        msg_id=message_id,
+                    )
                     return
             else:
                 self.message_map[message_id] = data
@@ -1983,8 +1986,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
         Send request message to server.
@@ -2001,9 +2004,9 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext
+        server_execution_context: ServerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: ThingExecutionContext
+        thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -2084,8 +2087,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> ResponseMessage:
         """
         Send an operation and receive the response for it.
@@ -2102,9 +2105,9 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext
+        server_execution_context: ServerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: ThingExecutionContext
+        thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -2143,8 +2146,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
         thing_ids: list[str] | None = None,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> dict[str, ResponseMessage]:
         if not thing_ids:
             thing_ids = list(self._client_to_thing_map.values())
@@ -2174,8 +2177,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> dict[str, ResponseMessage]:
         """
         Execute the same operation in all `Thing`s.

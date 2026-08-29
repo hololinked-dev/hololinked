@@ -399,13 +399,20 @@ class RPCServer(BaseZMQServer):
 
                 # complete thing execution context
                 if fetch_execution_logs:
-                    rpayload.value = dict(return_value=rpayload.value, execution_logs=list_handler.log_list)
+                    rpayload.value = dict(
+                        return_value=rpayload.value,
+                        execution_logs=list_handler.log_list,
+                    )
 
                 # raise any payload errors now
                 rpayload.require_serialized()
 
                 # set reply
-                scheduler.last_operation_reply = (rpayload, rpreserialized_payload, REPLY)
+                scheduler.last_operation_reply = (
+                    rpayload,
+                    rpreserialized_payload,
+                    REPLY,
+                )
 
             except BreakInnerLoop:
                 # exit the loop and stop the thing
@@ -416,10 +423,17 @@ class RPCServer(BaseZMQServer):
 
                 # complete thing execution context
                 if fetch_execution_logs:
-                    rpayload.value = dict(return_value=rpayload.value, execution_logs=list_handler.log_list)
+                    rpayload.value = dict(
+                        return_value=rpayload.value,
+                        execution_logs=list_handler.log_list,
+                    )
 
                 # set reply, let the message broker decide
-                scheduler.last_operation_reply = (rpayload, rpreserialized_payload, None)
+                scheduler.last_operation_reply = (
+                    rpayload,
+                    rpreserialized_payload,
+                    None,
+                )
 
                 # quit the loop
                 break
@@ -439,7 +453,11 @@ class RPCServer(BaseZMQServer):
                     rpayload.value["execution_logs"] = list_handler.log_list
 
                 # set error reply
-                scheduler.last_operation_reply = (rpayload, rpreserialized_payload, ERROR)
+                scheduler.last_operation_reply = (
+                    rpayload,
+                    rpreserialized_payload,
+                    ERROR,
+                )
 
             finally:
                 # cleanup
@@ -534,7 +552,11 @@ class RPCServer(BaseZMQServer):
             and len(return_value) == 2
             and (isinstance(return_value[1], bytes) or isinstance(return_value[1], PreserializedData))
         ):
-            payload = SerializableData(return_value[0], serializer=serializer, content_type=serializer.content_type)
+            payload = SerializableData(
+                return_value[0],
+                serializer=serializer,
+                content_type=serializer.content_type,
+            )
             if isinstance(return_value[1], bytes):
                 preserialized_payload = PreserializedData(return_value[1], content_type=content_type_if_no_serializer)
         elif isinstance(return_value, bytes):
@@ -544,7 +566,11 @@ class RPCServer(BaseZMQServer):
             payload = SerializableData(None, content_type="application/json")
             preserialized_payload = return_value
         else:
-            payload = SerializableData(return_value, serializer=serializer, content_type=serializer.content_type)
+            payload = SerializableData(
+                return_value,
+                serializer=serializer,
+                content_type=serializer.content_type,
+            )
             preserialized_payload = PreserializedData(EMPTY_BYTE, content_type="text/plain")
         return payload, preserialized_payload
 
@@ -780,7 +806,11 @@ class RPCServer(BaseZMQServer):
             except Exception as ex:
                 if not ignore_errors:
                     raise ex from None
-                instance.logger.warning("error while generating TD forms for property", name=name, error=str(ex))
+                instance.logger.warning(
+                    "error while generating TD forms for property",
+                    name=name,
+                    error=str(ex),
+                )
 
         for name in TM.get("actions", []):
             try:
@@ -799,7 +829,11 @@ class RPCServer(BaseZMQServer):
             except Exception as ex:
                 if not ignore_errors:
                     raise ex from None
-                instance.logger.warning("error while generating TD forms for action", name=name, error=str(ex))
+                instance.logger.warning(
+                    "error while generating TD forms for action",
+                    name=name,
+                    error=str(ex),
+                )
 
         for name in TM.get("events", []):
             try:
@@ -818,7 +852,11 @@ class RPCServer(BaseZMQServer):
             except Exception as ex:
                 if not ignore_errors:
                     raise ex from None
-                instance.logger.warning("error while generating TD forms for event", name=name, error=str(ex))
+                instance.logger.warning(
+                    "error while generating TD forms for event",
+                    name=name,
+                    error=str(ex),
+                )
 
         return TD
 

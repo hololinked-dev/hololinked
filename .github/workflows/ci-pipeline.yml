@@ -80,6 +80,7 @@ jobs:
         run: |
           source .venv/bin/activate
           ruff check --config ruff.toml hololinked/client
+          ruff check --config ruff.toml hololinked/core
           ruff check --config ruff.toml hololinked/serializers
           ruff check --config ruff.toml hololinked/schema_validators
           ruff check --config ruff.toml hololinked/storage
@@ -95,6 +96,7 @@ jobs:
         run: |
           source .venv/bin/activate
           ty check hololinked/client
+          ty check hololinked/core
           ty check hololinked/serializers
           ty check hololinked/schema_validators
           ty check hololinked/storage
