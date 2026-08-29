@@ -110,6 +110,11 @@ try:
             -------
             bool
                 True if the username and password are valid, False otherwise
+
+            Raises
+            ------
+            ValueError
+                if the scheme is configured for plain text credentials rather than base64
             """
             if not self.expect_base64:
                 raise ValueError("base64 encoded credentials not expected, please reconfigure if needed")
@@ -209,6 +214,11 @@ try:
             -------
             bool
                 True if the username and password are valid, False otherwise
+
+            Raises
+            ------
+            ValueError
+                if the scheme is configured for plain text credentials rather than base64
             """
             if not self.expect_base64:
                 raise ValueError("base64 encoded credentials not expected, please reconfigure if needed")
@@ -396,7 +406,14 @@ try:
             return self._ph.hash(apikey)
 
         def save(self, record: APIKeyRecord, filename: str = "apikeys.json", override: bool = False) -> None:
-            """Save the security scheme data to persistent storage."""
+            """
+            Save the security scheme data to persistent storage.
+
+            Raises
+            ------
+            ValueError
+                if a key is already stored under this name and `override` is `False`
+            """
             filepath = os.path.join(global_config.TEMP_DIR_SECRETS, filename)
             existing_data = {}
             if os.path.exists(filepath):
@@ -409,7 +426,14 @@ try:
                 json.dump(existing_data, file, indent=4)
 
         def load(self) -> None:
-            """Load the security scheme data from persistent storage."""
+            """
+            Load the security scheme data from persistent storage.
+
+            Raises
+            ------
+            ValueError
+                if the storage file does not hold a mapping of scheme name to key record
+            """
             if not os.path.exists(self.file):
                 return
             with open(self.file, "r") as file:
@@ -428,6 +452,11 @@ try:
             -------
             bool
                 True if the API key is valid, False otherwise
+
+            Raises
+            ------
+            ValueError
+                if no API key has been loaded to validate against
             """
             if self.record is None:
                 raise ValueError("No API key loaded for validation")

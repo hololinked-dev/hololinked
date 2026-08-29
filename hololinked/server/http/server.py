@@ -180,7 +180,16 @@ class HTTPServer(BaseProtocolServer):
         self.add_things(*(things or []))
 
     async def setup(self) -> None:
-        """Check if all the requirements are met before starting the server, auto invoked by listen()."""
+        """
+        Check if all the requirements are met before starting the server, auto invoked by listen().
+
+        Raises
+        ------
+        RuntimeError
+            if the ZMQ client pool was not created
+        ValueError
+            if a `Thing` to be served is not exposed through an `RPCServer`
+        """
         # Add only those code here that needs to be redone always before restarting the server.
         # One time creation attributes/activities must be in init
 
@@ -285,6 +294,13 @@ class HTTPServer(BaseProtocolServer):
             custom handler for the property, otherwise the default handler will be used
         kwargs: dict
             additional keyword arguments to be passed to the handler's __init__
+
+        Raises
+        ------
+        TypeError
+            if `property` is not a `Property`/`PropertyAffordance`, or `handler` is not a `BaseHandler` subclass
+        ValueError
+            if the read, write or delete HTTP method is not one the operation allows
         """
         if not isinstance(property, (Property, PropertyAffordance)):
             raise TypeError(f"property should be of type Property, given type {type(property)}")
@@ -337,6 +353,11 @@ class HTTPServer(BaseProtocolServer):
             custom handler for the action
         kwargs: dict
             additional keyword arguments to be passed to the handler's __init__
+
+        Raises
+        ------
+        TypeError
+            if `action` is not an `Action`/`ActionAffordance`, or `handler` is not a `BaseHandler` subclass
         """
         if not isinstance(action, (Action, ActionAffordance)):
             raise TypeError(f"Given action should be of type Action or ActionAffordance, given type {type(action)}")
@@ -373,6 +394,11 @@ class HTTPServer(BaseProtocolServer):
             custom handler for the event
         kwargs: dict
             additional keyword arguments to be passed to the handler's __init__
+
+        Raises
+        ------
+        TypeError
+            if `event` is not an `Event`/`EventAffordance`, or `handler` is not a `BaseHandler` subclass
         """
         if not isinstance(event, (Event, EventAffordance)) and (
             not isinstance(event, PropertyAffordance) or not event.observable
@@ -446,6 +472,11 @@ class ApplicationRouter:
             handler class to be used for the affordance
         kwargs: dict[str, Any]
             additional keyword arguments to be passed to the handler's __init__
+
+        Raises
+        ------
+        RuntimeError
+            if the affordance carries neither a thing id nor a thing class to route it under
         """
         for rule in self.app.wildcard_router.rules:
             if rule.matcher == URL_path:
@@ -534,6 +565,11 @@ class ApplicationRouter:
             thing id to be prefixed to the URL path of each property, action, and event.
             If the thing_id is not provided, then the rule will be in pending state and not exposed
             until a thing instance with the given thing_id is added to the server.
+
+        Raises
+        ------
+        ValueError
+            if no `get_thing_model` action is present to build the thing description routes from
         """
         for property in properties:
             if property in self:
@@ -612,6 +648,11 @@ class ApplicationRouter:
         Internal method to add a thing instance to be served by the HTTP server.
 
         Iterates through the interaction affordances and adds a route for each property, action and event.
+
+        Raises
+        ------
+        TypeError
+            if `thing` is not a `Thing`
         """
         # Prepare affordance lists with error handling (single loop)
         if not isinstance(thing, Thing):
@@ -715,6 +756,11 @@ class ApplicationRouter:
         -------
         str
             full URL path for the affordance
+
+        Raises
+        ------
+        ValueError
+            if the affordance is not in the router, or has no route registered yet
         """
         if affordance not in self:
             raise ValueError(f"affordance {affordance} not found in the application router")
@@ -732,6 +778,11 @@ class ApplicationRouter:
         -------
         dict[str, Any]
             the keyword arguments injected into the handler serving that affordance
+
+        Raises
+        ------
+        ValueError
+            if the affordance is not in the router, or has no rule registered for it
         """
         if affordance not in self:
             raise ValueError(f"affordance {affordance} not found in the application router")
@@ -795,6 +846,13 @@ class ApplicationRouter:
         -------
         tuple[str, ...]
             the supplied HTTP methods as a tuple
+
+        Raises
+        ------
+        TypeError
+            if `http_methods` is neither a string nor a tuple
+        ValueError
+            if one of the given methods is not a supported HTTP method
         """
         if isinstance(http_methods, str):
             http_methods = (http_methods,)

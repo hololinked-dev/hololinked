@@ -78,12 +78,36 @@ class BaseProtocolServer(Parameterized):
             self.add_thing(thing)
 
     def add_property(self, *args, **kwargs) -> None:
+        """
+        Add a property to be served, the arguments being specific to the protocol.
+
+        Raises
+        ------
+        NotImplementedError
+            if the protocol does not support this operation
+        """
         raise NotImplementedError("Not implemented for this protocol")
 
     def add_action(self, *args, **kwargs) -> None:
+        """
+        Add an action to be served, the arguments being specific to the protocol.
+
+        Raises
+        ------
+        NotImplementedError
+            if the protocol does not support this operation
+        """
         raise NotImplementedError("Not implemented for this protocol")
 
     def add_event(self, *args, **kwargs) -> None:
+        """
+        Add an event to be served, the arguments being specific to the protocol.
+
+        Raises
+        ------
+        NotImplementedError
+            if the protocol does not support this operation
+        """
         raise NotImplementedError("Not implemented for this protocol")
 
     async def _instantiate_broker(
@@ -136,11 +160,27 @@ class BaseProtocolServer(Parameterized):
 
     async def setup(self) -> None:
         # This method should not block, just create side-effects
+        """
+        Prepare the protocol before it starts serving, creating side effects only without blocking.
+
+        Raises
+        ------
+        NotImplementedError
+            if the protocol does not implement a setup step
+        """
         raise NotImplementedError("Not implemented for this protocol")
 
     async def start(self) -> None:
         # This method should not block, just create side-effects
         # await self.setup()  # call setup() here, this is only an example
+        """
+        Start serving the protocol, creating side effects only without blocking.
+
+        Raises
+        ------
+        NotImplementedError
+            if the protocol cannot be started this way
+        """
         raise NotImplementedError("Not implemented for this protocol")
 
     @forkable
@@ -160,6 +200,14 @@ class BaseProtocolServer(Parameterized):
         run(self, print_welcome_message=print_welcome_message)
 
     def stop(self):
+        """
+        Stop serving the protocol.
+
+        Raises
+        ------
+        NotImplementedError
+            if the protocol does not implement a stop step
+        """
         raise NotImplementedError("Not implemented for this protocol")
 
 
@@ -176,6 +224,11 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
         whether to run in a forked thread
     print_welcome_message: bool, default True
         whether to print a welcome message on startup, like the ports and access points
+
+    Raises
+    ------
+    ValueError
+        if more than one `ZMQServer` or `RPCServer` is given - add all your `Thing`s to one instance
     """
     from . import ZMQServer
 

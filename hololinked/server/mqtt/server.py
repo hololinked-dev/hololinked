@@ -118,7 +118,14 @@ class MQTTPublisher(BaseProtocolServer):
         await self.setup()
 
     async def start_publishers(self, thing: CoreThing) -> None:
-        """Start the publishers for a given `Thing`."""
+        """
+        Start the publishers for a given `Thing`.
+
+        Raises
+        ------
+        ValueError
+            if the `Thing` is not exposed through an `RPCServer`
+        """
         eventloop = get_current_async_loop()
         if not thing.rpc_server:
             raise ValueError(f"Thing {thing.id} is not associated with any RPC server")

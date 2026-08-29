@@ -339,6 +339,11 @@ class BaseHandler(RequestHandler):
         tuple[SerializableData, PreserializedData]
             the request body as serializable data and as preserialized data - the body is carried by whichever
             of the two matches the request's content type
+
+        Raises
+        ------
+        ValueError
+            if the request declares a content type that is not supported
         """
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
@@ -500,7 +505,7 @@ class RPCHandler(BaseHandler):
             self.write(response_payload.value)
 
     async def handle_no_block_response(self) -> None:
-        """Handles the no-block response for the noblock calls."""
+        """Handles the no-block response for the noblock calls."""  # noqa: DOC501
         try:
             message_id = self.message_id
             if message_id is None:
@@ -539,6 +544,7 @@ class PropertyHandler(RPCHandler):
     """handles property requests."""
 
     async def get(self) -> None:
+        """Read the property, or fetch the reply of an earlier no-block read."""
         if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             if self.message_id is not None:
@@ -548,18 +554,21 @@ class PropertyHandler(RPCHandler):
         self.finish()
 
     async def post(self) -> None:
+        """Write the property."""
         if await self.is_method_allowed("POST"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def put(self) -> None:
+        """Write the property."""
         if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def delete(self) -> None:
+        """Delete the property."""
         if await self.is_method_allowed("DELETE"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.deleteproperty)
@@ -570,6 +579,7 @@ class ActionHandler(RPCHandler):
     """handles action requests."""
 
     async def get(self) -> None:
+        """Invoke the action, or fetch the reply of an earlier no-block invocation."""
         if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             if self.message_id is not None:
@@ -579,18 +589,21 @@ class ActionHandler(RPCHandler):
         self.finish()
 
     async def post(self) -> None:
+        """Invoke the action."""
         if await self.is_method_allowed("POST"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def put(self) -> None:
+        """Invoke the action."""
         if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def delete(self) -> None:
+        """Invoke the action."""
         if await self.is_method_allowed("DELETE"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
@@ -608,11 +621,13 @@ class RWMultiplePropertiesHandler(ActionHandler):
         metadata: Any = None,
         **kwargs,
     ) -> None:
+        """Set up the handler with the affordances that read and write multiple properties."""
         self.read_properties_resource = kwargs.get("read_properties_resource", None)
         self.write_properties_resource = kwargs.get("write_properties_resource", None)
         return super().initialize(resource, config, logger, metadata)
 
     async def get(self) -> None:
+        """Read multiple properties, or fetch the reply of an earlier no-block read."""
         if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             self.resource = self.read_properties_resource
@@ -623,11 +638,13 @@ class RWMultiplePropertiesHandler(ActionHandler):
         self.finish()
 
     async def post(self) -> None:
+        """Reject the request with 405, multiple properties are written with PUT or PATCH."""
         if await self.is_method_allowed("POST"):
             self.set_status(405, "method not allowed, PUT instead")
         self.finish()
 
     async def put(self) -> None:
+        """Write multiple properties."""
         if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             self.resource = self.write_properties_resource
@@ -635,6 +652,7 @@ class RWMultiplePropertiesHandler(ActionHandler):
         self.finish()
 
     async def patch(self) -> None:  # ty: ignore[invalid-method-override]
+        """Write multiple properties."""
         if await self.is_method_allowed("PATCH"):
             self.set_custom_default_headers()
             self.resource = self.write_properties_resource
@@ -652,6 +670,7 @@ class EventHandler(BaseHandler):
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
+        """Set up the handler to stream events with a plain SSE data header."""
         super().initialize(resource, config, logger, metadata)
         self.data_header = b"data: %s\n\n"
 
@@ -737,6 +756,7 @@ class JPEGImageEventHandler(EventHandler):
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
+        """Set up the handler to stream events with a base64 JPEG image SSE data header."""
         super().initialize(resource, config, logger, metadata)
         self.data_header = b"data:image/jpeg;base64,%s\n\n"
 
@@ -751,6 +771,7 @@ class PNGImageEventHandler(EventHandler):
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
+        """Set up the handler to stream events with a base64 PNG image SSE data header."""
         super().initialize(resource, config, logger, metadata)
         self.data_header = b"data:image/png;base64,%s\n\n"
 
@@ -764,6 +785,7 @@ class StopHandler(BaseHandler):
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any,
     ) -> None:
+        """Set up the handler with the HTTP server it stops."""
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
 
@@ -774,6 +796,7 @@ class StopHandler(BaseHandler):
         self.server = owner_inst  # type: HTTPServer
 
     async def post(self):
+        """Schedule a graceful shutdown of the HTTP server."""
         if not await self.has_access_control():
             return
         try:
@@ -801,6 +824,7 @@ class LivenessProbeHandler(BaseHandler):
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any = None,
     ) -> None:
+        """Set up the handler with the HTTP server it probes."""
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
 
@@ -809,6 +833,7 @@ class LivenessProbeHandler(BaseHandler):
         self.server = owner_inst  # type: HTTPServer
 
     async def get(self):
+        """Report that the server is alive and accepting requests."""
         self.set_status(200, "ok")
         self.set_custom_default_headers()
         self.finish()
@@ -823,6 +848,7 @@ class ReadinessProbeHandler(BaseHandler):
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any = None,
     ) -> None:
+        """Set up the handler with the HTTP server it probes."""
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
 
@@ -831,6 +857,7 @@ class ReadinessProbeHandler(BaseHandler):
         self.server = owner_inst  # type: HTTPServer
 
     async def get(self):
+        """Report whether every served `Thing` is connected and answering a ping."""  # noqa: DOC501
         self.set_custom_default_headers()
         try:
             if len(self.server._disconnected_things) > 0:
@@ -861,6 +888,7 @@ class ThingDescriptionHandler(BaseHandler):
         owner_inst: Any = None,
         metadata: Any = None,
     ) -> None:
+        """Set up the handler along with the service that generates the Thing Description."""
         super().initialize(
             resource=resource,
             config=config,
@@ -875,6 +903,7 @@ class ThingDescriptionHandler(BaseHandler):
         )
 
     async def get(self):
+        """Generate and return the Thing Description of the `Thing`."""  # noqa: DOC501
         if not await self.has_access_control():
             self.finish()
             return

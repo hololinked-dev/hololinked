@@ -68,6 +68,11 @@ class BrokerThing(BaseModel):
         -------
         dict
             the field values unchanged, once the access point has been accepted
+
+        Raises
+        ------
+        ValueError
+            if the access point is not one of 'TCP', 'IPC' or 'INPROC'
         """
         access_point = values.get("access_point")
         if access_point is not None and access_point.upper() not in ["TCP", "IPC", "INPROC"]:
@@ -105,6 +110,11 @@ class BrokerThing(BaseModel):
         -------
         ResponseMessage
             the response received from the `Thing` for this operation
+
+        Raises
+        ------
+        RuntimeError
+            if this `Thing` is not connected to the message broker
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
@@ -149,6 +159,11 @@ class BrokerThing(BaseModel):
         -------
         str
             The message ID of the scheduled request
+
+        Raises
+        ------
+        RuntimeError
+            if this `Thing` is not connected to the message broker
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
@@ -188,6 +203,11 @@ class BrokerThing(BaseModel):
             The server execution context
         thing_execution_context: ThingExecutionContext, optional
             The thing execution context
+
+        Raises
+        ------
+        RuntimeError
+            if this `Thing` is not connected to the message broker
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
@@ -220,6 +240,11 @@ class BrokerThing(BaseModel):
         -------
         ResponseMessage
             The response message received
+
+        Raises
+        ------
+        RuntimeError
+            if this `Thing` is not connected to the message broker
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
@@ -255,14 +280,28 @@ class BrokerThing(BaseModel):
         return event_consumer
 
     def set_req_rep_client(self, client: AsyncZMQClient | MessageMappedZMQClientPool) -> None:
-        """Sets the req-rep client for this broker thing."""
+        """
+        Sets the req-rep client for this broker thing.
+
+        Raises
+        ------
+        ValueError
+            if the client has no socket address, i.e. it is not connected yet
+        """
         if not client.socket_address:
             raise ValueError("client has no socket address, is it connected?")
         self.req_rep_client = client
         self.req_rep_socket_address = client.socket_address
 
     def set_event_consumer(self, client: AsyncEventConsumer) -> None:
-        """Sets the pub-sub client for this broker thing."""
+        """
+        Sets the pub-sub client for this broker thing.
+
+        Raises
+        ------
+        ValueError
+            if the consumer has no socket address, i.e. it is not connected yet
+        """
         if not client.socket_address:
             raise ValueError("client has no socket address, is it connected?")
         self.event_client = client
@@ -284,6 +323,11 @@ class BrokerThing(BaseModel):
         -------
         PreserializedData | SerializableData
             The extracted payload, either preserialized or serialized
+
+        Raises
+        ------
+        RuntimeError
+            if no response is available, i.e. no operation was performed
         """
         # print("zmq_response - ", zmq_response)
         if zmq_response is None:

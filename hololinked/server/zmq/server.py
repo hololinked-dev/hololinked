@@ -42,6 +42,13 @@ class ZMQServer(RPCServer, BaseProtocolServer):
 
             - `logger`: `structlog.stdlib.BoundLogger`, custom logger instance.
             - `poll_timeout`: `int`, polling timeout in milliseconds.
+
+        Raises
+        ------
+        TypeError
+            if `access_points` is neither a transport, a socket address, nor a list of them
+        RuntimeError
+            if a TCP server or event publisher was created without a socket address
         """
         self.ipc_server = self.tcp_server = None
         self.ipc_event_publisher = self.tcp_event_publisher = self.inproc_events_proxy = None
@@ -120,7 +127,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         return RPCServer.add_thing(self, thing)
 
     def run_zmq_request_listener(self) -> None:
-        # doc in parent class
+        """Listen for requests on the IPC and TCP servers, and start tunnelling INPROC events to their publishers."""
         eventloop = get_current_async_loop()
         if self.ipc_server is not None:
             eventloop.create_task(self.recv_requests_and_dispatch_jobs(self.ipc_server))
@@ -131,6 +138,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         super().run_zmq_request_listener()
 
     async def tunnel_events_from_inproc(self) -> None:
+        """Forward every event published on the internal INPROC transport to the IPC and TCP publishers."""
         if not self.inproc_events_proxy:
             return
         self.logger.info("starting to tunnel events from inproc to external publishers")
@@ -153,7 +161,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         self.logger.info("stopped tunneling events from inproc")
 
     def stop(self) -> None:
-        # doc in parent class
+        """Stop polling the IPC and TCP servers and the INPROC event proxy."""
         if self.ipc_server is not None:
             self.ipc_server.stop_polling()
         if self.tcp_server is not None:
@@ -163,7 +171,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         super().stop()
 
     def exit(self) -> None:
-        # doc in parent class
+        """Close the IPC and TCP servers, their event publishers and the INPROC event proxy."""
         try:
             self.stop()
             if self.ipc_server is not None:
@@ -205,7 +213,23 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         return paths
 
     async def start(self) -> None:
+        """
+        Not supported for this server, use the blocking `run()` method instead.
+
+        Raises
+        ------
+        NotImplementedError
+            always, since the server is started through `run()`
+        """
         raise NotImplementedError("Use the blocking run() method to start the ZMQServer.")
 
     async def setup(self) -> None:
+        """
+        Not supported for this server, `run()` performs the setup itself.
+
+        Raises
+        ------
+        NotImplementedError
+            always, since `run()` sets the server up
+        """
         raise NotImplementedError("Use the blocking run() method to start the ZMQServer, no need to setup separately.")

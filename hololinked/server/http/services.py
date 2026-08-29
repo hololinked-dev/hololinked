@@ -374,6 +374,13 @@ class ThingDescriptionService:
         -------
         dict[str, JSONSerializable]
             the Thing Description as served over the internal INPROC transport
+
+        Raises
+        ------
+        RuntimeError
+            if the `Thing` replies with an error, timeout or invalid-message response
+        ValueError
+            if the payload received from the `Thing` is not a Thing Description
         """
         response_message = await self.thing.execute(
             objekt=self.resource.name,
