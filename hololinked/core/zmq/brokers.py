@@ -108,7 +108,7 @@ class BaseZMQ:
         access_point: str = ZMQ_TRANSPORTS.IPC,
         socket_type: zmq.SocketType = zmq.SocketType.ROUTER,
         **kwargs,
-    ) -> tuple[zmq.Socket, str]:
+    ) -> tuple[zmq.Socket | zmq.asyncio.Socket, str]:
         """
         Create a socket with certain specifications.
 
@@ -223,11 +223,13 @@ class BaseZMQ:
                 "transports other than IPC, TCP & INPROC are not implemented now for {}.".format(cls.__name__)
                 + f" Given transport {transport}."
             )
-        return socket, socket_address
+        return socket, socket_address  # ty: ignore[invalid-return-type]  # every branch above assigns socket_address
 
 
 class BaseAsyncZMQ(BaseZMQ):
     """Base class for all async ZMQ servers and clients."""
+
+    socket: zmq.asyncio.Socket
 
     # init of this class must always take empty arguments due to inheritance structure
 
@@ -257,7 +259,7 @@ class BaseAsyncZMQ(BaseZMQ):
                 "async ZMQ message broker accepts only async ZMQ context. supplied type {}".format(type(context))
             )
         self.context = context or global_config.zmq_context()
-        self.socket, self.socket_address = BaseZMQ.get_socket(
+        self.socket, self.socket_address = BaseZMQ.get_socket(  # ty: ignore[invalid-assignment]  # an async context yields an async socket
             server_id=server_id,
             socket_id=socket_id,
             node_type=node_type,
@@ -278,6 +280,8 @@ class BaseAsyncZMQ(BaseZMQ):
 
 class BaseSyncZMQ(BaseZMQ):
     """Base class for all sync ZMQ servers and clients."""
+
+    socket: zmq.Socket
 
     # init of this class must always take empty arguments due to inheritance structure
 
@@ -934,6 +938,8 @@ class ZMQServerPool(BaseZMQServer):
 class BaseZMQClient(BaseZMQ):
     """Base class for all ZMQ clients irrespective of sync and async."""
 
+    poller: zmq.Poller | zmq.asyncio.Poller
+
     def __init__(
         self,
         *,
@@ -964,8 +970,6 @@ class BaseZMQClient(BaseZMQ):
             logger = structlog.get_logger()
         self.logger = logger.bind(component="broker", impl=self.__class__.__name__, id=id, server_id=server_id)
         self.server_id = server_id
-        self.socket: zmq.Socket | zmq.asyncio.Socket
-        self.poller: zmq.Poller | zmq.asyncio.Poller
         self._monitor_socket = None  # type: zmq.Socket | zmq.asyncio.Socket | None
         self._response_cache = dict()
         self._poll_timeout = kwargs.get("poll_timeout", 1000)  # default to 1000 ms
@@ -1060,6 +1064,8 @@ class BaseZMQClient(BaseZMQ):
 class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
     """Sync ZMQ client (as-in not asyncio compatible) that connect with a ZMQ server. Implements REQ-REP pattern."""
 
+    poller: zmq.Poller
+
     def __init__(
         self,
         id: str,
@@ -1117,8 +1123,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext | dict = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> str:
         """
         Send request message to server.
@@ -1135,9 +1141,9 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: dict[str, Any]
+        server_execution_context: ServerExecutionContext
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: dict[str, Any]
+        thing_execution_context: ThingExecutionContext
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -1235,8 +1241,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext | dict = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> ResponseMessage:
         """
         Send an operation and receive the response for it.
@@ -1253,9 +1259,9 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: dict[str, Any]
+        server_execution_context: ServerExecutionContext
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: dict[str, Any]
+        thing_execution_context: ThingExecutionContext
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -1320,6 +1326,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
 
 class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
     """Async ZMQ client (asyncio compatible) that connect with a ZMQ server. Implements REQ-REP pattern."""
+
+    poller: zmq.asyncio.Poller
 
     def __init__(
         self,
@@ -1416,7 +1424,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                 except zmq.Again:
                     pass
                 else:
-                    if response_message.type == HANDSHAKE:  # type: ignore
+                    if response_message.type == HANDSHAKE:
                         self.logger.info("client handshook with server")
                         break
                     elif self.handled_default_message_types(response_message):
@@ -1472,9 +1480,9 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: dict[str, Any]
+        server_execution_context: ServerExecutionContext
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: dict[str, Any]
+        thing_execution_context: ThingExecutionContext
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -1519,7 +1527,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
 
         Returns
         -------
-        response_message: list[ResponseMessage]
+        response_message: ResponseMessage
             the response message matching the given message id
         """
         self._stop = False
@@ -1572,8 +1580,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict = default_server_execution_context,
-        thing_execution_context: ThingExecutionContext | dict = default_thing_execution_context,
+        server_execution_context: ServerExecutionContext = default_server_execution_context,
+        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> ResponseMessage:
         """
         Send an operation and receive the response for it.
@@ -1590,9 +1598,9 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: dict[str, Any]
+        server_execution_context: ServerExecutionContext
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: dict[str, Any]
+        thing_execution_context: ThingExecutionContext
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -1613,11 +1621,15 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
 
 
 class MessageMappedZMQClientPool(BaseZMQClient):
+    context: zmq.asyncio.Context
+
     """
     Pool of async ZMQ clients, to be primarily used within protocol bindings where multiple things may be served.
 
     Use message ID to track responses.
     """
+
+    poller: zmq.asyncio.Poller
 
     def __init__(
         self,
@@ -1664,7 +1676,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         ValueError
             if `client_ids` and `server_ids` are not of the same length
         """
-        super().__init__(id=id, server_id=None, **kwargs)
+        super().__init__(id=id, server_id=None, **kwargs)  # ty: ignore[invalid-argument-type]  # a pool talks to many servers, not one
         if len(client_ids) != len(server_ids):
             raise ValueError("client_ids and server_ids must have same length")
         # this class does not call create_socket method
@@ -1782,7 +1794,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         """
         if thing_id not in self._thing_to_client_map:
             raise ValueError(f"client for thing_id '{thing_id}' not present in pool")
-        return self._thing_to_client_map.get(thing_id, None)
+        return self._thing_to_client_map[thing_id]
 
     def get_thing_id_from_client_id(self, client_id: str) -> str:
         """
@@ -1805,7 +1817,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         """
         if client_id not in self._client_to_thing_map:
             raise ValueError(f"thing_id for client_id '{client_id}' not present in pool")
-        return self._client_to_thing_map.get(client_id, None)
+        return self._client_to_thing_map[client_id]
 
     def get_client_protocol(self, thing_id: str) -> str:
         """
@@ -1989,9 +2001,9 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: dict[str, Any]
+        server_execution_context: ServerExecutionContext
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: dict[str, Any]
+        thing_execution_context: ThingExecutionContext
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -2090,9 +2102,9 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: dict[str, Any]
+        server_execution_context: ServerExecutionContext
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
-        thing_execution_context: dict[str, Any]
+        thing_execution_context: ThingExecutionContext
             Specify thing level execution context like `fetchExecutionLogs` etc.
 
         Returns
@@ -2135,7 +2147,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> dict[str, ResponseMessage]:
         if not thing_ids:
-            thing_ids = self._client_to_thing_map.values()
+            thing_ids = list(self._client_to_thing_map.values())
 
         gathered_replies = await asyncio.gather(
             *[
@@ -2183,7 +2195,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         )
 
     async def ping_all_servers(self):
-        return await self.async_execute_in_all()  # operation='invokeAction', objekt=CommonRPC.PING)
+        return await self.async_execute_in_all()  # ty: ignore[missing-argument]  # TODO: needs operation='invokeAction', objekt=CommonRPC.PING
 
     def __contains__(self, name: str) -> bool:
         return name in self.pool
@@ -2289,7 +2301,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             node_type="server",
             context=context,
             access_point=access_point,
-            socket_type=zmq.PUB,
+            socket_type=zmq.SocketType.PUB,
             **kwargs,
         )
         self.events = set()  # type is set[EventDispatcher]
@@ -2406,6 +2418,9 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 class BaseEventConsumer(BaseZMQClient):
     """Consumes events published at PUB sockets using SUB socket."""
 
+    # the sync and async subclasses each narrow these to their own flavour
+    _poller_lock: threading.Lock | asyncio.Lock
+
     def __init__(
         self,
         id: str,
@@ -2451,7 +2466,7 @@ class BaseEventConsumer(BaseZMQClient):
             self._poller_lock = asyncio.Lock()
         else:
             raise TypeError("BaseEventConsumer must be subclassed by either BaseSyncZMQ or BaseAsyncZMQ")
-        super().__init__(id=id, server_id=kwargs.get("server_id", None), **kwargs)
+        super().__init__(id=id, server_id=kwargs.get("server_id", None), **kwargs)  # ty: ignore[invalid-argument-type]  # an event consumer subscribes rather than pairing with one server
         logger = kwargs.get("logger", None)
         if not logger:
             logger = structlog.get_logger().bind(
@@ -2465,16 +2480,16 @@ class BaseEventConsumer(BaseZMQClient):
             server_id=id,
             socket_id=id,
             node_type="client",
-            context=self.context,
-            socket_type=zmq.SUB,
+            context=self.context,  # ty: ignore[invalid-argument-type]  # the context flavour matches the mixin
+            socket_type=zmq.SocketType.SUB,
             access_point=access_point,
             **kwargs,
         )
         self.event_unique_identifier = bytes(event_unique_identifier, encoding="utf-8")
         short_uuid = uuid_hex()
-        self.interruptor = self.context.socket(zmq.PAIR, socket_class=socket_class)
+        self.interruptor = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]  # socket_class matches the context flavour
         self.interruptor.setsockopt_string(zmq.IDENTITY, f"interrupting-server-{short_uuid}")
-        self.interrupting_peer = self.context.socket(zmq.PAIR, socket_class=socket_class)
+        self.interrupting_peer = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]  # socket_class matches the context flavour
         self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f"interrupting-client-{short_uuid}")
         self.interruptor.bind(f"inproc://{self.id}-{short_uuid}/interruption")
         self.interrupting_peer.connect(f"inproc://{self.id}-{short_uuid}/interruption")
@@ -2528,6 +2543,9 @@ class BaseEventConsumer(BaseZMQClient):
 class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
     """Sync Event Consumer to used outside of async loops."""
 
+    _poller_lock: threading.Lock
+    poller: zmq.Poller
+
     def receive(self, timeout: float | None = 1000, raise_interrupt_as_exception: bool = False) -> EventMessage | None:
         """
         Receive event with given timeout.
@@ -2554,7 +2572,7 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
             try:
                 if not self._poller_lock.acquire(timeout=timeout / 1000 if timeout else -1):
                     continue
-                sockets = self.poller.poll(timeout)  # list[tuple[zmq.Socket, int]]
+                sockets = self.poller.poll(timeout)  # ty: ignore[invalid-argument-type]  # zmq accepts a float timeout  # list[tuple[zmq.Socket, int]]
                 if len(sockets) > 1:
                     # if there is an interrupt message as well as an event,
                     # give preference to interrupt message.
@@ -2594,6 +2612,9 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
 
 class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
     """Async Event Consumer to be used inside async loops."""
+
+    _poller_lock: asyncio.Lock
+    poller: zmq.asyncio.Poller
 
     async def receive(
         self,

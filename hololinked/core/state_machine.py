@@ -2,7 +2,9 @@
 
 from enum import Enum, EnumMeta, StrEnum
 from types import FunctionType, MethodType
-from typing import Callable
+from typing import Callable, overload
+
+import structlog
 
 from ..param import edit_constant
 from .actions import Action
@@ -81,6 +83,8 @@ class StateMachine:
     )  # type: bool
     """if `True`, when the state changes, an event is pushed with the new state"""
 
+    logger: structlog.stdlib.BoundLogger
+
     valid = Boolean(
         default=False,
         readonly=True,
@@ -95,8 +99,8 @@ class StateMachine:
         *,
         initial_state: StrEnum | str,
         push_state_change_event: bool = True,
-        on_enter: dict[str, list[Callable] | Callable] = None,
-        on_exit: dict[str, list[Callable] | Callable] = None,
+        on_enter: dict[str, list[Callable] | Callable] | None = None,
+        on_exit: dict[str, list[Callable] | Callable] | None = None,
         **machine: dict[str, Callable | Property],
     ) -> None:
         """
@@ -133,7 +137,7 @@ class StateMachine:
         self.initial_state = initial_state
         self.machine = machine
         self.push_state_change_event = push_state_change_event
-        self.logger = None
+        self.logger = None  # ty: ignore[invalid-assignment]
 
     def __set_name__(self, owner: ThingMeta, name: str) -> None:
         self.name = name
@@ -166,7 +170,7 @@ class StateMachine:
         owner_methods = owner.actions.get_descriptors(recreate=True).values()
 
         if isinstance(self.states, list):
-            with edit_constant(self.__class__.states):  # type: ignore
+            with edit_constant(self.__class__.states):
                 self.states = tuple(self.states)  # freeze the list of states
 
         # first validate machine
@@ -208,7 +212,7 @@ class StateMachine:
                 self.on_enter[state] = tuple(objects)
             elif not isinstance(objects, (list, tuple)):
                 self.on_enter[state] = (objects,)
-            for obj in self.on_enter[state]:  # type: ignore
+            for obj in self.on_enter[state]:
                 if not isinstance(obj, (FunctionType, MethodType)):
                     raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")
 
@@ -216,17 +220,23 @@ class StateMachine:
             self.on_exit = {}
         for state, objects in self.on_exit.items():
             if isinstance(objects, list):
-                self.on_exit[state] = tuple(objects)  # type: ignore
+                self.on_exit[state] = tuple(objects)
             elif not isinstance(objects, (list, tuple)):
-                self.on_exit[state] = (objects,)  # type: ignore
-            for obj in self.on_exit[state]:  # type: ignore
+                self.on_exit[state] = (objects,)
+            for obj in self.on_exit[state]:
                 if not isinstance(obj, (FunctionType, MethodType)):
                     raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")
 
         self.logger = owner.logger.bind(component="state-machine", thing_id=owner.id)
         self._valid = True
 
-    def __get__(self, instance, owner) -> "BoundFSM":
+    @overload
+    def __get__(self, instance: None, owner: ThingMeta) -> "StateMachine": ...
+
+    @overload
+    def __get__(self, instance: Thing, owner: ThingMeta) -> "BoundFSM": ...
+
+    def __get__(self, instance, owner) -> "StateMachine | BoundFSM":
         if instance is None:
             return self
         return BoundFSM(instance, self)

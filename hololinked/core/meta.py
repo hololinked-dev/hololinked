@@ -4,7 +4,7 @@ import copy
 import inspect
 
 from types import FunctionType
-from typing import Any, KeysView, Type
+from typing import TYPE_CHECKING, Any, KeysView, Type
 
 from ..constants import JSON, JSONSerializable
 from ..param.parameterized import EventDispatcher as ParamEventDispatcher
@@ -15,6 +15,12 @@ from ..utils import getattr_without_descriptor_read
 from .actions import Action, BoundAction, action
 from .events import Event, EventDispatcher
 from .property import Property
+
+
+if TYPE_CHECKING:
+    from .thing import Thing
+    from .zmq.brokers import EventPublisher
+    from .zmq.rpc_server import RPCServer
 
 
 class ThingMeta(ParameterizedMetaclass):
@@ -49,7 +55,7 @@ class ThingMeta(ParameterizedMetaclass):
         instance.__post_init__()
         return instance
 
-    def _create_param_container(cls, cls_members: dict) -> None:
+    def _create_param_container(cls, cls_members: dict) -> None:  # ty: ignore[invalid-method-override]  # param's base names it mcs_members
         """
         Creates `PropertiesRegistry` instead of `param`'s own `Parameters` as the default container for descriptors.
 
@@ -80,7 +86,7 @@ class ThingMeta(ParameterizedMetaclass):
 
         Returns `PropertiesRegistry` instance instead of `param`'s own `Parameters` instance.
         """
-        return cls._param_container
+        return cls._param_container  # ty: ignore[invalid-return-type]  # param declares this as ClassParameters; a ThingMeta always holds a PropertiesRegistry
 
     @property
     def actions(cls) -> "ActionsRegistry":
@@ -110,7 +116,7 @@ class DescriptorRegistry:
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/DescriptorRegistry.pdf)
     """
 
-    def __init__(self, owner_cls: ThingMeta, owner_inst=None) -> None:
+    def __init__(self, owner_cls: ThingMeta, owner_inst: "Thing | None" = None) -> None:
         """
         Initialize the registry.
 
@@ -153,7 +159,7 @@ class DescriptorRegistry:
         raise NotImplementedError("Implement descriptor_object in subclass")
 
     @property
-    def descriptors(self) -> dict[str, Type[Property | Action | Event]]:
+    def descriptors(self) -> dict[str, Any]:
         """A dictionary with all the descriptors as values and their names as keys."""
         raise NotImplementedError("Implement descriptors in subclass")
 
@@ -183,7 +189,7 @@ class DescriptorRegistry:
             except AttributeError:
                 pass
 
-    def __getitem__(self, key: str) -> Property | Action | Event:
+    def __getitem__(self, key: str) -> Any:
         """Returns the descriptor object for the given key."""
         raise NotImplementedError("Implement __getitem__ in subclass")
 
@@ -227,12 +233,12 @@ class DescriptorRegistry:
     def __hash__(self) -> int:
         return hash(self._qualified__prefix)
 
-    def __str__(self) -> int:
+    def __str__(self) -> str:
         if self.owner_inst:
             return f"<DescriptorRegistry({self.owner_cls.__name__}({self.owner_inst.id}))>"
         return f"<DescriptorRegistry({self.owner_cls.__name__})>"
 
-    def get_descriptors(self, recreate: bool = False) -> dict[str, Property | Action | Event]:
+    def get_descriptors(self, recreate: bool = False) -> dict[str, Any]:
         """
         A dictionary with all the descriptors as values and their names as keys.
 
@@ -252,7 +258,7 @@ class DescriptorRegistry:
             return getattr(self, f"_{self._qualified_prefix}_{self.__class__.__name__.lower()}")
         except AttributeError:
             descriptors = dict()
-            for name, objekt in inspect._getmembers(
+            for name, objekt in inspect._getmembers(  # ty: ignore[unresolved-attribute]  # private CPython helper, present at runtime
                 self.owner_cls,
                 lambda f: isinstance(f, self.descriptor_object),
                 getattr_without_descriptor_read,
@@ -315,13 +321,13 @@ def supports_only_instance_access(
     def inner(func: FunctionType) -> FunctionType:
         def wrapper(self: DescriptorRegistry, *args, **kwargs):
             if self.owner_inst is None:
-                error_msg = inner._error_msg
+                error_msg = inner._error_msg  # ty: ignore[unresolved-attribute]  # attribute attached to the function below
                 raise AttributeError(error_msg)
             return func(self, *args, **kwargs)
 
         return wrapper
 
-    inner._error_msg = error_msg
+    inner._error_msg = error_msg  # ty: ignore[unresolved-attribute]  # carries the message to the wrapper
     return inner
 
 
@@ -343,7 +349,7 @@ class PropertiesRegistry(DescriptorRegistry):
             # instantiated by instance
             self._instance_params = {}
             self.event_resolver = self.owner_cls.properties.event_resolver
-            self.event_dispatcher = ParamEventDispatcher(owner_inst, self.event_resolver)
+            self.event_dispatcher = ParamEventDispatcher(owner_inst, self.event_resolver)  # ty: ignore[invalid-argument-type]  # this branch only runs when owner_inst is set
             self.event_dispatcher.prepare_instance_dependencies()
 
     @property
@@ -363,8 +369,8 @@ class PropertiesRegistry(DescriptorRegistry):
     def __getitem__(self, key: str) -> Property | Parameter:
         return self.descriptors[key]
 
-    def __contains__(self, value: object) -> bool:
-        return value in self.descriptors.values() or value in self.descriptors
+    def __contains__(self, obj: object) -> bool:
+        return obj in self.descriptors.values() or obj in self.descriptors
 
     @property
     def defaults(self) -> dict[str, Any]:
@@ -513,7 +519,7 @@ class PropertiesRegistry(DescriptorRegistry):
             for name, prop in self.remote_objects.items():
                 if self.owner_inst is None and not prop.class_member:
                     continue
-                data[name] = prop.__get__(self.owner_inst, self.owner_cls)
+                data[name] = prop.__get__(self.owner_inst, self.owner_cls)  # ty: ignore[invalid-argument-type]  # class-level reads go through the descriptor too
             return data
         elif "names" in kwargs:
             names = kwargs.get("names")
@@ -572,7 +578,7 @@ class PropertiesRegistry(DescriptorRegistry):
                 "Some properties could not be set due to errors. "
                 + "Check exception notes or server logs for more information."
             )
-            ex.__notes__ = errors
+            ex.__notes__ = [errors]
             raise ex from None
 
     def add(self, name: str, config: JSON) -> None:
@@ -586,9 +592,9 @@ class PropertiesRegistry(DescriptorRegistry):
         config: JSON
             configuration of the property, i.e. keyword arguments to the `__init__` method of the property class
         """
-        prop = self.get_type_from_name(**config)
+        prop = self.get_type_from_name(**config)  # ty: ignore[invalid-argument-type]  # unreachable today, see `_add_property`
         setattr(self.owner_cls, name, prop)
-        prop.__set_name__(self.owner_cls, name)
+        prop.__set_name__(self.owner_cls, name)  # ty: ignore[missing-argument, invalid-argument-type]  # unreachable today, see `_add_property`
         if prop.deepcopy_default:
             self._deep_copy_param_descriptor(prop)
             self._deep_copy_param_default(prop)
@@ -624,7 +630,8 @@ class PropertiesRegistry(DescriptorRegistry):
         """
         if not hasattr(self.owner_inst, "db_engine"):
             raise AttributeError("database engine not set, this object is not connected to a database")
-        props = self.owner_inst.db_engine.get_all_properties()  # type: dict
+        # `deserialized=True` (the default) makes every backend return a dict, not a Sequence
+        props: dict = self.owner_inst.db_engine.get_all_properties()  # ty: ignore[unresolved-attribute, invalid-assignment]  # guarded by the hasattr() check above
         final_list = {}
         for name, prop in props.items():
             try:
@@ -644,16 +651,16 @@ class PropertiesRegistry(DescriptorRegistry):
         if not hasattr(self.owner_inst, "db_engine"):
             return
             # raise AttributeError("database engine not set, this object is not connected to a database")
-        missing_properties = self.owner_inst.db_engine.create_missing_properties(
+        missing_properties = self.owner_inst.db_engine.create_missing_properties(  # ty: ignore[unresolved-attribute]  # guarded by the hasattr() check above
             self.db_init_objects, get_missing_property_names=True
         )
         # 4. read db_init and db_persist objects
         with edit_constant_parameters(self.owner_inst):
             for db_prop, value in self.get_from_DB().items():
                 try:
-                    prop_desc = self.descriptors[db_prop]  # type: Property
-                    if (prop_desc.db_init or prop_desc.db_persist) and db_prop not in missing_properties:
-                        setattr(self.owner_inst, db_prop, value)  # type: ignore
+                    prop_desc: Property = self.descriptors[db_prop]  # ty: ignore[invalid-assignment]  # a PropertiesRegistry only holds Property instances
+                    if (prop_desc.db_init or prop_desc.db_persist) and db_prop not in missing_properties:  # ty: ignore[unsupported-operator]  # `get_missing_property_names=True` returns a list
+                        setattr(self.owner_inst, db_prop, value)
                 except Exception as ex:
                     self.owner_inst.logger.error(f"could not set attribute {db_prop} due to error {str(ex)}")
 
@@ -747,8 +754,8 @@ class ActionsRegistry(DescriptorRegistry):
             return self.descriptors[key].__get__(self.owner_inst, self.owner_cls)
         return self.descriptors[key]
 
-    def __contains__(self, action: object) -> bool:
-        return action in self.descriptors.values() or action in self.descriptors
+    def __contains__(self, obj: object) -> bool:
+        return obj in self.descriptors.values() or obj in self.descriptors
 
 
 class EventsRegistry(DescriptorRegistry):
@@ -772,8 +779,8 @@ class EventsRegistry(DescriptorRegistry):
             return self.descriptors[key].__get__(self.owner_inst, self.owner_cls)
         return self.descriptors[key]
 
-    def __contains__(self, event: object) -> bool:
-        return event in self.descriptors.values() or event in self.descriptors
+    def __contains__(self, obj: object) -> bool:
+        return obj in self.descriptors.values() or obj in self.descriptors
 
     def clear(self):
         """Deletes the cached descriptor dictionaries so that they can be recreated, including change events and observables."""
@@ -868,7 +875,7 @@ class Propertized(Parameterized):
     # with same name
     def create_param_container(self, **params):
         """Creates a registry for available properties based on `PropertiesRegistry`."""
-        self._properties_registry = PropertiesRegistry(self.__class__, None, self)
+        self._properties_registry = PropertiesRegistry(self.__class__, None, self)  # ty: ignore[invalid-argument-type]  # a Thing subclass is always a ThingMeta instance
         self._properties_registry._setup_parameters(**params)
         self._param_container = self._properties_registry  # backwards compatibility with param
 
@@ -952,7 +959,7 @@ class RemoteInvokable:
     # with same name
     def create_actions_registry(self) -> None:
         """Creates a registry for available `Actions` based on `ActionsRegistry`."""
-        self._actions_registry = ActionsRegistry(self.__class__, self)
+        self._actions_registry = ActionsRegistry(self.__class__, self)  # ty: ignore[invalid-argument-type]  # a Thing subclass is always a ThingMeta instance
 
     @property
     def actions(self) -> ActionsRegistry:
@@ -968,6 +975,7 @@ class EventSource:
     """
 
     id: str
+    rpc_server: "RPCServer | None"
 
     def __init__(self) -> None:
         self.create_events_registry()
@@ -976,7 +984,7 @@ class EventSource:
     # with same name
     def create_events_registry(self) -> None:
         """Creates a registry for available `Events` based on `EventsRegistry`."""
-        self._events_registry = EventsRegistry(self.__class__, self)
+        self._events_registry = EventsRegistry(self.__class__, self)  # ty: ignore[invalid-argument-type]  # a Thing subclass is always a ThingMeta instance
 
     @property
     def events(self) -> EventsRegistry:
@@ -984,7 +992,7 @@ class EventSource:
         return self._events_registry
 
     @property
-    def event_publisher(self) -> "EventPublisher":  # noqa TODO fix
+    def event_publisher(self) -> "EventPublisher | None":
         """Event publishing object `EventPublisher` that owns the zmq.PUB socket, valid only after creating an RPC server or calling a `run()` method on the `Thing` instance."""
         try:
             return self.rpc_server.event_publisher if self.rpc_server else None
