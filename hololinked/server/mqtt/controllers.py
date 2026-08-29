@@ -1,3 +1,5 @@
+"""Publishers that push events, observable properties and Thing Descriptions to MQTT topics."""
+
 from typing import Any
 
 import aiomqtt

@@ -1,3 +1,5 @@
+"""Runtime configuration for the MQTT publisher."""
+
 from typing import Annotated, Any
 
 from pydantic import BaseModel, Field

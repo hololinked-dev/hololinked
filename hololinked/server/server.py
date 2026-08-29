@@ -1,3 +1,5 @@
+"""Base class for protocol servers, along with the entry points to run and stop them."""
+
 from __future__ import annotations
 
 import asyncio

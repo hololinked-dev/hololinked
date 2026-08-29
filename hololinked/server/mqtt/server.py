@@ -1,3 +1,5 @@
+"""MQTT publisher that exposes `Thing` events and properties through an MQTT broker."""
+
 import ssl
 
 from typing import Optional, Type  # noqa: F401

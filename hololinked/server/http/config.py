@@ -1,3 +1,5 @@
+"""Runtime configuration for the HTTP server and metadata for its request handlers."""
+
 from typing import Any
 
 from pydantic import BaseModel, Field

@@ -1,3 +1,5 @@
+"""Repository layer to operate on a `Thing` through the internal message broker."""
+
 from __future__ import annotations
 
 import asyncio

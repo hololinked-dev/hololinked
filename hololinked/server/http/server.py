@@ -1,3 +1,5 @@
+"""HTTP(s) server exposing `Thing`s over HTTP 1.1, along with its application router."""
+
 import socket
 import ssl
 import warnings

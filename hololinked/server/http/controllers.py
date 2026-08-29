@@ -1,3 +1,5 @@
+"""HTTP request handlers that run operations on a `Thing`."""
+
 from typing import Any, Optional
 
 import msgspec

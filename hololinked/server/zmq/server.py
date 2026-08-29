@@ -1,5 +1,6 @@
+"""ZeroMQ server exposing `Thing`s over IPC and TCP in addition to the internal INPROC transport."""
+
 import structlog
-import zmq
 import zmq.asyncio
 
 from ...constants import ZMQ_TRANSPORTS

@@ -1,3 +1,5 @@
+"""Service layer that generates the Thing Description served over HTTP."""
+
 import copy
 
 from typing import Any, cast

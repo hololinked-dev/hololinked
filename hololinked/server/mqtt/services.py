@@ -1,3 +1,5 @@
+"""Service layer that generates the Thing Description published over MQTT."""
+
 import copy
 
 from typing import Any
