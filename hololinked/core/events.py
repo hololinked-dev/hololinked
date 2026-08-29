@@ -132,7 +132,6 @@ class EventDispatcher:
     @property
     def publisher(self) -> EventPublisher:
         """Event publishing PUB socket owning object."""
-        # None until an RPC server exists; `push()` is only reachable once one does, so use sites treat it as set
         return self._publisher  # ty: ignore[invalid-return-type]
 
     @publisher.setter

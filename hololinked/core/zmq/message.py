@@ -186,10 +186,8 @@ class RequestMessage:
 
     def __init__(self, msg: list[bytes]) -> None:
         self._bytes = msg
-        # header and body are only populated by parse_header()/parse_body(); the `None` here is a placeholder,
-        # so the class-level annotations above state the contract that every use site relies on
         self._header = None  # ty: ignore[invalid-assignment]  # deserialized header
-        self._body = None  # ty: ignore[invalid-assignment]
+        self._body = None  # ty: ignore[invalid-assignment]  # type: Optional[tuple[SerializableData, PreserializedData]]
         self._sender_id = None
 
     @property
@@ -342,7 +340,7 @@ class RequestMessage:
             operation=operation,
             payloadContentType=payload.content_type,
             preencodedPayloadContentType=preserialized_payload.content_type,
-            thingExecutionContext=thing_execution_context,  # ty: ignore[invalid-argument-type]  # see above
+            thingExecutionContext=thing_execution_context,  # ty: ignore[invalid-argument-type]
         )
         message._body = [payload, preserialized_payload]
         message._bytes = [
@@ -480,12 +478,12 @@ class ResponseMessage:
     @property
     def payload(self) -> SerializableData:
         """Payload of the message."""
-        return self.body[0]  # ty: ignore[invalid-return-type]  # index 0 is always the serializable payload
+        return self.body[0]  # ty: ignore[invalid-return-type]
 
     @property
     def preserialized_payload(self) -> PreserializedData:
         """pre-encoded payload of the message."""
-        return self.body[1]  # ty: ignore[invalid-return-type]  # index 1 is always the preserialized payload
+        return self.body[1]  # ty: ignore[invalid-return-type]
 
     @property
     def oneof_valid_payload(self) -> SerializableData | PreserializedData:
@@ -687,7 +685,7 @@ class EventMessage(ResponseMessage):
     # For header's JSON schema, visit [here](https://hololinked.readthedocs.io/en/latest/protocols/zmq/event-message-header.json).
 
     @classmethod
-    def craft_from_arguments(  # ty: ignore[invalid-method-override]  # event factory takes an event_id, not a receiver/message_type pair
+    def craft_from_arguments(  # ty: ignore[invalid-method-override]
         cls,
         event_id: str,
         sender_id: str,

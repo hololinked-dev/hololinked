@@ -259,7 +259,7 @@ class RPCServer(BaseZMQServer):
             invokation_timed_out = True
             if ready_to_process_event is not None:
                 ready_to_process_event.set()  # releases timeout task
-                invokation_timed_out = await timeout_task  # ty: ignore[invalid-await]  # created together with ready_to_process_event
+                invokation_timed_out = await timeout_task  # ty: ignore[invalid-await]
             if ready_to_process_event is not None and invokation_timed_out:
                 # drop call to thing, timeout message was already sent in _process_timeouts()
                 continue
@@ -303,7 +303,7 @@ class RPCServer(BaseZMQServer):
             # check if execution completed within time
             if execution_completed_event is not None:
                 execution_completed_event.set()  # releases timeout task
-                execution_timed_out = await execution_timeout_task  # ty: ignore[invalid-await]  # set together with execution_completed_event
+                execution_timed_out = await execution_timeout_task  # ty: ignore[invalid-await]
             if execution_timeout_task is not None and execution_timed_out:
                 # drop reply to client as timeout was already sent
                 continue
@@ -314,7 +314,7 @@ class RPCServer(BaseZMQServer):
             # send reply to client
             await origin_server.async_send_response_with_message_type(
                 request_message=request_message,
-                message_type=reply_message_type,  # ty: ignore[invalid-argument-type]  # only None on the oneway path, which returns earlier
+                message_type=reply_message_type,  # ty: ignore[invalid-argument-type]
                 payload=payload,
                 preserialized_payload=preserialized_payload,
             )
@@ -503,7 +503,7 @@ class RPCServer(BaseZMQServer):
             prop = instance.properties[objekt]  # type: Property
             return getattr(instance, prop.name)
         elif operation == Operations.writeproperty:
-            prop: Property = instance.properties[objekt]  # ty: ignore[invalid-assignment]  # a PropertiesRegistry only holds Property instances
+            prop: Property = instance.properties[objekt]  # ty: ignore[invalid-assignment]
             if preserialized_payload != EMPTY_BYTE:
                 prop_value = preserialized_payload
             else:
@@ -525,7 +525,7 @@ class RPCServer(BaseZMQServer):
             # payload then become kwargs
             if preserialized_payload != EMPTY_BYTE:
                 args = (preserialized_payload,) + args
-            action: BoundAction = instance.actions[objekt]  # ty: ignore[invalid-assignment]  # instance-level access returns a BoundAction
+            action: BoundAction = instance.actions[objekt]  # ty: ignore[invalid-assignment]
             if action.execution_info.iscoroutine:
                 # the actual scheduling as a purely async task is done by the scheduler, not here,
                 # this will be a blocking call
@@ -731,20 +731,20 @@ class RPCServer(BaseZMQServer):
                 raise RuntimeError(
                     "This server cannot generate TD for IPC protocol, consider using thing model directly."
                 )
-            req_rep_socket_address = self.ipc_server.socket_address  # ty: ignore[unresolved-attribute]  # guarded by the hasattr() check above
-            pub_sub_socket_address = self.ipc_event_publisher.socket_address  # ty: ignore[unresolved-attribute]  # present whenever the matching server is
+            req_rep_socket_address = self.ipc_server.socket_address  # ty: ignore[unresolved-attribute]
+            pub_sub_socket_address = self.ipc_event_publisher.socket_address  # ty: ignore[unresolved-attribute]
         elif protocol.lower() == "tcp":
             if not hasattr(self, "tcp_server"):
                 raise RuntimeError(
                     "This server cannot generate TD for TCP protocol, consider using thing model directly."
                 )
-            req_rep_socket_address = self.tcp_server.socket_address  # ty: ignore[unresolved-attribute]  # guarded by the hasattr() check above  # type: str
+            req_rep_socket_address = self.tcp_server.socket_address  # ty: ignore[unresolved-attribute]  # type: str
             req_rep_socket_address = req_rep_socket_address.replace(
                 "*", socket.gethostname()
             ).replace(
                 "0.0.0.0", socket.gethostname()
             )  # SAST(id='hololinked.core.zmq.rpc_server.RPCServer.get_thing_description.req_rep_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
-            pub_sub_socket_address = self.tcp_event_publisher.socket_address  # ty: ignore[unresolved-attribute]  # present whenever the matching server is  # type: str
+            pub_sub_socket_address = self.tcp_event_publisher.socket_address  # ty: ignore[unresolved-attribute]  # type: str
             pub_sub_socket_address = pub_sub_socket_address.replace(
                 "*", socket.gethostname()
             ).replace(
@@ -920,14 +920,14 @@ class Scheduler:
     async def wait_for_operation(self, eventloop: asyncio.AbstractEventLoop | None) -> None:
         # assert isinstance(self._operation_execution_ready_event, threading.Event), "not a threaded scheduler"
         if isinstance(self._operation_execution_ready_event, threading.Event):
-            await eventloop.run_in_executor(None, self._operation_execution_ready_event.wait)  # ty: ignore[unresolved-attribute]  # a loop is always supplied for a threaded event
+            await eventloop.run_in_executor(None, self._operation_execution_ready_event.wait)  # ty: ignore[unresolved-attribute]
         else:
             await self._operation_execution_ready_event.wait()
         self._operation_execution_ready_event.clear()
 
     async def wait_for_reply(self, eventloop: asyncio.AbstractEventLoop | None) -> None:
         if isinstance(self._operation_execution_complete_event, threading.Event):
-            await eventloop.run_in_executor(None, self._operation_execution_complete_event.wait)  # ty: ignore[unresolved-attribute]  # a loop is always supplied for a threaded event
+            await eventloop.run_in_executor(None, self._operation_execution_complete_event.wait)  # ty: ignore[unresolved-attribute]
         else:
             await self._operation_execution_complete_event.wait()
         self._operation_execution_complete_event.clear()
@@ -959,7 +959,7 @@ class Scheduler:
         operation_request: OperationRequest
             thing id, objekt, operation, payload, preserialized payload and thing execution context
         """
-        return (  # ty: ignore[invalid-return-type]  # body index 0 is the payload and index 1 the preserialized payload
+        return (  # ty: ignore[invalid-return-type]
             request_message.header["thingID"],
             request_message.header["objekt"],
             request_message.header["operation"],

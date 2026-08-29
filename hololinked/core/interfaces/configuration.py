@@ -58,7 +58,7 @@ class BaseConfigurationRepository:
             value of the property
         """
 
-    def get_properties(self, properties: dict[str | Property, Any], deserialized: bool = True) -> dict[str, Any]:  # ty: ignore[empty-body]  # interface stub, implemented by adapters
+    def get_properties(self, properties: dict[str | Property, Any], deserialized: bool = True) -> dict[str, Any]:  # ty: ignore[empty-body]
         """
         Get multiple properties at once from the configuration storage.
 
@@ -85,7 +85,7 @@ class BaseConfigurationRepository:
             string names or the descriptor of the properties and their values.
         """
 
-    def get_all_properties(self, deserialized: bool = True) -> dict[str, Any] | Sequence:  # ty: ignore[empty-body]  # interface stub, implemented by adapters
+    def get_all_properties(self, deserialized: bool = True) -> dict[str, Any] | Sequence:  # ty: ignore[empty-body]
         """
         Get all properties of the `Thing` instance from the configuration storage.
 

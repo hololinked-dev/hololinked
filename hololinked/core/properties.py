@@ -115,7 +115,7 @@ class Bytes(String):
     this property only allows objects of type bytes (e.g. b'bytes').
     """
 
-    def validate_and_adapt(self, value: typing.Any) -> bytes | None:  # ty: ignore[invalid-method-override]  # Bytes deliberately narrows String to bytes
+    def validate_and_adapt(self, value: typing.Any) -> bytes | None:  # ty: ignore[invalid-method-override]
         """
         verify if given value is a bytes confirming to regex.
 
@@ -490,7 +490,7 @@ class Number(Property):
         Set to the given value, but cropped to be within the legal bounds.
         See crop_to_bounds for details on how cropping is done.
         """
-        value = self.validate_and_adapt(value)  # ty: ignore[invalid-assignment]  # None only when allow_None, which _crop_to_bounds handles
+        value = self.validate_and_adapt(value)  # ty: ignore[invalid-assignment]
         bounded_value = self._crop_to_bounds(value)
         super().__set__(obj, bounded_value)
 
@@ -508,7 +508,7 @@ class Number(Property):
         """
         # Values outside the bounds are silently cropped to
         # be inside the bounds.
-        vmin, vmax = self.bounds  # ty: ignore[not-iterable]  # bounds is always a 2-tuple when set
+        vmin, vmax = self.bounds  # ty: ignore[not-iterable]
         incmin, incmax = self.inclusive_bounds
         if vmin is not None:
             if value < vmin:
@@ -880,7 +880,7 @@ class Tuple(Iterable):
     def validate_and_adapt(self, value: typing.Any) -> typing.Tuple:
         if self.accept_list and isinstance(value, list):
             value = tuple(value)
-        return super().validate_and_adapt(value)  # ty: ignore[invalid-return-type]  # dtype is fixed to tuple
+        return super().validate_and_adapt(value)  # ty: ignore[invalid-return-type]
 
     @classmethod
     def serialize(cls, value):
@@ -973,7 +973,7 @@ class List(Iterable):
     def validate_and_adapt(self, value: typing.Any) -> typing.Tuple:
         if self.accept_tuple and isinstance(value, tuple):
             value = list(value)
-        return super().validate_and_adapt(value)  # ty: ignore[invalid-return-type]  # dtype is fixed to list
+        return super().validate_and_adapt(value)  # ty: ignore[invalid-return-type]
 
 
 class Callable(Property):
@@ -1067,7 +1067,7 @@ class Composite(Property):
                 else:
                     self.attribs.append(attrib)
 
-    def __get__(self, obj: Parameterized, objtype: typing.Type[Parameterized]) -> typing.List[typing.Any]:  # ty: ignore[invalid-method-override]  # a Composite reads several attributes at once
+    def __get__(self, obj: Parameterized, objtype: typing.Type[Parameterized]) -> typing.List[typing.Any]:  # ty: ignore[invalid-method-override]
         """
         Return the values of all the attribs, as a list.
         """
@@ -1520,7 +1520,7 @@ class Path(Property):
             self.search_paths = []
 
     def _resolve(self, path):
-        return resolve_path(path, path_to_file=None, search_paths=self.search_paths)  # ty: ignore[too-many-positional-arguments]  # ParameterizedFunction is called, not instantiated
+        return resolve_path(path, path_to_file=None, search_paths=self.search_paths)  # ty: ignore[too-many-positional-arguments]
 
     def validate_and_adapt(self, value: typing.Any) -> typing.Any:
         if value is None and self.allow_None:
@@ -1533,7 +1533,7 @@ class Path(Property):
         Return an absolute, normalized path (see resolve_path).
         """
         raw_path = super().__get__(obj, objtype)
-        return None if raw_path is None else self._resolve(raw_path)  # ty: ignore[invalid-return-type]  # None is returned only when the path is unset
+        return None if raw_path is None else self._resolve(raw_path)  # ty: ignore[invalid-return-type]
 
     def __getstate__(self):
         # don't want to pickle the search_paths
@@ -1562,7 +1562,7 @@ class Filename(Path):
     """
 
     def _resolve(self, path):
-        return resolve_path(path, path_to_file=True, search_paths=self.search_paths)  # ty: ignore[too-many-positional-arguments]  # ParameterizedFunction is called, not instantiated
+        return resolve_path(path, path_to_file=True, search_paths=self.search_paths)  # ty: ignore[too-many-positional-arguments]
 
 
 class Foldername(Path):
@@ -1584,7 +1584,7 @@ class Foldername(Path):
     """
 
     def _resolve(self, path):
-        return resolve_path(path, path_to_file=False, search_paths=self.search_paths)  # ty: ignore[too-many-positional-arguments]  # ParameterizedFunction is called, not instantiated
+        return resolve_path(path, path_to_file=False, search_paths=self.search_paths)  # ty: ignore[too-many-positional-arguments]
 
 
 def abbreviate_paths(pathspec, named_paths):
@@ -2229,7 +2229,7 @@ class Range(Tuple):
 
     @property
     def rangestr(self):
-        vmin, vmax = self.bounds  # ty: ignore[not-iterable]  # bounds is always a 2-tuple when set
+        vmin, vmax = self.bounds  # ty: ignore[not-iterable]
         incmin, incmax = self.inclusive_bounds
         incmin = "[" if incmin else "("
         incmax = "]" if incmax else ")"
@@ -2366,7 +2366,7 @@ class TypedList(ClassSelector):
         **kwargs,
     ) -> None:
         if default is not None:
-            default = TypeConstrainedList(  # ty: ignore[invalid-assignment]  # a constrained container stands in for the plain one
+            default = TypeConstrainedList(  # ty: ignore[invalid-assignment]
                 default=default, item_type=item_type, bounds=bounds, constant=constant, skip_validate=False
             )
         super().__init__(
@@ -2450,7 +2450,7 @@ class TypedDict(ClassSelector):
         **kwargs,
     ) -> None:
         if default is not None:
-            default = TypeConstrainedDict(  # ty: ignore[invalid-assignment]  # a constrained container stands in for the plain one
+            default = TypeConstrainedDict(  # ty: ignore[invalid-assignment]
                 default, key_type=key_type, item_type=item_type, bounds=bounds, constant=constant, skip_validate=False
             )
         self.key_type = key_type
@@ -2537,7 +2537,7 @@ class TypedKeyMappingsDict(ClassSelector):
         **kwargs,
     ) -> None:
         if default is not None:
-            default = TypedKeyMappingsConstrainedDict(  # ty: ignore[invalid-assignment]  # a constrained container stands in for the plain one
+            default = TypedKeyMappingsConstrainedDict(  # ty: ignore[invalid-assignment]
                 default=default,
                 type_mapping=type_mapping,
                 allow_unspecified_keys=allow_unspecified_keys,

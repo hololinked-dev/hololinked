@@ -142,7 +142,6 @@ lines-after-imports = 2
 [tool.ruff.lint.per-file-ignores]
 "hololinked/*.py" = ["DOC502"]
 "hololinked/serializers/*.py" = ["D102"]
-# tests are not held to the docstring rules
 "tests/**/*.py" = ["D", "DOC"]
 
 [tool.ruff.lint.pydocstyle]

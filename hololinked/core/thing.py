@@ -197,7 +197,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def sub_things(self) -> dict[str, "Thing"]:
         """Other `Thing`s' that are composed within this `Thing`."""
         things = dict()
-        for name, subthing in inspect._getmembers(  # ty: ignore[unresolved-attribute]  # private CPython helper, present at runtime
+        for name, subthing in inspect._getmembers(  # ty: ignore[unresolved-attribute]
             self,
             lambda obj: isinstance(obj, Thing),
             getattr_without_descriptor_read,  # noqa: F405

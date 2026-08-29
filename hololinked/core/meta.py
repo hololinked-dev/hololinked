@@ -55,7 +55,7 @@ class ThingMeta(ParameterizedMetaclass):
         instance.__post_init__()
         return instance
 
-    def _create_param_container(cls, cls_members: dict) -> None:  # ty: ignore[invalid-method-override]  # param's base names it mcs_members
+    def _create_param_container(cls, cls_members: dict) -> None:  # ty: ignore[invalid-method-override]
         """
         Creates `PropertiesRegistry` instead of `param`'s own `Parameters` as the default container for descriptors.
 
@@ -86,7 +86,7 @@ class ThingMeta(ParameterizedMetaclass):
 
         Returns `PropertiesRegistry` instance instead of `param`'s own `Parameters` instance.
         """
-        return cls._param_container  # ty: ignore[invalid-return-type]  # param declares this as ClassParameters; a ThingMeta always holds a PropertiesRegistry
+        return cls._param_container  # ty: ignore[invalid-return-type]
 
     @property
     def actions(cls) -> "ActionsRegistry":
@@ -258,7 +258,7 @@ class DescriptorRegistry:
             return getattr(self, f"_{self._qualified_prefix}_{self.__class__.__name__.lower()}")
         except AttributeError:
             descriptors = dict()
-            for name, objekt in inspect._getmembers(  # ty: ignore[unresolved-attribute]  # private CPython helper, present at runtime
+            for name, objekt in inspect._getmembers(  # ty: ignore[unresolved-attribute]
                 self.owner_cls,
                 lambda f: isinstance(f, self.descriptor_object),
                 getattr_without_descriptor_read,
@@ -321,13 +321,13 @@ def supports_only_instance_access(
     def inner(func: FunctionType) -> FunctionType:
         def wrapper(self: DescriptorRegistry, *args, **kwargs):
             if self.owner_inst is None:
-                error_msg = inner._error_msg  # ty: ignore[unresolved-attribute]  # attribute attached to the function below
+                error_msg = inner._error_msg  # ty: ignore[unresolved-attribute]
                 raise AttributeError(error_msg)
             return func(self, *args, **kwargs)
 
         return wrapper
 
-    inner._error_msg = error_msg  # ty: ignore[unresolved-attribute]  # carries the message to the wrapper
+    inner._error_msg = error_msg  # ty: ignore[unresolved-attribute]
     return inner
 
 
@@ -349,7 +349,7 @@ class PropertiesRegistry(DescriptorRegistry):
             # instantiated by instance
             self._instance_params = {}
             self.event_resolver = self.owner_cls.properties.event_resolver
-            self.event_dispatcher = ParamEventDispatcher(owner_inst, self.event_resolver)  # ty: ignore[invalid-argument-type]  # this branch only runs when owner_inst is set
+            self.event_dispatcher = ParamEventDispatcher(owner_inst, self.event_resolver)  # ty: ignore[invalid-argument-type]
             self.event_dispatcher.prepare_instance_dependencies()
 
     @property
@@ -519,7 +519,7 @@ class PropertiesRegistry(DescriptorRegistry):
             for name, prop in self.remote_objects.items():
                 if self.owner_inst is None and not prop.class_member:
                     continue
-                data[name] = prop.__get__(self.owner_inst, self.owner_cls)  # ty: ignore[invalid-argument-type]  # class-level reads go through the descriptor too
+                data[name] = prop.__get__(self.owner_inst, self.owner_cls)  # ty: ignore[invalid-argument-type]
             return data
         elif "names" in kwargs:
             names = kwargs.get("names")
@@ -631,7 +631,7 @@ class PropertiesRegistry(DescriptorRegistry):
         if not hasattr(self.owner_inst, "db_engine"):
             raise AttributeError("database engine not set, this object is not connected to a database")
         # `deserialized=True` (the default) makes every backend return a dict, not a Sequence
-        props: dict = self.owner_inst.db_engine.get_all_properties()  # ty: ignore[unresolved-attribute, invalid-assignment]  # guarded by the hasattr() check above
+        props: dict = self.owner_inst.db_engine.get_all_properties()  # ty: ignore[unresolved-attribute, invalid-assignment]
         final_list = {}
         for name, prop in props.items():
             try:
@@ -651,15 +651,15 @@ class PropertiesRegistry(DescriptorRegistry):
         if not hasattr(self.owner_inst, "db_engine"):
             return
             # raise AttributeError("database engine not set, this object is not connected to a database")
-        missing_properties = self.owner_inst.db_engine.create_missing_properties(  # ty: ignore[unresolved-attribute]  # guarded by the hasattr() check above
+        missing_properties = self.owner_inst.db_engine.create_missing_properties(  # ty: ignore[unresolved-attribute]
             self.db_init_objects, get_missing_property_names=True
         )
         # 4. read db_init and db_persist objects
         with edit_constant_parameters(self.owner_inst):
             for db_prop, value in self.get_from_DB().items():
                 try:
-                    prop_desc: Property = self.descriptors[db_prop]  # ty: ignore[invalid-assignment]  # a PropertiesRegistry only holds Property instances
-                    if (prop_desc.db_init or prop_desc.db_persist) and db_prop not in missing_properties:  # ty: ignore[unsupported-operator]  # `get_missing_property_names=True` returns a list
+                    prop_desc: Property = self.descriptors[db_prop]  # ty: ignore[invalid-assignment]
+                    if (prop_desc.db_init or prop_desc.db_persist) and db_prop not in missing_properties:  # ty: ignore[unsupported-operator]
                         setattr(self.owner_inst, db_prop, value)
                 except Exception as ex:
                     self.owner_inst.logger.error(f"could not set attribute {db_prop} due to error {str(ex)}")
@@ -875,7 +875,7 @@ class Propertized(Parameterized):
     # with same name
     def create_param_container(self, **params):
         """Creates a registry for available properties based on `PropertiesRegistry`."""
-        self._properties_registry = PropertiesRegistry(self.__class__, None, self)  # ty: ignore[invalid-argument-type]  # a Thing subclass is always a ThingMeta instance
+        self._properties_registry = PropertiesRegistry(self.__class__, None, self)  # ty: ignore[invalid-argument-type]
         self._properties_registry._setup_parameters(**params)
         self._param_container = self._properties_registry  # backwards compatibility with param
 
@@ -959,7 +959,7 @@ class RemoteInvokable:
     # with same name
     def create_actions_registry(self) -> None:
         """Creates a registry for available `Actions` based on `ActionsRegistry`."""
-        self._actions_registry = ActionsRegistry(self.__class__, self)  # ty: ignore[invalid-argument-type]  # a Thing subclass is always a ThingMeta instance
+        self._actions_registry = ActionsRegistry(self.__class__, self)  # ty: ignore[invalid-argument-type]
 
     @property
     def actions(self) -> ActionsRegistry:
@@ -984,7 +984,7 @@ class EventSource:
     # with same name
     def create_events_registry(self) -> None:
         """Creates a registry for available `Events` based on `EventsRegistry`."""
-        self._events_registry = EventsRegistry(self.__class__, self)  # ty: ignore[invalid-argument-type]  # a Thing subclass is always a ThingMeta instance
+        self._events_registry = EventsRegistry(self.__class__, self)  # ty: ignore[invalid-argument-type]
 
     @property
     def events(self) -> EventsRegistry:

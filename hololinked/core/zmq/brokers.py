@@ -78,11 +78,9 @@ class BaseZMQ:
         """
         super().__init__()
         self.id = id
-        # these three are only assigned properly once `create_socket()` runs; the `None` here is a defensive
-        # initialisation, so the class-level annotations above state the contract that every use site relies on
-        self.context = self.context if hasattr(self, "context") and self.context else None  # ty: ignore[invalid-assignment]
-        self.socket = self.socket if hasattr(self, "socket") and self.socket else None  # ty: ignore[invalid-assignment]
-        self.socket_address = self.socket_address if hasattr(self, "socket_address") and self.socket_address else None  # ty: ignore[invalid-assignment]
+        self.context = self.context if hasattr(self, "context") and self.context else None  # ty: ignore[invalid-assignment]  # type: zmq.Context | zmq.asyncio.Context
+        self.socket = self.socket if hasattr(self, "socket") and self.socket else None  # ty: ignore[invalid-assignment]  # type: zmq.Socket | None
+        self.socket_address = self.socket_address if hasattr(self, "socket_address") and self.socket_address else None  # ty: ignore[invalid-assignment]  # type: str | None
 
     def exit(self) -> None:
         """
@@ -223,7 +221,7 @@ class BaseZMQ:
                 "transports other than IPC, TCP & INPROC are not implemented now for {}.".format(cls.__name__)
                 + f" Given transport {transport}."
             )
-        return socket, socket_address  # ty: ignore[invalid-return-type]  # every branch above assigns socket_address
+        return socket, socket_address  # ty: ignore[invalid-return-type]
 
 
 class BaseAsyncZMQ(BaseZMQ):
@@ -259,7 +257,7 @@ class BaseAsyncZMQ(BaseZMQ):
                 "async ZMQ message broker accepts only async ZMQ context. supplied type {}".format(type(context))
             )
         self.context = context or global_config.zmq_context()
-        self.socket, self.socket_address = BaseZMQ.get_socket(  # ty: ignore[invalid-assignment]  # an async context yields an async socket
+        self.socket, self.socket_address = BaseZMQ.get_socket(  # ty: ignore[invalid-assignment]
             server_id=server_id,
             socket_id=socket_id,
             node_type=node_type,
@@ -1676,7 +1674,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         ValueError
             if `client_ids` and `server_ids` are not of the same length
         """
-        super().__init__(id=id, server_id=None, **kwargs)  # ty: ignore[invalid-argument-type]  # a pool talks to many servers, not one
+        super().__init__(id=id, server_id=None, **kwargs)  # ty: ignore[invalid-argument-type]
         if len(client_ids) != len(server_ids):
             raise ValueError("client_ids and server_ids must have same length")
         # this class does not call create_socket method
@@ -2198,7 +2196,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         )
 
     async def ping_all_servers(self):
-        return await self.async_execute_in_all()  # ty: ignore[missing-argument]  # TODO: needs operation='invokeAction', objekt=CommonRPC.PING
+        return await self.async_execute_in_all()  # ty: ignore[missing-argument]  # operation='invokeAction', objekt=CommonRPC.PING)
 
     def __contains__(self, name: str) -> bool:
         return name in self.pool
@@ -2469,7 +2467,7 @@ class BaseEventConsumer(BaseZMQClient):
             self._poller_lock = asyncio.Lock()
         else:
             raise TypeError("BaseEventConsumer must be subclassed by either BaseSyncZMQ or BaseAsyncZMQ")
-        super().__init__(id=id, server_id=kwargs.get("server_id", None), **kwargs)  # ty: ignore[invalid-argument-type]  # an event consumer subscribes rather than pairing with one server
+        super().__init__(id=id, server_id=kwargs.get("server_id", None), **kwargs)  # ty: ignore[invalid-argument-type]
         logger = kwargs.get("logger", None)
         if not logger:
             logger = structlog.get_logger().bind(
@@ -2483,16 +2481,16 @@ class BaseEventConsumer(BaseZMQClient):
             server_id=id,
             socket_id=id,
             node_type="client",
-            context=self.context,  # ty: ignore[invalid-argument-type]  # the context flavour matches the mixin
+            context=self.context,  # ty: ignore[invalid-argument-type]
             socket_type=zmq.SocketType.SUB,
             access_point=access_point,
             **kwargs,
         )
         self.event_unique_identifier = bytes(event_unique_identifier, encoding="utf-8")
         short_uuid = uuid_hex()
-        self.interruptor = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]  # socket_class matches the context flavour
+        self.interruptor = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]
         self.interruptor.setsockopt_string(zmq.IDENTITY, f"interrupting-server-{short_uuid}")
-        self.interrupting_peer = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]  # socket_class matches the context flavour
+        self.interrupting_peer = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]
         self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f"interrupting-client-{short_uuid}")
         self.interruptor.bind(f"inproc://{self.id}-{short_uuid}/interruption")
         self.interrupting_peer.connect(f"inproc://{self.id}-{short_uuid}/interruption")
@@ -2575,7 +2573,7 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
             try:
                 if not self._poller_lock.acquire(timeout=timeout / 1000 if timeout else -1):
                     continue
-                sockets = self.poller.poll(timeout)  # ty: ignore[invalid-argument-type]  # zmq accepts a float timeout  # list[tuple[zmq.Socket, int]]
+                sockets = self.poller.poll(timeout)  # ty: ignore[invalid-argument-type]  # list[tuple[zmq.Socket, int]]
                 if len(sockets) > 1:
                     # if there is an interrupt message as well as an event,
                     # give preference to interrupt message.

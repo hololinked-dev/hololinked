@@ -80,7 +80,7 @@ class Metadata(BaseModel):
         """
         raise NotImplementedError("Implement add_interactions() in subclass")
 
-    def json(self, **kwargs) -> dict[str, Any]:  # ty: ignore[invalid-method-override]  # deliberately replaces pydantic's deprecated json()
+    def json(self, **kwargs) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
         """
         Return the JSON string representation.
 
@@ -365,7 +365,7 @@ class InteractionMetadata(BaseModel):
             return False
         return self.thing_id == value.thing_id and self.name == value.name
 
-    def __deepcopy__(self, memo):  # ty: ignore[invalid-method-override]  # abstract hook, subclasses implement it
+    def __deepcopy__(self, memo):  # ty: ignore[invalid-method-override]
         raise NotImplementedError("Implement in subclass")
 
     def __getstate__(self):
@@ -379,7 +379,7 @@ class InteractionMetadata(BaseModel):
             del state["_objekt"]
         return state
 
-    def json(self) -> dict[str, Any]:  # ty: ignore[invalid-method-override]  # deliberately replaces pydantic's deprecated json()
+    def json(self) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
         """Return the JSON representation."""
         raise NotImplementedError("json() must be implemented in subclass of InteractionMetadata")
 
@@ -392,7 +392,7 @@ class PropertyMetadata(InteractionMetadata):
         return ResourceTypes.PROPERTY
 
     @classmethod
-    def from_descriptor(cls, property: Property, owner: Thing | ThingMeta) -> PropertyMetadata:  # noqa: D102 # ty: ignore[invalid-method-override]  # each subclass names its own descriptor kind
+    def from_descriptor(cls, property: Property, owner: Thing | ThingMeta) -> PropertyMetadata:  # noqa: D102 # ty: ignore[invalid-method-override]
         raise NotImplementedError
 
 
@@ -404,7 +404,7 @@ class ActionMetadata(InteractionMetadata):
         return ResourceTypes.ACTION
 
     @classmethod
-    def from_descriptor(cls, action: Action, owner: Thing | ThingMeta) -> ActionMetadata:  # noqa: D102 # ty: ignore[invalid-method-override]  # each subclass names its own descriptor kind
+    def from_descriptor(cls, action: Action, owner: Thing | ThingMeta) -> ActionMetadata:  # noqa: D102 # ty: ignore[invalid-method-override]
         raise NotImplementedError
 
 
@@ -416,5 +416,5 @@ class EventMetadata(InteractionMetadata):
         return ResourceTypes.EVENT
 
     @classmethod
-    def from_descriptor(cls, event: Event, owner: Thing | ThingMeta) -> EventMetadata:  # noqa: D102 # ty: ignore[invalid-method-override]  # each subclass names its own descriptor kind
+    def from_descriptor(cls, event: Event, owner: Thing | ThingMeta) -> EventMetadata:  # noqa: D102 # ty: ignore[invalid-method-override]
         raise NotImplementedError

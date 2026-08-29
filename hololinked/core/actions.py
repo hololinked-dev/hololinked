@@ -182,7 +182,7 @@ class BoundAction:
             return
         if self.execution_info.state is None or (
             hasattr(self.owner_inst, "state_machine")
-            and self.owner_inst.state_machine.current_state in self.execution_info.state  # ty: ignore[unresolved-attribute]  # guarded by hasattr()
+            and self.owner_inst.state_machine.current_state in self.execution_info.state  # ty: ignore[unresolved-attribute]
         ):
             if self.execution_info.schema_validator is not None:
                 self.execution_info.schema_validator.validate_method_call(args, kwargs)
@@ -356,10 +356,10 @@ def action(
     """
 
     def inner(obj):
-        input_schema = inner._arguments.get("input_schema", None)  # ty: ignore[unresolved-attribute]  # attribute attached to the function below
-        output_schema = inner._arguments.get("output_schema", None)  # ty: ignore[unresolved-attribute]  # attribute attached to the function below
-        state = inner._arguments.get("state", None)  # ty: ignore[unresolved-attribute]  # attribute attached to the function below
-        kwargs = inner._arguments.get("kwargs", {})  # ty: ignore[unresolved-attribute]  # attribute attached to the function below
+        input_schema = inner._arguments.get("input_schema", None)  # ty: ignore[unresolved-attribute]
+        output_schema = inner._arguments.get("output_schema", None)  # ty: ignore[unresolved-attribute]
+        state = inner._arguments.get("state", None)  # ty: ignore[unresolved-attribute]
+        kwargs = inner._arguments.get("kwargs", {})  # ty: ignore[unresolved-attribute]
 
         original = obj
         if (
@@ -460,7 +460,7 @@ def action(
             "Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, "
             + f"unknown arguments found {kwargs.keys()}"
         )
-    inner._arguments = dict(  # ty: ignore[unresolved-attribute]  # carries the decorator arguments to `inner`
+    inner._arguments = dict(  # ty: ignore[unresolved-attribute]
         input_schema=input_schema,
         output_schema=output_schema,
         state=state,

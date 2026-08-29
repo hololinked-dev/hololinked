@@ -210,7 +210,7 @@ class Property(Parameter):
             # This is a descriptor object, so we need to set it on the owner class
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
 
-    def __get__(self, obj: Thing, objtype: ParameterizedMetaclass) -> Any:  # ty: ignore[invalid-method-override]  # a Property is only ever attached to a Thing
+    def __get__(self, obj: Thing, objtype: ParameterizedMetaclass) -> Any:  # ty: ignore[invalid-method-override]
         read_value = super().__get__(obj, objtype)
         self.push_change_event(obj, read_value)
         return read_value
@@ -242,7 +242,7 @@ class Property(Parameter):
                     return
             elif not old_value != value:
                 return
-            event_dispatcher.push(value)  # ty: ignore[unresolved-attribute]  # guarded by the descriptor check above
+            event_dispatcher.push(value)  # ty: ignore[unresolved-attribute]
 
     def validate_and_adapt(self, value) -> Any:
         """
@@ -267,9 +267,9 @@ class Property(Parameter):
                 raise ValueError(f"Property {self.name} does not allow None values")
         if self.model:
             if isinstance(self.model, dict):
-                self.validator(value)  # ty: ignore[call-non-callable]  # validator is set whenever model is set
+                self.validator(value)  # ty: ignore[call-non-callable]
             elif issubklass(self.model, RootModel):
-                value = self.model(value)  # ty: ignore[too-many-positional-arguments]  # issubklass() narrowing is not visible to the checker
+                value = self.model(value)  # ty: ignore[too-many-positional-arguments]
             elif issubklass(self.model, BaseModel):
                 value = self.model(**value)
         return super().validate_and_adapt(value)
@@ -286,14 +286,14 @@ class Property(Parameter):
             If the `Thing` instance is in a state where this property cannot be written.
         """
         if self.execution_info.state is None or (
-            hasattr(obj, "state_machine") and obj.state_machine.current_state in self.execution_info.state  # ty: ignore[unresolved-attribute]  # guarded by hasattr()
+            hasattr(obj, "state_machine") and obj.state_machine.current_state in self.execution_info.state  # ty: ignore[unresolved-attribute]
         ):
             return self.__set__(obj, value)
         else:
             raise StateMachineError(
                 "Thing {} is in `{}` state, however attribute can be written only in `{}` state".format(
                     obj.id,
-                    obj.state_machine.current_state,  # ty: ignore[unresolved-attribute]  # only reached when the state machine exists
+                    obj.state_machine.current_state,  # ty: ignore[unresolved-attribute]
                     self.execution_info.state,
                 )
             )
@@ -390,9 +390,9 @@ def wrap_plain_types_in_rootmodel(
         it is returned unchanged. Otherwise, a new `RootModel` subclass is returned which wraps the input type.
     """
     if model is None:
-        return  # ty: ignore[invalid-return-type]  # callers only pass None when they discard the result
+        return  # ty: ignore[invalid-return-type]
     if issubklass(model, BaseModel):
-        return model  # ty: ignore[invalid-return-type]  # issubklass() narrowing is not visible to the checker
+        return model  # ty: ignore[invalid-return-type]
     return create_model(f"{model!r}", root=(model, ...), __base__=ModelRoot)  # type: ignore[call-overload]
 
 
