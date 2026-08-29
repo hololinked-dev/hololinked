@@ -1,4 +1,6 @@
 """
+Global configuration for the package.
+
 adapted from pyro - https://github.com/irmen/Pyro5 - see following license
 
 MIT License
@@ -40,6 +42,7 @@ from .utils import generate_main_script_log_filename, set_global_event_loop_poli
 class Configuration:
     """
     Allows to auto apply common settings used throughout the package, instead of passing these settings as arguments.
+
     Import `global_config` variable instead of instantiating this class. Please check `global_config` docstring for supported values
     or [website documentation](https://docs.hololinked.dev/api-reference/global-config/).
 
@@ -94,7 +97,7 @@ class Configuration:
         self.load_variables()
 
     def load_variables(self):
-        """Set default values. This method is called during `__init__`"""
+        """Set default values. This method is called during `__init__`."""
         # note that all variables have not been implemented yet,
         # things just come and go as of now
         self.TEMP_DIR = os.path.join(os.path.expanduser("~"), ".hololinked")
@@ -106,13 +109,14 @@ class Configuration:
         self.TRACE_MALLOC = False
         # self.VALIDATE_SCHEMA_ON_CLIENT = False
         self.VALIDATE_SCHEMAS = True
-        self.ZMQ_CONTEXT = zmq.asyncio.Context()
+        self.ZMQ_CONTEXT = zmq.asyncio.Context()  # ty: ignore[invalid-argument-type]  # the async context is the one this package uses throughout
         self.DEBUG = False
         self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
         # self.USE_STRUCTLOG = True
         self.COLORED_LOGS = False
         self.USE_LOG_FILE = False
-        self.LOG_FILENAME = os.path.join(self.TEMP_DIR_LOGS, generate_main_script_log_filename(self.app_name))
+        # generate_main_script_log_filename() always falls back to a default name
+        self.LOG_FILENAME = os.path.join(self.TEMP_DIR_LOGS, generate_main_script_log_filename(self.app_name))  # ty: ignore[no-matching-overload]
         self.ROTATE_LOG_FILES = True
         self.LOGFILE_BACKUP_COUNT = 14
         # Add the filename of the main script importing this module
@@ -124,6 +128,7 @@ class Configuration:
     def setup(self):
         """
         Actions to be done to recreate global configuration state after changing config values.
+
         Called after `load_variables` and `set` methods.
 
         Please call this method after changing config values directly specific to logging or event loop policy
@@ -148,7 +153,14 @@ class Configuration:
         )
 
     def copy(self):
-        """returns a copy of this config as another object"""
+        """
+        Returns a copy of this config as another object.
+
+        Returns
+        -------
+        Configuration
+            a copy of this configuration
+        """
         other = object.__new__(Configuration)
         for item in self.__slots__:
             setattr(other, item, getattr(self, item))
@@ -156,7 +168,8 @@ class Configuration:
 
     def set(self, **kwargs):
         """
-        sets multiple config values at once, and recreates necessary global states.
+        Sets multiple config values at once, and recreates necessary global states.
+
         `load_variables` sets default values first, then overwrites with environment file values.
         This method only overwrites the specified values.
         """
@@ -165,13 +178,26 @@ class Configuration:
         self.setup()
 
     def asdict(self):
-        """returns this config as a regular dictionary"""
+        """
+        Returns this config as a regular dictionary.
+
+        Returns
+        -------
+        dict
+            the configuration values keyed by their names
+        """
         return {item: getattr(self, item) for item in self.__slots__}
 
     def zmq_context(self) -> zmq.asyncio.Context:
         """
-        Returns a global ZMQ async context. Use socket_class argument to retrieve
-        a synchronous socket if necessary.
+        Returns a global ZMQ async context.
+
+        Use socket_class argument to retrieve a synchronous socket if necessary.
+
+        Returns
+        -------
+        zmq.asyncio.Context
+            the process-wide ZMQ async context
         """
         return self.ZMQ_CONTEXT
 
@@ -181,7 +207,7 @@ class Configuration:
         execution_timeout: int | None = None,
         oneway: bool = False,
     ) -> None:
-        """Sets the default server execution context for the application"""
+        """Sets the default server execution context for the application."""
         from .core.zmq.message import default_server_execution_context
 
         default_server_execution_context.invokationTimeout = invokation_timeout or 5
@@ -192,32 +218,33 @@ class Configuration:
         self,
         fetch_execution_logs: bool = False,
     ) -> None:
-        """Sets the default thing execution context for the application"""
+        """Sets the default thing execution context for the application."""
         from .core.zmq.message import default_thing_execution_context
 
         default_thing_execution_context.fetchExecutionLogs = fetch_execution_logs
 
     @property
     def TEMP_DIR_SOCKETS(self) -> str:
-        """returns the temporary directory path for IPC sockets"""
+        """Returns the temporary directory path for IPC sockets."""
         return os.path.join(self.TEMP_DIR, self._sockets_folder)
 
     @property
     def TEMP_DIR_LOGS(self) -> str:
-        """returns the temporary directory path for log files"""
+        """Returns the temporary directory path for log files."""
         return os.path.join(self.TEMP_DIR, self._logs_folder)
 
     @property
     def TEMP_DIR_DB(self) -> str:
-        """returns the temporary directory path for database files"""
+        """Returns the temporary directory path for database files."""
         return os.path.join(self.TEMP_DIR, self._db_folder)
 
     @property
     def TEMP_DIR_SECRETS(self) -> str:
-        """returns the temporary directory path for secret files"""
+        """Returns the temporary directory path for secret files."""
         return os.path.join(self.TEMP_DIR, self._secrets_folder)
 
     def setup_temp_dirs(self) -> None:
+        """Create every temporary directory the package writes to, if missing."""
         for directory in [
             self.TEMP_DIR,
             self.TEMP_DIR_SOCKETS,
@@ -233,33 +260,34 @@ class Configuration:
                 warnings.warn(f"permission denied to create directory {directory}", UserWarning)
 
     def set_temp_dir(self, path: str) -> None:
-        """sets the base directory path for temporary files and application data (sockets, logs, databases, secrets)"""
+        """Sets the base directory path for temporary files and application data (sockets, logs, databases, secrets)."""
         self.TEMP_DIR = path
         self.setup_temp_dirs()
 
     def set_sockets_folders(self, path: str) -> None:
-        """sets the temporary directory path for IPC sockets"""
+        """Sets the temporary directory path for IPC sockets."""
         self._sockets_folder = path
         self.setup_temp_dirs()
 
     def set_logs_folder(self, path: str) -> None:
-        """sets the temporary directory path for log files"""
+        """Sets the temporary directory path for log files."""
         self._logs_folder = path
         self.setup_temp_dirs()
 
     def set_db_folder(self, path: str) -> None:
-        """sets the temporary directory path for database files"""
+        """Sets the temporary directory path for database files."""
         self._db_folder = path
         self.setup_temp_dirs()
 
     def set_secrets_folder(self, path: str) -> None:
-        """sets the temporary directory path for secret files"""
+        """Sets the temporary directory path for secret files."""
         self._secrets_folder = path
         self.setup_temp_dirs()
 
     def cleanup_temp_dirs(self, cleanup_databases: bool = False) -> None:
         """
         Cleans up temporary directories used by hololinked, all log files and IPC sockets are removed.
+
         If `cleanup_databases` is `True`, database files are also removed.
         """
         directories = [self.TEMP_DIR_SOCKETS, self.TEMP_DIR_LOGS]

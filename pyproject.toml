@@ -116,17 +116,42 @@ filterwarnings = [
 ]
 
 [tool.ruff]
+line-length = 120
 exclude = [
     "hololinked/core/properties.py",
     "hololinked/param"
 ]
 
 [tool.ruff.lint]
-extend-select = ["I"]
+preview = true
+extend-select = [
+    "I",    # isort
+    "D",    # pydocstyle
+    "DOC"
+]
+ignore = [
+    "G201",  # logging-exc-info: do not require exc_info in logger.exception calls
+    "D401",  # imperative mode for summary line
+    "D105",  # magic methods dont need a docstring
+]
 
 [tool.ruff.lint.isort]
 lines-between-types = 1
 lines-after-imports = 2
+
+[tool.ruff.lint.per-file-ignores]
+"hololinked/*.py" = ["DOC502"]
+"hololinked/serializers/*.py" = ["D102"]
+"tests/**/*.py" = ["D", "DOC"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ty.src]
+exclude = ["hololinked/param"]
+
+[tool.ty.environment]
+python-platform = "linux" # for sys.platform machine specific
 
 [tool.bandit]
 exclude_dirs = [

@@ -53,10 +53,12 @@ Undefined = NotImplemented
 
 
 def instance_descriptor(
-    f: typing.Callable[["Parameter", "Parameterized", typing.Any], None],
-) -> typing.Callable[["Parameter", "Parameterized", typing.Any], None]:
+    f: typing.Callable[["Parameter", typing.Any, typing.Any], None],
+) -> typing.Callable[["Parameter", typing.Any, typing.Any], None]:
+    # the owner need not be a `Parameterized`; plain classes also hold `Parameter` descriptors,
+    # so this must stay as wide as the `__set__` it decorates
     # If parameter has an instance Parameter, delegate setting
-    def fset(self: "Parameter", obj: "Parameterized", val: typing.Any) -> None:
+    def fset(self: "Parameter", obj: typing.Any, val: typing.Any) -> None:
         if hasattr(obj, "parameters"):
             if hasattr(obj.parameters, "_instance_params"):
                 instance_param = obj.parameters._instance_params.get(self.name, None)

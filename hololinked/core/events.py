@@ -9,11 +9,10 @@ import jsonschema
 from hololinked.config import global_config
 from hololinked.constants import JSON
 from hololinked.core.interfaces.metadata import EventMetadata
-from hololinked.param.parameterized import Parameterized, ParameterizedMetaclass
 
 
 if TYPE_CHECKING:
-    from hololinked.core.events import EventMetadata
+    from hololinked.core.meta import ThingMeta
     from hololinked.core.thing import Thing
     from hololinked.core.zmq.brokers import EventPublisher
 
@@ -26,7 +25,16 @@ class Event:
     to the clients that have subscribed to them.
     """
 
-    __slots__ = ["name", "_internal_name", "_publisher", "_observable", "doc", "schema", "label", "owner"]
+    __slots__ = [
+        "name",
+        "_internal_name",
+        "_publisher",
+        "_observable",
+        "doc",
+        "schema",
+        "label",
+        "owner",
+    ]
 
     def __init__(
         self,
@@ -53,14 +61,17 @@ class Event:
         self.label = label
         self._observable = False
 
-    def __set_name__(self, owner: ParameterizedMetaclass, name: str) -> None:
+    def __set_name__(self, owner: ThingMeta, name: str) -> None:
         self.name = name
         self.owner = owner
 
     @overload
-    def __get__(self, obj, objtype) -> "EventDispatcher": ...
+    def __get__(self, obj: None, objtype: ThingMeta | None = None) -> "Event": ...
 
-    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass = None):
+    @overload
+    def __get__(self, obj: Thing, objtype: ThingMeta | None = None) -> "EventDispatcher": ...
+
+    def __get__(self, obj: Thing | None, objtype: ThingMeta | None = None):
         try:
             if not obj:
                 return self
@@ -109,8 +120,8 @@ class EventDispatcher:
     def __init__(
         self,
         unique_identifier: str,
-        publisher: EventPublisher,
-        owner_inst: ParameterizedMetaclass,
+        publisher: EventPublisher | None,
+        owner_inst: Thing,
         descriptor: Event,
     ) -> None:
         self._unique_identifier = unique_identifier
@@ -121,10 +132,10 @@ class EventDispatcher:
     @property
     def publisher(self) -> EventPublisher:
         """Event publishing PUB socket owning object."""
-        return self._publisher
+        return self._publisher  # ty: ignore[invalid-return-type]
 
     @publisher.setter
-    def publisher(self, value: EventPublisher) -> None:
+    def publisher(self, value: EventPublisher | None) -> None:
         # TODO fix this once the architecture is resolved
         from .zmq.brokers import EventPublisher  # noqa: E402
 

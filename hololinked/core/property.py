@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, RootModel, create_model
 
 from hololinked import SchemaValidatorClasses
 
-from ..param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
+from ..param.parameterized import Parameter, ParameterizedMetaclass
 from ..utils import issubklass
 from .dataklasses import RemoteResourceInfoValidator
 from .events import Event, EventDispatcher  # noqa: F401
@@ -28,6 +28,8 @@ class Property(Parameter):
     Please note the capital 'P' in `Property` to differentiate from python's own `property`.
     `Property` objects are similar to python's `property` but not a subclass of it due to limitations and redundancy.
     """
+
+    execution_info: RemoteResourceInfoValidator
 
     __slots__ = [
         "db_persist",
@@ -57,7 +59,7 @@ class Property(Parameter):
         db_init: bool = False,
         db_commit: bool = False,
         observable: bool = False,
-        model: "BaseModel" | None = None,
+        model: type[BaseModel] | dict[str, Any] | None = None,
         class_member: bool = False,
         fget: Callable | None = None,
         fset: Callable | None = None,
@@ -180,7 +182,7 @@ class Property(Parameter):
         if observable:
             self._observable_event_descriptor = Event()
         self._execution_info_validator = None
-        self.execution_info = None  # RemoteResource | None
+        self.execution_info = None  # ty: ignore[invalid-assignment]  # RemoteResource | None
         if remote:
             # TODO, this execution info validator can be refactored & removed later, adds an additional layer of info
             self._execution_info_validator = RemoteResourceInfoValidator(state=state, isproperty=True, obj=self)
@@ -192,7 +194,7 @@ class Property(Parameter):
                 self.model = model
                 self.validator = SchemaValidatorClasses.json_schema(model).validate
             else:
-                self.model = wrap_plain_types_in_rootmodel(model)  # type: BaseModel
+                self.model = wrap_plain_types_in_rootmodel(model)
                 self.validator = self.model.model_validate
 
     def __set_name__(self, owner: Any, attrib_name: str) -> None:
@@ -208,7 +210,7 @@ class Property(Parameter):
             # This is a descriptor object, so we need to set it on the owner class
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
 
-    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> Any:
+    def __get__(self, obj: Thing, objtype: ParameterizedMetaclass) -> Any:  # ty: ignore[invalid-method-override]
         read_value = super().__get__(obj, objtype)
         self.push_change_event(obj, read_value)
         return read_value
@@ -240,7 +242,7 @@ class Property(Parameter):
                     return
             elif not old_value != value:
                 return
-            event_dispatcher.push(value)
+            event_dispatcher.push(value)  # ty: ignore[unresolved-attribute]
 
     def validate_and_adapt(self, value) -> Any:
         """
@@ -265,14 +267,14 @@ class Property(Parameter):
                 raise ValueError(f"Property {self.name} does not allow None values")
         if self.model:
             if isinstance(self.model, dict):
-                self.validator(value)
+                self.validator(value)  # ty: ignore[call-non-callable]
             elif issubklass(self.model, RootModel):
-                value = self.model(value)
+                value = self.model(value)  # ty: ignore[too-many-positional-arguments]
             elif issubklass(self.model, BaseModel):
                 value = self.model(**value)
         return super().validate_and_adapt(value)
 
-    def external_set(self, obj: Parameterized, value: Any) -> None:
+    def external_set(self, obj: Thing, value: Any) -> None:
         """
         Called when the value of the property is set from an external source, e.g. a remote client.
 
@@ -284,13 +286,15 @@ class Property(Parameter):
             If the `Thing` instance is in a state where this property cannot be written.
         """
         if self.execution_info.state is None or (
-            hasattr(obj, "state_machine") and obj.state_machine.current_state in self.execution_info.state
+            hasattr(obj, "state_machine") and obj.state_machine.current_state in self.execution_info.state  # ty: ignore[unresolved-attribute]
         ):
             return self.__set__(obj, value)
         else:
             raise StateMachineError(
                 "Thing {} is in `{}` state, however attribute can be written only in `{}` state".format(
-                    obj.id, obj.state_machine.current_state, self.execution_info.state
+                    obj.id,
+                    obj.state_machine.current_state,  # ty: ignore[unresolved-attribute]
+                    self.execution_info.state,
                 )
             )
 
@@ -368,7 +372,9 @@ class ModelRoot(RootModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-def wrap_plain_types_in_rootmodel(model: type) -> Type[BaseModel] | Type[RootModel]:
+def wrap_plain_types_in_rootmodel(
+    model: type | None,
+) -> Type[BaseModel] | Type[RootModel]:
     """
     Ensure a type is a subclass of BaseModel.
 
@@ -384,9 +390,9 @@ def wrap_plain_types_in_rootmodel(model: type) -> Type[BaseModel] | Type[RootMod
         it is returned unchanged. Otherwise, a new `RootModel` subclass is returned which wraps the input type.
     """
     if model is None:
-        return
+        return  # ty: ignore[invalid-return-type]
     if issubklass(model, BaseModel):
-        return model
+        return model  # ty: ignore[invalid-return-type]
     return create_model(f"{model!r}", root=(model, ...), __base__=ModelRoot)  # type: ignore[call-overload]
 
 

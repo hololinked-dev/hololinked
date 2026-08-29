@@ -1,3 +1,5 @@
+"""Assorted helpers - networking, asyncio, naming, signature introspection and schema handling."""
+
 import asyncio
 import inspect
 import os
@@ -21,8 +23,10 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
 
 def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name: str | None = None) -> str:
     """
-    Get IP address of specified interface. Generally necessary when connected to the network
-    through multiple (physical) adapters and a server binds to only one adapter at a time.
+    Get IP address of specified interface.
+
+    Generally necessary when connected to the network through multiple (physical) adapters
+    and a server binds to only one adapter at a time.
 
     Parameters
     ----------
@@ -35,6 +39,11 @@ def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name: str | 
     -------
     str:
         IP address of the interface
+
+    Raises
+    ------
+    ValueError
+        if the given interface name is not found among the system interfaces
     """
     import ifaddr
 
@@ -44,22 +53,36 @@ def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name: str | 
             for ip in adapter.ips:
                 if interface_name == ip.nice_name:
                     if ip.is_IPv4:
-                        return ip.ip
+                        return ip.ip  # ty: ignore[invalid-return-type]
         elif adapter_name == adapter.nice_name:
             for ip in adapter.ips:
                 if interface_name == ip.nice_name:
                     if ip.is_IPv4:
-                        return ip.ip
+                        return ip.ip  # ty: ignore[invalid-return-type]
     raise ValueError(f"interface name {interface_name} not found in system interfaces.")
 
 
 def uuid_hex() -> str:
-    """Generate a random UUID hex string of 8 characters"""
+    """
+    Generate a random UUID hex string of 8 characters.
+
+    Returns
+    -------
+    str
+        the generated hex string
+    """
     return uuid4().hex[:8]
 
 
 def format_exception_as_json(exc: Exception) -> dict[str, Any]:
-    """Return exception as a JSON serializable dictionary"""
+    """
+    Return exception as a JSON serializable dictionary.
+
+    Returns
+    -------
+    dict[str, Any]
+        the message, type, traceback and notes of the exception
+    """
     return dict(
         message=str(exc),
         type=repr(exc).split("(", 1)[0],
@@ -76,13 +99,25 @@ def pep8_to_dashed_name(word: str) -> str:
 
         >>> pep8_to_dashed_URL("device_type")
         'device-type'
+
+    Returns
+    -------
+    str
+        the dashed, lowercase form of the given word
     """
     val = re.sub(r"_+", "-", word.lstrip("_").rstrip("_"))
     return val.replace(" ", "-")
 
 
 def get_current_async_loop() -> asyncio.AbstractEventLoop:
-    """Get or automatically create an asnyc loop for the current thread"""
+    """
+    Get or automatically create an asnyc loop for the current thread.
+
+    Returns
+    -------
+    asyncio.AbstractEventLoop
+        the event loop of the current thread
+    """
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -92,7 +127,19 @@ def get_current_async_loop() -> asyncio.AbstractEventLoop:
 
 
 def run_coro_sync(coro: Coroutine) -> Any:
-    """Try to run coroutine synchronously, raises runtime error if event loop is already running"""
+    """
+    Try to run coroutine synchronously, raises runtime error if event loop is already running.
+
+    Returns
+    -------
+    Any
+        the return value of the coroutine
+
+    Raises
+    ------
+    RuntimeError
+        if the event loop of the current thread is already running
+    """
     eventloop = get_current_async_loop()
     if eventloop.is_running():
         raise RuntimeError(
@@ -105,8 +152,17 @@ def run_coro_sync(coro: Coroutine) -> Any:
 
 def run_callable_somehow(method: Callable | Coroutine) -> Any:
     """
-    Run method if synchronous, or when async, either schedule a coroutine
-    or run it until its complete
+    Run method if synchronous, or when async, either schedule a coroutine or run it until its complete.
+
+    Returns
+    -------
+    Any
+        the return value when the method is synchronous, otherwise the scheduled task or its result
+
+    Raises
+    ------
+    TypeError
+        if the given method is neither callable nor awaitable
     """
     if inspect.isawaitable(method):
         coro = method  # already a coroutine/awaitable object
@@ -121,26 +177,26 @@ def run_callable_somehow(method: Callable | Coroutine) -> Any:
     eventloop = get_current_async_loop()
     if eventloop.is_running():
         # task =  # check later if lambda is necessary
-        eventloop.create_task(coro)
+        eventloop.create_task(coro)  # ty: ignore[invalid-argument-type]  # narrowed to an awaitable above
     else:
         # task = method
         return eventloop.run_until_complete(coro)
 
 
 def complete_pending_tasks_in_current_loop() -> None:
-    """Complete all pending tasks in the current asyncio event loop"""
+    """Complete all pending tasks in the current asyncio event loop."""
     get_current_async_loop().run_until_complete(
         asyncio.gather(*asyncio.all_tasks(get_current_async_loop())),
     )
 
 
 async def complete_pending_tasks_in_current_loop_async() -> None:
-    """Complete all pending tasks in the current asyncio event loop"""
+    """Complete all pending tasks in the current asyncio event loop."""
     await asyncio.gather(*asyncio.all_tasks(get_current_async_loop()))
 
 
 def cancel_pending_tasks_in_current_loop():
-    """Cancel all pending tasks in the current asyncio event loop"""
+    """Cancel all pending tasks in the current asyncio event loop."""
     loop = get_current_async_loop()
     tasks = asyncio.all_tasks(loop)
     for task in tasks:
@@ -148,7 +204,7 @@ def cancel_pending_tasks_in_current_loop():
 
 
 def print_pending_tasks_in_current_loop():
-    """Print all pending tasks in the current asyncio event loop"""
+    """Print all pending tasks in the current asyncio event loop."""
     tasks = asyncio.all_tasks(get_current_async_loop())
     if not tasks:
         print("No pending tasks in the current event loop.")
@@ -158,8 +214,8 @@ def print_pending_tasks_in_current_loop():
 
 
 def set_global_event_loop_policy(use_uvloop: bool = False) -> None:
-    """Set global event loop policy, optionally using uvloop if available and on linux/macos"""
-    if sys.platform.lower().startswith("win"):
+    """Set global event loop policy, optionally using uvloop if available and on linux/macos."""
+    if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     if use_uvloop and sys.platform.lower() in [
@@ -167,7 +223,7 @@ def set_global_event_loop_policy(use_uvloop: bool = False) -> None:
         "darwin",
         "linux2",
     ]:
-        import uvloop
+        import uvloop  # ty: ignore[unresolved-import]  # POSIX-only optional dependency
 
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -201,9 +257,14 @@ def get_signature(callable: Callable) -> tuple[list[str], list[type]]:
 
 def getattr_without_descriptor_read(instance: Any, key: str) -> Any:
     """
-    Supply to inspect._get_members (not inspect.get_members) to avoid calling
-    __get__ on descriptors, especially whey they are hardware attributes that would
-    invoke a hardware read.
+    Supply to inspect._get_members (not inspect.get_members) to avoid calling __get__ on descriptors.
+
+    Especially useful whey they are hardware attributes that would invoke a hardware read.
+
+    Returns
+    -------
+    Any
+        the attribute value without triggering a descriptor read
     """
     if key in instance.__dict__:
         return instance.__dict__[key]
@@ -224,7 +285,13 @@ def getattr_without_descriptor_read(instance: Any, key: str) -> Any:
 def isclassmethod(method: Callable) -> bool:
     """
     Returns `True` if the method is a classmethod, `False` otherwise.
+
     https://stackoverflow.com/questions/19227724/check-if-a-function-uses-classmethod
+
+    Returns
+    -------
+    bool
+        `True` if the method is a classmethod, `False` otherwise
     """
     if isinstance(method, classmethod):
         return True
@@ -232,7 +299,7 @@ def isclassmethod(method: Callable) -> bool:
     if not isinstance(bound_to, type):
         # must be bound to a class
         return False
-    name = method.__name__
+    name = method.__name__  # ty: ignore[unresolved-attribute]  # a bound method always has one
     for cls in bound_to.__mro__:
         descriptor = vars(cls).get(name)
         if descriptor is not None:
@@ -242,7 +309,9 @@ def isclassmethod(method: Callable) -> bool:
 
 def has_async_def(method: Callable) -> bool:
     """
-    Checks if async def is found in method signature. Especially useful for class methods.
+    Checks if async def is found in method signature.
+
+    Especially useful for class methods.
     https://github.com/python/cpython/issues/100224#issuecomment-2000895467
 
     Parameters
@@ -257,7 +326,7 @@ def has_async_def(method: Callable) -> bool:
     """
     source = inspect.getsource(method)
     if re.search(
-        r"^\s*async\s+def\s+" + re.escape(method.__name__) + r"\s*\(",
+        r"^\s*async\s+def\s+" + re.escape(method.__name__) + r"\s*\(",  # ty: ignore[unresolved-attribute]  # a function always has one
         source,
         re.MULTILINE,
     ):
@@ -295,7 +364,14 @@ def issubklass(obj: Any, cls: Any) -> bool:
 
 
 def get_sanitized_filename_from_random_string(a_string: str, extension: str) -> str:
-    """Generate a sanitized filename from a given string and extension"""
+    """
+    Generate a sanitized filename from a given string and extension.
+
+    Returns
+    -------
+    str
+        the sanitized filename with the extension appended
+    """
     # Remove invalid characters from the instance name
     safe_id = re.sub(r'[<>:"/\\|?*\x00-\x1F]+', "_", a_string)
     # Collapse consecutive underscores into one
@@ -307,7 +383,14 @@ def get_sanitized_filename_from_random_string(a_string: str, extension: str) -> 
 
 
 def generate_main_script_log_filename(self, app_name: str | None = None) -> str | None:
-    """Returns the main script filename if available"""
+    """
+    Returns the main script filename if available.
+
+    Returns
+    -------
+    str | None
+        the log filename derived from the main script, or a default one
+    """
     import __main__
 
     if not app_name:
@@ -325,10 +408,18 @@ def generate_main_script_log_filename(self, app_name: str | None = None) -> str 
 
 
 class SerializableDataclass:
-    """Presents uniform serialization for pickle and JSON for dataclasses"""
+    """Presents uniform serialization for pickle and JSON for dataclasses."""
 
     def json(self):
-        return asdict(self)
+        """
+        Return the dataclass as a dictionary.
+
+        Returns
+        -------
+        dict
+            the dataclass fields keyed by their names
+        """
+        return asdict(self)  # ty: ignore[invalid-argument-type]  # mixed into dataclasses only
 
     def __getstate__(self):
         return self.json()
@@ -339,7 +430,7 @@ class SerializableDataclass:
 
 
 class Singleton(type):
-    """Enforces a Singleton behavior on a class"""
+    """Enforces a Singleton behavior on a class."""
 
     _instances = {}
 
@@ -384,6 +475,11 @@ def get_input_model_from_signature(
     model_for_empty_annotations: bool, optional
         If True, create a model even if there are no annotations.
 
+    Raises
+    ------
+    ValueError
+        if the first positional argument is to be removed but the signature has none
+
     Returns
     -------
     Type[BaseModel] or None
@@ -409,16 +505,12 @@ def get_input_model_from_signature(
         if ignore and name in ignore:
             continue
         if p.kind == Parameter.VAR_KEYWORD:
-            p_type = typing.Annotated[
-                typing.Dict[str, typing.Any] if p.annotation is Parameter.empty else type_hints[name],
-                Parameter.VAR_KEYWORD,
-            ]
+            keyword_type = typing.Dict[str, typing.Any] if p.annotation is Parameter.empty else type_hints[name]
+            p_type = typing.Annotated[keyword_type, Parameter.VAR_KEYWORD]
             default = dict() if p.default is Parameter.empty else p.default
         elif p.kind == Parameter.VAR_POSITIONAL:
-            p_type = typing.Annotated[
-                typing.Tuple if p.annotation is Parameter.empty else type_hints[name],
-                Parameter.VAR_POSITIONAL,
-            ]
+            positional_type = typing.Tuple if p.annotation is Parameter.empty else type_hints[name]
+            p_type = typing.Annotated[positional_type, Parameter.VAR_POSITIONAL]
             default = tuple() if p.default is Parameter.empty else p.default
         else:
             # `type_hints` does more processing than p.annotation - but will
@@ -433,7 +525,7 @@ def get_input_model_from_signature(
         return None
 
     model = create_model(  # type: ignore[call-overload]
-        f"{func.__name__}_input",
+        f"{func.__name__}_input",  # ty: ignore[unresolved-attribute]  # a function always has one
         **fields,
         __config__=ConfigDict(extra="forbid", strict=True, arbitrary_types_allowed=True),
     )
@@ -441,7 +533,14 @@ def get_input_model_from_signature(
 
 
 def get_return_type_from_signature(func: Callable) -> RootModel | None:
-    """Determine the return type of a function."""
+    """
+    Determine the return type of a function.
+
+    Returns
+    -------
+    RootModel | None
+        a model for the return annotation, or None when there is none
+    """
     sig = inspect.signature(func)
     if sig.return_annotation == inspect.Signature.empty:
         return None  # type: ignore[return-value]
@@ -459,7 +558,7 @@ def get_return_type_from_signature(func: Callable) -> RootModel | None:
         ):
             return None
 
-        return wrap_plain_types_in_rootmodel(type_hints["return"])
+        return wrap_plain_types_in_rootmodel(type_hints["return"])  # ty: ignore[invalid-return-type]  # a RootModel subclass is returned for plain types
 
 
 def pydantic_validate_args_kwargs(
@@ -478,10 +577,6 @@ def pydantic_validate_args_kwargs(
         Positional arguments to validate.
     **kwargs: dict
         Keyword arguments to validate.
-
-    Returns
-    -------
-    None
 
     Raises
     ------
@@ -546,6 +641,11 @@ def json_schema_merge_args_to_kwargs(schema: dict, args: tuple = tuple(), kwargs
     -------
     dict
         The merged arguments as a dictionary, usually a JSON
+
+    Raises
+    ------
+    ValueError
+        if the schema is not an object, or the given arguments do not fit its properties
     """
     if schema["type"] != "object":
         raise ValueError("Schema must be an object.")
@@ -579,7 +679,13 @@ def json_schema_merge_args_to_kwargs(schema: dict, args: tuple = tuple(), kwargs
 def forkable(func):
     """
     Decorator to make a function forkable into a separate thread.
+
     This is useful for functions that need to be run in a separate thread.
+
+    Returns
+    -------
+    Callable
+        the wrapped function, which runs in a new thread when called with `forked=True`
     """
 
     @wraps(func)
@@ -596,7 +702,14 @@ def forkable(func):
 
 
 def get_all_sub_things_recusively(thing) -> list:
-    """Get all sub things recursively from a thing"""
+    """
+    Get all sub things recursively from a thing.
+
+    Returns
+    -------
+    list
+        the thing itself followed by all of its sub things
+    """
     sub_things = [thing]
     for sub_thing in thing.sub_things.values():
         sub_things.extend(get_all_sub_things_recusively(sub_thing))

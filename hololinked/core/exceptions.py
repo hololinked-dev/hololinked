@@ -28,4 +28,11 @@ class DatabaseError(Exception):
     """Raise to show database related errors."""
 
 
-__all__ = ["BreakInnerLoop", "BreakAllLoops", "BreakLoop", "BreakFlow", "StateMachineError", "DatabaseError"]
+__all__ = [
+    "BreakInnerLoop",
+    "BreakAllLoops",
+    "BreakLoop",
+    "BreakFlow",
+    "StateMachineError",
+    "DatabaseError",
+]

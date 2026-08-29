@@ -14,6 +14,8 @@ from ..server import BaseProtocolServer
 class ZMQServer(RPCServer, BaseProtocolServer):
     """Server to expose `Thing` over `ZeroMQ` protocol. Extends `RPCServer` to support `IPC` & `TCP`."""
 
+    context: zmq.asyncio.Context
+
     def __init__(
         self,
         *,

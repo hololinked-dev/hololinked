@@ -97,7 +97,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         *,
         id: str,
         logger: structlog.stdlib.BoundLogger | None = None,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> None:
         """
         Initialize a `Thing`.
@@ -143,8 +143,9 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         EventSource.__init__(self)
         if self.id.startswith("/"):
             self.id = self.id[1:]
-        if kwargs.get("serializer", None) is not None:
-            Serializers.register_for_thing_instance(self.id, kwargs.get("serializer"))
+        serializer = kwargs.get("serializer", None)
+        if serializer is not None:
+            Serializers.register_for_thing_instance(self.id, serializer)
 
         prepare_object_logger(
             instance=self,
@@ -196,7 +197,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def sub_things(self) -> dict[str, "Thing"]:
         """Other `Thing`s' that are composed within this `Thing`."""
         things = dict()
-        for name, subthing in inspect._getmembers(
+        for name, subthing in inspect._getmembers(  # ty: ignore[unresolved-attribute]
             self,
             lambda obj: isinstance(obj, Thing),
             getattr_without_descriptor_read,  # noqa: F405
@@ -209,7 +210,12 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         return things
 
     @action()
-    def get_thing_model(self, ignore_errors: bool = False, skip_names: list[str] = [], format: str = "wot") -> Metadata:
+    def get_thing_model(
+        self,
+        ignore_errors: bool = False,
+        skip_names: list[str] = [],
+        format: str = "wot",
+    ) -> Metadata:
         """
         Generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object.
 
@@ -252,7 +258,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self,
         access_points: list[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS | str | list[str] = ZMQ_TRANSPORTS.IPC,
         forked: bool = False,  # used by decorator
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> None:
         """
         Quick-start to serve `Thing` over ZMQ.
@@ -290,7 +296,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         from ..server.server import parse_params, run
 
-        servers = parse_params(self.id, [("ZMQ", dict(access_points=access_points, logger=self.logger, **kwargs))])
+        servers = parse_params(
+            self.id,
+            [("ZMQ", dict(access_points=access_points, logger=self.logger, **kwargs))],
+        )
 
         for server in servers:
             server.add_thing(self)
@@ -308,7 +317,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # network_interface : str = 'Ethernet',
         forked: bool = False,  # used by forkable decorator
         print_welcome_message: bool = True,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> None:
         """
         Quick-start to serve `Thing` over HTTP.
@@ -357,7 +366,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         self,
         forked: bool = False,  # used by forkable decorator
         print_welcome_message: bool = True,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> None:
         """
         Expose the object with the given servers.
@@ -389,7 +398,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         from ..server.server import BaseProtocolServer, parse_params, run  # noqa: F401
 
-        access_points = kwargs.get("access_points", None)  # type: dict[str, dict | int | str | list[str]]
+        access_points = kwargs.get("access_points", None)  # type: list[tuple[str, str | int | dict | list[str]]] | None
         servers = kwargs.get("servers", [])  # type: list[BaseProtocolServer] | None
 
         if access_points is None and len(servers) == 0:

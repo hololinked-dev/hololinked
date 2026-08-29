@@ -7,7 +7,7 @@ import warnings
 from enum import Enum
 from inspect import getfullargspec, iscoroutinefunction
 from types import FunctionType, MethodType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import jsonschema
 
@@ -31,6 +31,7 @@ from .dataklasses import ActionInfoValidator
 
 if TYPE_CHECKING:
     from hololinked.core.interfaces import ActionMetadata
+    from hololinked.core.meta import ThingMeta
     from hololinked.core.thing import Thing
 
 
@@ -101,7 +102,7 @@ class Action:
             raise TypeError("execution_info must be of type ActionInfoValidator")
         self._execution_info = value  # type: ActionInfoValidator
 
-    def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> ActionMetadata:
+    def to_metadata(self, owner_inst: "Thing | ThingMeta | None" = None, format: str = "wot") -> ActionMetadata:
         """
         Generates a `ActionAffordance` TD fragment for this Action.
 
@@ -126,6 +127,8 @@ class Action:
 class BoundAction:
     """A bound action, base class for both sync and async methods."""
 
+    obj: FunctionType | MethodType
+
     __slots__ = [
         "obj",
         "execution_info",
@@ -135,7 +138,7 @@ class BoundAction:
         "bound_obj",
     ]
 
-    def __init__(self, obj: FunctionType, descriptor: Action, owner_inst, owner) -> None:
+    def __init__(self, obj: FunctionType | MethodType, descriptor: Action, owner_inst, owner) -> None:
         self.obj = obj
         self.descriptor = descriptor
         self.execution_info = descriptor._execution_info
@@ -145,8 +148,6 @@ class BoundAction:
 
     def __post_init__(self):
         # never called, neither possible to call, only type hinting
-        from .thing import ThingMeta
-
         # owner class and instance
         self.owner: ThingMeta
         self.owner_inst: Thing
@@ -181,7 +182,7 @@ class BoundAction:
             return
         if self.execution_info.state is None or (
             hasattr(self.owner_inst, "state_machine")
-            and self.owner_inst.state_machine.current_state in self.execution_info.state
+            and self.owner_inst.state_machine.current_state in self.execution_info.state  # ty: ignore[unresolved-attribute]
         ):
             if self.execution_info.schema_validator is not None:
                 self.execution_info.schema_validator.validate_method_call(args, kwargs)
@@ -203,7 +204,14 @@ class BoundAction:
         raise NotImplementedError("call must be implemented by subclass")
 
     def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks."""
+        """
+        Validated call to the action with state machine and payload checks.
+
+        Returns
+        -------
+        Any
+            the return value of the action
+        """
         raise NotImplementedError("external_call must be implemented by subclass")
 
     def __str__(self):
@@ -223,7 +231,7 @@ class BoundAction:
             return self.obj.__doc__
         return super().__getattribute__(name)
 
-    def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> ActionMetadata:
+    def to_metadata(self, owner_inst: "Thing | ThingMeta | None" = None, format: str = "wot") -> ActionMetadata:
         """
         Generates a `ActionAffordance` TD fragment for this Action.
 
@@ -249,7 +257,14 @@ class BoundSyncAction(BoundAction):
     """
 
     def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks."""
+        """
+        Validated call to the action with state machine and payload checks.
+
+        Returns
+        -------
+        Any
+            the return value of the action
+        """
         self.validate_call(args, kwargs)
         return self.__call__(*args, **kwargs)
 
@@ -268,7 +283,14 @@ class BoundAsyncAction(BoundAction):
     """
 
     async def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks."""
+        """
+        Validated call to the action with state machine and payload checks.
+
+        Returns
+        -------
+        Any
+            the return value of the action
+        """
         self.validate_call(args, kwargs)
         return await self.__call__(*args, **kwargs)
 
@@ -286,7 +308,7 @@ def action(
     output_schema: JSON | BaseModel | RootModel | None = None,
     state: str | Enum | None = None,
     **kwargs,
-) -> Action:
+) -> Callable[[Any], Action]:
     """
     Decorate on your methods to make them accessible remotely or create 'actions' out of them.
 
@@ -334,10 +356,10 @@ def action(
     """
 
     def inner(obj):
-        input_schema = inner._arguments.get("input_schema", None)
-        output_schema = inner._arguments.get("output_schema", None)
-        state = inner._arguments.get("state", None)
-        kwargs = inner._arguments.get("kwargs", {})
+        input_schema = inner._arguments.get("input_schema", None)  # ty: ignore[unresolved-attribute]
+        output_schema = inner._arguments.get("output_schema", None)  # ty: ignore[unresolved-attribute]
+        state = inner._arguments.get("state", None)  # ty: ignore[unresolved-attribute]
+        kwargs = inner._arguments.get("kwargs", {})  # ty: ignore[unresolved-attribute]
 
         original = obj
         if (
@@ -438,7 +460,7 @@ def action(
             "Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, "
             + f"unknown arguments found {kwargs.keys()}"
         )
-    inner._arguments = dict(
+    inner._arguments = dict(  # ty: ignore[unresolved-attribute]
         input_schema=input_schema,
         output_schema=output_schema,
         state=state,
