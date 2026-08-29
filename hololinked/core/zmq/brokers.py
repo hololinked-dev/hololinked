@@ -1366,7 +1366,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
         server_execution_context: ServerExecutionContext = default_server_execution_context,
-        thing_execution_context: dict[str, Any] = default_thing_execution_context,
+        thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> str:
         """
         Send request message to server.
@@ -1415,7 +1415,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         )
         return request_message.id
 
-    async def async_recv_response(self, message_id: str) -> list[ResponseMessage]:
+    async def async_recv_response(self, message_id: str) -> ResponseMessage:
         """
         Receives response from server. Messages are identified by message id, and out of order messages are sent to
         a cache which may be popped later. This method blocks until the expected message is received or `stop_polling()`
@@ -1868,7 +1868,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         return message_id
 
     async def async_recv_response(
-        self, thing_id: str, message_id: bytes, timeout: float | int | None = None
+        self, thing_id: str, message_id: str, timeout: float | int | None = None
     ) -> ResponseMessage:
         """
         Receive response for specified message ID.
@@ -1877,7 +1877,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         ----------
         client_id: str
             id of the client in the pool to be used to receive the message
-        message_id: bytes
+        message_id: str
             the message id for which response needs to be fetched
         timeout: float | int | None
             Client side timeout, not the same as timeout passed to server. Recommended to be None in general cases.

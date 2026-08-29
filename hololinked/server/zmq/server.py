@@ -17,8 +17,8 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         self,
         *,
         id: str,
-        access_points: ZMQ_TRANSPORTS = ZMQ_TRANSPORTS.IPC,
-        things: list["Thing"] = None,
+        access_points: ZMQ_TRANSPORTS | str | list[ZMQ_TRANSPORTS | str] = ZMQ_TRANSPORTS.IPC,
+        things: list["Thing"] | None = None,
         context: zmq.asyncio.Context | None = None,
         **kwargs,
     ) -> None:
@@ -53,26 +53,31 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         # at any point in future
 
         if isinstance(access_points, str):
-            access_points = [access_points]
-        elif not isinstance(access_points, list):
+            requested_access_points = [access_points]
+        elif isinstance(access_points, list):
+            requested_access_points = list(access_points)
+        else:
             raise TypeError(f"unsupported transport type : {type(access_points)}")
-        for index, transport in enumerate(access_points):
+        transports = []  # type: list[str]
+        for transport in requested_access_points:
             if isinstance(transport, str) and len(transport) in [3, 6]:
-                access_points[index] = transport.upper()
+                transports.append(transport.upper())
             elif transport.lower().startswith("tcp://"):
-                access_points[index] = "TCP"
+                transports.append("TCP")
                 tcp_socket_address = transport
             else:
-                access_points[index] = transport
+                transports.append(transport)
 
         # initialise every externally visible protocol
-        if ZMQ_TRANSPORTS.TCP in access_points or "TCP" in access_points:
+        if ZMQ_TRANSPORTS.TCP in transports or "TCP" in transports:
             self.tcp_server = AsyncZMQServer(
                 id=self.id,
                 context=self.context,
                 access_point=tcp_socket_address or ZMQ_TRANSPORTS.TCP,
                 **kwargs,
             )
+            if not self.tcp_server.socket_address:
+                raise RuntimeError("TCP server was created without a socket address")
             host, port = self.tcp_server.socket_address.rsplit(":", 1)
             new_port = int(port) + 1  # try the next port for the event publisher
             tcp_socket_address = f"{host}:{new_port}"
@@ -83,7 +88,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 access_point=tcp_socket_address,
                 **kwargs,
             )
-        if ZMQ_TRANSPORTS.IPC in access_points or "IPC" in access_points:
+        if ZMQ_TRANSPORTS.IPC in transports or "IPC" in transports:
             self.ipc_server = AsyncZMQServer(
                 id=self.id,
                 context=self.context,
@@ -97,6 +102,8 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 **kwargs,
             )
         if self.ipc_event_publisher is not None or self.tcp_event_publisher is not None:
+            if not self.event_publisher.socket_address:
+                raise RuntimeError("inproc event publisher was created without a socket address")
             self.inproc_events_proxy = AsyncEventConsumer(
                 id=f"{self.id}/event-proxy",
                 event_unique_identifier="",
@@ -130,10 +137,10 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 event = await self.inproc_events_proxy.receive(raise_interrupt_as_exception=True)
                 if not event:
                     continue
-                if self.ipc_event_publisher is not None:
+                if self.ipc_event_publisher is not None and self.ipc_event_publisher.socket is not None:
                     self.ipc_event_publisher.socket.send_multipart(event.byte_array)
                     # print(f"sent event to ipc publisher {event.byte_array}")
-                if self.tcp_event_publisher is not None:
+                if self.tcp_event_publisher is not None and self.tcp_event_publisher.socket is not None:
                     self.tcp_event_publisher.socket.send_multipart(event.byte_array)
                     # print(f"sent event to tcp publisher {event.byte_array}")
             except ConnectionAbortedError:
@@ -158,9 +165,11 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             self.stop()
             if self.ipc_server is not None:
                 self.ipc_server.exit()
+            if self.ipc_event_publisher is not None:
                 self.ipc_event_publisher.exit()
             if self.tcp_server is not None:
                 self.tcp_server.exit()
+            if self.tcp_event_publisher is not None:
                 self.tcp_event_publisher.exit()
             if self.req_rep_server is not None:
                 self.req_rep_server.exit()

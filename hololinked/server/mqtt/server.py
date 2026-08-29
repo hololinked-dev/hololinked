@@ -73,9 +73,8 @@ class MQTTPublisher(BaseProtocolServer):
             qos=qos,
         )
         default_config.update(config or dict())
-        config = RuntimeConfig(**default_config)
 
-        super().__init__(config=config)
+        super().__init__(config=RuntimeConfig(**default_config))
 
         endpoint = f"{hostname}{f':{port}' if port else ''}"
 

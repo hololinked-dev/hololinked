@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+
 from typing import TYPE_CHECKING, Any, Optional
 
 import structlog
 import zmq.asyncio
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..config import global_config
 from ..core import Thing
@@ -44,7 +46,7 @@ class BrokerThing(BaseModel):
     TD: dict[str, Any] | None = None
     """ZMQ Thing Description"""
 
-    req_rep_client: MessageMappedZMQClientPool | None = None
+    req_rep_client: AsyncZMQClient | MessageMappedZMQClientPool | None = None
     """req-rep queue client"""
     event_client: AsyncEventConsumer | None = None
     """pub-sub queue client"""
@@ -52,7 +54,7 @@ class BrokerThing(BaseModel):
     """req-rep socket address"""
     pub_sub_socket_address: str = ""
     """pub-sub socket address"""
-    logger: structlog.stdlib.BoundLogger | None = None
+    logger: structlog.stdlib.BoundLogger = Field(default_factory=structlog.get_logger)
     """Logger instance"""
 
     @model_validator(mode="before")
@@ -207,11 +209,13 @@ class BrokerThing(BaseModel):
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
-        return await self.req_rep_client.async_recv_response(
-            thing_id=self.id,
-            message_id=message_id,
-            timeout=timeout,
-        )
+        if isinstance(self.req_rep_client, MessageMappedZMQClientPool):
+            return await self.req_rep_client.async_recv_response(
+                thing_id=self.id,
+                message_id=message_id,
+                timeout=timeout,
+            )
+        return await asyncio.wait_for(self.req_rep_client.async_recv_response(message_id), timeout)
 
     def subscribe_event(self, resource: EventMetadata | PropertyMetadata) -> AsyncEventConsumer:
         """
@@ -238,11 +242,15 @@ class BrokerThing(BaseModel):
 
     def set_req_rep_client(self, client: AsyncZMQClient | MessageMappedZMQClientPool) -> None:
         """Sets the req-rep client for this broker thing."""
+        if not client.socket_address:
+            raise ValueError("client has no socket address, is it connected?")
         self.req_rep_client = client
         self.req_rep_socket_address = client.socket_address
 
     def set_event_consumer(self, client: AsyncEventConsumer) -> None:
         """Sets the pub-sub client for this broker thing."""
+        if not client.socket_address:
+            raise ValueError("client has no socket address, is it connected?")
         self.event_client = client
         self.pub_sub_socket_address = client.socket_address
 
@@ -318,6 +326,8 @@ async def consume_broker_queue(
     """
     from ..client.zmq.consumed_interactions import ZMQAction
 
+    logger = logger or structlog.get_logger()
+
     # create client
     client = AsyncZMQClient(
         id=id,
@@ -338,7 +348,7 @@ async def consume_broker_queue(
     FetchTMAffordance.override_defaults(thing_id=thing_id, name="get_thing_description")
     fetch_td = ZMQAction(
         resource=FetchTMAffordance,
-        sync_client=None,
+        sync_client=None,  # ty: ignore[invalid-argument-type] # only async_call is used below
         async_client=client,
         logger=logger,
         owner_inst=None,

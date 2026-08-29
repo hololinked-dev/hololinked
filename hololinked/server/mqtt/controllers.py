@@ -3,6 +3,9 @@ from typing import Any
 import aiomqtt
 import structlog
 
+from paho.mqtt.packettypes import PacketTypes
+from paho.mqtt.properties import Properties
+
 from hololinked import Serializers
 
 from ...core.zmq.message import EventMessage  # noqa: F401
@@ -60,11 +63,13 @@ class TopicPublisher:
                 if message is None:
                     continue
                 payload = self.thing.get_response_payload(message)
+                properties = Properties(PacketTypes.PUBLISH)
+                properties.ContentType = payload.content_type
                 await self.client.publish(
                     topic=self.topic,
                     payload=payload.value,
                     qos=self.qos,
-                    properties=dict(content_type=payload.content_type),
+                    properties=properties,
                 )
                 self.logger.debug(f"Published MQTT message for {self.resource.name} on topic {self.topic}")
             except Exception as ex:
@@ -111,15 +116,17 @@ class ThingDescriptionPublisher:
             ssl=self.client._client._ssl_context is not None,
         )
 
-    async def publish(self, ZMQ_TD: dict[str, Any]) -> dict[str, Any]:
+    async def publish(self, ZMQ_TD: dict[str, Any]) -> None:
         """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True"""
         TD = await self.thing_description.generate(ZMQ_TD)
 
+        properties = Properties(PacketTypes.PUBLISH)
+        properties.ContentType = "application/json"
         await self.client.publish(
             topic=self.topic,
             payload=Serializers.json.dumps(TD),
             qos=2,
-            properties=dict(content_type="application/json"),
+            properties=properties,
             retain=True,
         )
 
