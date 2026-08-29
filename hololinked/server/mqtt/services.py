@@ -13,6 +13,7 @@ from ...metadata.td.interaction_affordance import EventAffordance, PropertyAffor
 class ThingDescriptionService:
     """
     Generates Thing Descriptions for `Thing`s.
+
     This object would be a service in layered architecture.
     """
 

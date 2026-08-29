@@ -146,7 +146,7 @@ class BaseProtocolServer(Parameterized):
     @forkable
     def run(self, forked: bool = False, print_welcome_message: bool = True) -> None:
         """
-        Run the server and serve your things
+        Run the server and serve your things.
 
         Parameters
         ----------
@@ -166,7 +166,7 @@ class BaseProtocolServer(Parameterized):
 @forkable
 def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_message: bool = True) -> None:
     """
-    Run servers and serve your things
+    Run servers and serve your things.
 
     Parameters
     ----------
@@ -225,7 +225,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
 
 
 def stop():
-    """Shutdown all running servers started with run()"""
+    """Shutdown all running servers started with run()."""
     if hasattr(run, "shutdown_event"):
         run.shutdown_event.set()
         return
@@ -295,7 +295,7 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
 
 
 def _print_welcome_message(servers: Sequence[BaseProtocolServer]) -> None:
-    """Prints a welcome message to the console/log"""
+    """Prints a welcome message to the console/log."""
     from . import HTTPServer, MQTTPublisher
 
     buffer = StringIO()

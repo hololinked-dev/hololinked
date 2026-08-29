@@ -23,6 +23,7 @@ from .services import ThingDescriptionService
 class RuntimeConfig(BaseModel):
     """
     Runtime configuration for HTTP server and handlers.
+
     Pass the attributes of this class as a dictionary to the `config` argument of `HTTPServer`.
     """
 
@@ -69,7 +70,7 @@ class RuntimeConfig(BaseModel):
 
 
 class HandlerMetadata(BaseModel):
-    """Specific metadata when a request handler has been initialized, in other words, handler specific metadata"""
+    """Specific metadata when a request handler has been initialized, in other words, handler specific metadata."""
 
     http_methods: tuple[str, ...] = tuple()
     """HTTP methods supported by the handler"""

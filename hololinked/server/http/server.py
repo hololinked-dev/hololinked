@@ -50,6 +50,7 @@ from .services import ThingDescriptionService
 class HTTPServer(BaseProtocolServer):
     """
     HTTP(s) server to expose `Thing` over HTTP protocol. Supports HTTP 1.1.
+
     Use `add_thing`, or `add_property` or `add_action` or `add_event` methods to add things to the server.
     """
 
@@ -177,7 +178,7 @@ class HTTPServer(BaseProtocolServer):
         self.add_things(*(things or []))
 
     async def setup(self) -> None:
-        """Check if all the requirements are met before starting the server, auto invoked by listen()"""
+        """Check if all the requirements are met before starting the server, auto invoked by listen()."""
         # Add only those code here that needs to be redone always before restarting the server.
         # One time creation attributes/activities must be in init
 
@@ -219,6 +220,7 @@ class HTTPServer(BaseProtocolServer):
     def stop(self, attempt_async_stop: bool = True) -> None:
         """
         Stop the HTTP server - unreliable, use `async_stop()` if possible.
+
         A stop handler at the path `/stop` with POST method is already implemented that invokes this
         method for the clients.
 
@@ -239,7 +241,9 @@ class HTTPServer(BaseProtocolServer):
 
     async def async_stop(self) -> None:
         """
-        Stop the HTTP server. A stop handler at the path `/stop` with POST method is already implemented
+        Stop the HTTP server.
+
+        A stop handler at the path `/stop` with POST method is already implemented
         that invokes this method for the clients.
         """
         if self.zmq_client_pool is not None:
@@ -317,7 +321,7 @@ class HTTPServer(BaseProtocolServer):
         **kwargs,
     ) -> None:
         """
-        Add an action to be accessible by HTTP
+        Add an action to be accessible by HTTP.
 
         Parameters
         ----------
@@ -402,8 +406,9 @@ class HTTPServer(BaseProtocolServer):
 
 class ApplicationRouter:
     """
-    Covering implementation (as in - a layer on top) of the application router to
-    add rules to the tornado application. Not a real router, which is taken care of
+    Covering implementation (as in - a layer on top) of the application router to add rules to the tornado application.
+
+    Not a real router, which is taken care of
     by the tornado application automatically.
     """
 
@@ -423,7 +428,9 @@ class ApplicationRouter:
         kwargs: dict[str, Any],
     ) -> None:
         """
-        Add rule to the application router. Note that this method will replace existing rules and can duplicate
+        Add rule to the application router.
+
+        Note that this method will replace existing rules and can duplicate
         endpoints for an affordance without checks (i.e. you could technically add two different endpoints for the
         same affordance).
 
@@ -510,6 +517,7 @@ class ApplicationRouter:
     ) -> None:
         """
         Can add multiple properties, actions and events at once to the application router.
+
         Calls `add_rule` method internally for each affordance.
 
         Parameters
@@ -599,8 +607,9 @@ class ApplicationRouter:
     # can add an entire thing instance at once
     def add_thing(self, thing: Thing) -> None:
         """
-        Internal method to add a thing instance to be served by the HTTP server. Iterates through the
-        interaction affordances and adds a route for each property, action and event.
+        Internal method to add a thing instance to be served by the HTTP server.
+
+        Iterates through the interaction affordances and adds a route for each property, action and event.
         """
         # Prepare affordance lists with error handling (single loop)
         if not isinstance(thing, Thing):
@@ -634,6 +643,7 @@ class ApplicationRouter:
     ) -> None:
         """
         Process the pending rules and add them to the application router.
+
         Rules become pending only when a property, action or event has a thing class associated
         but no thing instance.
         """
@@ -656,8 +666,9 @@ class ApplicationRouter:
     ) -> bool:
         """
         Check if the item is in the application router.
+
         Not exact for torando's rules when a string is provided for the URL path,
-        as you need to provide the Matcher object
+        as you need to provide the Matcher object.
         """
         affordance = item
         if isinstance(item, str):
@@ -707,7 +718,7 @@ class ApplicationRouter:
         raise ValueError(f"affordance {affordance} has no route in the application router yet")
 
     def get_injected_dependencies(self, affordance) -> dict[str, Any]:
-        """Get the target kwargs for the affordance in the application router"""
+        """Get the target kwargs for the affordance in the application router."""
         if affordance not in self:
             raise ValueError(f"affordance {affordance} not found in the application router")
         for rule in self.app.wildcard_router.rules:
@@ -745,13 +756,13 @@ class ApplicationRouter:
     basepath = property(fget=get_basepath, doc="basepath of the server")
 
     def adapt_route(self, interaction_affordance_name: str) -> str:
-        """Adapt the URL path to default conventions"""
+        """Adapt the URL path to default conventions."""
         if interaction_affordance_name == "get_thing_model":
             return "/resources/wot-tm"
         return f"/{pep8_to_dashed_name(interaction_affordance_name)}"
 
     def adapt_http_methods(self, http_methods: Any):
-        """Comply the supplied HTTP method to the router to a tuple and check if the method is supported"""
+        """Comply the supplied HTTP method to the router to a tuple and check if the method is supported."""
         if isinstance(http_methods, str):
             http_methods = (http_methods,)
         if not isinstance(http_methods, tuple):
@@ -764,6 +775,7 @@ class ApplicationRouter:
     def print_rules(self) -> None:
         """
         Print the rules in the application router.
+
         prettytable is used if available, otherwise a simple print is done.
         """
         try:

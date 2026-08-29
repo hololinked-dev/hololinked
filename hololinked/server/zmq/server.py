@@ -12,7 +12,7 @@ from ..server import BaseProtocolServer
 
 
 class ZMQServer(RPCServer, BaseProtocolServer):
-    """Server to expose `Thing` over `ZeroMQ` protocol. Extends `RPCServer` to support `IPC` & `TCP`"""
+    """Server to expose `Thing` over `ZeroMQ` protocol. Extends `RPCServer` to support `IPC` & `TCP`."""
 
     def __init__(
         self,
@@ -114,7 +114,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             )
 
     def add_thing(self, thing: Thing) -> None:
-        """Adds a thing to the list of things to serve"""
+        """Adds a thing to the list of things to serve."""
         return RPCServer.add_thing(self, thing)
 
     def run_zmq_request_listener(self) -> None:

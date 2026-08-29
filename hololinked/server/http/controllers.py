@@ -47,7 +47,7 @@ class LocalExecutionContext(msgspec.Struct):
 # rather than as methods, so overriding them with a real `def` is always reported as an invariant
 # mismatch - its own ErrorHandler/RedirectHandler/StaticFileHandler override them the same way.
 class BaseHandler(RequestHandler):
-    """Base request handler for running operations on the `Thing`"""
+    """Base request handler for running operations on the `Thing`."""
 
     # Would be a Controller in layered architecture.
 
@@ -89,6 +89,7 @@ class BaseHandler(RequestHandler):
     async def has_access_control(self) -> bool:
         """
         Checks if a client is an allowed client and enforces security schemes.
+
         Custom web request handlers can use this property to check if a client has access control on the server or `Thing`
         and let this property automatically generate a 401/403.
         """
@@ -122,7 +123,7 @@ class BaseHandler(RequestHandler):
         return False  # keep False always at the end
 
     async def is_authenticated(self) -> bool:
-        """Enforces authentication using the defined security schemes, freshly computed everytime"""
+        """Enforces authentication using the defined security schemes, freshly computed everytime."""
         authenticated = False
         # 1. Basic Authentication
         authorization_header = self.request.headers.get("Authorization", None)  # type: str
@@ -187,6 +188,7 @@ class BaseHandler(RequestHandler):
     async def is_authorized(self) -> bool:
         """
         Enforces authorization using the defined security schemes, freshly computed everytime.
+
         Do not call this method without doing authentication first and having a userinfo property.
         """
         if not self.userinfo:
@@ -199,6 +201,7 @@ class BaseHandler(RequestHandler):
     def set_access_control_allow_headers(self) -> None:
         """
         For credential login, access control allow headers cannot be a wildcard '*'.
+
         Some requests require exact list of allowed headers for the client to access the response.
         """
         headers = ", ".join(self.request.headers.keys())
@@ -231,6 +234,7 @@ class BaseHandler(RequestHandler):
     ]:
         """
         Aggregates all arguments to a standard dataclasses from the query parameters.
+
         Retrieves execution context (like oneway calls, fetching executing
         logs), timeouts, etc. Non recognized arguments are passed as additional payload to the `Thing`.
 
@@ -295,7 +299,7 @@ class BaseHandler(RequestHandler):
 
     @property
     def message_id(self) -> str | None:
-        """Retrieves the message id from the request headers"""
+        """Retrieves the message id from the request headers."""
         try:
             return self._message_id
         except AttributeError:
@@ -308,7 +312,7 @@ class BaseHandler(RequestHandler):
             return message_id
 
     def get_request_payload(self) -> tuple[SerializableData, PreserializedData]:
-        """Retrieves the payload from the request body, does not necessarily deserialize it"""
+        """Retrieves the payload from the request body, does not necessarily deserialize it."""
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
         if self.request.body:
@@ -327,26 +331,27 @@ class BaseHandler(RequestHandler):
         return payload, preserialized_payload
 
     async def get(self) -> None:  # ty: ignore[invalid-method-override]
-        """Runs property or action if accessible by 'GET' method. Default for property reads"""
+        """Runs property or action if accessible by 'GET' method. Default for property reads."""
         raise NotImplementedError("implement GET request method in child handler class")
 
     async def post(self) -> None:  # ty: ignore[invalid-method-override]
-        """Runs property or action if accessible by 'POST' method. Default for action execution"""
+        """Runs property or action if accessible by 'POST' method. Default for action execution."""
         raise NotImplementedError("implement POST request method in child handler class")
 
     async def put(self) -> None:  # ty: ignore[invalid-method-override]
-        """Runs property or action if accessible by 'PUT' method. Default for property writes"""
+        """Runs property or action if accessible by 'PUT' method. Default for property writes."""
         raise NotImplementedError("implement PUT request method in child handler class")
 
     async def delete(self) -> None:  # ty: ignore[invalid-method-override]
         """
-        Runs property or action if accessible by 'DELETE' method. Default for property deletes
-        (not a valid operation as per web of things semantics).
+        Runs property or action if accessible by 'DELETE' method.
+
+        Default for property deletes (not a valid operation as per web of things semantics).
         """
         raise NotImplementedError("implement DELETE request method in child handler class")
 
     async def is_method_allowed(self, method: str) -> bool:
-        """Checks if the method is allowed for the property"""
+        """Checks if the method is allowed for the property."""
         raise NotImplementedError("implement is_method_allowed in child handler class")
 
 
@@ -367,7 +372,7 @@ class RPCHandler(BaseHandler):
         - Access control (authentication & authorization)
         - if the HTTP method is allowed for the resource.
         - if its GET method with message id for no-block response.
-        """
+        """  # noqa: D400
         if not await self.has_access_control():
             return False
         if self.message_id is not None and method.upper() == "GET":
@@ -379,7 +384,9 @@ class RPCHandler(BaseHandler):
 
     async def options(self) -> None:  # ty: ignore[invalid-method-override]
         """
-        Options for the resource. Main functionality is to inform the client is a specific HTTP method is supported by
+        Options for the resource.
+
+        Main functionality is to inform the client is a specific HTTP method is supported by
         the property or the action (Access-Control-Allow-Methods).
         """
         if await self.has_access_control():
@@ -461,7 +468,7 @@ class RPCHandler(BaseHandler):
             self.write(response_payload.value)
 
     async def handle_no_block_response(self) -> None:
-        """Handles the no-block response for the noblock calls"""
+        """Handles the no-block response for the noblock calls."""
         try:
             message_id = self.message_id
             if message_id is None:
@@ -497,7 +504,7 @@ class RPCHandler(BaseHandler):
 
 
 class PropertyHandler(RPCHandler):
-    """handles property requests"""
+    """handles property requests."""
 
     async def get(self) -> None:
         if await self.is_method_allowed("GET"):
@@ -528,7 +535,7 @@ class PropertyHandler(RPCHandler):
 
 
 class ActionHandler(RPCHandler):
-    """handles action requests"""
+    """handles action requests."""
 
     async def get(self) -> None:
         if await self.is_method_allowed("GET"):
@@ -559,7 +566,7 @@ class ActionHandler(RPCHandler):
 
 
 class RWMultiplePropertiesHandler(ActionHandler):
-    """handles read-write of multiple properties via an action"""
+    """handles read-write of multiple properties via an action."""
 
     def initialize(  # ty: ignore[invalid-method-override]
         self,
@@ -604,7 +611,7 @@ class RWMultiplePropertiesHandler(ActionHandler):
 
 
 class EventHandler(BaseHandler):
-    """handles events emitted by `Thing` and tunnels them as HTTP SSE"""
+    """handles events emitted by `Thing` and tunnels them as HTTP SSE."""
 
     def initialize(
         self,
@@ -627,21 +634,21 @@ class EventHandler(BaseHandler):
         Access-Control-Allow-Credentials: true # Possibly for cookie auth
         Access-Control-Allow-Origin: <client> # if CORS is enabled
         ```
-        """
+        """  # noqa: D400
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
         super().set_custom_default_headers()
 
     async def get(self):
-        """Events are support only with GET method"""
+        """Events are support only with GET method."""
         if await self.has_access_control():
             self.set_custom_default_headers()
             await self.handle_datastream()
         self.finish()
 
     async def options(self):  # ty: ignore[invalid-method-override]
-        """Options for the resource"""
+        """Options for the resource."""
         if await self.has_access_control():
             self.set_status(204)
             self.set_custom_default_headers()
@@ -650,11 +657,11 @@ class EventHandler(BaseHandler):
         self.finish()
 
     def receive_blocking_event(self, event_consumer: EventConsumer):
-        """deprecated, but can make a blocking call in an async loop"""
+        """deprecated, but can make a blocking call in an async loop."""
         return event_consumer.receive(timeout=10000)
 
     async def handle_datastream(self) -> None:
-        """Called by GET method and handles the event publishing"""
+        """Called by GET method and handles the event publishing."""
         try:
             event_consumer = self.thing.subscribe_event(self.resource)
             self.set_status(200)
@@ -682,7 +689,7 @@ class EventHandler(BaseHandler):
 
 
 class JPEGImageEventHandler(EventHandler):
-    """handles events with images with JPEG image data header"""
+    """handles events with images with JPEG image data header."""
 
     def initialize(
         self,
@@ -696,7 +703,7 @@ class JPEGImageEventHandler(EventHandler):
 
 
 class PNGImageEventHandler(EventHandler):
-    """handles events with images with PNG image data header"""
+    """handles events with images with PNG image data header."""
 
     def initialize(
         self,
@@ -710,7 +717,7 @@ class PNGImageEventHandler(EventHandler):
 
 
 class StopHandler(BaseHandler):
-    """Stops the tornado HTTP server"""
+    """Stops the tornado HTTP server."""
 
     def initialize(  # ty: ignore[invalid-method-override]
         self,
@@ -747,7 +754,7 @@ class StopHandler(BaseHandler):
 
 
 class LivenessProbeHandler(BaseHandler):
-    """Liveness probe handler"""
+    """Liveness probe handler."""
 
     def initialize(  # ty: ignore[invalid-method-override]
         self,
@@ -769,7 +776,7 @@ class LivenessProbeHandler(BaseHandler):
 
 
 class ReadinessProbeHandler(BaseHandler):
-    """Readiness probe handler"""
+    """Readiness probe handler."""
 
     def initialize(  # ty: ignore[invalid-method-override]
         self,
@@ -805,7 +812,7 @@ class ReadinessProbeHandler(BaseHandler):
 
 
 class ThingDescriptionHandler(BaseHandler):
-    """Thing Description handler"""
+    """Thing Description handler."""
 
     def initialize(  # ty: ignore[invalid-method-override]
         self,

@@ -31,7 +31,7 @@ __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
 
 class ThingDescriptionService:
-    """Service layer to generate HTTP TD"""
+    """Service layer to generate HTTP TD."""
 
     def __init__(
         self,
@@ -57,7 +57,7 @@ class ThingDescriptionService:
         authority: str | None = None,
     ) -> dict[str, JSONSerializable]:
         """
-        Generate the HTTP Thing Description
+        Generate the HTTP Thing Description.
 
         Parameters
         ----------
@@ -91,7 +91,7 @@ class ThingDescriptionService:
         use_localhost: bool,
     ) -> None:
         """
-        Add properties to the TD with forms
+        Add properties to the TD with forms.
 
         Parameters
         ----------
@@ -167,7 +167,7 @@ class ThingDescriptionService:
         use_localhost: bool,
     ) -> None:
         """
-        Add actions to the TD with forms
+        Add actions to the TD with forms.
 
         Parameters
         ----------
@@ -227,7 +227,7 @@ class ThingDescriptionService:
         use_localhost: bool,
     ) -> None:
         """
-        Add events to the TD with forms
+        Add events to the TD with forms.
 
         Parameters
         ----------
@@ -285,7 +285,7 @@ class ThingDescriptionService:
         authority: str | None,
         use_localhost: bool,
     ) -> None:
-        """Adds top level forms for reading and writing multiple properties"""
+        """Adds top level forms for reading and writing multiple properties."""
         properties_end_point = f"{self.server.router.get_basepath(authority, use_localhost)}/{TD['id']}/properties"
 
         if TD.get("forms", None) is None:
@@ -321,7 +321,7 @@ class ThingDescriptionService:
         forms.append(writemultipleproperties.json())
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
-        """Adds security definitions to the TD"""
+        """Adds security definitions to the TD."""
         from ...metadata.td.security_definitions import (
             APIKeySecurityScheme,
             BasicSecurityScheme,
@@ -358,11 +358,11 @@ class ThingDescriptionService:
                 security.append(scheme.name)
 
     def add_links(self, TD: dict[str, JSONSerializable]) -> None:
-        """Adds custom links to the TD, override this in subclass"""
+        """Adds custom links to the TD, override this in subclass."""
         pass
 
     async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
-        """Fetch the TM or ZMQ in process queue TD"""
+        """Fetch the TM or ZMQ in process queue TD."""
         response_message = await self.thing.execute(
             objekt=self.resource.name,
             operation=Operations.invokeaction,

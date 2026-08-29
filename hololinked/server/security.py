@@ -1,4 +1,4 @@
-"""Implementation of security schemes for a server"""
+"""Implementation of security schemes for a server."""
 
 import base64
 import json
@@ -22,7 +22,7 @@ logger = structlog.get_logger()
 
 
 class Security(BaseModel):
-    """Type definition for security schemes"""
+    """Type definition for security schemes."""
 
     def __init__(self, **data: Any) -> None:
         """
@@ -40,6 +40,7 @@ try:
     class BcryptBasicSecurity(Security):
         """
         A username and password based security scheme using bcrypt.
+
         The password is stored as a hash.
 
         The request must supply an authorization header in of the following formats:
@@ -84,7 +85,7 @@ try:
 
         def validate_input(self, username: str, password: str) -> bool:
             """
-            Plain validate a username and password
+            Plain validate a username and password.
 
             Returns
             -------
@@ -98,6 +99,7 @@ try:
         def validate_base64(self, b64_str: str) -> bool:
             """
             Validate a base64 encoded string containing username and password.
+
             Please strip the 'Basic ' prefix before passing as argument.
 
             Returns
@@ -119,6 +121,7 @@ except ImportError:
     class BcryptBasicSecurity(Security):
         """
         Placeholder for BcryptBasicSecurity when bcrypt is not installed.
+
         Please install the `bcrypt` library to use Bcrypt password security and see the actual docstrings.
         """
 
@@ -132,6 +135,7 @@ try:
     class Argon2BasicSecurity(Security):
         """
         A username and password based security scheme using Argon2.
+
         The password is stored as a hash.
 
         The request must supply an authorization header in of the following formats:
@@ -175,7 +179,7 @@ try:
 
         def validate_input(self, username: str, password: str) -> bool:
             """
-            Plain validate a username and password
+            Plain validate a username and password.
 
             Returns
             -------
@@ -192,6 +196,7 @@ try:
         def validate_base64(self, b64_str: str) -> bool:
             """
             Validate a base64 encoded string containing username and password.
+
             Please strip the 'Basic ' prefix before passing.
 
             Returns
@@ -213,6 +218,7 @@ except ImportError:
     class Argon2BasicSecurity(Security):
         """
         Placeholder for Argon2BasicSecurity when argon2 is not installed.
+
         Please install the `argon2-cffi` library to use Argon2 password security.
         """
 
@@ -224,7 +230,7 @@ try:
     import argon2
 
     class APIKeyRecord(BaseModel):
-        """An API key record dataclass"""
+        """An API key record dataclass."""
 
         name: str
         id: str
@@ -236,13 +242,13 @@ try:
 
         @field_serializer("created_at", "expiry_at")
         def serialize_datetime(self, dt: datetime, _info) -> str:
-            """Serialize datetime to ISO format string"""
+            """Serialize datetime to ISO format string."""
             return dt.isoformat()
 
         @field_validator("created_at", "expiry_at", mode="before")
         @classmethod
         def parse_datetime(cls, value):
-            """Parse datetime from string or return datetime object"""
+            """Parse datetime from string or return datetime object."""
             if isinstance(value, str):
                 return datetime.fromisoformat(value)
             return value
@@ -301,6 +307,7 @@ try:
         ) -> str:
             """
             Create a new API key. Use this method to generate and store a new API key before running your application.
+
             The validity period, specified in minutes (default 30 days), is stored as validation metadata and not a part
             of the key itself. Nevertheless, this is checked during validation.
 
@@ -357,7 +364,7 @@ try:
 
         def hash(self, apikey: str) -> str:
             """
-            Create a hash of the API key for storage
+            Create a hash of the API key for storage.
 
             Returns
             -------
@@ -367,7 +374,7 @@ try:
             return self._ph.hash(apikey)
 
         def save(self, record: APIKeyRecord, filename: str = "apikeys.json", override: bool = False) -> None:
-            """Save the security scheme data to persistent storage"""
+            """Save the security scheme data to persistent storage."""
             filepath = os.path.join(global_config.TEMP_DIR_SECRETS, filename)
             existing_data = {}
             if os.path.exists(filepath):
@@ -380,7 +387,7 @@ try:
                 json.dump(existing_data, file, indent=4)
 
         def load(self) -> None:
-            """Load the security scheme data from persistent storage"""
+            """Load the security scheme data from persistent storage."""
             if not os.path.exists(self.file):
                 return
             with open(self.file, "r") as file:
@@ -420,6 +427,7 @@ except ImportError:
     class APIKeySecurity(Security):
         """
         Placeholder for APIKeySecurity when argon2 is not installed.
+
         Please install the `argon2-cffi` library to use API key security and see the actual docstrings.
         """
 
@@ -435,8 +443,9 @@ try:
 
     class OIDCSecurity(Security):
         """
-        Generic OIDC JWT validation meant to be used with 'openid' scope to validate login sessions, requires the PyJWT
-        library to be installed. A *JWT access token* is validated by verifying its signature against the provider's
+        Generic OIDC JWT validation meant to be used with 'openid' scope to validate login sessions, requires the PyJWT library to be installed.
+
+        A *JWT access token* is validated by verifying its signature against the provider's
         JWKS endpoint (JWK Set) and optionally validating issuer/audience.
 
         This security scheme is not meant to be used with OAuth flows where the resource server is a third party
@@ -627,6 +636,7 @@ try:
     class KeycloakOIDCSecurity(OIDCSecurity):
         """
         Keycloak specific OIDC security, extends the generic `OIDCSecurity` class.
+
         Only adds convenience around constructing the issuer URL. See `OIDCSecurity` for actual details and usage.
         Keycloak issuer is typically: {server_url}/realms/{realm}
         """
@@ -652,6 +662,7 @@ except ImportError:
     class OIDCSecurity(Security):
         """
         Placeholder for OIDCSecurity when PyJWT is not installed.
+
         If you see this doc, you need to install the `PyJWT` library to use OIDC security.
         """
 
@@ -670,6 +681,7 @@ except ImportError:
     class KeycloakOIDCSecurity(Security):
         """
         Placeholder for KeycloakOIDCSecurity.
+
         If you see this doc, you need to install the `PyJWT` library to use OIDC security.
         """
 

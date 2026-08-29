@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 class BrokerThing(BaseModel):
-    """Repository Layer of a Thing over the internal message broker"""
+    """Repository Layer of a Thing over the internal message broker."""
 
     id: str
     """Thing ID"""
@@ -259,6 +259,7 @@ class BrokerThing(BaseModel):
     def get_response_payload(self, zmq_response: ResponseMessage) -> PreserializedData | SerializableData:
         """
         Retrieves the payload from the ZMQ response message, does not necessarily deserialize it.
+
         Use this method to extract the payload from a response message.
         Multipart responses are not supported yet for protocol controllers (except ZMQ), so only one payload is returned.
 
