@@ -1,3 +1,5 @@
+"""ZMQ message brokers for servers, clients and event publishers/subscribers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,6 +8,7 @@ import threading
 import time
 import warnings
 
+from collections.abc import Coroutine
 from enum import Enum
 from typing import Any, Iterator
 
@@ -52,27 +55,41 @@ from .message import (
 
 class BaseZMQ:
     """
-    Base class for all ZMQ message brokers. Implements socket creation & logger config,
-    which are common to all server and client implementations.
+    Base class for all ZMQ message brokers.
+
+    Implements socket creation & logger config, which are common to all server and client implementations.
     """
+
+    id: str
+    context: zmq.Context | zmq.asyncio.Context
+    socket: zmq.Socket
+    socket_address: str
 
     def __init__(self, id: str, **kwargs) -> None:
         """
+        Initialize the broker.
+
+        Parameters
+        ----------
         id: str
             unique ID of the server/client. This is used as the identity of the ZMQ socket.
         logger: logging.Logger, optional
             logger instance to use. If None, a default logger is created.
         """
         super().__init__()
-        self.id = id  # type: str
-        self.context = self.context if hasattr(self, "context") and self.context else None  # type: zmq.Context | zmq.asyncio.Context
-        self.socket = self.socket if hasattr(self, "socket") and self.socket else None  # type: zmq.Socket | None
-        self.socket_address = self.socket_address if hasattr(self, "socket_address") and self.socket_address else None  # type: str | None
+        self.id = id
+        # these three are only assigned properly once `create_socket()` runs; the `None` here is a defensive
+        # initialisation, so the class-level annotations above state the contract that every use site relies on
+        self.context = self.context if hasattr(self, "context") and self.context else None  # ty: ignore[invalid-assignment]
+        self.socket = self.socket if hasattr(self, "socket") and self.socket else None  # ty: ignore[invalid-assignment]
+        self.socket_address = self.socket_address if hasattr(self, "socket_address") and self.socket_address else None  # ty: ignore[invalid-assignment]
 
     def exit(self) -> None:
         """
-        Cleanup method to terminate ZMQ sockets and contexts before quitting. Called by `__del__()`
-        automatically. Each subclass server/client should implement their version of exiting if necessary.
+        Cleanup method to terminate ZMQ sockets and contexts before quitting.
+
+        Called by `__del__()` automatically. Each subclass server/client should implement their version of
+        exiting if necessary.
         """
         if not hasattr(self, "logger") or not self.logger:
             self.logger = structlog.get_logger().bind(component="broker", impl=self.__class__.__name__, id=self.id)
@@ -89,12 +106,14 @@ class BaseZMQ:
         node_type: str,
         context: zmq.asyncio.Context | zmq.Context,
         access_point: str = ZMQ_TRANSPORTS.IPC,
-        socket_type: zmq.SocketType = zmq.ROUTER,
+        socket_type: zmq.SocketType = zmq.SocketType.ROUTER,
         **kwargs,
     ) -> tuple[zmq.Socket, str]:
         """
-        Create a socket with certain specifications. Supported ZeroMQ transports are TCP, IPC & INPROC.
-        For IPC sockets, a file is created under TEMP_DIR of global configuration.
+        Create a socket with certain specifications.
+
+        Supported ZeroMQ transports are TCP, IPC & INPROC. For IPC sockets, a file is created under TEMP_DIR
+        of global configuration.
 
         Parameters
         ----------
@@ -127,6 +146,8 @@ class BaseZMQ:
 
         Raises
         ------
+        ValueError
+            if `node_type` is neither `server` nor `client`
         NotImplementedError
             if transport other than `TCP`, `IPC` or `INPROC` is used
         RuntimeError
@@ -206,9 +227,7 @@ class BaseZMQ:
 
 
 class BaseAsyncZMQ(BaseZMQ):
-    """
-    Base class for all async ZMQ servers and clients.
-    """
+    """Base class for all async ZMQ servers and clients."""
 
     # init of this class must always take empty arguments due to inheritance structure
 
@@ -220,12 +239,18 @@ class BaseAsyncZMQ(BaseZMQ):
         node_type: str = "server",
         context: zmq.asyncio.Context | None = None,
         access_point: str = ZMQ_TRANSPORTS.IPC,
-        socket_type: zmq.SocketType = zmq.ROUTER,
+        socket_type: zmq.SocketType = zmq.SocketType.ROUTER,
         **kwargs,
     ) -> None:
         """
-        Overloads `create_socket()` to create, bind/connect an async socket. A global context is used if
-        none is supplied.
+        Overloads `create_socket()` to create, bind/connect an async socket.
+
+        A global context is used if none is supplied.
+
+        Raises
+        ------
+        TypeError
+            if the supplied context is not an async ZMQ context
         """
         if context and not isinstance(context, zmq.asyncio.Context):
             raise TypeError(
@@ -252,7 +277,7 @@ class BaseAsyncZMQ(BaseZMQ):
 
 
 class BaseSyncZMQ(BaseZMQ):
-    """Base class for all sync ZMQ servers and clients"""
+    """Base class for all sync ZMQ servers and clients."""
 
     # init of this class must always take empty arguments due to inheritance structure
 
@@ -264,12 +289,13 @@ class BaseSyncZMQ(BaseZMQ):
         node_type: str = "server",
         context: zmq.Context | None = None,
         access_point: str = ZMQ_TRANSPORTS.IPC,
-        socket_type: zmq.SocketType = zmq.ROUTER,
+        socket_type: zmq.SocketType = zmq.SocketType.ROUTER,
         **kwargs,
     ) -> None:
         """
-        Overloads `create_socket()` to create, bind/connect a synchronous socket. A global context is used if
-        none is supplied.
+        Overloads `create_socket()` to create, bind/connect a synchronous socket.
+
+        A global context is used if none is supplied.
         """
         self.context = context or global_config.zmq_context()
         self.socket, self.socket_address = BaseZMQ.get_socket(
@@ -293,7 +319,7 @@ class BaseSyncZMQ(BaseZMQ):
 
 
 class BaseZMQServer(BaseZMQ):
-    """Base class for all ZMQ servers irrespective of sync and async"""
+    """Base class for all ZMQ servers irrespective of sync and async."""
 
     def __init__(self, id: str, logger: structlog.stdlib.BoundLogger | None = None, **kwargs) -> None:
         super().__init__(id=id, **kwargs)
@@ -303,8 +329,10 @@ class BaseZMQServer(BaseZMQ):
 
     def handshake(self, request_message: RequestMessage) -> None:
         """
-        Pass a handshake message to client. Absolutely mandatory to handshake with all clients to ensure initial messages
-        do not get lost because of ZMQ's tiny but significant initial delay after creating socket.
+        Pass a handshake message to client.
+
+        Absolutely mandatory to handshake with all clients to ensure initial messages do not get lost because of
+        ZMQ's tiny but significant initial delay after creating socket.
 
         Parameters
         ----------
@@ -313,15 +341,14 @@ class BaseZMQServer(BaseZMQ):
         """
         run_callable_somehow(self._handshake(request_message))
 
-    def _handshake(self, request_message: RequestMessage) -> None:
+    def _handshake(self, request_message: RequestMessage) -> Coroutine[Any, Any, None]:
         raise NotImplementedError(
             f"handshake cannot be handled - implement _handshake in {self.__class__} to handshake."
         )
 
     def handle_invalid_message(self, request_message: RequestMessage, exception: Exception) -> None:
         """
-        Pass an invalid message to the client when an exception occurred while parsing the message from the client
-        (in `handled_default_message_types()`)
+        Pass an invalid message to the client when an exception occurred while parsing the message from the client (in `handled_default_message_types()`).
 
         Parameters
         ----------
@@ -332,7 +359,9 @@ class BaseZMQServer(BaseZMQ):
         """
         run_callable_somehow(self._handle_invalid_message(request_message, exception))
 
-    def _handle_invalid_message(self, message: RequestMessage, exception: Exception) -> None:
+    def _handle_invalid_message(
+        self, request_message: RequestMessage, exception: Exception
+    ) -> Coroutine[Any, Any, None]:
         raise NotImplementedError(
             "invalid message cannot be handled"
             + f" - implement _handle_invalid_message in {self.__class__} to handle invalid messages."
@@ -340,7 +369,7 @@ class BaseZMQServer(BaseZMQ):
 
     def handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> None:
         """
-        Pass timeout message to the client when the operation could not be executed within specified timeouts
+        Pass timeout message to the client when the operation could not be executed within specified timeouts.
 
         Parameters
         ----------
@@ -350,7 +379,7 @@ class BaseZMQServer(BaseZMQ):
         """
         run_callable_somehow(self._handle_timeout(request_message, timeout_type=timeout_type))
 
-    def _handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> None:
+    def _handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> Coroutine[Any, Any, None]:
         raise NotImplementedError(
             "timeouts cannot be handled ",
             f"- implement _handle_timeout in {self.__class__} to handle timeout.",
@@ -358,7 +387,7 @@ class BaseZMQServer(BaseZMQ):
 
     def handle_error_message(self, request_message: RequestMessage, exception: Exception) -> None:
         """
-        Pass an exception message to the client when an exception occurred while executing the operation
+        Pass an exception message to the client when an exception occurred while executing the operation.
 
         Parameters
         ----------
@@ -369,7 +398,7 @@ class BaseZMQServer(BaseZMQ):
         """
         run_callable_somehow(self._handle_error_message(request_message, exception))
 
-    def _handle_error_message(self, request_message: RequestMessage, exception: Exception) -> None:
+    def _handle_error_message(self, request_message: RequestMessage, exception: Exception) -> Coroutine[Any, Any, None]:
         raise NotImplementedError(
             "exceptions cannot be handled ",
             f"- implement _handle_error_message in {self.__class__} to handle exceptions.",
@@ -378,12 +407,23 @@ class BaseZMQServer(BaseZMQ):
     def handled_default_message_types(self, request_message: RequestMessage) -> bool:
         """
         Handle default cases for the server without further processing of the request (for example, `HANDSHAKE`).
+
         This method is called once/supposed to be called when the message is received or popped out of the socket.
 
         Parameters
         ----------
         request_message: RequestMessage
             the client message to handle
+
+        Returns
+        -------
+        handled: bool
+            whether the message was handled here and needs no further processing
+
+        Raises
+        ------
+        BreakLoop
+            if an `EXIT` message is received from the client
         """
         if request_message.type == HANDSHAKE:
             self.handshake(request_message)
@@ -405,9 +445,10 @@ class BaseZMQServer(BaseZMQ):
 
 class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
     """
-    An async ZMQ server that can handle multiple clients. Implements both blocking (non-polled) and
-    non-blocking/polling form of receiving messages and sending replies. This server can be stopped from server side
-    by calling `stop_polling()`.
+    An async ZMQ server that can handle multiple clients.
+
+    Implements both blocking (non-polled) and non-blocking/polling form of receiving messages and sending replies.
+    This server can be stopped from server side by calling `stop_polling()`.
     """
 
     def __init__(
@@ -415,12 +456,14 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         *,
         id: str,
         context: zmq.asyncio.Context | None = None,
-        socket_type: zmq.SocketType = zmq.ROUTER,
+        socket_type: zmq.SocketType = zmq.SocketType.ROUTER,
         access_point: str = ZMQ_TRANSPORTS.IPC,
         poll_timeout: int = 25,
         **kwargs,
     ) -> None:
         """
+        Initialize the server.
+
         Parameters
         ----------
         id: str
@@ -456,7 +499,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
 
     @property
     def poll_timeout(self) -> int:
-        """Socket polling timeout in milliseconds greater than 0"""
+        """Socket polling timeout in milliseconds greater than 0."""
         return self._poll_timeout
 
     @poll_timeout.setter
@@ -470,8 +513,9 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
 
     async def async_recv_request(self) -> RequestMessage:
         """
-        Receive one message in a blocking form. There is no polling, therefore this method blocks until a message is
-        received.
+        Receive one message in a blocking form.
+
+        There is no polling, therefore this method blocks until a message is received.
 
         Returns
         -------
@@ -492,8 +536,9 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
 
     async def async_recv_requests(self) -> list[RequestMessage]:
         """
-        Receive all currently available messages in blocking form. There is no polling, therefore this method
-        blocks until at least one message is received.
+        Receive all currently available messages in blocking form.
+
+        There is no polling, therefore this method blocks until at least one message is received.
 
         Returns
         -------
@@ -586,6 +631,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
     async def poll_requests(self) -> list[RequestMessage]:
         """
         Poll for messages with specified timeout (`poll_timeout`) and return if any messages are available.
+
         This method can be stopped from another method in a different thread or asyncio task (not in the same thread though).
 
         Returns
@@ -619,13 +665,11 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         return messages
 
     def stop_polling(self) -> None:
-        """Stop polling and unblock `poll_messages()` method"""
+        """Stop polling and unblock `poll_messages()` method."""
         self.stop_poll = True
 
     async def _handshake(self, request_message: RequestMessage) -> None:
-        """
-        Inner method that handles handshake. Scheduled by `handshake()` method, signature same as `handshake()`.
-        """
+        """Inner method that handles handshake. Scheduled by `handshake()` method, signature same as `handshake()`."""
         # Note that for ROUTER sockets, once the message goes through the sending socket, the address of the receiver
         # is replaced by the address of the sender once received
         handshake_message = ResponseMessage.craft_from_arguments(
@@ -642,9 +686,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         )
 
     async def _handle_timeout(self, request_message: RequestMessage, timeout_type: str) -> None:
-        """
-        Inner method that handles timeout. Scheduled by `handle_timeout()`, signature same as `handle_timeout`.
-        """
+        """Inner method that handles timeout. Scheduled by `handle_timeout()`, signature same as `handle_timeout`."""
         timeout_message = ResponseMessage.craft_from_arguments(
             receiver_id=request_message.sender_id,
             sender_id=self.id,
@@ -661,8 +703,9 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
 
     async def _handle_invalid_message(self, request_message: RequestMessage, exception: Exception) -> None:
         """
-        Inner method that handles invalid messages. Scheduled by `handle_invalid_message()`,
-        signature same as `handle_invalid_message()`.
+        Inner method that handles invalid messages.
+
+        Scheduled by `handle_invalid_message()`, signature same as `handle_invalid_message()`.
         """
         invalid_message = ResponseMessage.craft_from_arguments(
             receiver_id=request_message.sender_id,
@@ -709,10 +752,14 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
 
 
 class ZMQServerPool(BaseZMQServer):
-    """Implements pool of async ZMQ servers (& their sockets)"""
+    """Implements pool of async ZMQ servers (& their sockets)."""
 
     def __init__(self, *, ids: list[str] | None = None, **kwargs) -> None:
         """
+        Initialize the server pool.
+
+        Parameters
+        ----------
         ids: List[str], optional
             list of server IDs to create the server pool. If None, an empty pool is created and servers can be
             registered later using `register_server()`.
@@ -738,7 +785,7 @@ class ZMQServerPool(BaseZMQServer):
         bind: bool,
         context: zmq.asyncio.Context | zmq.Context,
         access_point: str,
-        socket_type: zmq.SocketType = zmq.ROUTER,
+        socket_type: zmq.SocketType = zmq.SocketType.ROUTER,
         **kwargs,
     ) -> None:
         raise NotImplementedError("create socket not supported by ZMQServerPool")
@@ -757,7 +804,7 @@ class ZMQServerPool(BaseZMQServer):
 
     @property
     def poll_timeout(self) -> int:
-        """Socket polling timeout in milliseconds greater than 0"""
+        """Socket polling timeout in milliseconds greater than 0."""
         return self._poll_timeout
 
     @poll_timeout.setter
@@ -771,7 +818,7 @@ class ZMQServerPool(BaseZMQServer):
 
     async def async_recv_request(self, id: str) -> RequestMessage:
         """
-        Receive message for server specified by id
+        Receive message for server specified by id.
 
         Parameters
         ----------
@@ -787,7 +834,7 @@ class ZMQServerPool(BaseZMQServer):
 
     async def async_recv_requests(self, id: str) -> list[RequestMessage]:
         """
-        Receive all available messages for server specified by id
+        Receive all available messages for server specified by id.
 
         Parameters
         ----------
@@ -810,7 +857,7 @@ class ZMQServerPool(BaseZMQServer):
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
     ) -> None:
         """
-        Send response for a request message for server specified by id
+        Send response for a request message for server specified by id.
 
         Parameters
         ----------
@@ -831,8 +878,9 @@ class ZMQServerPool(BaseZMQServer):
 
     async def poll(self) -> list[RequestMessage]:
         """
-        Pool for messages in the entire server pool. Use the message to identify the server by using `receiver_id` of
-        the message header.
+        Pool for messages in the entire server pool.
+
+        Use the message to identify the server by using `receiver_id` of the message header.
 
         Returns
         -------
@@ -862,7 +910,7 @@ class ZMQServerPool(BaseZMQServer):
         return messages
 
     def stop_polling(self) -> None:
-        """Stop polling method `poll()`"""
+        """Stop polling method `poll()`."""
         self.stop_poll = True
 
     def __getitem__(self, key) -> AsyncZMQServer:
@@ -884,7 +932,7 @@ class ZMQServerPool(BaseZMQServer):
 
 
 class BaseZMQClient(BaseZMQ):
-    """Base class for all ZMQ clients irrespective of sync and async"""
+    """Base class for all ZMQ clients irrespective of sync and async."""
 
     def __init__(
         self,
@@ -895,6 +943,8 @@ class BaseZMQClient(BaseZMQ):
         **kwargs,
     ) -> None:
         """
+        Initialize the client.
+
         Parameters
         ----------
         id: str
@@ -923,7 +973,7 @@ class BaseZMQClient(BaseZMQ):
 
     @property
     def poll_timeout(self) -> int:
-        """Socket polling timeout in milliseconds greater than 0"""
+        """Socket polling timeout in milliseconds greater than 0."""
         return self._poll_timeout
 
     @poll_timeout.setter
@@ -962,13 +1012,24 @@ class BaseZMQClient(BaseZMQ):
 
     def handled_default_message_types(self, response_message: ResponseMessage) -> bool:
         """
-        Handle default cases for the client. This method is called once/supposed to be called when the message
-        is received or popped out of the socket.
+        Handle default cases for the client.
+
+        This method is called once/supposed to be called when the message is received or popped out of the socket.
 
         Parameters
         ----------
         response_message: List[ResponseMessage]
             the server message to handle
+
+        Returns
+        -------
+        handled: bool
+            whether the message was handled here and needs no further processing
+
+        Raises
+        ------
+        ConnectionAbortedError
+            if the server disconnected
         """
         if len(response_message.byte_array) == 2:  # socket monitor message, not our message
             try:
@@ -1009,6 +1070,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         **kwargs,
     ) -> None:
         """
+        Initialize the client.
+
         Parameters
         ----------
         id: str
@@ -1106,14 +1169,21 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
 
     def recv_response(self, message_id: str) -> ResponseMessage:
         """
-        Receives response from server. Messages are identified by message id, and out of order messages are sent to
-        a cache which may be popped later. This method blocks until the expected message is received or `stop_polling()`
-        is called from another thread.
+        Receives response from server.
+
+        Messages are identified by message id, and out of order messages are sent to a cache which may be popped
+        later. This method blocks until the expected message is received or `stop_polling()` is called from another
+        thread.
 
         Parameters
         ----------
         message_id: bytes
             the message id of the expected response message
+
+        Returns
+        -------
+        response_message: ResponseMessage
+            the response message matching the given message id
         """
         self._stop = False
         while not self._stop:
@@ -1206,13 +1276,18 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
 
     def handshake(self, timeout: float | int = 60000) -> None:
         """
-        Handshake with server before sending first message
+        Handshake with server before sending first message.
 
         Parameters
         ----------
         timeout: float | int
             timeout in milliseconds to wait for handshake to complete. If handshake does not complete within this time,
             a `ConnectionError` is raised. If None, wait indefinitely until handshake completes.
+
+        Raises
+        ------
+        ConnectionError
+            if the server could not be contacted within the specified timeout
         """
         self._stop = False
         start_time = time.time_ns()
@@ -1256,6 +1331,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         **kwargs,
     ) -> None:
         """
+        Initialize the client.
+
         Parameters
         ----------
         id: str
@@ -1300,8 +1377,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
 
     def handshake(self, timeout: int | None = 60000) -> None:
         """
-        Schedules a handshake coroutine in the running event loop
-        or completes handshake synchronously if no event loop is running.
+        Schedules a handshake coroutine in the running event loop or completes handshake synchronously if no event loop is running.
+
         Use `handshake_complete()` async method to check if handshake is complete.
 
         Parameters
@@ -1313,7 +1390,14 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         run_callable_somehow(self._handshake(timeout))
 
     async def _handshake(self, timeout: float | int | None = 60000) -> None:
-        """Handshake with server before sending first message"""
+        """
+        Handshake with server before sending first message.
+
+        Raises
+        ------
+        ConnectionError
+            if the server could not be contacted within the specified timeout
+        """
         self._stop = False
         if self._monitor_socket is not None and self._monitor_socket in self.poller:
             self.poller.unregister(self._monitor_socket)
@@ -1346,13 +1430,18 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
 
     async def handshake_complete(self, timeout: float | int = 60000) -> None:
         """
-        Wait for handshake to complete
+        Wait for handshake to complete.
 
         Parameters
         ----------
         timeout: float | int
             timeout in milliseconds to wait for handshake to complete. If handshake does not complete within this time,
             a `TimeoutError` is raised.
+
+        Raises
+        ------
+        TimeoutError
+            if handshake does not complete within the specified timeout
         """
         await asyncio.wait_for(self._handshake_event.wait(), int(timeout / 1000) if timeout else None)
         if not self._handshake_event.is_set():
@@ -1417,14 +1506,21 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
 
     async def async_recv_response(self, message_id: str) -> ResponseMessage:
         """
-        Receives response from server. Messages are identified by message id, and out of order messages are sent to
-        a cache which may be popped later. This method blocks until the expected message is received or `stop_polling()`
-        is called from another thread.
+        Receives response from server.
+
+        Messages are identified by message id, and out of order messages are sent to a cache which may be popped
+        later. This method blocks until the expected message is received or `stop_polling()` is called from another
+        thread.
 
         Parameters
         ----------
         message_id: bytes
             the message id of the expected response message
+
+        Returns
+        -------
+        response_message: list[ResponseMessage]
+            the response message matching the given message id
         """
         self._stop = False
         while not self._stop:
@@ -1519,6 +1615,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
 class MessageMappedZMQClientPool(BaseZMQClient):
     """
     Pool of async ZMQ clients, to be primarily used within protocol bindings where multiple things may be served.
+
     Use message ID to track responses.
     """
 
@@ -1528,12 +1625,14 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         client_ids: list[str],
         server_ids: list[str],
         handshake: bool = True,
-        context: zmq.asyncio.Context = None,
+        context: zmq.asyncio.Context | None = None,
         access_point: str = ZMQ_TRANSPORTS.IPC,
         poll_timeout: int = 25,
         **kwargs,
     ) -> None:
         """
+        Initialize the client pool.
+
         Parameters
         ----------
         id: str
@@ -1559,6 +1658,11 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             Additional arguments:
 
             - `logger`: `logging.Logger`, logger instance to use. If None, a default logger is created.
+
+        Raises
+        ------
+        ValueError
+            if `client_ids` and `server_ids` are not of the same length
         """
         super().__init__(id=id, server_id=None, **kwargs)
         if len(client_ids) != len(server_ids):
@@ -1591,6 +1695,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
     def create_new(self, id: str, server_id: str, access_point: str = ZMQ_TRANSPORTS.IPC) -> None:
         """
         Create new server with specified transport & add it to the pool.
+
         Other arguments are taken from pool default specifications.
 
         Parameters
@@ -1601,6 +1706,11 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             id of the server to connect to
         access_point: str
             transport method used by the server - `IPC`, `INPROC` or `tcp://<host>:<port>`
+
+        Raises
+        ------
+        ValueError
+            if a client for the given `server_id` is already present in the pool
         """
         if server_id not in self.pool.keys():
             client = AsyncZMQClient(
@@ -1628,6 +1738,11 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         thing_id: Optional, str
             thing_id to which this client is mapped, especially when the client is connected to a server that serves
             only one `Thing`.
+
+        Raises
+        ------
+        TypeError
+            if the given client is not a subclass of `AsyncZMQClient`
         """
         if not isinstance(client, AsyncZMQClient):
             raise TypeError(
@@ -1654,6 +1769,16 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         ----------
         thing_id: str
             the `thing_id` for which the client is to be retrieved
+
+        Returns
+        -------
+        client_id: str
+            the id of the client mapped to the given `thing_id`
+
+        Raises
+        ------
+        ValueError
+            if no client for the given `thing_id` is present in the pool
         """
         if thing_id not in self._thing_to_client_map:
             raise ValueError(f"client for thing_id '{thing_id}' not present in pool")
@@ -1667,6 +1792,16 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         ----------
         client_id: str
             the client id for which the `thing_id` is to be retrieved
+
+        Returns
+        -------
+        thing_id: str
+            the `thing_id` mapped to the given client id
+
+        Raises
+        ------
+        ValueError
+            if no `thing_id` for the given client id is present in the pool
         """
         if client_id not in self._client_to_thing_map:
             raise ValueError(f"thing_id for client_id '{client_id}' not present in pool")
@@ -1678,8 +1813,18 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
         Parameters
         ----------
-        client_id: str
-            the client id for which the protocol is to be retrieved
+        thing_id: str
+            the `thing_id` for which the protocol is to be retrieved
+
+        Returns
+        -------
+        protocol: str
+            the transport used by the client mapped to the given `thing_id`
+
+        Raises
+        ------
+        ValueError
+            if no client for the given `thing_id` is present in the pool
         """
         if thing_id not in self._thing_to_client_map:
             raise ValueError(f"client_id '{thing_id}' not present in pool")
@@ -1688,7 +1833,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     @property
     def poll_timeout(self) -> int:
-        """Socket polling timeout in milliseconds greater than 0"""
+        """Socket polling timeout in milliseconds greater than 0."""
         return self._poll_timeout
 
     @poll_timeout.setter
@@ -1702,14 +1847,14 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self._poll_timeout = value
 
     async def handshake_complete(self) -> None:
-        """Wait for handshake to complete for all clients in the pool"""
+        """Wait for handshake to complete for all clients in the pool."""
         for client in self.pool.values():
             await client.handshake_complete()  # sufficient to wait serially
 
     def handshake(self, timeout: int | None = 60000) -> None:
         """
-        Schedules handshake coroutines for each client in the running event loop
-        or completes handshake synchronously if no event loop is running.
+        Schedules handshake coroutines for each client in the running event loop or completes handshake synchronously if no event loop is running.
+
         Use `handshake_complete()` async method to check if handshake is complete.
 
         Parameters
@@ -1723,7 +1868,9 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def poll_responses(self) -> None:
         """
-        Poll for replies from server.This method should be independently started in the event loop by calling `start_polling()`.
+        Poll for replies from server.
+
+        This method should be independently started in the event loop by calling `start_polling()`.
         Sending message requests and retrieving a response is still carried out by other methods.
         Do not duplicate this method call as there are no checks how many pollers exist and messages will become malformed
         if multiple pollers are active.
@@ -1775,8 +1922,10 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def _resolve_response(self, message_id: str, data: Any) -> None:
         """
-        This method is called when there is no asyncio Event available for a message ID. This can happen only
-        when the server replied before the client created a asyncio.Event object. check `async_execute()` for details.
+        This method is called when there is no asyncio Event available for a message ID.
+
+        This can happen only when the server replied before the client created a asyncio.Event object.
+        check `async_execute()` for details.
 
         Parameters
         ----------
@@ -1784,7 +1933,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             the message for which the event was not created
         data: ResponseMessage
             the response message received from server
-        """
+        """  # noqa: D404 # rewording the summary would change the docstring's language
         max_number_of_retries = 100
         for i in range(max_number_of_retries):
             await asyncio.sleep(0.025)
@@ -1830,8 +1979,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
         Parameters
         ----------
-        client_id: str
-            id of the client in the pool to be used to send the message
         thing_id: str
             `id` of the `Thing` on which an operation is to be performed
         objekt: str
@@ -1875,9 +2022,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
         Parameters
         ----------
-        client_id: str
-            id of the client in the pool to be used to receive the message
-        message_id: str
+        message_id: bytes
             the message id for which response needs to be fetched
         timeout: float | int | None
             Client side timeout, not the same as timeout passed to server. Recommended to be None in general cases.
@@ -1894,6 +2039,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         ------
         ValueError
             if supplied message id is not valid
+        KeyError
+            if supplied message id is unknown to the pool
         TimeoutError
             if timeout is not None and response did not arrive
         """
@@ -1933,8 +2080,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
         Parameters
         ----------
-        client_id: str
-            id of the client in the pool to be used to send the message
         thing_id: str
             `id` of the `Thing` on which an operation is to be performed
         objekt: str
@@ -1970,13 +2115,11 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         )
 
     def start_polling(self) -> None:
-        """Register the server message polling loop in the asyncio event loop"""
+        """Register the server message polling loop in the asyncio event loop."""
         get_current_async_loop().create_task(self.poll_responses())
 
     def stop_polling(self):
-        """
-        Stop polling for replies from server
-        """
+        """Stop polling for replies from server."""
         self.stop_poll = True
         for client in self.pool.values():
             client.stop()
@@ -2022,7 +2165,14 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         server_execution_context: ServerExecutionContext = default_server_execution_context,
         thing_execution_context: ThingExecutionContext = default_thing_execution_context,
     ) -> dict[str, ResponseMessage]:
-        """Execute the same operation in all `Thing`s"""
+        """
+        Execute the same operation in all `Thing`s.
+
+        Returns
+        -------
+        responses: dict[str, ResponseMessage]
+            response message of each `Thing`, keyed by `thing_id`
+        """
         return await self.async_execute_in_all(
             objekt=objekt,
             operation=operation,
@@ -2073,7 +2223,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
 class AsyncioEventPool:
     """
-    creates a pool of asyncio Events to be used as a synchronisation object for MessageMappedClientPool
+    creates a pool of asyncio Events to be used as a synchronisation object for MessageMappedClientPool.
 
     Parameters
     ----------
@@ -2087,7 +2237,12 @@ class AsyncioEventPool:
 
     def pop(self) -> asyncio.Event:
         """
-        Pop an event, new one is created if nothing left in pool
+        Pop an event, new one is created if nothing left in pool.
+
+        Returns
+        -------
+        event: asyncio.Event
+            an event taken from the pool, or a newly created one
         """
         try:
             event = self.pool.pop(0)
@@ -2098,9 +2253,7 @@ class AsyncioEventPool:
         return event
 
     def completed(self, event: asyncio.Event) -> None:
-        """
-        Put an event back into the pool
-        """
+        """Put an event back into the pool."""
         self.pool.append(event)
 
 
@@ -2118,6 +2271,8 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         **kwargs,
     ) -> None:
         """
+        Initialize the publisher.
+
         Parameters
         ----------
         id: str
@@ -2143,13 +2298,18 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
     def register(self, event: "EventDispatcher") -> None:
         """
-        Register event with a specific (unique) name
+        Register event with a specific (unique) name.
 
         Parameters
         ----------
         event: `EventDispatcher`
             `Event` object that needs to be registered. Events created at `__init__()` of `Thing` are
             automatically registered.
+
+        Raises
+        ------
+        AttributeError
+            if an event with the same unique identifier is already registered
         """
         if event._unique_identifier in self.events and event not in self.events:
             raise AttributeError(f"event {event._unique_identifier} already registered, please use another name.")
@@ -2158,7 +2318,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
     def unregister(self, event: "EventDispatcher") -> None:
         """
-        Unregister event with a specific (unique) name
+        Unregister event with a specific (unique) name.
 
         Parameters
         ----------
@@ -2184,6 +2344,11 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             `Event` object that needs to be published.
         data: Any
             data to be sent as payload of the event
+
+        Raises
+        ------
+        AttributeError
+            if the event is not registered with this publisher
         """
         # uncomment for type definitions
         # from ...core.events import EventDispatcher
@@ -2239,7 +2404,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
 
 class BaseEventConsumer(BaseZMQClient):
-    """Consumes events published at PUB sockets using SUB socket"""
+    """Consumes events published at PUB sockets using SUB socket."""
 
     def __init__(
         self,
@@ -2250,6 +2415,8 @@ class BaseEventConsumer(BaseZMQClient):
         **kwargs,
     ) -> None:
         """
+        Initialize the event consumer.
+
         Parameters
         ----------
         id: str
@@ -2266,6 +2433,11 @@ class BaseEventConsumer(BaseZMQClient):
             - `logger`: `logging.Logger`, logger instance to use. If None, a default
             - `poll_timeout`: `int`, socket polling timeout in milliseconds greater than 0.
             - `server_id`: `str`, id of the PUB socket server, usually not necessary as `access_point` is sufficient.
+
+        Raises
+        ------
+        TypeError
+            if the consumer is not subclassed by either `BaseSyncZMQ` or `BaseAsyncZMQ`
         """
         if isinstance(self, BaseSyncZMQ):
             self.context = context or global_config.zmq_context()
@@ -2309,7 +2481,7 @@ class BaseEventConsumer(BaseZMQClient):
         self._stop = False
 
     def subscribe(self) -> None:
-        """Subscribe to the event at the PUB socket"""
+        """Subscribe to the event at the PUB socket."""
         self.socket.setsockopt(zmq.SUBSCRIBE, self.event_unique_identifier)
         # pair sockets cannot be polled unforunately, so we use router
         # if self.socket in self.poller._map:
@@ -2320,14 +2492,15 @@ class BaseEventConsumer(BaseZMQClient):
         self.poller.register(self.interruptor, zmq.POLLIN)
 
     def stop_polling(self) -> None:
-        """Stop polling for events when `receive()` is called"""
+        """Stop polling for events when `receive()` is called."""
         self._stop = True
 
     @property
     def interrupt_message(self) -> EventMessage:
         """
-        Craft an interrupt message to be sent to the interruptor socket, if `stop_polling()` is not sufficient as
-        the poll timeout is infinite. Used internally by `interrupt()` method.
+        Craft an interrupt message to be sent to the interruptor socket, if `stop_polling()` is not sufficient as the poll timeout is infinite.
+
+        Used internally by `interrupt()` method.
         """
         return EventMessage.craft_from_arguments(
             event_id=f"{self.id}/interrupting-server",
@@ -2353,11 +2526,11 @@ class BaseEventConsumer(BaseZMQClient):
 
 
 class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
-    """Sync Event Consumer to used outside of async loops"""
+    """Sync Event Consumer to used outside of async loops."""
 
     def receive(self, timeout: float | None = 1000, raise_interrupt_as_exception: bool = False) -> EventMessage | None:
         """
-        Receive event with given timeout
+        Receive event with given timeout.
 
         Parameters
         ----------
@@ -2365,6 +2538,16 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
             timeout in milliseconds, None for blocking
         raise_interrupt_as_exception: bool
             if True, raises BreakLoop exception when interrupted, otherwise returns None
+
+        Returns
+        -------
+        event_message: EventMessage | None
+            the received event, or None if polling was interrupted or timed out
+
+        Raises
+        ------
+        BreakLoop
+            if polling was interrupted and `raise_interrupt_as_exception` is True
         """
         self._stop = False
         while not self._stop:
@@ -2401,14 +2584,16 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
 
     def interrupt(self):
         """
-        Interrupts the event consumer. Generally should be used for exiting this object if there is no poll
-        period/infinite polling. Otherwise please use stop_polling().
+        Interrupts the event consumer.
+
+        Generally should be used for exiting this object if there is no poll period/infinite polling.
+        Otherwise please use stop_polling().
         """
         self.interrupting_peer.send_multipart(self.interrupt_message.byte_array)
 
 
 class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
-    """Async Event Consumer to be used inside async loops"""
+    """Async Event Consumer to be used inside async loops."""
 
     async def receive(
         self,
@@ -2416,7 +2601,7 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         raise_interrupt_as_exception: bool = False,
     ) -> EventMessage | None:
         """
-        Receive event with given timeout
+        Receive event with given timeout.
 
         Parameters
         ----------
@@ -2424,6 +2609,16 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
             timeout in milliseconds, None for blocking
         raise_interrupt_as_exception: bool
             if True, raises BreakLoop exception when interrupted, otherwise returns None
+
+        Returns
+        -------
+        event_message: EventMessage | None
+            the received event, or None if polling was interrupted or timed out
+
+        Raises
+        ------
+        BreakLoop
+            if polling was interrupted and `raise_interrupt_as_exception` is True
         """
         # TODO - use raise_interrupt_as_exception
         self._stop = False
@@ -2465,8 +2660,10 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
 
     async def interrupt(self):
         """
-        Interrupts the event consumer. Generally should be used for exiting this object if there is no poll
-        period/infinite polling. Otherwise please use stop_polling().
+        Interrupts the event consumer.
+
+        Generally should be used for exiting this object if there is no poll period/infinite polling.
+        Otherwise please use stop_polling().
         """
         await self.interrupting_peer.send_multipart(self.interrupt_message.byte_array)
 

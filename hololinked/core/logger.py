@@ -1,3 +1,5 @@
+"""Logging handlers for a `Thing` - remote log streaming and log history capture."""
+
 import asyncio
 import datetime
 import logging
@@ -9,13 +11,14 @@ from typing import Any  # noqa: F401
 
 import structlog
 
+from ..constants import JSON
 from .actions import action as remote_method
 from .events import Event
 from .properties import Integer, List, Number
 from .thing import Thing as RemoteObject
 
 
-log_message_schema = {
+log_message_schema: JSON = {
     "type": "object",
     "properties": {
         "level": {
@@ -43,6 +46,7 @@ log_message_schema = {
 class RemoteAccessHandler(logging.Handler, RemoteObject):
     """
     Log handler with remote access attached to `Thing`'s logger, capable of streaming the log entries as events.
+
     Set `remote_accessible_logger` to True in the `Thing` to enable this handler.
     The schema of the pushed logs is an array of objects, where each object is:
 
@@ -75,6 +79,8 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
 
     def __init__(self, id: str = "logger", maxlen: int = 500, stream_interval: float = 1.0, **kwargs) -> None:
         """
+        Initialize the handler.
+
         Parameters
         ----------
         id: str, default 'logger'
@@ -154,6 +160,11 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
             main event loop.
         stream_interval: float
             push interval in seconds.
+
+        Raises
+        ------
+        ValueError
+            if `scheduling` is neither 'threaded' nor 'async'
         """
         self.stream_interval = stream_interval
         if scheduling == "async":
@@ -167,11 +178,11 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
 
     @remote_method()
     def stop_events(self) -> None:
-        """stop pushing log events"""
+        """Stop pushing log events."""
         self._push_events = False
         if self._events_thread:  # coroutine variant will resolve automatically
             self._events_thread.join()
-            self._owner.logger.debug(f"joined log event source with thread-id {self._events_thread.ident}.")
+            self.logger.debug(f"joined log event source with thread-id {self._events_thread.ident}.")
             self._events_thread = None
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -240,7 +251,9 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
 
 def prepare_object_logger(instance: RemoteObject, remote_access: bool = False) -> None:
     """
-    Setup logger for the object with default settings. If a logger is already present, it is not recreated.
+    Setup logger for the object with default settings.
+
+    If a logger is already present, it is not recreated.
     If remote access is present, it is not recreated. This is a single-shot method to be run at __init__.
 
     Parameters
@@ -285,13 +298,17 @@ def prepare_object_logger(instance: RemoteObject, remote_access: bool = False) -
 
 class LogHistoryHandler(logging.Handler):
     """
-    Log history handler. Add and remove this handler at specific points to hold specific logs that are generated
+    Log history handler.
+
+    Add and remove this handler at specific points to hold specific logs that are generated
     between those points. Currently used by execution context within `RPCServer` where one can fetch the
     execution logs that were collected during a specific operation.
     """
 
     def __init__(self, log_list: list | None = None):
         """
+        Initialize the handler.
+
         Parameters
         ----------
         log_list: list, optional

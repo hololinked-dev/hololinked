@@ -203,7 +203,14 @@ class BoundAction:
         raise NotImplementedError("call must be implemented by subclass")
 
     def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks."""
+        """
+        Validated call to the action with state machine and payload checks.
+
+        Returns
+        -------
+        Any
+            the return value of the action
+        """
         raise NotImplementedError("external_call must be implemented by subclass")
 
     def __str__(self):
@@ -249,7 +256,14 @@ class BoundSyncAction(BoundAction):
     """
 
     def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks."""
+        """
+        Validated call to the action with state machine and payload checks.
+
+        Returns
+        -------
+        Any
+            the return value of the action
+        """
         self.validate_call(args, kwargs)
         return self.__call__(*args, **kwargs)
 
@@ -268,7 +282,14 @@ class BoundAsyncAction(BoundAction):
     """
 
     async def external_call(self, *args, **kwargs):
-        """Validated call to the action with state machine and payload checks."""
+        """
+        Validated call to the action with state machine and payload checks.
+
+        Returns
+        -------
+        Any
+            the return value of the action
+        """
         self.validate_call(args, kwargs)
         return await self.__call__(*args, **kwargs)
 

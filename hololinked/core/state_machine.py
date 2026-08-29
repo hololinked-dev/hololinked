@@ -1,3 +1,5 @@
+"""Finite state machine for a `Thing` - states, transitions and their callbacks."""
+
 from enum import Enum, EnumMeta, StrEnum
 from types import FunctionType, MethodType
 from typing import Callable
@@ -98,6 +100,8 @@ class StateMachine:
         **machine: dict[str, Callable | Property],
     ) -> None:
         """
+        Initialize the state machine.
+
         Parameters
         ----------
         states: EnumMeta | List[str] | Tuple[str]
@@ -136,7 +140,18 @@ class StateMachine:
         self.owner = owner
 
     def validate(self, owner: Thing) -> None:
-        """Validate the state machine, whether the properties, actions and states are correctly specified"""
+        """
+        Validate the state machine, whether the properties, actions and states are correctly specified.
+
+        Raises
+        ------
+        AttributeError
+            if the initial state is not among the states, or an object in the machine does not belong to the owner
+        TypeError
+            if a state cannot be complied to a string
+        StateMachineError
+            if the state machine specification is invalid
+        """
         # cannot merge this with __set_name__ because descriptor objects are not ready at that time.
         # reason - metaclass __init__ is called after __set_name__ of descriptors, therefore the new "proper" desriptor
         # registries are available only after that. Until then only the inherited descriptor registries are available,
@@ -230,8 +245,17 @@ class StateMachine:
 
     def _get_machine_compliant_state(self, state) -> StrEnum | str:
         """
-        In case of not using StrEnum or iterable of str,
-        this maps the enum of state to the state name.
+        In case of not using StrEnum or iterable of str, this maps the enum of state to the state name.
+
+        Returns
+        -------
+        state: StrEnum | str
+            the state as a string
+
+        Raises
+        ------
+        TypeError
+            if the state cannot be complied to a string
         """
         if isinstance(state, str):
             return state
@@ -244,6 +268,7 @@ class StateMachine:
     def contains_object(self, object: Property | Callable) -> bool:
         """
         Check if specified object is found in any of the state machine states.
+
         Supply unbound method for checking methods, as state machine is specified at class level
         when the methods are unbound.
 
@@ -266,6 +291,7 @@ class StateMachine:
 class BoundFSM:
     """
     A FSM bound to a `Thing` instance, returned when accessed as a instance attribute (`self.state_machine`).
+
     There is no need to instantiate this class directly.
     """
 
@@ -291,7 +317,9 @@ class BoundFSM:
 
     def set_state(self, value: str | StrEnum | Enum, push_event: bool = True, skip_callbacks: bool = False) -> None:
         """
-        Set state of state machine. Also triggers state change callbacks if `skip_callbacks=False` and pushes a state
+        Set state of state machine.
+
+        Also triggers state change callbacks if `skip_callbacks=False` and pushes a state
         change event when `push_event=True` (when __init__ argument `push_state_change_event=True`).
         One can also set state using the '=' operator of the `current_state` property,
         in which case `skip_callbacks=False` and `push_event=True` will be used.
@@ -302,7 +330,7 @@ class BoundFSM:
 
         Raises
         ------
-        ValueError:
+        ValueError
             if the state is not found in the allowed states
         """
         if value in self.states:
@@ -331,8 +359,14 @@ class BoundFSM:
     def contains_object(self, object: Property | Callable) -> bool:
         """
         Check if specified object is found in any of the state machine states.
+
         Supply unbound method for checking methods, as state machine is specified at class level
         when the methods are unbound.
+
+        Returns
+        -------
+        bool
+            `True` if the object is found in any of the states, `False` otherwise
         """
         return self.descriptor.contains_object(object)
 
@@ -362,32 +396,32 @@ class BoundFSM:
 
     @property
     def initial_state(self):
-        """Initial state of the machine"""
+        """Initial state of the machine."""
         return self.descriptor.initial_state
 
     @property
     def states(self):
-        """List of allowed states"""
+        """List of allowed states."""
         return self.descriptor.states
 
     @property
     def on_enter(self):
-        """Callbacks to execute when a certain state is entered"""
+        """Callbacks to execute when a certain state is entered."""
         return self.descriptor.on_enter
 
     @property
     def on_exit(self):
-        """Callbacks to execute when certain state is exited"""
+        """Callbacks to execute when certain state is exited."""
         return self.descriptor.on_exit
 
     @property
     def machine(self):
-        """The machine specification with state as key and objects as list"""
+        """The machine specification with state as key and objects as list."""
         return self.descriptor.machine
 
 
 def prepare_object_FSM(instance: Thing) -> None:
-    """Validate and prepare the state machine attached to a Thing class"""
+    """Validate and prepare the state machine attached to a Thing class."""
     cls = instance.__class__
     if cls.state_machine and isinstance(cls.state_machine, StateMachine):
         cls.state_machine.validate(instance)
