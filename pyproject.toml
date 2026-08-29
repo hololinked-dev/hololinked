@@ -151,6 +151,9 @@ convention = "numpy"
 [tool.ty.src]
 exclude = ["hololinked/param"]
 
+[tool.ty.environment]
+python-platform = "linux" # for sys.platform machine specific
+
 [tool.bandit]
 exclude_dirs = [
     ".venv", 

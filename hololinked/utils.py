@@ -215,7 +215,7 @@ def print_pending_tasks_in_current_loop():
 
 def set_global_event_loop_policy(use_uvloop: bool = False) -> None:
     """Set global event loop policy, optionally using uvloop if available and on linux/macos."""
-    if sys.platform.lower().startswith("win"):
+    if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     if use_uvloop and sys.platform.lower() in [
