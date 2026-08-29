@@ -44,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tool: [ruff, ty, ruff-extensive]
+        tool: [ruff, ty]
 
     steps:
       - name: checkout code
@@ -67,45 +67,19 @@ jobs:
         if: matrix.tool == 'ruff'
         run: |
           source .venv/bin/activate
-          ruff check --config pyproject.toml hololinked
+          ruff check hololinked
 
       - name: run ruff linter tests directory
         if: matrix.tool == 'ruff'
         run: |
           source .venv/bin/activate
-          ruff check --config pyproject.toml tests/*.py tests/things/*.py tests/helper-scripts/*.py
-
-      - name: run ruff linter src directory
-        if: matrix.tool == 'ruff-extensive'
-        run: |
-          source .venv/bin/activate
-          ruff check --config ruff.toml hololinked/client
-          ruff check --config ruff.toml hololinked/core
-          ruff check --config ruff.toml hololinked/serializers
-          ruff check --config ruff.toml hololinked/schema_validators
-          ruff check --config ruff.toml hololinked/storage
-          ruff check --config ruff.toml hololinked/metadata/td
-          ruff check --config ruff.toml hololinked/server
-          ruff check --config ruff.toml hololinked/serialization.py
-          ruff check --config ruff.toml hololinked/schemas.py
-          ruff check --config ruff.toml hololinked/persistence.py
-          ruff check --config ruff.toml hololinked/ddl.py
+          ruff check tests/*.py tests/things/*.py tests/helper-scripts/*.py
 
       - name: run ty type checker
         if: matrix.tool == 'ty'
         run: |
           source .venv/bin/activate
-          ty check hololinked/client
-          ty check hololinked/core
-          ty check hololinked/serializers
-          ty check hololinked/schema_validators
-          ty check hololinked/storage
-          ty check hololinked/metadata/td
-          ty check hololinked/server
-          ty check hololinked/serialization.py
-          ty check hololinked/schemas.py
-          ty check hololinked/persistence.py
-          ty check hololinked/ddl.py
+          ty check hololinked
 
   scan:
     name: security scan (${{ matrix.tool }})

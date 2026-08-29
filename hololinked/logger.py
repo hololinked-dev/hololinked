@@ -1,3 +1,5 @@
+"""Structured logging setup for the package, built on structlog."""
+
 import copy
 import logging
 import logging.handlers
@@ -15,8 +17,14 @@ default_label_formatter = None
 
 
 def normalize_component_name(_, __, event_dict: dict[str, Any]) -> dict[str, Any]:
-    """cast component name to upper case and format event message with it"""
+    """
+    Cast component name to upper case and format event message with it.
 
+    Returns
+    -------
+    dict[str, Any]
+        the event dictionary with the component folded into the event message
+    """
     global default_label_formatter
     component = event_dict.pop("component", "")
     if default_label_formatter:
@@ -30,11 +38,13 @@ def normalize_component_name(_, __, event_dict: dict[str, Any]) -> dict[str, Any
 def setup_logging(
     log_level: int = logging.INFO,
     colored_logs: bool = False,
-    log_file: str = None,
+    log_file: str | None = None,
     **kwargs,
 ) -> None:
     """
-    Setup structured logging using structlog. Not a flexible setup, except the values configurable in `global_config`,
+    Setup structured logging using structlog.
+
+    Not a flexible setup, except the values configurable in `global_config`,
     Override the entire function if you want a different logging configuration by monkey patching this method.
 
     Parameters
@@ -77,7 +87,8 @@ def setup_logging(
             default_label_formatter.key_style = None
 
     structlog.configure(
-        processors=[
+        # structlog's processor protocol is wider than its stub
+        processors=[  # ty: ignore[invalid-argument-type]
             structlog.contextvars.merge_contextvars,
             structlog.processors.add_log_level,
             structlog.processors.StackInfoRenderer(),
@@ -98,7 +109,7 @@ def setup_logging(
     for name, module in sys.modules.items():
         if name.startswith("asyncio.") and isinstance(module, types.ModuleType):
             if hasattr(module, "logger"):
-                module.logger = asyncio_log
+                module.logger = asyncio_log  # ty: ignore[unresolved-attribute]
 
     try:
         import httpx  # noqa: F401
