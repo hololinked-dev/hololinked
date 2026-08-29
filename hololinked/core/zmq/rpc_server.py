@@ -24,11 +24,11 @@ from hololinked.utils import (
     get_current_async_loop,
 )
 
-from ..actions import BoundAction  # noqa: F401
+from ..actions import BoundAction
 from ..exceptions import BreakInnerLoop, BreakLoop
 from ..logger import LogHistoryHandler
 from ..properties import TypedList
-from ..property import Property  # noqa: F401
+from ..property import Property
 from ..thing import Thing
 from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
 from .message import (
@@ -148,9 +148,9 @@ class RPCServer(BaseZMQServer):
         for instance in all_things:
             instance.rpc_server = self
             for action in instance.actions.descriptors.values():
-                if action.execution_info.iscoroutine and not action.execution_info.synchronous:
+                if action.iscoroutine and not action.synchronous:
                     self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = AsyncScheduler
-                elif not action.execution_info.synchronous:
+                elif not action.synchronous:
                     self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = ThreadedScheduler
                 # else QueuedScheduler which is default
             # properties need not dealt yet, but may be in future)
@@ -189,7 +189,7 @@ class RPCServer(BaseZMQServer):
             except BreakLoop:
                 break
             except Exception as ex:
-                self.logger.error(f"exception occurred while polling for server - {str(ex)}")
+                self.logger.error(f"exception occurred while polling for server - {ex!s}")
                 self.logger.exception(str(ex))
                 continue
 
@@ -231,7 +231,7 @@ class RPCServer(BaseZMQServer):
                 except Exception as ex:
                     # handle invalid message
                     self.logger.error(
-                        f"exception occurred for message - {str(ex)}",
+                        f"exception occurred for message - {ex!s}",
                         sender_id=request_message.sender_id,
                         msg_id=request_message.id,
                     )
@@ -240,7 +240,7 @@ class RPCServer(BaseZMQServer):
         self.stop()
         self.logger.info(f"stopped polling at socket {server.socket_address.split(':')[0].upper()}")
 
-    async def tunnel_message_to_things(self, scheduler: "Scheduler") -> None:
+    async def tunnel_message_to_things(self, scheduler: Scheduler) -> None:
         """Message tunneler/coordinator between external sockets listening thread and `Thing` object executor thread."""
         self.logger.info("started schedulers")
         eventloop = get_current_async_loop()
@@ -322,7 +322,7 @@ class RPCServer(BaseZMQServer):
         scheduler.cleanup()
         self.logger.info("stopped schedulers")
 
-    async def run_thing_instance(self, instance: Thing, scheduler: "Scheduler" | None = None) -> None:
+    async def run_thing_instance(self, instance: Thing, scheduler: Scheduler | None = None) -> None:
         """
         Run a single `Thing` instance in an infinite loop by allowing the scheduler to schedule operations on it.
 
@@ -440,7 +440,7 @@ class RPCServer(BaseZMQServer):
 
             except Exception as ex:
                 # error occurred while executing the operation
-                instance.logger.error(f"error while executing operation - {str(ex)}")
+                instance.logger.error(f"error while executing operation - {ex!s}")
                 instance.logger.exception(ex)
 
                 # send a reply with error
@@ -526,7 +526,7 @@ class RPCServer(BaseZMQServer):
             if preserialized_payload != EMPTY_BYTE:
                 args = (preserialized_payload,) + args
             action: BoundAction = instance.actions[objekt]  # ty: ignore[invalid-assignment]
-            if action.execution_info.iscoroutine:
+            if action.descriptor.iscoroutine:
                 # the actual scheduling as a purely async task is done by the scheduler, not here,
                 # this will be a blocking call
                 return await action.external_call(*args, **payload)
@@ -537,9 +537,7 @@ class RPCServer(BaseZMQServer):
             return instance.properties.get(names=objekt)
         elif operation == Operations.writemultipleproperties or operation == Operations.writeallproperties:
             return instance.properties.set(**payload)
-        raise NotImplementedError(
-            "Unimplemented execution path for Thing {} for operation {}".format(instance.id, operation)
-        )
+        raise NotImplementedError(f"Unimplemented execution path for Thing {instance.id} for operation {operation}")
 
     def format_return_value(
         self,
@@ -579,7 +577,7 @@ class RPCServer(BaseZMQServer):
         request_message: RequestMessage,
         ready_to_process_event: asyncio.Event,
         origin_server: AsyncZMQServer,
-        timeout: float | int | None,
+        timeout: float | None,
         timeout_type: str,
     ) -> bool:
         """
@@ -672,7 +670,7 @@ class RPCServer(BaseZMQServer):
             if self.event_publisher is not None:
                 self.event_publisher.exit()
         except Exception as ex:
-            self.logger.warning(f"Exception occurred while exiting the RPC server - {str(ex)}")
+            self.logger.warning(f"Exception occurred while exiting the RPC server - {ex!s}")
 
     def __hash__(self):
         return hash(str(self))

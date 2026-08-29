@@ -10,8 +10,8 @@ from pydantic import BaseModel, ConfigDict, RootModel, create_model
 from hololinked import SchemaValidatorClasses
 
 from ..param.parameterized import Parameter, ParameterizedMetaclass
+from ..param.parameters import Tuple
 from ..utils import issubklass
-from .dataklasses import RemoteResourceInfoValidator
 from .events import Event, EventDispatcher  # noqa: F401
 from .exceptions import StateMachineError
 
@@ -29,8 +29,6 @@ class Property(Parameter):
     `Property` objects are similar to python's `property` but not a subclass of it due to limitations and redundancy.
     """
 
-    execution_info: RemoteResourceInfoValidator
-
     __slots__ = [
         "db_persist",
         "db_init",
@@ -39,11 +37,14 @@ class Property(Parameter):
         "metadata",
         "fcomparator",
         "validator",
-        "execution_info",
-        "_execution_info_validator",
+        "state",
+        "_remote",
         "_observable_event_descriptor",
         "_old_value_internal_name",
     ]
+
+    state: "tuple[Enum | str] | None"
+    """state machine state(s) in which this property can be written, any state when None"""
 
     def __init__(
         self,
@@ -181,12 +182,16 @@ class Property(Parameter):
         self._observable_event_descriptor = None
         if observable:
             self._observable_event_descriptor = Event()
-        self._execution_info_validator = None
-        self.execution_info = None  # ty: ignore[invalid-assignment]  # RemoteResource | None
-        if remote:
-            # TODO, this execution info validator can be refactored & removed later, adds an additional layer of info
-            self._execution_info_validator = RemoteResourceInfoValidator(state=state, isproperty=True, obj=self)
-            self.execution_info = self._execution_info_validator  # TODO: use dataclass or remove this attribute
+        self._remote = remote
+
+        self.state = Tuple(
+            default=None,
+            item_type=(Enum, str),
+            allow_None=True,
+            accept_list=True,
+            accept_item=True,
+        ).validate_and_adapt(state)
+
         self.model = None
         self.validator = None
         if model:
@@ -195,12 +200,9 @@ class Property(Parameter):
                 self.validator = SchemaValidatorClasses.json_schema(model).validate
             else:
                 self.model = wrap_plain_types_in_rootmodel(model)
-                self.validator = self.model.model_validate
 
     def __set_name__(self, owner: Any, attrib_name: str) -> None:
         super().__set_name__(owner, attrib_name)
-        if self._execution_info_validator:
-            self._execution_info_validator.obj_name = attrib_name
         if self._observable_event_descriptor:
             _observable_event_name = f"{self.name}_change_event"
             self._old_value_internal_name = f"{self._internal_name}_old_value"
@@ -285,8 +287,8 @@ class Property(Parameter):
         StateMachineError
             If the `Thing` instance is in a state where this property cannot be written.
         """
-        if self.execution_info.state is None or (
-            hasattr(obj, "state_machine") and obj.state_machine.current_state in self.execution_info.state  # ty: ignore[unresolved-attribute]
+        if self.state is None or (
+            hasattr(obj, "state_machine") and obj.state_machine.current_state in self.state  # ty: ignore[unresolved-attribute]
         ):
             return self.__set__(obj, value)
         else:
@@ -294,7 +296,7 @@ class Property(Parameter):
                 "Thing {} is in `{}` state, however attribute can be written only in `{}` state".format(
                     obj.id,
                     obj.state_machine.current_state,  # ty: ignore[unresolved-attribute]
-                    self.execution_info.state,
+                    self.state,
                 )
             )
 
@@ -333,7 +335,7 @@ class Property(Parameter):
     @property
     def is_remote(self):
         """`False` if the property is not remotely accessible."""
-        return self._execution_info_validator is not None
+        return self._remote
 
     @property
     def observable(self) -> bool:

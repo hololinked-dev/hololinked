@@ -135,14 +135,14 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         """
         from hololinked import Serializers, prepare_object_storage
 
-        from .logger import prepare_object_logger  # noqa
-        from .state_machine import prepare_object_FSM  # noqa
+        from .logger import prepare_object_logger
+        from .state_machine import prepare_object_FSM
 
         Propertized.__init__(self, id=id, logger=logger, **kwargs)
         RemoteInvokable.__init__(self)
         EventSource.__init__(self)
         if self.id.startswith("/"):
-            self.id = self.id[1:]
+            self.id = self.id.removeprefix("/")
         serializer = kwargs.get("serializer", None)
         if serializer is not None:
             Serializers.register_for_thing_instance(self.id, serializer)
@@ -194,13 +194,13 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             super().__setattr__(__name, __value)
 
     @property
-    def sub_things(self) -> dict[str, "Thing"]:
+    def sub_things(self) -> dict[str, Thing]:
         """Other `Thing`s' that are composed within this `Thing`."""
         things = dict()
         for name, subthing in inspect._getmembers(  # ty: ignore[unresolved-attribute]
             self,
             lambda obj: isinstance(obj, Thing),
-            getattr_without_descriptor_read,  # noqa: F405
+            getattr_without_descriptor_read,
         ):
             if not hasattr(subthing, "_owners") or subthing._owners is None:
                 subthing._owners = []
@@ -253,7 +253,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
     thing_model = property(get_thing_model, doc=get_thing_model.__doc__)
 
-    @forkable  # noqa: F405
+    @forkable
     def run_with_zmq_server(
         self,
         access_points: list[ZMQ_TRANSPORTS] | ZMQ_TRANSPORTS | str | list[str] = ZMQ_TRANSPORTS.IPC,
@@ -305,7 +305,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             server.add_thing(self)
         run(*servers, print_welcome_message=False)  # no welcome message for ZMQ
 
-    @forkable  # noqa: F405
+    @forkable
     def run_with_http_server(
         self,
         port: int = 8080,
@@ -361,7 +361,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         http_server.add_thing(self)
         run(http_server, print_welcome_message=print_welcome_message)
 
-    @forkable  # noqa: F405
+    @forkable
     def run(
         self,
         forked: bool = False,  # used by forkable decorator
@@ -438,7 +438,6 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         Successful when action succeeds with no return value and
         no timeout or exception raised on the client side.
         """
-        pass
 
     def __hash__(self) -> int:
         filename = inspect.getfile(self.__class__)
@@ -458,7 +457,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     def __contains__(self, item: Property | BoundAction | EventDispatcher) -> bool:
         return item in self.properties or item in self.actions or item in self.events
 
-    def __enter__(self) -> "Thing":
+    def __enter__(self) -> Thing:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:

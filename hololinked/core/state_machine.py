@@ -1,8 +1,9 @@
 """Finite state machine for a `Thing` - states, transitions and their callbacks."""
 
+from collections.abc import Callable
 from enum import Enum, EnumMeta, StrEnum
 from types import FunctionType, MethodType
-from typing import Callable, overload
+from typing import overload
 
 import structlog
 
@@ -180,29 +181,26 @@ class StateMachine:
                     if isinstance(resource, Action):
                         if resource not in owner_methods:
                             raise AttributeError(
-                                "Given object {} for state machine does not belong to class {}".format(resource, owner)
+                                f"Given object {resource} for state machine does not belong to class {owner}"
                             )
                     elif isinstance(resource, Property):
                         if resource not in owner_properties:
                             raise AttributeError(
-                                "Given object {} for state machine does not belong to class {}".format(resource, owner)
+                                f"Given object {resource} for state machine does not belong to class {owner}"
                             )
-                        continue  # for now
                     else:
                         raise AttributeError(
                             f"Object {resource} was not made remotely accessible,"
                             + " use state machine with properties and actions only."
                         )
-                    if resource.execution_info.state is None:
-                        resource.execution_info.state = self._get_machine_compliant_state(state)
-                    else:
-                        resource.execution_info.state = resource._execution_info.state + (
-                            self._get_machine_compliant_state(state),
-                        )
+
+                    compliant_state = self._get_machine_compliant_state(state)
+                    if resource.state is None:
+                        resource.state = (compliant_state,)
+                    elif compliant_state not in resource.state:
+                        resource.state = resource.state + (compliant_state,)
             else:
-                raise StateMachineError(
-                    "Given state {} not in allowed states ({})".format(state, self.states.__members__)
-                )
+                raise StateMachineError(f"Given state {state} not in allowed states ({self.states.__members__})")
 
         # then the callbacks
         if self.on_enter is None:
@@ -247,9 +245,12 @@ class StateMachine:
         )
 
     def __contains__(self, state: str | StrEnum):
-        if isinstance(self.states, EnumMeta) and state in self.states.__members__:
-            return True
-        elif isinstance(self.states, tuple) and state in self.states:
+        if (
+            isinstance(self.states, EnumMeta)
+            and state in self.states.__members__
+            or isinstance(self.states, tuple)
+            and state in self.states
+        ):
             return True
         return False
 
@@ -367,7 +368,7 @@ class BoundFSM:
                 for func in self.on_enter[next_state]:
                     func(self.owner)
         else:
-            raise ValueError("given state '{}' not in set of allowed states : {}.".format(value, self.states))
+            raise ValueError(f"given state '{value}' not in set of allowed states : {self.states}.")
 
     current_state = property(
         get_state,

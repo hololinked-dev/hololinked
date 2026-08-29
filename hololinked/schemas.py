@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from hololinked.constants import JSON
 from hololinked.core.interfaces import BaseSchemaValidator
@@ -25,9 +25,9 @@ class JSONSchema:
     class which is separate.
     """
 
-    _allowed_types = ("string", "number", "integer", "boolean", "object", "array", None)
+    _allowed_types: ClassVar = ("string", "number", "integer", "boolean", "object", "array", None)
 
-    _replacements = {
+    _replacements: ClassVar[dict[type, str | dict]] = {
         int: "integer",
         float: "number",
         str: "string",
@@ -47,9 +47,9 @@ class JSONSchema:
             },
             "required": ["message", "type", "traceback"],
         },
-    }  # type: dict[type, str | dict]
+    }
 
-    _schemas = {}
+    _schemas: ClassVar = {}
 
     @classmethod
     def is_allowed_type(cls, typ: Any) -> bool:
@@ -76,9 +76,7 @@ class JSONSchema:
         bool
             True or False
         """
-        if typ in JSONSchema._replacements.keys():
-            return True
-        return False
+        return typ in JSONSchema._replacements
 
     @classmethod
     def get_base_type(cls, typ: Any) -> str:
@@ -175,9 +173,7 @@ class JSONSchema:
         bool
             True, if additional schema definitions exist for the type
         """
-        if typ in JSONSchema._schemas.keys():
-            return True
-        return False
+        return typ in JSONSchema._schemas
 
     @classmethod
     def get_additional_schema_definitions(cls, typ: Any):

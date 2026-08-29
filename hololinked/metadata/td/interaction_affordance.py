@@ -366,23 +366,23 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
                 self.description = description
             else:
                 self.description = description
-        if action.execution_info.argument_schema:
-            if isinstance(action.execution_info.argument_schema, dict):
-                self.input = action.execution_info.argument_schema
-            elif issubklass(action.execution_info.argument_schema, (BaseModel, RootModel)):
-                self.input = type_to_dataschema(action.execution_info.argument_schema)
+        if action.argument_schema:
+            if isinstance(action.argument_schema, dict):
+                self.input = action.argument_schema
+            elif issubklass(action.argument_schema, (BaseModel, RootModel)):
+                self.input = type_to_dataschema(action.argument_schema)
             else:
                 raise ValueError(
-                    f"unknown schema definition for action input, given type: {type(action.execution_info.argument_schema)}"
+                    f"unknown schema definition for action input, given type: {type(action.argument_schema)}"
                 )
-        if action.execution_info.return_value_schema:
-            if isinstance(action.execution_info.return_value_schema, dict):
-                self.output = action.execution_info.return_value_schema
-            elif issubklass(action.execution_info.return_value_schema, (BaseModel, RootModel)):
-                self.output = type_to_dataschema(action.execution_info.return_value_schema)
+        if action.return_value_schema:
+            if isinstance(action.return_value_schema, dict):
+                self.output = action.return_value_schema
+            elif issubklass(action.return_value_schema, (BaseModel, RootModel)):
+                self.output = type_to_dataschema(action.return_value_schema)
             else:
                 raise ValueError(
-                    f"unknown schema definition for action output, given type: {type(action.execution_info.return_value_schema)}"
+                    f"unknown schema definition for action output, given type: {type(action.return_value_schema)}"
                 )
         if (
             not (
@@ -390,13 +390,13 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
                 and self.owner.state_machine is not None
                 and self.owner.state_machine.contains_object(action)
             )
-            and action.execution_info.idempotent
+            and action.idempotent
         ):
-            self.idempotent = action.execution_info.idempotent
-        if action.execution_info.synchronous:
-            self.synchronous = action.execution_info.synchronous
-        if action.execution_info.safe:
-            self.safe = action.execution_info.safe
+            self.idempotent = action.idempotent
+        if action.synchronous:
+            self.synchronous = action.synchronous
+        if action.safe:
+            self.safe = action.safe
 
     @classmethod
     def from_descriptor(cls, action: Action, owner: Thing | ThingMeta, **kwargs) -> "ActionAffordance":  # noqa: D102
