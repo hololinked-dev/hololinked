@@ -24,6 +24,8 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         **kwargs,
     ) -> None:
         """
+        Initialize the ZeroMQ server.
+
         Parameters
         ----------
         id: str

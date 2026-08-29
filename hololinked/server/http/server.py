@@ -88,6 +88,8 @@ class HTTPServer(BaseProtocolServer):
         **kwargs,
     ) -> None:
         """
+        Initialize the HTTP server.
+
         Parameters
         ----------
         port: int, default 8080

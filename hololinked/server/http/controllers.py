@@ -39,6 +39,8 @@ from ..security import (
 
 
 class LocalExecutionContext(msgspec.Struct):
+    """Execution options that apply to a single HTTP request, parsed from its query arguments."""
+
     noblock: Optional[bool] = None
     messageID: Optional[str] = None
 
@@ -59,12 +61,12 @@ class BaseHandler(RequestHandler):
         metadata: Any = None,
     ) -> None:
         """
+        Set up the handler with the affordance it serves and the server's runtime configuration.
+
         Parameters
         ----------
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
             dataclass representation of `Thing`'s exposed object that can quickly convert to a ZMQ Request object
-        owner_inst: HTTPServer
-            owning `hololinked.server.HTTPServer` instance
         metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
         """

@@ -49,6 +49,8 @@ class MQTTPublisher(BaseProtocolServer):
         **kwargs,
     ):
         """
+        Initialize the MQTT publisher.
+
         Parameters
         ----------
         hostname: str

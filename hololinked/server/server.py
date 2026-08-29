@@ -236,6 +236,29 @@ def stop():
 
 
 def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list[str]]]) -> list[BaseProtocolServer]:
+    """
+    Create one protocol server per requested access point.
+
+    Parameters
+    ----------
+    id: str
+        identifier given to the ZMQ server, when one is created
+    access_points: list[tuple[str, str | int | dict | list[str]]]
+        one tuple per protocol - `"HTTP"`, `"ZMQ"` or `"MQTT"` - paired with its parameters. The parameters may
+        be the port, the broker hostname, the ZMQ access points, or a dict of keyword arguments for that server.
+
+    Returns
+    -------
+    list[BaseProtocolServer]
+        the created servers, in the order their access points were given
+
+    Raises
+    ------
+    TypeError
+        if `access_points` is not a list
+    ValueError
+        if the parameters given for a protocol are not of a supported type
+    """
     from .http import HTTPServer
     from .mqtt import MQTTPublisher
     from .zmq import ZMQServer

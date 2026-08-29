@@ -25,6 +25,8 @@ class ThingDescriptionService:
         ssl: bool = True,
     ) -> None:
         """
+        Initialize the Thing Description service.
+
         Parameters
         ----------
         hostname: str

@@ -30,6 +30,8 @@ class TopicPublisher:
         logger: structlog.stdlib.BoundLogger,
     ) -> None:
         """
+        Initialize the publisher for one event or observable property.
+
         Parameters
         ----------
         client: aiomqtt.Client
@@ -95,6 +97,8 @@ class ThingDescriptionPublisher:
         ZMQ_TD: dict[str, Any],
     ) -> None:
         """
+        Initialize the Thing Description publisher.
+
         Parameters
         ----------
         client: aiomqtt.Client

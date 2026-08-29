@@ -26,6 +26,8 @@ class Security(BaseModel):
 
     def __init__(self, **data: Any) -> None:
         """
+        Initialize the security scheme from its field values.
+
         Parameters
         ----------
         data: dict
@@ -65,6 +67,8 @@ try:
 
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             """
+            Initialize the scheme, storing the password as a bcrypt hash.
+
             Parameters
             ----------
             username: str
@@ -158,6 +162,8 @@ try:
 
         def __init__(self, username: str, password: str, expect_base64: bool = True, name: str = "") -> None:
             """
+            Initialize the scheme, storing the password as an Argon2 hash.
+
             Parameters
             ----------
             username: str
@@ -280,6 +286,8 @@ try:
 
         def __init__(self, name: str, file: str = "apikeys.json", hasher: Any = None) -> None:
             """
+            Initialize the scheme and load the stored API key for this name, if any.
+
             Parameters
             ----------
             name: str
@@ -491,6 +499,8 @@ try:
             name: str = "oidc-security",
         ) -> None:
             """
+            Initialize the scheme and discover the provider's JWKS endpoint.
+
             Parameters
             ----------
             issuer: str
