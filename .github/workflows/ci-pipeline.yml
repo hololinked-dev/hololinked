@@ -84,6 +84,7 @@ jobs:
           ruff check --config ruff.toml hololinked/schema_validators
           ruff check --config ruff.toml hololinked/storage
           ruff check --config ruff.toml hololinked/metadata/td
+          ruff check --config ruff.toml hololinked/server
           ruff check --config ruff.toml hololinked/serialization.py
           ruff check --config ruff.toml hololinked/schemas.py
           ruff check --config ruff.toml hololinked/persistence.py
@@ -98,6 +99,7 @@ jobs:
           ty check hololinked/schema_validators
           ty check hololinked/storage
           ty check hololinked/metadata/td
+          ty check hololinked/server
           ty check hololinked/serialization.py
           ty check hololinked/schemas.py
           ty check hololinked/persistence.py
