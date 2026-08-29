@@ -10,11 +10,10 @@ from inspect import getfullargspec, iscoroutinefunction
 from types import FunctionType, MethodType
 from typing import TYPE_CHECKING, Any
 
-import jsonschema
-
 from pydantic import BaseModel, RootModel
 
-from hololinked import SchemaValidatorClasses
+from hololinked import SchemaValidators
+from hololinked.config import global_config
 from hololinked.constants import JSON
 from hololinked.core.exceptions import StateMachineError
 from hololinked.core.interfaces.metadata import ActionMetadata
@@ -30,7 +29,7 @@ from hololinked.utils import (
 
 
 if TYPE_CHECKING:
-    from hololinked.core.interfaces import ActionMetadata
+    from hololinked.core.interfaces import ActionMetadata, BaseSchemaValidator
     from hololinked.core.meta import ThingMeta
     from hololinked.core.thing import Thing
 
@@ -43,6 +42,7 @@ class Action:
     """
 
     __slots__ = [
+        "_schema_validator",
         "argument_schema",
         "create_task",
         "idempotent",
@@ -54,7 +54,6 @@ class Action:
         "request_as_argument",
         "return_value_schema",
         "safe",
-        "schema_validator",
         "state",
         "synchronous",
     ]
@@ -83,7 +82,7 @@ class Action:
         self.synchronous = True
         self.argument_schema = None
         self.return_value_schema = None
-        self.schema_validator = None
+        self._schema_validator = None
 
     def __set_name__(self, owner, name):
         self.owner = owner
@@ -116,6 +115,21 @@ class Action:
     def name(self) -> str:
         """Name of the action."""
         return self.obj.__name__
+
+    @property
+    def schema_validator(self) -> BaseSchemaValidator | None:
+        """
+        Validator for the arguments of this action, None if the action has no validation.
+
+        Built from `argument_schema` the first time it is needed, which is when the action is first invoked.
+        Further calls return the cached instance.
+        """
+        if self._schema_validator is None and self.argument_schema:
+            if isinstance(self.argument_schema, dict):
+                self._schema_validator = SchemaValidators.json_schema(self.argument_schema)
+            else:
+                self._schema_validator = SchemaValidators.pydantic(self.argument_schema)
+        return self._schema_validator
 
     def to_metadata(self, owner_inst: Thing | ThingMeta | None = None, format: str = "wot") -> ActionMetadata:
         """
@@ -430,10 +444,9 @@ def action(
                 )
         if input_schema:
             if isinstance(input_schema, dict):
-                action.schema_validator = SchemaValidatorClasses.json_schema(input_schema)
-            elif issubklass(input_schema, (BaseModel, RootModel)):
-                action.schema_validator = SchemaValidatorClasses.pydantic(input_schema)
-            else:
+                if global_config.VALIDATE_SCHEMAS:
+                    SchemaValidators.check_schema(input_schema)
+            elif not issubklass(input_schema, (BaseModel, RootModel)):
                 raise TypeError(f"input schema must be a JSON schema or a Pydantic model, got {type(input_schema)}")
         action.argument_schema = input_schema
 
@@ -450,7 +463,8 @@ def action(
         if output_schema:
             # output is not validated by us, so we just check the schema and dont create a validator
             if isinstance(output_schema, dict):
-                jsonschema.Draft7Validator.check_schema(output_schema)
+                if global_config.VALIDATE_SCHEMAS:
+                    SchemaValidators.check_schema(output_schema)
                 action.return_value_schema = output_schema
             elif issubklass(output_schema, (BaseModel, RootModel)):
                 action.return_value_schema = output_schema

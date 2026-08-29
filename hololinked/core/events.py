@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, overload
 
-import jsonschema
-
+from hololinked import SchemaValidators
 from hololinked.config import global_config
 from hololinked.constants import JSON
 from hololinked.core.interfaces.metadata import EventMetadata
@@ -56,7 +55,7 @@ class Event:
         """
         self.doc = doc
         if global_config.VALIDATE_SCHEMAS and schema:
-            jsonschema.Draft7Validator.check_schema(schema)
+            SchemaValidators.check_schema(schema)
         self.schema = schema
         self.label = label
         self._observable = False
