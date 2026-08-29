@@ -1,11 +1,15 @@
+"""Repository layer to operate on a `Thing` through the internal message broker."""
+
 from __future__ import annotations
+
+import asyncio
 
 from typing import TYPE_CHECKING, Any, Optional
 
 import structlog
 import zmq.asyncio
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..config import global_config
 from ..core import Thing
@@ -32,7 +36,7 @@ if TYPE_CHECKING:
 
 
 class BrokerThing(BaseModel):
-    """Repository Layer of a Thing over the internal message broker"""
+    """Repository Layer of a Thing over the internal message broker."""
 
     id: str
     """Thing ID"""
@@ -44,7 +48,7 @@ class BrokerThing(BaseModel):
     TD: dict[str, Any] | None = None
     """ZMQ Thing Description"""
 
-    req_rep_client: MessageMappedZMQClientPool | None = None
+    req_rep_client: AsyncZMQClient | MessageMappedZMQClientPool | None = None
     """req-rep queue client"""
     event_client: AsyncEventConsumer | None = None
     """pub-sub queue client"""
@@ -52,12 +56,24 @@ class BrokerThing(BaseModel):
     """req-rep socket address"""
     pub_sub_socket_address: str = ""
     """pub-sub socket address"""
-    logger: structlog.stdlib.BoundLogger | None = None
+    logger: structlog.stdlib.BoundLogger = Field(default_factory=structlog.get_logger)
     """Logger instance"""
 
     @model_validator(mode="before")
     def validate_access_point(cls, values):
-        """Validates the access point format before setting."""
+        """
+        Validates the access point format before setting.
+
+        Returns
+        -------
+        dict
+            the field values unchanged, once the access point has been accepted
+
+        Raises
+        ------
+        ValueError
+            if the access point is not one of 'TCP', 'IPC' or 'INPROC'
+        """
         access_point = values.get("access_point")
         if access_point is not None and access_point.upper() not in ["TCP", "IPC", "INPROC"]:
             raise ValueError("Access point must be 'TCP', 'IPC', or 'INPROC'")
@@ -89,6 +105,16 @@ class BrokerThing(BaseModel):
             The server execution context
         thing_execution_context: ThingExecutionContext, optional
             The thing execution context
+
+        Returns
+        -------
+        ResponseMessage
+            the response received from the `Thing` for this operation
+
+        Raises
+        ------
+        RuntimeError
+            if this `Thing` is not connected to the message broker
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
@@ -133,6 +159,11 @@ class BrokerThing(BaseModel):
         -------
         str
             The message ID of the scheduled request
+
+        Raises
+        ------
+        RuntimeError
+            if this `Thing` is not connected to the message broker
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
@@ -172,6 +203,11 @@ class BrokerThing(BaseModel):
             The server execution context
         thing_execution_context: ThingExecutionContext, optional
             The thing execution context
+
+        Raises
+        ------
+        RuntimeError
+            if this `Thing` is not connected to the message broker
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
@@ -204,14 +240,21 @@ class BrokerThing(BaseModel):
         -------
         ResponseMessage
             The response message received
+
+        Raises
+        ------
+        RuntimeError
+            if this `Thing` is not connected to the message broker
         """
         if self.req_rep_client is None:
             raise RuntimeError("Not connected to broker")
-        return await self.req_rep_client.async_recv_response(
-            thing_id=self.id,
-            message_id=message_id,
-            timeout=timeout,
-        )
+        if isinstance(self.req_rep_client, MessageMappedZMQClientPool):
+            return await self.req_rep_client.async_recv_response(
+                thing_id=self.id,
+                message_id=message_id,
+                timeout=timeout,
+            )
+        return await asyncio.wait_for(self.req_rep_client.async_recv_response(message_id), timeout)
 
     def subscribe_event(self, resource: EventMetadata | PropertyMetadata) -> AsyncEventConsumer:
         """
@@ -237,18 +280,37 @@ class BrokerThing(BaseModel):
         return event_consumer
 
     def set_req_rep_client(self, client: AsyncZMQClient | MessageMappedZMQClientPool) -> None:
-        """Sets the req-rep client for this broker thing."""
+        """
+        Sets the req-rep client for this broker thing.
+
+        Raises
+        ------
+        ValueError
+            if the client has no socket address, i.e. it is not connected yet
+        """
+        if not client.socket_address:
+            raise ValueError("client has no socket address, is it connected?")
         self.req_rep_client = client
         self.req_rep_socket_address = client.socket_address
 
     def set_event_consumer(self, client: AsyncEventConsumer) -> None:
-        """Sets the pub-sub client for this broker thing."""
+        """
+        Sets the pub-sub client for this broker thing.
+
+        Raises
+        ------
+        ValueError
+            if the consumer has no socket address, i.e. it is not connected yet
+        """
+        if not client.socket_address:
+            raise ValueError("client has no socket address, is it connected?")
         self.event_client = client
         self.pub_sub_socket_address = client.socket_address
 
     def get_response_payload(self, zmq_response: ResponseMessage) -> PreserializedData | SerializableData:
         """
         Retrieves the payload from the ZMQ response message, does not necessarily deserialize it.
+
         Use this method to extract the payload from a response message.
         Multipart responses are not supported yet for protocol controllers (except ZMQ), so only one payload is returned.
 
@@ -261,6 +323,11 @@ class BrokerThing(BaseModel):
         -------
         PreserializedData | SerializableData
             The extracted payload, either preserialized or serialized
+
+        Raises
+        ------
+        RuntimeError
+            if no response is available, i.e. no operation was performed
         """
         # print("zmq_response - ", zmq_response)
         if zmq_response is None:
@@ -318,6 +385,8 @@ async def consume_broker_queue(
     """
     from ..client.zmq.consumed_interactions import ZMQAction
 
+    logger = logger or structlog.get_logger()
+
     # create client
     client = AsyncZMQClient(
         id=id,
@@ -338,7 +407,7 @@ async def consume_broker_queue(
     FetchTMAffordance.override_defaults(thing_id=thing_id, name="get_thing_description")
     fetch_td = ZMQAction(
         resource=FetchTMAffordance,
-        sync_client=None,
+        sync_client=None,  # ty: ignore[invalid-argument-type] # only async_call is used below
         async_client=client,
         logger=logger,
         owner_inst=None,
@@ -361,6 +430,11 @@ def consume_broker_pubsub(id: str, access_point: str) -> AsyncEventConsumer:
         Unique identifier for the event consumer
     access_point: str
         The qualified ZMQ address (`tcp://`, `ipc://`, `inproc://`) of the pub-sub broker
+
+    Returns
+    -------
+    AsyncEventConsumer
+        a consumer subscribed to every event published on that broker
     """
     return AsyncEventConsumer(
         id=id or f"EventTunnel|{uuid_hex()}",

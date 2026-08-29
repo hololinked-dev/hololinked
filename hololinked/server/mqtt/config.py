@@ -1,3 +1,5 @@
+"""Runtime configuration for the MQTT publisher."""
+
 from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
@@ -9,6 +11,7 @@ from .services import ThingDescriptionService
 class RuntimeConfig(BaseModel):
     """
     Runtime configuration for MQTT publishers, initialized in `MQTTPublisher` object.
+
     Pass the attributes of this class as a dictionary to the `config` argument of `MQTTPublisher`.
     """
 

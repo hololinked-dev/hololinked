@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
 def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name: str | None = None) -> str:
     """
     Get IP address of specified interface. Generally necessary when connected to the network
-    through multiple adapters and a server binds to only one adapter at a time.
+    through multiple (physical) adapters and a server binds to only one adapter at a time.
 
     Parameters
     ----------

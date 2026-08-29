@@ -1,3 +1,5 @@
+"""HTTP protocol server, its request handlers and their runtime configuration."""
+
 from .controllers import (  # noqa: F401
     ActionHandler,
     BaseHandler,

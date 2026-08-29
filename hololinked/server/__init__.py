@@ -1,3 +1,5 @@
+"""Protocol servers that expose a `Thing`."""
+
 from .server import BaseProtocolServer, run, stop  # noqa: F401, isort: skip
 from .http import HTTPServer  # noqa: F401
 from .mqtt import MQTTPublisher  # noqa: F401

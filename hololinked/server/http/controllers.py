@@ -1,3 +1,5 @@
+"""HTTP request handlers that run operations on a `Thing`."""
+
 from typing import Any, Optional
 
 import msgspec
@@ -37,16 +39,21 @@ from ..security import (
 
 
 class LocalExecutionContext(msgspec.Struct):
+    """Execution options that apply to a single HTTP request, parsed from its query arguments."""
+
     noblock: Optional[bool] = None
     messageID: Optional[str] = None
 
 
+# tornado declares `initialize` and the HTTP verb hooks as class attributes typed `Callable[..., ...]`
+# rather than as methods, so overriding them with a real `def` is always reported as an invariant
+# mismatch - its own ErrorHandler/RedirectHandler/StaticFileHandler override them the same way.
 class BaseHandler(RequestHandler):
-    """Base request handler for running operations on the `Thing`"""
+    """Base request handler for running operations on the `Thing`."""
 
     # Would be a Controller in layered architecture.
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
         config: Any,
@@ -54,12 +61,12 @@ class BaseHandler(RequestHandler):
         metadata: Any = None,
     ) -> None:
         """
+        Set up the handler with the affordance it serves and the server's runtime configuration.
+
         Parameters
         ----------
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
             dataclass representation of `Thing`'s exposed object that can quickly convert to a ZMQ Request object
-        owner_inst: HTTPServer
-            owning `hololinked.server.HTTPServer` instance
         metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
         """
@@ -84,8 +91,14 @@ class BaseHandler(RequestHandler):
     async def has_access_control(self) -> bool:
         """
         Checks if a client is an allowed client and enforces security schemes.
+
         Custom web request handlers can use this property to check if a client has access control on the server or `Thing`
         and let this property automatically generate a 401/403.
+
+        Returns
+        -------
+        bool
+            `True` if the client may proceed, `False` if a 401/403 was already set on the response
         """
         if not self.allowed_clients and not self.security_schemes:
             return True
@@ -117,7 +130,14 @@ class BaseHandler(RequestHandler):
         return False  # keep False always at the end
 
     async def is_authenticated(self) -> bool:
-        """Enforces authentication using the defined security schemes, freshly computed everytime"""
+        """
+        Enforces authentication using the defined security schemes, freshly computed everytime.
+
+        Returns
+        -------
+        bool
+            `True` if one of the security schemes accepted the credentials supplied with the request
+        """
         authenticated = False
         # 1. Basic Authentication
         authorization_header = self.request.headers.get("Authorization", None)  # type: str
@@ -182,7 +202,13 @@ class BaseHandler(RequestHandler):
     async def is_authorized(self) -> bool:
         """
         Enforces authorization using the defined security schemes, freshly computed everytime.
+
         Do not call this method without doing authentication first and having a userinfo property.
+
+        Returns
+        -------
+        bool
+            `True` if there is no user info to check against, or the user carries one of the allowed roles
         """
         if not self.userinfo:
             return True
@@ -194,6 +220,7 @@ class BaseHandler(RequestHandler):
     def set_access_control_allow_headers(self) -> None:
         """
         For credential login, access control allow headers cannot be a wildcard '*'.
+
         Some requests require exact list of allowed headers for the client to access the response.
         """
         headers = ", ".join(self.request.headers.keys())
@@ -226,6 +253,7 @@ class BaseHandler(RequestHandler):
     ]:
         """
         Aggregates all arguments to a standard dataclasses from the query parameters.
+
         Retrieves execution context (like oneway calls, fetching executing
         logs), timeouts, etc. Non recognized arguments are passed as additional payload to the `Thing`.
 
@@ -289,8 +317,8 @@ class BaseHandler(RequestHandler):
         return server_execution_context, thing_execution_context, local_execution_context, additional_payload
 
     @property
-    def message_id(self) -> str:
-        """Retrieves the message id from the request headers"""
+    def message_id(self) -> str | None:
+        """Retrieves the message id from the request headers."""
         try:
             return self._message_id
         except AttributeError:
@@ -303,7 +331,20 @@ class BaseHandler(RequestHandler):
             return message_id
 
     def get_request_payload(self) -> tuple[SerializableData, PreserializedData]:
-        """Retrieves the payload from the request body, does not necessarily deserialize it"""
+        """
+        Retrieves the payload from the request body, does not necessarily deserialize it.
+
+        Returns
+        -------
+        tuple[SerializableData, PreserializedData]
+            the request body as serializable data and as preserialized data - the body is carried by whichever
+            of the two matches the request's content type
+
+        Raises
+        ------
+        ValueError
+            if the request declares a content type that is not supported
+        """
         payload = SerializableData(value=None)
         preserialized_payload = PreserializedData(value=b"")
         if self.request.body:
@@ -312,34 +353,37 @@ class BaseHandler(RequestHandler):
                 payload.content_type = self.request.headers.get("Content-Type", "application/json")
             elif global_config.ALLOW_UNKNOWN_SERIALIZATION:
                 preserialized_payload.value = self.request.body
-                preserialized_payload.content_type = self.request.headers.get("Content-Type", None)
+                content_type = self.request.headers.get("Content-Type", None)
+                if content_type:
+                    preserialized_payload.content_type = content_type
             else:
                 raise ValueError("Content-Type not supported")
                 # NOTE that was assume that the content type is JSON even if unspecified in the header.
                 # This error will be raised only when a specified content type is not supported.
         return payload, preserialized_payload
 
-    async def get(self) -> None:
-        """Runs property or action if accessible by 'GET' method. Default for property reads"""
+    async def get(self) -> None:  # ty: ignore[invalid-method-override]
+        """Runs property or action if accessible by 'GET' method. Default for property reads."""
         raise NotImplementedError("implement GET request method in child handler class")
 
-    async def post(self) -> None:
-        """Runs property or action if accessible by 'POST' method. Default for action execution"""
+    async def post(self) -> None:  # ty: ignore[invalid-method-override]
+        """Runs property or action if accessible by 'POST' method. Default for action execution."""
         raise NotImplementedError("implement POST request method in child handler class")
 
-    async def put(self) -> None:
-        """Runs property or action if accessible by 'PUT' method. Default for property writes"""
+    async def put(self) -> None:  # ty: ignore[invalid-method-override]
+        """Runs property or action if accessible by 'PUT' method. Default for property writes."""
         raise NotImplementedError("implement PUT request method in child handler class")
 
-    async def delete(self) -> None:
+    async def delete(self) -> None:  # ty: ignore[invalid-method-override]
         """
-        Runs property or action if accessible by 'DELETE' method. Default for property deletes
-        (not a valid operation as per web of things semantics).
+        Runs property or action if accessible by 'DELETE' method.
+
+        Default for property deletes (not a valid operation as per web of things semantics).
         """
         raise NotImplementedError("implement DELETE request method in child handler class")
 
-    def is_method_allowed(self, method: str) -> bool:
-        """Checks if the method is allowed for the property"""
+    async def is_method_allowed(self, method: str) -> bool:
+        """Checks if the method is allowed for the property."""
         raise NotImplementedError("implement is_method_allowed in child handler class")
 
 
@@ -360,7 +404,12 @@ class RPCHandler(BaseHandler):
         - Access control (authentication & authorization)
         - if the HTTP method is allowed for the resource.
         - if its GET method with message id for no-block response.
-        """
+
+        Returns
+        -------
+        bool
+            `True` if the method may be served, `False` if a 401/403/405 was already set on the response
+        """  # noqa: D400
         if not await self.has_access_control():
             return False
         if self.message_id is not None and method.upper() == "GET":
@@ -370,9 +419,11 @@ class RPCHandler(BaseHandler):
         self.set_status(405, "method not allowed")
         return False
 
-    async def options(self) -> None:
+    async def options(self) -> None:  # ty: ignore[invalid-method-override]
         """
-        Options for the resource. Main functionality is to inform the client is a specific HTTP method is supported by
+        Options for the resource.
+
+        Main functionality is to inform the client is a specific HTTP method is supported by
         the property or the action (Access-Control-Allow-Methods).
         """
         if await self.has_access_control():
@@ -454,11 +505,14 @@ class RPCHandler(BaseHandler):
             self.write(response_payload.value)
 
     async def handle_no_block_response(self) -> None:
-        """Handles the no-block response for the noblock calls"""
+        """Handles the no-block response for the noblock calls."""  # noqa: DOC501
         try:
-            self.logger.info("waiting for no-block response", message_id=self.message_id)
+            message_id = self.message_id
+            if message_id is None:
+                raise ValueError("no message id available to wait for a no-block response")
+            self.logger.info("waiting for no-block response", message_id=message_id)
             response_message = await self.thing.recv_response(
-                message_id=self.message_id,
+                message_id=message_id,
                 timeout=default_server_execution_context.invokationTimeout
                 + default_server_execution_context.executionTimeout,
             )
@@ -487,9 +541,10 @@ class RPCHandler(BaseHandler):
 
 
 class PropertyHandler(RPCHandler):
-    """handles property requests"""
+    """handles property requests."""
 
     async def get(self) -> None:
+        """Read the property, or fetch the reply of an earlier no-block read."""
         if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             if self.message_id is not None:
@@ -499,18 +554,21 @@ class PropertyHandler(RPCHandler):
         self.finish()
 
     async def post(self) -> None:
+        """Write the property."""
         if await self.is_method_allowed("POST"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def put(self) -> None:
+        """Write the property."""
         if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.writeproperty)
         self.finish()
 
     async def delete(self) -> None:
+        """Delete the property."""
         if await self.is_method_allowed("DELETE"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.deleteproperty)
@@ -518,9 +576,10 @@ class PropertyHandler(RPCHandler):
 
 
 class ActionHandler(RPCHandler):
-    """handles action requests"""
+    """handles action requests."""
 
     async def get(self) -> None:
+        """Invoke the action, or fetch the reply of an earlier no-block invocation."""
         if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             if self.message_id is not None:
@@ -530,18 +589,21 @@ class ActionHandler(RPCHandler):
         self.finish()
 
     async def post(self) -> None:
+        """Invoke the action."""
         if await self.is_method_allowed("POST"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def put(self) -> None:
+        """Invoke the action."""
         if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
     async def delete(self) -> None:
+        """Invoke the action."""
         if await self.is_method_allowed("DELETE"):
             self.set_custom_default_headers()
             await self.handle_through_thing(Operations.invokeaction)
@@ -549,9 +611,9 @@ class ActionHandler(RPCHandler):
 
 
 class RWMultiplePropertiesHandler(ActionHandler):
-    """handles read-write of multiple properties via an action"""
+    """handles read-write of multiple properties via an action."""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         resource: ActionAffordance,
         config: Any,
@@ -559,11 +621,13 @@ class RWMultiplePropertiesHandler(ActionHandler):
         metadata: Any = None,
         **kwargs,
     ) -> None:
+        """Set up the handler with the affordances that read and write multiple properties."""
         self.read_properties_resource = kwargs.get("read_properties_resource", None)
         self.write_properties_resource = kwargs.get("write_properties_resource", None)
         return super().initialize(resource, config, logger, metadata)
 
     async def get(self) -> None:
+        """Read multiple properties, or fetch the reply of an earlier no-block read."""
         if await self.is_method_allowed("GET"):
             self.set_custom_default_headers()
             self.resource = self.read_properties_resource
@@ -574,18 +638,21 @@ class RWMultiplePropertiesHandler(ActionHandler):
         self.finish()
 
     async def post(self) -> None:
+        """Reject the request with 405, multiple properties are written with PUT or PATCH."""
         if await self.is_method_allowed("POST"):
             self.set_status(405, "method not allowed, PUT instead")
         self.finish()
 
     async def put(self) -> None:
+        """Write multiple properties."""
         if await self.is_method_allowed("PUT"):
             self.set_custom_default_headers()
             self.resource = self.write_properties_resource
             await self.handle_through_thing(Operations.invokeaction)
         self.finish()
 
-    async def patch(self) -> None:
+    async def patch(self) -> None:  # ty: ignore[invalid-method-override]
+        """Write multiple properties."""
         if await self.is_method_allowed("PATCH"):
             self.set_custom_default_headers()
             self.resource = self.write_properties_resource
@@ -594,7 +661,7 @@ class RWMultiplePropertiesHandler(ActionHandler):
 
 
 class EventHandler(BaseHandler):
-    """handles events emitted by `Thing` and tunnels them as HTTP SSE"""
+    """handles events emitted by `Thing` and tunnels them as HTTP SSE."""
 
     def initialize(
         self,
@@ -603,6 +670,7 @@ class EventHandler(BaseHandler):
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
+        """Set up the handler to stream events with a plain SSE data header."""
         super().initialize(resource, config, logger, metadata)
         self.data_header = b"data: %s\n\n"
 
@@ -617,21 +685,21 @@ class EventHandler(BaseHandler):
         Access-Control-Allow-Credentials: true # Possibly for cookie auth
         Access-Control-Allow-Origin: <client> # if CORS is enabled
         ```
-        """
+        """  # noqa: D400
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
         super().set_custom_default_headers()
 
     async def get(self):
-        """Events are support only with GET method"""
+        """Events are support only with GET method."""
         if await self.has_access_control():
             self.set_custom_default_headers()
             await self.handle_datastream()
         self.finish()
 
-    async def options(self):
-        """Options for the resource"""
+    async def options(self):  # ty: ignore[invalid-method-override]
+        """Options for the resource."""
         if await self.has_access_control():
             self.set_status(204)
             self.set_custom_default_headers()
@@ -640,11 +708,18 @@ class EventHandler(BaseHandler):
         self.finish()
 
     def receive_blocking_event(self, event_consumer: EventConsumer):
-        """deprecated, but can make a blocking call in an async loop"""
-        return event_consumer.receive(timeout=10000, deserialize=False)
+        """
+        deprecated, but can make a blocking call in an async loop.
+
+        Returns
+        -------
+        EventMessage | None
+            the event received within the timeout, or `None` if none arrived
+        """
+        return event_consumer.receive(timeout=10000)
 
     async def handle_datastream(self) -> None:
-        """Called by GET method and handles the event publishing"""
+        """Called by GET method and handles the event publishing."""
         try:
             event_consumer = self.thing.subscribe_event(self.resource)
             self.set_status(200)
@@ -672,7 +747,7 @@ class EventHandler(BaseHandler):
 
 
 class JPEGImageEventHandler(EventHandler):
-    """handles events with images with JPEG image data header"""
+    """handles events with images with JPEG image data header."""
 
     def initialize(
         self,
@@ -681,12 +756,13 @@ class JPEGImageEventHandler(EventHandler):
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
+        """Set up the handler to stream events with a base64 JPEG image SSE data header."""
         super().initialize(resource, config, logger, metadata)
         self.data_header = b"data:image/jpeg;base64,%s\n\n"
 
 
 class PNGImageEventHandler(EventHandler):
-    """handles events with images with PNG image data header"""
+    """handles events with images with PNG image data header."""
 
     def initialize(
         self,
@@ -695,19 +771,21 @@ class PNGImageEventHandler(EventHandler):
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
     ) -> None:
+        """Set up the handler to stream events with a base64 PNG image SSE data header."""
         super().initialize(resource, config, logger, metadata)
         self.data_header = b"data:image/png;base64,%s\n\n"
 
 
 class StopHandler(BaseHandler):
-    """Stops the tornado HTTP server"""
+    """Stops the tornado HTTP server."""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any,
     ) -> None:
+        """Set up the handler with the HTTP server it stops."""
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
 
@@ -718,6 +796,7 @@ class StopHandler(BaseHandler):
         self.server = owner_inst  # type: HTTPServer
 
     async def post(self):
+        """Schedule a graceful shutdown of the HTTP server."""
         if not await self.has_access_control():
             return
         try:
@@ -737,14 +816,15 @@ class StopHandler(BaseHandler):
 
 
 class LivenessProbeHandler(BaseHandler):
-    """Liveness probe handler"""
+    """Liveness probe handler."""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any = None,
     ) -> None:
+        """Set up the handler with the HTTP server it probes."""
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
 
@@ -753,20 +833,22 @@ class LivenessProbeHandler(BaseHandler):
         self.server = owner_inst  # type: HTTPServer
 
     async def get(self):
+        """Report that the server is alive and accepting requests."""
         self.set_status(200, "ok")
         self.set_custom_default_headers()
         self.finish()
 
 
 class ReadinessProbeHandler(BaseHandler):
-    """Readiness probe handler"""
+    """Readiness probe handler."""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any = None,
     ) -> None:
+        """Set up the handler with the HTTP server it probes."""
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
 
@@ -775,6 +857,7 @@ class ReadinessProbeHandler(BaseHandler):
         self.server = owner_inst  # type: HTTPServer
 
     async def get(self):
+        """Report whether every served `Thing` is connected and answering a ping."""  # noqa: DOC501
         self.set_custom_default_headers()
         try:
             if len(self.server._disconnected_things) > 0:
@@ -795,9 +878,9 @@ class ReadinessProbeHandler(BaseHandler):
 
 
 class ThingDescriptionHandler(BaseHandler):
-    """Thing Description handler"""
+    """Thing Description handler."""
 
-    def initialize(
+    def initialize(  # ty: ignore[invalid-method-override]
         self,
         resource: InteractionAffordance | PropertyAffordance,
         config: Any,
@@ -805,6 +888,7 @@ class ThingDescriptionHandler(BaseHandler):
         owner_inst: Any = None,
         metadata: Any = None,
     ) -> None:
+        """Set up the handler along with the service that generates the Thing Description."""
         super().initialize(
             resource=resource,
             config=config,
@@ -819,6 +903,7 @@ class ThingDescriptionHandler(BaseHandler):
         )
 
     async def get(self):
+        """Generate and return the Thing Description of the `Thing`."""  # noqa: DOC501
         if not await self.has_access_control():
             self.finish()
             return

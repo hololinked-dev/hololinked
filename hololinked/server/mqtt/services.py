@@ -1,3 +1,5 @@
+"""Service layer that generates the Thing Description published over MQTT."""
+
 import copy
 
 from typing import Any
@@ -11,6 +13,7 @@ from ...metadata.td.interaction_affordance import EventAffordance, PropertyAffor
 class ThingDescriptionService:
     """
     Generates Thing Descriptions for `Thing`s.
+
     This object would be a service in layered architecture.
     """
 
@@ -22,6 +25,8 @@ class ThingDescriptionService:
         ssl: bool = True,
     ) -> None:
         """
+        Initialize the Thing Description service.
+
         Parameters
         ----------
         hostname: str

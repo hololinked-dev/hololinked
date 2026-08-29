@@ -1,7 +1,12 @@
+"""Publishers that push events, observable properties and Thing Descriptions to MQTT topics."""
+
 from typing import Any
 
 import aiomqtt
 import structlog
+
+from paho.mqtt.packettypes import PacketTypes
+from paho.mqtt.properties import Properties
 
 from hololinked import Serializers
 
@@ -13,6 +18,7 @@ from ..repository import BrokerThing  # noqa: F401
 class TopicPublisher:
     """
     Publishes an event to an MQTT topic. Supply a different class in `MQTTPublisher` to use a different one.
+
     This object would be a controller in layered architecture.
     """
 
@@ -24,6 +30,8 @@ class TopicPublisher:
         logger: structlog.stdlib.BoundLogger,
     ) -> None:
         """
+        Initialize the publisher for one event or observable property.
+
         Parameters
         ----------
         client: aiomqtt.Client
@@ -47,11 +55,11 @@ class TopicPublisher:
         self._stop_publishing = False
 
     def stop(self):
-        """Stop publishing, the client is not closed automatically"""
+        """Stop publishing, the client is not closed automatically."""
         self._stop_publishing = True
 
     async def publish(self):
-        """Publishes events to the MQTT broker in an infinite loop"""
+        """Publishes events to the MQTT broker in an infinite loop."""
         consumer = self.thing.subscribe_event(self.resource)
         self.logger.info(f"Starting to publish events for {self.resource.name} to MQTT broker on topic {self.topic}")
         while not self._stop_publishing:
@@ -60,11 +68,13 @@ class TopicPublisher:
                 if message is None:
                     continue
                 payload = self.thing.get_response_payload(message)
+                properties = Properties(PacketTypes.PUBLISH)
+                properties.ContentType = payload.content_type
                 await self.client.publish(
                     topic=self.topic,
                     payload=payload.value,
                     qos=self.qos,
-                    properties=dict(content_type=payload.content_type),
+                    properties=properties,
                 )
                 self.logger.debug(f"Published MQTT message for {self.resource.name} on topic {self.topic}")
             except Exception as ex:
@@ -75,6 +85,7 @@ class TopicPublisher:
 class ThingDescriptionPublisher:
     """
     Publishes Thing Description to an MQTT Topic. Supply a different class in `MQTTPublisher` to use a different one.
+
     This object would be a controller in layered architecture.
     """
 
@@ -86,6 +97,8 @@ class ThingDescriptionPublisher:
         ZMQ_TD: dict[str, Any],
     ) -> None:
         """
+        Initialize the Thing Description publisher.
+
         Parameters
         ----------
         client: aiomqtt.Client
@@ -111,15 +124,17 @@ class ThingDescriptionPublisher:
             ssl=self.client._client._ssl_context is not None,
         )
 
-    async def publish(self, ZMQ_TD: dict[str, Any]) -> dict[str, Any]:
-        """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True"""
+    async def publish(self, ZMQ_TD: dict[str, Any]) -> None:
+        """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True."""
         TD = await self.thing_description.generate(ZMQ_TD)
 
+        properties = Properties(PacketTypes.PUBLISH)
+        properties.ContentType = "application/json"
         await self.client.publish(
             topic=self.topic,
             payload=Serializers.json.dumps(TD),
             qos=2,
-            properties=dict(content_type="application/json"),
+            properties=properties,
             retain=True,
         )
 
