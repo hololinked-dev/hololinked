@@ -57,6 +57,8 @@ if TYPE_CHECKING:
     from .json import JSONSerializer as JSONSerializer
     from .json import PythonBuiltinJSONSerializer as PythonBuiltinJSONSerializer
     from .msgpack import MsgpackSerializer as MsgpackSerializer
+
+    # SAST(id='hololinked.serializers.pickle_type_import', description='B403:blacklist', tool='bandit')
     from .pickle import PickleSerializer as PickleSerializer
     from .serpent import SerpentSerializer as SerpentSerializer
     from .text import TextSerializer as TextSerializer

@@ -1,17 +1,17 @@
 {
   "errors": [],
-  "generated_at": "2025-12-13T20:18:40Z",
+  "generated_at": "2026-08-30T08:02:54Z",
   "metrics": {
     "_totals": {
-      "CONFIDENCE.HIGH": 2,
+      "CONFIDENCE.HIGH": 3,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 6,
       "CONFIDENCE.UNDEFINED": 0,
       "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 1,
+      "SEVERITY.LOW": 2,
       "SEVERITY.MEDIUM": 7,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 22624,
+      "loc": 27208,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -24,7 +24,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 3,
+      "loc": 7,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -37,7 +37,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 3,
+      "loc": 9,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -50,7 +50,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 444,
+      "loc": 486,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -63,7 +63,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 8,
+      "loc": 46,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -76,7 +76,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 451,
+      "loc": 539,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -89,7 +89,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
+      "loc": 1,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -102,7 +102,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 408,
+      "loc": 599,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -115,7 +115,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
+      "loc": 1,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -128,7 +128,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 84,
+      "loc": 130,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -141,7 +141,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 490,
+      "loc": 547,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -154,7 +154,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 13,
+      "loc": 338,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -167,7 +167,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
+      "loc": 1,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -180,7 +180,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 499,
+      "loc": 576,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -193,7 +193,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 232,
+      "loc": 271,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -206,7 +206,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 86,
+      "loc": 71,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -219,7 +219,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 6,
+      "loc": 47,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -232,20 +232,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 338,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/core/dataklasses.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 127,
+      "loc": 411,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -258,7 +245,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 123,
+      "loc": 153,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -271,7 +258,72 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 30,
+      "loc": 21,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/core/interfaces/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 14,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/core/interfaces/configuration.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 110,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/core/interfaces/metadata.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 338,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/core/interfaces/schema_validators.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 24,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/core/interfaces/serializer.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 44,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -284,7 +336,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 257,
+      "loc": 286,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -297,7 +349,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 769,
+      "loc": 816,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -323,7 +375,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 297,
+      "loc": 326,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/core/schema.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 160,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -336,7 +401,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 317,
+      "loc": 381,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -349,7 +414,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 1,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 326,
+      "loc": 380,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -362,7 +427,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 10,
+      "loc": 11,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -375,7 +440,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 2221,
+      "loc": 2369,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -388,7 +453,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 576,
+      "loc": 627,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/core/zmq/payloads.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 69,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -401,7 +479,33 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 2,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 828,
+      "loc": 879,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/ddl.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 49,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/injection.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 614,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -414,7 +518,137 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 97,
+      "loc": 106,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 8,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/base.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 58,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/data_schema.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 400,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/forms.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 64,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/interaction_affordance.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 391,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/metadata.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 21,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/pydantic_extensions.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 316,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/security_definitions.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 52,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/tm.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 165,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/metadata/td/utils.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 18,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -535,6 +769,19 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "hololinked/persistence.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 53,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "hololinked/schema_validators/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -544,7 +791,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 2,
+      "loc": 26,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/schema_validators/fast_json_schema.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 61,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -557,11 +817,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 81,
+      "loc": 61,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/schema_validators/validators.py": {
+    "hololinked/schema_validators/pydantic_model.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -570,11 +830,24 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 89,
+      "loc": 39,
       "nosec": 0,
       "skipped_tests": 0
     },
     "hololinked/serializers/__init__.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 48,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/serializers/json.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -583,11 +856,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 9,
+      "loc": 132,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/serializers/payloads.py": {
+    "hololinked/serializers/msgpack.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -596,11 +869,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 47,
+      "loc": 72,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/serializers/serializers.py": {
+    "hololinked/serializers/pickle.py": {
       "CONFIDENCE.HIGH": 2,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -609,7 +882,33 @@
       "SEVERITY.LOW": 1,
       "SEVERITY.MEDIUM": 1,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 556,
+      "loc": 21,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/serializers/serpent.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 39,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/serializers/text.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 15,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -622,7 +921,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 4,
+      "loc": 11,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -635,7 +934,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 15,
+      "loc": 16,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -648,7 +947,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 12,
+      "loc": 61,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -661,7 +960,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 635,
+      "loc": 795,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -674,7 +973,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 3,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 659,
+      "loc": 780,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -687,7 +986,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 237,
+      "loc": 355,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -700,7 +999,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 2,
+      "loc": 3,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/server/mqtt/config.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 20,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -713,7 +1025,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 77,
+      "loc": 119,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -726,7 +1038,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 134,
+      "loc": 158,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -739,7 +1051,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 70,
+      "loc": 136,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/server/repository.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 382,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -752,7 +1077,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 136,
+      "loc": 639,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -765,20 +1090,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 189,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/server/thing.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 217,
+      "loc": 322,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -791,7 +1103,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 1,
+      "loc": 2,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -804,7 +1116,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 177,
+      "loc": 210,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -817,7 +1129,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 33,
+      "loc": 6,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "hololinked/storage/bases.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 87,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -830,11 +1155,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 89,
+      "loc": 94,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/storage/database.py": {
+    "hololinked/storage/jsonfile.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -843,20 +1168,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 539,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/storage/json_storage.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 146,
+      "loc": 171,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -869,11 +1181,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 46,
+      "loc": 59,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/storage/utils.py": {
+    "hololinked/storage/mongodb.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -882,11 +1194,11 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 3,
+      "loc": 194,
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/td/__init__.py": {
+    "hololinked/storage/sqlalchemydb.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -895,124 +1207,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 7,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/td/base.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 37,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/td/data_schema.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 390,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/td/forms.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 58,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/td/interaction_affordance.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 403,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/td/metadata.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 15,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/td/pydantic_extensions.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 165,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/td/security_definitions.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 28,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/td/tm.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 128,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "hololinked/td/utils.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 16,
+      "loc": 434,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1025,14 +1220,14 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 520,
+      "loc": 628,
       "nosec": 0,
       "skipped_tests": 0
     }
   },
   "results": [
     {
-      "code": "266         port: int = 8080,\n267         address: str = \"0.0.0.0\",  # SAST(id='hololinked.core.thing.Thing.run_with_http_server.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n268         # host: str = None,\n269         allowed_clients: str | list[str] | None = None,\n270         ssl_context: ssl.SSLContext | None = None,\n271         # protocol_version : int = 1,\n272         # network_interface : str = 'Ethernet',\n273         forked: bool = False,  # used by forkable decorator\n274         **kwargs: dict[str, Any],\n275     ) -> None:\n276         \"\"\"\n277         Quick-start to serve `Thing` over HTTP. This method is fully blocking.\n",
+      "code": "311         port: int = 8080,\n312         address: str = \"0.0.0.0\",  # SAST(id='hololinked.core.thing.Thing.run_with_http_server.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n313         # host: str = None,\n314         allowed_clients: str | list[str] | None = None,\n315         ssl_context: ssl.SSLContext | None = None,\n316         # protocol_version : int = 1,\n317         # network_interface : str = 'Ethernet',\n318         forked: bool = False,  # used by forkable decorator\n319         print_welcome_message: bool = True,\n320         **kwargs: Any,\n321     ) -> None:\n322         \"\"\"\n323         Quick-start to serve `Thing` over HTTP.\n",
       "col_offset": 23,
       "end_col_offset": 32,
       "filename": "hololinked/core/thing.py",
@@ -1043,25 +1238,26 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 267,
+      "line_number": 312,
       "line_range": [
-        265,
-        266,
-        267,
-        268,
-        269,
-        270,
-        271,
-        272,
-        273,
-        274
+        310,
+        311,
+        312,
+        313,
+        314,
+        315,
+        316,
+        317,
+        318,
+        319,
+        320
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "690             ).replace(\n691                 \"0.0.0.0\", socket.gethostname()\n692             )  # SAST(id='hololinked.core.zmq.rpc_server.RPCServer.get_thing_description.req_rep_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n693             pub_sub_socket_address = self.tcp_event_publisher.socket_address  # type: str\n694             pub_sub_socket_address = pub_sub_socket_address.replace(\n695                 \"*\", socket.gethostname()\n696             ).replace(\n",
+      "code": "742             ).replace(\n743                 \"0.0.0.0\", socket.gethostname()\n744             )  # SAST(id='hololinked.core.zmq.rpc_server.RPCServer.get_thing_description.req_rep_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n745             pub_sub_socket_address = self.tcp_event_publisher.socket_address  # ty: ignore[unresolved-attribute]  # type: str\n746             pub_sub_socket_address = pub_sub_socket_address.replace(\n747                 \"*\", socket.gethostname()\n748             ).replace(\n",
       "col_offset": 16,
       "end_col_offset": 25,
       "filename": "hololinked/core/zmq/rpc_server.py",
@@ -1072,20 +1268,20 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 691,
+      "line_number": 743,
       "line_range": [
-        688,
-        689,
-        690,
-        691,
-        692
+        740,
+        741,
+        742,
+        743,
+        744
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "696             ).replace(\n697                 \"0.0.0.0\", socket.gethostname()\n698             )  # SAST(id='hololinked.core.zmq.rpc_server.RPCServer.get_thing_description.pub_sub_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n699         else:\n700             raise ValueError(f\"Unsupported protocol '{protocol}' for ZMQ.\")\n701 \n702         for name in TM.get(\"properties\", []):\n",
+      "code": "748             ).replace(\n749                 \"0.0.0.0\", socket.gethostname()\n750             )  # SAST(id='hololinked.core.zmq.rpc_server.RPCServer.get_thing_description.pub_sub_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n751         else:\n752             raise ValueError(f\"Unsupported protocol '{protocol}' for ZMQ.\")\n753 \n754         for name in TM.get(\"properties\", []):\n",
       "col_offset": 16,
       "end_col_offset": 25,
       "filename": "hololinked/core/zmq/rpc_server.py",
@@ -1096,23 +1292,43 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 697,
+      "line_number": 749,
       "line_range": [
-        694,
-        695,
-        696,
-        697,
-        698
+        746,
+        747,
+        748,
+        749,
+        750
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "32 import json as pythonjson\n33 import pickle  # SAST(id='hololinked.serializers.serializers.pickle_import', description='B403:blacklist', tool='bandit')\n34 import uuid\n",
+      "code": "62     # the submodule is named after the serializer it holds, so bandit reads it as an import of the pickle module\n63     from .pickle import PickleSerializer as PickleSerializer\n64     from .serpent import SerpentSerializer as SerpentSerializer\n",
+      "col_offset": 4,
+      "end_col_offset": 60,
+      "filename": "hololinked/serializers/__init__.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 502,
+        "link": "https://cwe.mitre.org/data/definitions/502.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with PickleSerializer module.",
+      "line_number": 63,
+      "line_range": [
+        63
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.9.1/blacklists/blacklist_imports.html#b403-import-pickle",
+      "test_id": "B403",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "2 \n3 import pickle  # SAST(id='hololinked.serializers.pickle.pickle_import', description='B403:blacklist', tool='bandit')\n4 \n",
       "col_offset": 0,
       "end_col_offset": 13,
-      "filename": "hololinked/serializers/serializers.py",
+      "filename": "hololinked/serializers/pickle.py",
       "issue_confidence": "HIGH",
       "issue_cwe": {
         "id": 502,
@@ -1120,19 +1336,19 @@
       },
       "issue_severity": "LOW",
       "issue_text": "Consider possible security implications associated with pickle module.",
-      "line_number": 33,
+      "line_number": 3,
       "line_range": [
-        33
+        3
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/blacklists/blacklist_imports.html#b403-import-pickle",
       "test_id": "B403",
       "test_name": "blacklist"
     },
     {
-      "code": "215         if global_config.ALLOW_PICKLE:\n216             return pickle.loads(self.convert_to_bytes(data))\n217             # SAST(id='hololinked.serializers.serializers.PickleSerializer.loads', description='B301:blacklist', tool='bandit')\n",
+      "code": "19         if global_config.ALLOW_PICKLE:\n20             return pickle.loads(self.convert_to_bytes(data))\n21             # SAST(id='hololinked.serializers.pickle.PickleSerializer.loads', description='B301:blacklist', tool='bandit')\n",
       "col_offset": 19,
       "end_col_offset": 60,
-      "filename": "hololinked/serializers/serializers.py",
+      "filename": "hololinked/serializers/pickle.py",
       "issue_confidence": "HIGH",
       "issue_cwe": {
         "id": 502,
@@ -1140,16 +1356,16 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Pickle and modules that wrap it can be unsafe when used to deserialize untrusted data, possible security issue.",
-      "line_number": 216,
+      "line_number": 20,
       "line_range": [
-        216
+        20
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/blacklists/blacklist_calls.html#b301-pickle",
       "test_id": "B301",
       "test_name": "blacklist"
     },
     {
-      "code": "54 \n55     address = IPAddress(default=\"0.0.0.0\", doc=\"IP address\")  # type: str\n56     # SAST(id='hololinked.server.http.HTTPServer.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n",
+      "code": "56 \n57     address = IPAddress(default=\"0.0.0.0\", doc=\"IP address\")  # type: str\n58     # SAST(id='hololinked.server.http.HTTPServer.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n",
       "col_offset": 32,
       "end_col_offset": 41,
       "filename": "hololinked/server/http/server.py",
@@ -1160,16 +1376,16 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 55,
+      "line_number": 57,
       "line_range": [
-        55
+        57
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "130         port: int = 8080,\n131         address: str = \"0.0.0.0\",  # SAST(id='hololinked.server.http.HTTPServer.__init__.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n132         things: list[Thing] | None = None,\n133         # host: Optional[str] = None,\n134         logger: structlog.stdlib.BoundLogger | None = None,\n135         log_level: int = logging.INFO,\n136         ssl_context: ssl.SSLContext | None = None,\n137         security_schemes: list[Security] | None = None,\n138         # protocol_version : int = 1, network_interface : str = 'Ethernet',\n139         allowed_clients: str | Iterable[str] | None = None,\n140         config: dict[str, Any] | None = None,\n141         **kwargs,\n142     ) -> None:\n143         \"\"\"\n144         Parameters\n145         ----------\n",
+      "code": "78         port: int = 8080,\n79         address: str = \"0.0.0.0\",  # SAST(id='hololinked.server.http.HTTPServer.__init__.address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n80         things: list[Thing] | None = None,\n81         # host: Optional[str] = None,\n82         logger: structlog.stdlib.BoundLogger | None = None,\n83         ssl_context: ssl.SSLContext | None = None,\n84         security_schemes: list[Security] | None = None,\n85         # protocol_version : int = 1, network_interface : str = 'Ethernet',\n86         allowed_clients: str | Iterable[str] | None = None,\n87         config: dict[str, Any] | None = None,\n88         **kwargs,\n89     ) -> None:\n90         \"\"\"\n91         Initialize the HTTP server.\n92 \n",
       "col_offset": 23,
       "end_col_offset": 32,
       "filename": "hololinked/server/http/server.py",
@@ -1180,29 +1396,28 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 131,
+      "line_number": 79,
       "line_range": [
-        128,
-        129,
-        130,
-        131,
-        132,
-        133,
-        134,
-        135,
-        136,
-        137,
-        138,
-        139,
-        140,
-        141
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "694             return f\"{protocol}://{socket.gethostname()}{port}\"\n695         if self.server.address == \"0.0.0.0\" or self.server.address == \"127.0.0.1\":\n696             # SAST(id='hololinked.server.http.ApplicationRouter.get_basepath', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n",
+      "code": "818             return f\"{protocol}://{socket.gethostname()}{port}\"\n819         if self.server.address == \"0.0.0.0\" or self.server.address == \"127.0.0.1\":\n820             # SAST(id='hololinked.server.http.ApplicationRouter.get_basepath', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n",
       "col_offset": 34,
       "end_col_offset": 43,
       "filename": "hololinked/server/http/server.py",
@@ -1213,9 +1428,9 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 695,
+      "line_number": 819,
       "line_range": [
-        695
+        819
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",

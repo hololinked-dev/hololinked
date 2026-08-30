@@ -31,8 +31,11 @@ class AdapterRegistry(MappableSingleton):
     This metaclass providers lazy import functionality.
     """
 
-    modules: ClassVar[dict[str, tuple[str, str]]] = {}
-    """Name of an implementation mapped to the module path and attribute it is imported from."""
+    package: ClassVar[str] = ""
+    """Adapter package the implementations are served from."""
+
+    modules: ClassVar[dict[str, str | tuple[str, str]]] = {}
+    """Name of an implementation mapped to the class that provides it."""
 
     tables: ClassVar[tuple[str, ...]] = ()
     """
@@ -58,7 +61,8 @@ class AdapterRegistry(MappableSingleton):
             raise AttributeError(f"no {cls.adapter_kind} is registered under the name {name!r}")
         import importlib
 
-        module_path, attribute = cls.modules[name]
+        target = cls.modules[name]
+        module_path, attribute = target if isinstance(target, tuple) else (cls.package, target)
         try:
             adapter = getattr(importlib.import_module(module_path), attribute)
         except ModuleNotFoundError as ex:
@@ -145,11 +149,12 @@ class SchemaValidators(Registry):
     """
 
     adapter_kind: ClassVar[str] = "schema validator"
+    package: ClassVar[str] = "hololinked.schema_validators"
     tables: ClassVar[tuple[str, ...]] = ("modules", "predicates")
 
-    modules: ClassVar[dict[str, tuple[str, str]]] = {
-        "json_schema": ("hololinked.schema_validators.json_schema", "JSONSchemaValidator"),
-        "pydantic": ("hololinked.schema_validators.pydantic_model", "PydanticSchemaValidator"),
+    modules: ClassVar[dict[str, str | tuple[str, str]]] = {
+        "json_schema": "JSONSchemaValidator",
+        "pydantic": "PydanticSchemaValidator",
     }
 
     json_schema: type[BaseSchemaValidator]
@@ -357,15 +362,16 @@ class Serializers(Registry):
 
     adapter_kind: ClassVar[str] = "serializer"
     instantiate: ClassVar[bool] = True
+    package: ClassVar[str] = "hololinked.serializers"
     tables: ClassVar[tuple[str, ...]] = ("modules", "content_type_names")
 
-    modules: ClassVar[dict[str, tuple[str, str]]] = {
-        "default": ("hololinked.serializers.json", "JSONSerializer"),
-        "json": ("hololinked.serializers.json", "JSONSerializer"),
-        "msgpack": ("hololinked.serializers.msgpack", "MsgpackSerializer"),
-        "pickle": ("hololinked.serializers.pickle", "PickleSerializer"),
-        "text": ("hololinked.serializers.text", "TextSerializer"),
-        "serpent": ("hololinked.serializers.serpent", "SerpentSerializer"),
+    modules: ClassVar[dict[str, str | tuple[str, str]]] = {
+        "default": "JSONSerializer",
+        "json": "JSONSerializer",
+        "msgpack": "MsgpackSerializer",
+        "pickle": "PickleSerializer",
+        "text": "TextSerializer",
+        "serpent": "SerpentSerializer",
     }
 
     content_type_names: ClassVar[dict[str, str]] = {
