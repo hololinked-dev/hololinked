@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar, Optional, Self
 
@@ -418,3 +419,14 @@ class EventMetadata(InteractionMetadata):
     @classmethod
     def from_descriptor(cls, event: Event, owner: Thing | ThingMeta) -> EventMetadata:  # noqa: D102 # ty: ignore[invalid-method-override]
         raise NotImplementedError
+
+
+@dataclass
+class MetadataFormat:
+    """Metadata class for each core component."""
+
+    thing: type[Metadata]
+    property: type[PropertyMetadata]
+    action: type[ActionMetadata]
+    event: type[EventMetadata]
+    interaction: type[InteractionMetadata]

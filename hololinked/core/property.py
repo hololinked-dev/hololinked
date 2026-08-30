@@ -383,7 +383,7 @@ class Property(Parameter):
             If the specified format is not supported. Currently, the only supported format is
             "wot" or W3C Web of Things.
         """
-        from hololinked.ddl import MetadataFormats
+        from hololinked import MetadataFormats
 
         return MetadataFormats.get(format).property.from_descriptor(self, owner_inst or self.owner)
 

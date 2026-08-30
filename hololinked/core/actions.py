@@ -142,7 +142,7 @@ class Action:
         ActionAffordance
             the affordance TD fragment for this action
         """
-        from hololinked.ddl import MetadataFormats
+        from hololinked import MetadataFormats
 
         return MetadataFormats.get(format).action.from_descriptor(
             self,

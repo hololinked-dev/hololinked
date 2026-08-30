@@ -16,4 +16,5 @@ from .metadata import (  # isort: skip
     ActionMetadata as ActionMetadata,
     EventMetadata as EventMetadata,
     InteractionMetadata as InteractionMetadata,
+    MetadataFormat as MetadataFormat,
 )

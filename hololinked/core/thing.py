@@ -239,7 +239,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # allow_loose_schema: bool, optional, Default False
         #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable
         #     inaccurate but truthy value. In other words, schema validation will always pass.
-        from hololinked.ddl import MetadataFormats
+        from hololinked import MetadataFormats
 
         return (
             MetadataFormats.get(format)
