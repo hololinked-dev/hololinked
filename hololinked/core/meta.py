@@ -3,8 +3,9 @@
 import copy
 import inspect
 
+from collections.abc import KeysView
 from types import FunctionType
-from typing import TYPE_CHECKING, Any, KeysView, Type
+from typing import TYPE_CHECKING, Any
 
 from ..constants import JSON, JSONSerializable
 from ..param.parameterized import EventDispatcher as ParamEventDispatcher
@@ -18,9 +19,8 @@ from .property import Property
 
 
 if TYPE_CHECKING:
+    from .eventloop import EventBus, EventLoop
     from .thing import Thing
-    from .zmq.brokers import EventPublisher
-    from .zmq.rpc_server import RPCServer
 
 
 class ThingMeta(ParameterizedMetaclass):
@@ -154,7 +154,7 @@ class DescriptorRegistry:
             return prefix
 
     @property
-    def descriptor_object(self) -> Type[Property | Action | Event]:
+    def descriptor_object(self) -> type[Property | Action | Event]:
         """The type of descriptor object that this registry holds, i.e. `Property`, `Action` or `Event`."""
         raise NotImplementedError("Implement descriptor_object in subclass")
 
@@ -353,7 +353,7 @@ class PropertiesRegistry(DescriptorRegistry):
             self.event_dispatcher.prepare_instance_dependencies()
 
     @property
-    def descriptor_object(self) -> Type[Parameter]:
+    def descriptor_object(self) -> type[Parameter]:
         """The type of descriptor object that this registry holds, i.e. `Parameter`."""
         return Parameter
 
@@ -572,7 +572,7 @@ class PropertiesRegistry(DescriptorRegistry):
                     raise AttributeError(f"property {name} is not a class member and cannot be set at class level")
                 setattr(self.owner, name, value)
             except Exception as ex:
-                errors += f"{name}: {str(ex)}\n"
+                errors += f"{name}: {ex!s}\n"
         if errors:
             ex = RuntimeError(
                 "Some properties could not be set due to errors. "
@@ -641,7 +641,7 @@ class PropertiesRegistry(DescriptorRegistry):
                 final_list[name] = prop
             except Exception as ex:
                 self.owner_inst.logger.error(
-                    f"could not deserialize property {name} due to error - {str(ex)}, skipping this property"
+                    f"could not deserialize property {name} due to error - {ex!s}, skipping this property"
                 )
         return final_list
 
@@ -662,10 +662,10 @@ class PropertiesRegistry(DescriptorRegistry):
                     if (prop_desc.db_init or prop_desc.db_persist) and db_prop not in missing_properties:  # ty: ignore[unsupported-operator]
                         setattr(self.owner_inst, db_prop, value)
                 except Exception as ex:
-                    self.owner_inst.logger.error(f"could not set attribute {db_prop} due to error {str(ex)}")
+                    self.owner_inst.logger.error(f"could not set attribute {db_prop} due to error {ex!s}")
 
     @classmethod
-    def get_type_from_name(cls, name: str) -> Type[Property]:
+    def get_type_from_name(cls, name: str) -> type[Property]:
         """
         The descriptor type registered under the given name, i.e. `Property`.
 
@@ -741,7 +741,7 @@ class ActionsRegistry(DescriptorRegistry):
     """
 
     @property
-    def descriptor_object(self) -> Type[Action]:
+    def descriptor_object(self) -> type[Action]:
         """The type of descriptor object that this registry holds, i.e. `Action`."""
         return Action
 
@@ -975,7 +975,7 @@ class EventSource:
     """
 
     id: str
-    rpc_server: "RPCServer | None"
+    engine: "EventLoop | None"
 
     def __init__(self) -> None:
         self.create_events_registry()
@@ -992,9 +992,14 @@ class EventSource:
         return self._events_registry
 
     @property
-    def event_publisher(self) -> "EventPublisher | None":
-        """Event publishing object `EventPublisher` that owns the zmq.PUB socket, valid only after creating an RPC server or calling a `run()` method on the `Thing` instance."""
+    def event_publisher(self) -> "EventBus | None":
+        """
+        The `EventBus` this object's events are published through.
+
+        Valid only after creating a server or calling `run()` on the `Thing` instance. Which
+        protocols the bus then fans out to is not this object's concern.
+        """
         try:
-            return self.rpc_server.event_publisher if self.rpc_server else None
+            return self.engine.event_bus if self.engine else None
         except AttributeError:
             return None

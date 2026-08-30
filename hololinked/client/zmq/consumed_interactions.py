@@ -21,22 +21,22 @@ from hololinked.client.exceptions import ReplyNotArrivedError, raise_local_excep
 from hololinked.constants import Operations
 from hololinked.core import Action, Thing  # noqa: F401
 from hololinked.core.payloads import SerializableData
-from hololinked.core.zmq.brokers import (
+from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.td.forms import Form
+from hololinked.server.zmq.brokers import (
     AsyncEventConsumer,
     AsyncZMQClient,
     BreakLoop,
     EventConsumer,
     SyncZMQClient,
 )
-from hololinked.core.zmq.message import (
+from hololinked.server.zmq.message import (
     EMPTY_BYTE,
     ERROR,
     INVALID_MESSAGE,
     TIMEOUT,
     ResponseMessage,
 )
-from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
-from hololinked.metadata.td.forms import Form
 
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]

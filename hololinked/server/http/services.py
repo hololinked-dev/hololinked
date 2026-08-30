@@ -10,7 +10,6 @@ from hololinked import Serializers
 
 from ...constants import JSONSerializable, Operations
 from ...core.payloads import SerializableData
-from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
 from ...metadata.td import (
     ActionAffordance,
     EventAffordance,
@@ -25,6 +24,7 @@ from ..security import (
     BcryptBasicSecurity,
     OIDCSecurity,
 )
+from ..zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
 
 
 __error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]

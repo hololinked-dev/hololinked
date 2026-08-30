@@ -2,9 +2,7 @@
 
 import typing
 
-from enum import IntEnum, StrEnum
-
-import zmq
+from enum import StrEnum
 
 
 # types
@@ -61,33 +59,6 @@ class ZMQ_TRANSPORTS(StrEnum):
     TCP = "TCP"
     IPC = "IPC"
     INPROC = "INPROC"
-
-
-class ZMQSocketType(IntEnum):
-    """General ZMQ socket types."""
-
-    PAIR = zmq.PAIR
-    PUB = zmq.PUB
-    SUB = zmq.SUB
-    REQ = zmq.REQ
-    REP = zmq.REP
-    DEALER = zmq.DEALER
-    ROUTER = zmq.ROUTER
-    PULL = zmq.PULL
-    PUSH = zmq.PUSH
-    XPUB = zmq.XPUB
-    XSUB = zmq.XSUB
-    STREAM = zmq.STREAM
-    # Add more socket types as needed
-
-
-ZMQ_EVENT_MAP = {}
-"""Built-in ZMQ events."""
-
-for name in dir(zmq):
-    if name.startswith("EVENT_"):
-        value = getattr(zmq, name)
-        ZMQ_EVENT_MAP[value] = name
 
 
 class Operations(StrEnum):

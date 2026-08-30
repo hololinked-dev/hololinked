@@ -768,15 +768,6 @@ def get_all_sub_things_recusively(thing) -> list:
     return sub_things
 
 
-def get_socket_type_name(socket_type):
-    from .constants import ZMQSocketType
-
-    try:
-        return ZMQSocketType(socket_type).name
-    except ValueError:
-        return "UNKNOWN"
-
-
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
@@ -795,5 +786,4 @@ __all__ = [
     get_return_type_from_signature.__name__,
     getattr_without_descriptor_read.__name__,
     forkable.__name__,
-    get_socket_type_name.__name__,
 ]

@@ -9,8 +9,12 @@ from hololinked import Serializers
 from hololinked.constants import byte_types
 from hololinked.param.parameters import Integer
 
-from ..operations import Operation, as_execution_kwargs
-from ..payloads import PreserializedData, SerializableData
+from ...core.eventloop.operations import (  # noqa: F401
+    Operation,
+    as_execution_kwargs,
+    qualified_operation_key,
+)
+from ...core.payloads import PreserializedData, SerializableData
 
 
 # message types
@@ -50,29 +54,6 @@ INDEX_DELIMITER = 1
 INDEX_HEADER = 2
 INDEX_BODY = 3
 INDEX_PRESERIALIZED_BODY = 4
-
-
-def qualified_operation_key(thing_id: str, objekt: str, operation: str) -> str:
-    """
-    A unique string representing one operation on one interaction affordance of one `Thing`.
-
-    Can be used as a key in dictionaries as a unique identifier for an operation.
-
-    Parameters
-    ----------
-    thing_id: str
-        `id` of the `Thing`
-    objekt: str
-        name of the property, action or event
-    operation: str
-        the operation, like `Operations.invokeaction`
-
-    Returns
-    -------
-    str
-        the qualified operation key
-    """
-    return f"{thing_id}.{objekt}.{operation}"
 
 
 class ServerExecutionContext(msgspec.Struct):
@@ -200,7 +181,7 @@ class RequestMessage:
     |-------|---------|------------|--------|---------|-----------------------|
     | Desc  | address | empty byte | header | payload | preserialized payload |
 
-    For header's JSON schema, visit [here](https://github.com/hololinked-dev/hololinked/blob/main/hololinked/core/zmq/request_message_header_schema.json).
+    For header's JSON schema, visit [here](https://github.com/hololinked-dev/hololinked/blob/main/hololinked/server/zmq/request_message_header_schema.json).
     """
 
     length = Integer(default=5, readonly=True, class_member=True, doc="length of the message")  # type: int
@@ -464,7 +445,7 @@ class ResponseMessage:
     |-------|---------|--------|------|------------------|
     | Desc  | address | header | data | pre encoded data |
 
-    For header's JSON schema, visit [here](https://github.com/hololinked-dev/hololinked/blob/main/hololinked/core/zmq/response_message_header_schema.json).
+    For header's JSON schema, visit [here](https://github.com/hololinked-dev/hololinked/blob/main/hololinked/server/zmq/response_message_header_schema.json).
     """
 
     length = Integer(default=5, readonly=True, class_member=True, doc="length of the message")  # type: int

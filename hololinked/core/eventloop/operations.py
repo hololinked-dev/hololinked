@@ -13,11 +13,13 @@ clients bypassed the typed header and sent a raw dict.
 
 from __future__ import annotations
 
+import asyncio
+
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from .payloads import PreserializedData, SerializableData
+from ..payloads import PreserializedData, SerializableData
 
 
 @dataclass
@@ -65,6 +67,10 @@ class ReplyKind(StrEnum):
     """raised, `payload` carries the formatted exception."""
     EXIT = "exit"
     """the `Thing` was asked to stop serving; there is no meaningful return value."""
+    INVOKATION_TIMEOUT = "invokation_timeout"
+    """never started - it was still queued when `invokation_timeout` elapsed."""
+    EXECUTION_TIMEOUT = "execution_timeout"
+    """started but did not finish within `execution_timeout`. It may still be running."""
 
 
 @dataclass
@@ -82,6 +88,69 @@ class Reply:
     def is_error(self) -> bool:
         """Whether the operation raised."""
         return self.kind is ReplyKind.ERROR
+
+    @property
+    def timed_out(self) -> bool:
+        """Whether the operation never started, or started and did not finish in time."""
+        return self.kind in (ReplyKind.INVOKATION_TIMEOUT, ReplyKind.EXECUTION_TIMEOUT)
+
+
+TIMED_OUT_REPLY = {
+    kind: Reply(
+        payload=SerializableData(None),
+        preserialized_payload=PreserializedData(b""),
+        kind=kind,
+    )
+    for kind in (ReplyKind.INVOKATION_TIMEOUT, ReplyKind.EXECUTION_TIMEOUT)
+}
+"""Prebuilt empty replies for the two timeout outcomes - a timeout carries no value."""
+
+
+@dataclass
+class Job:
+    """
+    One submitted operation on its way to a `Thing`, with the promise that answers the caller.
+
+    Whoever called `submit()` holds the other end of `future` and neither knows nor cares which
+    scheduling policy the operation ended up under.
+    """
+
+    operation: Operation
+    """what to do."""
+    future: asyncio.Future
+    """resolved with a `Reply`, the timeout kinds included, so the caller can tell them apart."""
+    started: asyncio.Event
+    """set when the operation leaves the queue. The invokation timeout races against this."""
+    invokation_timeout_task: asyncio.Task | None = None
+    """the racing timeout, if one was armed. Awaited once `started` is set, to settle the race."""
+
+    def answer(self, reply: Reply) -> None:
+        """Resolve the caller's future, unless a timeout already answered for us."""
+        if not self.future.done():
+            self.future.set_result(reply)
+
+
+def qualified_operation_key(thing_id: str, objekt: str, operation: str) -> str:
+    """
+    A unique string representing one operation on one interaction affordance of one `Thing`.
+
+    Can be used as a key in dictionaries as a unique identifier for an operation.
+
+    Parameters
+    ----------
+    thing_id: str
+        `id` of the `Thing`
+    objekt: str
+        name of the property, action or event
+    operation: str
+        the operation, like `Operations.invokeaction`
+
+    Returns
+    -------
+    str
+        the qualified operation key
+    """
+    return f"{thing_id}.{objekt}.{operation}"
 
 
 def as_execution_kwargs(context: Any) -> dict[str, Any]:
@@ -122,4 +191,4 @@ def as_execution_kwargs(context: Any) -> dict[str, Any]:
     return found
 
 
-__all__ = [Operation.__name__, Reply.__name__, ReplyKind.__name__]
+__all__ = [Job.__name__, Operation.__name__, Reply.__name__, ReplyKind.__name__, qualified_operation_key.__name__]

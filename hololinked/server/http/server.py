@@ -19,7 +19,6 @@ from ...core.actions import Action
 from ...core.events import Event
 from ...core.property import Property
 from ...core.thing import Thing, ThingMeta
-from ...core.zmq.brokers import MessageMappedZMQClientPool
 from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
@@ -32,6 +31,7 @@ from ...utils import (
 )
 from ..security import Security
 from ..server import BaseProtocolServer
+from ..zmq.brokers import MessageMappedZMQClientPool
 from .config import HandlerMetadata, RuntimeConfig
 from .controllers import (
     ActionHandler,
@@ -207,11 +207,11 @@ class HTTPServer(BaseProtocolServer):
         # which will prevent handshake function to succeed (although handshake will be done)
         # 4. Expose via broker
         for thing in self.things:
-            if not thing.rpc_server:
+            if not thing.engine:
                 raise ValueError(f"You need to expose thing {thing.id} via a RPCServer before trying to serve it")
             event_loop.create_task(
                 self._instantiate_broker(
-                    thing.rpc_server.id,
+                    thing.engine.id,
                     thing.id,
                     "INPROC",
                 )

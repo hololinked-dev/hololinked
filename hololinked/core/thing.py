@@ -163,11 +163,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
 
     def __post_init__(self):
+        from .eventloop import EventLoop  # noqa: F401
         from .logger import RemoteAccessHandler
-        from .zmq.rpc_server import RPCServer  # noqa: F401
 
         # Type definitions
-        self.rpc_server = None  # type: RPCServer | None
+        self.engine = None  # type: EventLoop | None
         self.db_engine: BaseConfigurationRepository | None
         self._owners = None if not hasattr(self, "_owners") else self._owners  # type: list[Thing] | None
         self._remote_access_loghandler: RemoteAccessHandler | None
@@ -420,7 +420,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         This method usually needs to be called remotely.
         The servers are not stopped, just the object run loop is exited.
         """
-        if self.rpc_server is None:
+        if self.engine is None:
             self.logger.debug("exit() called on a object that is not exposed yet.")
             return
         if self._owners:
@@ -428,7 +428,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 "call exit on the top-level object, composed objects cannot exit the loop. "
                 + f"This object belongs to {self._owners.__class__.__name__} with ID {self._owners.id}."
             )
-        self.rpc_server.stop()
+        self.engine.stop()
 
     @action()
     def ping(self) -> None:

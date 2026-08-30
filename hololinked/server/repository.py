@@ -7,13 +7,13 @@ import asyncio
 from typing import TYPE_CHECKING, Any, Optional
 
 import structlog
-import zmq.asyncio
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..config import global_config
 from ..core import Thing
-from ..core.zmq.brokers import (
+from ..utils import uuid_hex
+from .zmq.brokers import (
     AsyncEventConsumer,
     AsyncZMQClient,
     MessageMappedZMQClientPool,
@@ -27,11 +27,12 @@ from ..core.zmq.brokers import (
     default_server_execution_context,
     default_thing_execution_context,
 )
-from ..core.zmq.message import EMPTY_BYTE
-from ..utils import uuid_hex
+from .zmq.message import EMPTY_BYTE
 
 
 if TYPE_CHECKING:
+    import zmq.asyncio
+
     from hololinked.core.interfaces import EventMetadata, PropertyMetadata
 
 
@@ -354,7 +355,7 @@ async def consume_broker_queue(
     server_id: str,
     thing_id: str,
     access_point: str,
-    context: Optional[zmq.asyncio.Context] = None,
+    context: "zmq.asyncio.Context | None" = None,
     logger: Optional[structlog.stdlib.BoundLogger] = None,
     poll_timeout: int = 1000,
 ) -> tuple[AsyncZMQClient, dict[str, Any]]:

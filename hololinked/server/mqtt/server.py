@@ -127,10 +127,10 @@ class MQTTPublisher(BaseProtocolServer):
             if the `Thing` is not exposed through an `RPCServer`
         """
         eventloop = get_current_async_loop()
-        if not thing.rpc_server:
+        if not thing.engine:
             raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
 
-        await self._instantiate_broker(server_id=thing.rpc_server.id, thing_id=thing.id, access_point="INPROC")
+        await self._instantiate_broker(server_id=thing.engine.id, thing_id=thing.id, access_point="INPROC")
         TD = self.config.thing_repository[thing.id].TD
 
         for event_name in TD.get("events", {}).keys():

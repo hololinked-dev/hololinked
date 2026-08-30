@@ -142,7 +142,7 @@ class ClientFactory:
             ZMQEvent,
             ZMQProperty,
         )
-        from hololinked.core.zmq import AsyncZMQClient, SyncZMQClient
+        from hololinked.server.zmq import AsyncZMQClient, SyncZMQClient
 
         id = kwargs.get("id", f"{server_id}|{thing_id}|{access_point}|{uuid_hex()}")
 

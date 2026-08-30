@@ -10,9 +10,9 @@ from paho.mqtt.properties import Properties
 
 from hololinked import Serializers
 
-from ...core.zmq.message import EventMessage  # noqa: F401
 from ...metadata.td import EventAffordance, PropertyAffordance
 from ..repository import BrokerThing  # noqa: F401
+from ..zmq.message import EventMessage  # noqa: F401
 
 
 class TopicPublisher:

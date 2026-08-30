@@ -13,9 +13,9 @@ from hololinked.core.interfaces.metadata import EventMetadata
 
 
 if TYPE_CHECKING:
+    from hololinked.core.eventloop import EventBus
     from hololinked.core.meta import ThingMeta
     from hololinked.core.thing import Thing
-    from hololinked.core.zmq.brokers import EventPublisher
 
 
 class Event:
@@ -27,14 +27,14 @@ class Event:
     """
 
     __slots__ = [
-        "name",
         "_internal_name",
-        "_publisher",
         "_observable",
+        "_publisher",
         "doc",
-        "schema",
         "label",
+        "name",
         "owner",
+        "schema",
     ]
 
     def __init__(
@@ -68,21 +68,18 @@ class Event:
         self.owner = owner
 
     @overload
-    def __get__(self, obj: None, objtype: ThingMeta | None = None) -> "Event": ...
+    def __get__(self, obj: None, objtype: ThingMeta | None = None) -> Event: ...
 
     @overload
-    def __get__(self, obj: Thing, objtype: ThingMeta | None = None) -> "EventDispatcher": ...
+    def __get__(self, obj: Thing, objtype: ThingMeta | None = None) -> EventDispatcher: ...
 
     def __get__(self, obj: Thing | None, objtype: ThingMeta | None = None):
         try:
             if not obj:
                 return self
-            # uncomment for type hinting
-            # from .thing import Thing
-            # assert isinstance(obj, Thing)
             return EventDispatcher(
                 unique_identifier=f"{obj._qualified_id}/{self.name}",
-                publisher=obj.rpc_server.event_publisher if obj.rpc_server else None,
+                publisher=obj.engine.event_bus if obj.engine else None,
                 owner_inst=obj,
                 descriptor=self,
             )
@@ -117,12 +114,12 @@ class EventDispatcher:
     The separation is necessary between `Event` and `EventDispatcher` to allow class level definitions of the `Event`
     """
 
-    __slots__ = ["_unique_identifier", "_publisher", "_owner_inst", "_descriptor"]
+    __slots__ = ["_descriptor", "_owner_inst", "_publisher", "_unique_identifier"]
 
     def __init__(
         self,
         unique_identifier: str,
-        publisher: EventPublisher | None,
+        publisher: EventBus | None,
         owner_inst: Thing,
         descriptor: Event,
     ) -> None:
@@ -132,19 +129,18 @@ class EventDispatcher:
         self.publisher = publisher
 
     @property
-    def publisher(self) -> EventPublisher:
-        """Event publishing PUB socket owning object."""
+    def publisher(self) -> EventBus:
+        """The `EventBus` this event is registered with, through which it reaches every protocol."""
         return self._publisher  # ty: ignore[invalid-return-type]
 
     @publisher.setter
-    def publisher(self, value: EventPublisher | None) -> None:
-        # TODO fix this once the architecture is resolved
-        from .zmq.brokers import EventPublisher  # noqa: E402
+    def publisher(self, value: EventBus | None) -> None:
+        from .eventloop import EventBus
 
         if not hasattr(self, "_publisher"):
             self._publisher = value
-        elif not isinstance(value, EventPublisher):
-            raise AttributeError("Publisher must be of type EventPublisher. Given type: " + str(type(value)))
+        elif not isinstance(value, EventBus):
+            raise AttributeError("Publisher must be of type EventBus. Given type: " + str(type(value)))
         if self._publisher is not None:
             self._publisher.register(self)
 
@@ -162,7 +158,7 @@ class EventDispatcher:
         """
         self.publisher.publish(self, data=data)
 
-    def receive_acknowledgement(self, timeout: float | int | None) -> bool:
+    def receive_acknowledgement(self, timeout: float | None) -> bool:
         """
         Receive acknowledgement for an event that was just pushed.
 

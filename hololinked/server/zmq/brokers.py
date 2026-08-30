@@ -9,7 +9,7 @@ import time
 import warnings
 
 from collections.abc import Coroutine
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Any, Iterator
 
 import structlog
@@ -20,13 +20,12 @@ from zmq.utils.monitor import parse_monitor_message
 
 from hololinked import Serializers
 from hololinked.config import global_config
-from hololinked.constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS
+from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.exceptions import BreakLoop
 from hololinked.utils import (
     format_exception_as_json,
     get_current_async_loop,
     get_sanitized_filename_from_random_string,
-    get_socket_type_name,
     run_callable_somehow,
     uuid_hex,
 )
@@ -51,6 +50,53 @@ from .message import (
     default_server_execution_context,
     default_thing_execution_context,
 )
+
+
+class ZMQSocketType(IntEnum):
+    """General ZMQ socket types."""
+
+    PAIR = zmq.PAIR
+    PUB = zmq.PUB
+    SUB = zmq.SUB
+    REQ = zmq.REQ
+    REP = zmq.REP
+    DEALER = zmq.DEALER
+    ROUTER = zmq.ROUTER
+    PULL = zmq.PULL
+    PUSH = zmq.PUSH
+    XPUB = zmq.XPUB
+    XSUB = zmq.XSUB
+    STREAM = zmq.STREAM
+    # Add more socket types as needed
+
+
+ZMQ_EVENT_MAP = {}
+"""Built-in ZMQ events."""
+
+for name in dir(zmq):
+    if name.startswith("EVENT_"):
+        value = getattr(zmq, name)
+        ZMQ_EVENT_MAP[value] = name
+
+
+def get_socket_type_name(socket_type) -> str:
+    """
+    Name of a ZMQ socket type, for logging.
+
+    Parameters
+    ----------
+    socket_type: int
+        a `zmq.SocketType` or its integer value
+
+    Returns
+    -------
+    str
+        the socket type's name, or `"UNKNOWN"` if it is not one
+    """
+    try:
+        return ZMQSocketType(socket_type).name
+    except ValueError:
+        return "UNKNOWN"
 
 
 class BaseZMQ:
@@ -2271,7 +2317,13 @@ class AsyncioEventPool:
 
 
 class EventPublisher(BaseZMQServer, BaseSyncZMQ):
-    """Event publisher for broadcasting messages to all connected clients. Implements PUB-SUB pattern."""
+    """
+    Puts events published on an `EventBus` onto a ZMQ PUB socket. Implements PUB-SUB pattern.
+
+    Subscribe `publish` to an `EventBus` and this becomes one of the protocols an event fans out to.
+    It keeps no registry of its own - the bus decides what may be published, and has already checked
+    by the time `publish` is called.
+    """
 
     _standard_address_suffix = "/event-publisher"
     _standard_address_suffix_filename_replacement = "event-publisher"
@@ -2305,63 +2357,18 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             socket_type=zmq.SocketType.PUB,
             **kwargs,
         )
-        self.events = set()  # type is set[EventDispatcher]
-        self.event_ids = set()  # type: set[str]
         self._send_lock = threading.Lock()
-
-    def register(self, event: "EventDispatcher") -> None:
-        """
-        Register event with a specific (unique) name.
-
-        Parameters
-        ----------
-        event: `EventDispatcher`
-            `Event` object that needs to be registered. Events created at `__init__()` of `Thing` are
-            automatically registered.
-
-        Raises
-        ------
-        AttributeError
-            if an event with the same unique identifier is already registered
-        """
-        if event._unique_identifier in self.events and event not in self.events:
-            raise AttributeError(f"event {event._unique_identifier} already registered, please use another name.")
-        self.event_ids.add(event._unique_identifier)
-        self.events.add(event)
-
-    def unregister(self, event: "EventDispatcher") -> None:
-        """
-        Unregister event with a specific (unique) name.
-
-        Parameters
-        ----------
-        event: `EventDispatcher`
-            `Event` object that needs to be unregistered.
-        """
-        if event in self.events:
-            self.events.remove(event)
-            self.event_ids.remove(event._unique_identifier)
-        else:
-            warnings.warn(
-                f"event {event._unique_identifier} not found, did you mean to unregister another event?",
-                UserWarning,
-            )
 
     def publish(self, event, data: Any) -> None:
         """
-        Publish an event with given unique name.
+        Encode one event and put it on the PUB socket. Meant to be subscribed to an `EventBus`.
 
         Parameters
         ----------
         event: `EventDispatcher`
-            `Event` object that needs to be published.
+            the event being published
         data: Any
-            data to be sent as payload of the event
-
-        Raises
-        ------
-        AttributeError
-            if the event is not registered with this publisher
+            its payload, unencoded. `bytes` bypass serialization and travel as the preserialized frame.
         """
         # uncomment for type definitions
         # from ...core.events import EventDispatcher
@@ -2369,35 +2376,31 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
         try:
             self._send_lock.acquire()
-            if event._unique_identifier in self.event_ids:
-                serializer = Serializers.for_object(
-                    event._owner_inst.id,
-                    event._owner_inst.__class__.__name__,
-                    event._descriptor.name,
-                )
-                content_type_if_no_serializer = Serializers.get_content_type_for_object(
-                    event._owner_inst.id,
-                    event._owner_inst.__class__.__name__,
-                    event._descriptor.name,
-                )
-                if not isinstance(data, bytes):
-                    payload = SerializableData(data, serializer=serializer)
-                    preserialized_payload = PreserializedEmptyByte
-                else:
-                    payload = SerializableNone
-                    preserialized_payload = PreserializedData(data, content_type=content_type_if_no_serializer)
+            serializer = Serializers.for_object(
+                event._owner_inst.id,
+                event._owner_inst.__class__.__name__,
+                event._descriptor.name,
+            )
+            content_type_if_no_serializer = Serializers.get_content_type_for_object(
+                event._owner_inst.id,
+                event._owner_inst.__class__.__name__,
+                event._descriptor.name,
+            )
+            if not isinstance(data, bytes):
+                payload = SerializableData(data, serializer=serializer)
+                preserialized_payload = PreserializedEmptyByte
+            else:
+                payload = SerializableNone
+                preserialized_payload = PreserializedData(data, content_type=content_type_if_no_serializer)
 
-                event_message = EventMessage.craft_from_arguments(
-                    event._unique_identifier,
-                    self.id,
-                    payload=payload,
-                    preserialized_payload=preserialized_payload,
-                )
-                self.socket.send_multipart(event_message.byte_array)
-                self.logger.debug(f"published event with unique identifier {event._unique_identifier}")
-                # print("published event with unique identifier {}".format(event._unique_identifier))
-                return
-            raise AttributeError(f"event name {event._unique_identifier} not registered")
+            event_message = EventMessage.craft_from_arguments(
+                event._unique_identifier,
+                self.id,
+                payload=payload,
+                preserialized_payload=preserialized_payload,
+            )
+            self.socket.send_multipart(event_message.byte_array)
+            self.logger.debug(f"published event with unique identifier {event._unique_identifier}")
         finally:
             try:
                 self._send_lock.release()
@@ -2488,9 +2491,9 @@ class BaseEventConsumer(BaseZMQClient):
         )
         self.event_unique_identifier = bytes(event_unique_identifier, encoding="utf-8")
         short_uuid = uuid_hex()
-        self.interruptor = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]
+        self.interruptor = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)
         self.interruptor.setsockopt_string(zmq.IDENTITY, f"interrupting-server-{short_uuid}")
-        self.interrupting_peer = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]
+        self.interrupting_peer = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)
         self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f"interrupting-client-{short_uuid}")
         self.interruptor.bind(f"inproc://{self.id}-{short_uuid}/interruption")
         self.interrupting_peer.connect(f"inproc://{self.id}-{short_uuid}/interruption")

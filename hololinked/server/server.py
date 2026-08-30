@@ -22,9 +22,9 @@ from hololinked.utils import (
 )
 
 from ..config import global_config
+from ..constants import ZMQ_TRANSPORTS
 from ..core import Thing
 from ..core.properties import ClassSelector, Integer, TypedList
-from ..core.zmq.rpc_server import ZMQ_TRANSPORTS, RPCServer
 from ..param import Parameterized
 from ..param.parameters import String
 from .repository import (
@@ -230,14 +230,14 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
     ValueError
         if more than one `ZMQServer` or `RPCServer` is given - add all your `Thing`s to one instance
     """
-    from . import ZMQServer
+    from .zmq import RPCServer, ZMQServer
 
     loop = get_current_async_loop()  # initialize an event loop if it does not exist
 
     things = [thing for server in servers if server.things is not None for thing in server.things]
     things = list(set(things))  # remove duplicates
 
-    zmq_servers = [server for server in servers if isinstance(server, (ZMQServer, RPCServer))]
+    zmq_servers = [server for server in servers if isinstance(server, ZMQServer)]
     rpc_server = None
 
     if len(zmq_servers) > 1:
@@ -248,6 +248,8 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
     elif len(zmq_servers) == 1:
         rpc_server = zmq_servers[0]
     else:
+        # HTTP and MQTT still reach a `Thing` over INPROC, so one ZMQ server is created for them
+        # even when nobody asked for ZMQ. Removed once they can call the engine directly.
         rpc_server = RPCServer(
             id=f"rpc-broker-{uuid_hex()}",
             things=things,
@@ -350,11 +352,7 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
                 zmq_access_points.append("INPROC")
             protocol_params["access_points"] = zmq_access_points
 
-            if len(zmq_access_points) == 1 and zmq_access_points[0] == "INPROC":
-                server = RPCServer(id=id, **protocol_params)
-            else:
-                server = ZMQServer(id=id, **protocol_params)
-            servers.append(server)
+            servers.append(ZMQServer(id=id, **protocol_params))
         elif protocol.upper() == "MQTT":
             if isinstance(params, str):
                 protocol_params = dict(hostname=params)
