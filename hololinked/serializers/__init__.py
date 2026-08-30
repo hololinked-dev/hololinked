@@ -28,6 +28,8 @@ SOFTWARE.
 
 from typing import TYPE_CHECKING
 
+from hololinked.utils import lazy_module_getattr
+
 
 __all__ = [
     "JSONSerializer",
@@ -38,27 +40,17 @@ __all__ = [
     "TextSerializer",
 ]
 
-_lazy: dict[str, tuple[str, str]] = {
-    "JSONSerializer": (".json", "JSONSerializer"),
-    "PythonBuiltinJSONSerializer": (".json", "PythonBuiltinJSONSerializer"),
-    "MsgpackSerializer": (".msgpack", "MsgpackSerializer"),
-    "PickleSerializer": (".pickle", "PickleSerializer"),
-    "TextSerializer": (".text", "TextSerializer"),
-    "SerpentSerializer": (".serpent", "SerpentSerializer"),
+_lazy: dict[str, str] = {
+    "JSONSerializer": ".json",
+    "PythonBuiltinJSONSerializer": ".json",
+    "MsgpackSerializer": ".msgpack",
+    "PickleSerializer": ".pickle",
+    "TextSerializer": ".text",
+    "SerpentSerializer": ".serpent",
 }
+"""Name of a serializer mapped to the module it is imported from, resolved lazily."""
 
-
-def __getattr__(name: str):
-    if name not in _lazy:  # only lazy stuff for this adapter for now
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-    import importlib
-
-    module_path, attr = _lazy[name]
-    mod = importlib.import_module(module_path, package=__name__)
-    val = getattr(mod, attr)
-    globals()[name] = val  # cache so subsequent access skips __getattr__
-    return val
+__getattr__ = lazy_module_getattr(__name__, _lazy, globals())
 
 
 if TYPE_CHECKING:

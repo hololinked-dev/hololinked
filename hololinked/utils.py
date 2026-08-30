@@ -11,11 +11,12 @@ import types
 import typing
 
 from collections import OrderedDict
+from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import asdict
 from functools import wraps
 from inspect import Parameter, signature
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Sequence, Type
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
@@ -49,16 +50,10 @@ def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name: str | 
 
     adapters = ifaddr.get_adapters(include_unconfigured=True)
     for adapter in adapters:
-        if not adapter_name:
+        if not adapter_name or adapter_name == adapter.nice_name:
             for ip in adapter.ips:
-                if interface_name == ip.nice_name:
-                    if ip.is_IPv4:
-                        return ip.ip  # ty: ignore[invalid-return-type]
-        elif adapter_name == adapter.nice_name:
-            for ip in adapter.ips:
-                if interface_name == ip.nice_name:
-                    if ip.is_IPv4:
-                        return ip.ip  # ty: ignore[invalid-return-type]
+                if interface_name == ip.nice_name and ip.is_IPv4:
+                    return ip.ip  # ty: ignore[invalid-return-type]
     raise ValueError(f"interface name {interface_name} not found in system interfaces.")
 
 
@@ -429,6 +424,38 @@ class SerializableDataclass:
             setattr(self, key, value)
 
 
+def lazy_module_getattr(module_name: str, lazy: dict[str, str], namespace: dict[str, Any]) -> Callable[[str], Any]:
+    """
+    Build a PEP 562 module level `__getattr__` that does lazy import.
+
+    Parameters
+    ----------
+    module_name: str
+        `__name__` of the module the `__getattr__` belongs to, also the anchor for relative module paths
+    lazy: dict[str, str]
+        exported name mapped to the module it is imported from, relative paths anchored at `module_name`
+    namespace: dict[str, Any]
+        `globals()` of the module, where a resolved attribute is cached
+
+    Returns
+    -------
+    Callable[[str], Any]
+        the function to assign to `__getattr__` in the module
+    """
+
+    def __getattr__(name: str) -> Any:
+        if name not in lazy:
+            raise AttributeError(f"module {module_name!r} has no attribute {name!r}")
+
+        import importlib
+
+        value = getattr(importlib.import_module(lazy[name], package=module_name), name)
+        namespace[name] = value  # cache so subsequent access skips __getattr__
+        return value
+
+    return __getattr__
+
+
 class Singleton(type):
     """Enforces a Singleton behavior on a class."""
 
@@ -436,7 +463,7 @@ class Singleton(type):
 
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+            cls._instances[cls] = super().__call__(*args, **kwargs)
         return cls._instances[cls]
 
 
@@ -458,7 +485,7 @@ def get_input_model_from_signature(
     remove_first_positional_arg: bool = False,
     ignore: Sequence[str] | None = None,
     model_for_empty_annotations: bool = False,
-) -> Type[BaseModel] | None:
+) -> type[BaseModel] | None:
     """
     Create a pydantic model for a function's signature.
 
@@ -493,7 +520,7 @@ def get_input_model_from_signature(
         return None
 
     if remove_first_positional_arg:
-        name, parameter = next(iter((parameters.items())))  # get the first parameter
+        name, parameter = next(iter(parameters.items()))  # get the first parameter
         if parameter.kind in (Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD):
             raise ValueError("Can't remove first positional argument: there is none.")
         del parameters[name]
@@ -505,11 +532,11 @@ def get_input_model_from_signature(
         if ignore and name in ignore:
             continue
         if p.kind == Parameter.VAR_KEYWORD:
-            keyword_type = typing.Dict[str, typing.Any] if p.annotation is Parameter.empty else type_hints[name]
+            keyword_type = dict[str, typing.Any] if p.annotation is Parameter.empty else type_hints[name]
             p_type = typing.Annotated[keyword_type, Parameter.VAR_KEYWORD]
             default = dict() if p.default is Parameter.empty else p.default
         elif p.kind == Parameter.VAR_POSITIONAL:
-            positional_type = typing.Tuple if p.annotation is Parameter.empty else type_hints[name]
+            positional_type = tuple if p.annotation is Parameter.empty else type_hints[name]
             p_type = typing.Annotated[positional_type, Parameter.VAR_POSITIONAL]
             default = tuple() if p.default is Parameter.empty else p.default
         else:
@@ -587,7 +614,7 @@ def get_return_type_from_signature(func: Callable) -> RootModel | None:
 
 
 def pydantic_validate_args_kwargs(
-    model: Type[BaseModel],
+    model: type[BaseModel],
     args: tuple = tuple(),
     kwargs: dict = dict(),
 ) -> None:

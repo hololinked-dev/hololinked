@@ -1,11 +1,4 @@
-"""
-The dependency injection layer, where adapters are registered against the ports declared in `hololinked.core`.
-
-This module is the composition root of the package. It holds the registries that decide which concrete adapter
-serves a given port - `SchemaValidators` for `BaseSchemaValidator` and `Serializers` for `BaseSerializer` - and it
-deliberately never imports an adapter package at module level. Adapters are pulled in by name, on first use,
-through `AdapterRegistry`, so naming one adapter never imports the dependencies of another.
-"""
+"""The dependency injection layer, where adapters are registered against the ports declared in `hololinked.core`."""
 
 from __future__ import annotations
 
@@ -24,27 +17,37 @@ from hololinked.utils import MappableSingleton, issubklass
 
 class AdapterRegistry(MappableSingleton):
     """
-    Metaclass that imports an adapter the first time it is asked for.
+    Metaclass that imports an adapter the first time it is asked for (i.e. a lazy import).
 
-    Each adapter lives in its own module, so resolving one never imports the dependencies of the others. A registry
-    declares what it can pull in through a `modules` mapping of name to `(module path, attribute)`, and a resolved
-    adapter is cached on the registry so that subsequent access skips the import machinery entirely.
+    Adapter is a concrete implementation of a specific dependency, for example, `JSONSchemaValidator` is an adapter for
+    schema validation based on JSON schema, whereas pydantic is a different implementation. However, their interfaces
+    or external behaviour is similar, so they can be used interchangeably or for different technological reasons.
+
+    Each adapter lives in its own module, so resolving one never imports the dependencies of the others. This lets
+    one install only the dependencies you need. For individual adapters types, for example schema validators or
+    serializers, a registry class is defined that uses this metaclass to resolve adapters by name, as a lazy import
+    at runtime.
+
+    This metaclass providers lazy import functionality.
     """
 
     modules: ClassVar[dict[str, tuple[str, str]]] = {}
-    """Name of an adapter mapped to the module path and attribute it is imported from."""
+    """Name of an implementation mapped to the module path and attribute it is imported from."""
 
     tables: ClassVar[tuple[str, ...]] = ()
-    """Names of the registry's lookup dictionaries, snapshotted at class creation for `forget_adapters()`."""
+    """
+    Names of the registry's lookup dictionaries, snapshotted at class creation. 
+    One can clear the cache using `forget_adapters()`.
+    """
 
     adapter_kind: ClassVar[str] = "adapter"
-    """What this registry holds, used in error messages."""
+    """What this registry holds ("serializers", "schema-validators", "ddl" etc.), used in error messages."""
 
     instantiate: ClassVar[bool] = False
-    """Whether a resolved adapter is a class to be instantiated, or whether the class itself is what is served."""
+    """Whether a resolved adapter class needs to be instantiated, or whether the class itself is what is used."""
 
     def __init__(cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwargs: Any) -> None:
-        """Snapshot the registry's lookup tables so that `forget_adapters()` can restore them."""
+        """Initialize the registry."""
         super().__init__(name, bases, namespace, **kwargs)
         cls._installed = set()  # type: set[str]
         cls._adapters = {}  # type: dict[tuple[str, str], Any]
@@ -76,7 +79,7 @@ class AdapterRegistry(MappableSingleton):
 
     def install(cls, name: str, adapter: Any) -> None:
         """
-        Make an adapter available under a given name, caching it so that subsequent access skips `__getattr__`.
+        Caching the adapter so that subsequent access skips `__getattr__`.
 
         Parameters
         ----------
@@ -102,10 +105,13 @@ class AdapterRegistry(MappableSingleton):
 
 
 class Registry(metaclass=AdapterRegistry):
-    """Base for the registries below, so that a registry instance resolves adapters the way its class does."""
+    """
+    Base for the registries below, so that a registry instance resolves adapters the way its class does.
+
+    All members are class attributes, and only the metaclass knows how to resolve an unresolved adapter
+    """
 
     def __getattr__(self, name: str) -> Any:
-        # all members are class attributes, and only the metaclass knows how to resolve an unresolved adapter
         return getattr(type(self), name)
 
 
@@ -328,7 +334,7 @@ class ContentTypeMap(Mapping):
     def __len__(self) -> int:
         return len(self._registry.content_type_names)
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, ContentTypeMap):
             return self._registry is other._registry
         return NotImplemented
@@ -368,12 +374,9 @@ class Serializers(Registry):
         "application/x-pickle": "pickle",
         "text/plain": "text",
     }
-    """
-    Content type mapped to the name of the serializer that handles it, which is what `content_types` is a view of.
-
-    Must be answerable without importing the serializer it names, since it is what decides which serializer to
-    import in the first place.
-    """
+    # Content type mapped to the name of the serializer that handles it.
+    # Must be answerable without importing the serializer it names, since it is what decides which serializer to
+    # import in the first place.
 
     default: BaseSerializer
     """The default serializer."""
@@ -464,7 +467,7 @@ class Serializers(Registry):
         name = name or serializer.__class__.__name__
         try:
             if serializer.content_type in cls.content_type_names and not override:
-                raise ValueError("content type already registered : {}".format(serializer.content_type))
+                raise ValueError(f"content type already registered : {serializer.content_type}")
             cls.content_type_names[serializer.content_type] = name
         except NotImplementedError:
             warnings.warn("serializer does not implement a content type", category=UserWarning)
@@ -493,13 +496,11 @@ class Serializers(Registry):
         if len(cls.object_serializer_map) == 0 and len(cls.object_content_type_map) == 0:
             return cls.default
         for thing in [thing_id, thing_cls]:  # first thing id, then thing cls
-            if thing in cls.object_serializer_map:
-                if objekt in cls.object_serializer_map[thing]:
-                    return cls.object_serializer_map[thing][objekt]
-            if thing in cls.object_content_type_map:
-                if objekt in cls.object_content_type_map[thing]:
-                    return cls.content_types.get(cls.object_content_type_map[thing][objekt], None)
-                    # if said content type has no serializer, return None instead of default serializer
+            if thing in cls.object_serializer_map and objekt in cls.object_serializer_map[thing]:
+                return cls.object_serializer_map[thing][objekt]
+            if thing in cls.object_content_type_map and objekt in cls.object_content_type_map[thing]:
+                return cls.content_types.get(cls.object_content_type_map[thing][objekt], None)
+                # if said content type has no serializer, return None instead of default serializer
         return cls.default  # JSON is default serializer
 
     @classmethod
@@ -525,9 +526,8 @@ class Serializers(Registry):
         if len(self.object_serializer_map) == 0 and len(self.object_content_type_map) == 0:
             return self.default_content_type
         for thing in [thing_id, thing_cls]:  # first thing id, then thing cls
-            if thing in self.object_content_type_map:
-                if objekt in self.object_content_type_map[thing]:
-                    return self.object_content_type_map[thing][objekt]
+            if thing in self.object_content_type_map and objekt in self.object_content_type_map[thing]:
+                return self.object_content_type_map[thing][objekt]
         return self.default_content_type  # JSON is default serializer
 
     @classmethod
@@ -549,16 +549,16 @@ class Serializers(Registry):
         ValueError
             if the object is not a Property, Action or Event, or Thing class
         """
-        from hololinked.core import Action, Event, Property, Thing  # noqa
+        from hololinked.core import Action, Event, Property, Thing
 
         if not isinstance(serializer, BaseSerializer):
-            raise ValueError("serializer must be an instance of BaseSerializer, given : {}".format(type(serializer)))
+            raise ValueError(f"serializer must be an instance of BaseSerializer, given : {type(serializer)}")
         if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
-            raise ValueError("object must be a Property, Action or Event, or Thing, got : {}".format(type(objekt)))
+            raise ValueError(f"object must be a Property, Action or Event, or Thing, got : {type(objekt)}")
         if issubklass(objekt, Thing):
             owner = objekt.__name__
         elif not objekt.owner:
-            raise ValueError("object owner cannot be determined : {}".format(objekt))
+            raise ValueError(f"object owner cannot be determined : {objekt}")
         else:
             owner = objekt.owner.__name__
         if owner not in cls.object_serializer_map:
@@ -588,14 +588,14 @@ class Serializers(Registry):
         ValueError
             if the object is not a Property, Action or Event
         """
-        from hololinked.core import Action, Event, Property, Thing  # noqa
+        from hololinked.core import Action, Event, Property, Thing
 
         if not isinstance(objekt, (Property, Action, Event)) and not issubklass(objekt, Thing):
-            raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
+            raise ValueError(f"object must be a Property, Action or Event, got : {type(objekt)}")
         if issubklass(objekt, Thing):
             owner = objekt.__name__
         elif not objekt.owner:
-            raise ValueError("object owner cannot be determined, cannot register content type: {}".format(objekt))
+            raise ValueError(f"object owner cannot be determined, cannot register content type: {objekt}")
         else:
             owner = objekt.owner.__name__
         if owner not in cls.object_content_type_map:
@@ -637,7 +637,7 @@ class Serializers(Registry):
         from hololinked.core import Action, Event, Property, Thing  # noqa
 
         if not isinstance(objekt, (Property, Action, Event, str)):
-            raise ValueError("object must be a Property, Action or Event, got : {}".format(type(objekt)))
+            raise ValueError(f"object must be a Property, Action or Event, got : {type(objekt)}")
         if not isinstance(objekt, str):
             objekt = objekt.name
         if thing_id not in cls.object_content_type_map:
@@ -704,7 +704,7 @@ class Serializers(Registry):
         cls.forget_adapters()
 
     @content_types.getter
-    def get_content_types(cls) -> ContentTypeMap:
+    def get_content_types(cls: type[Serializers]) -> ContentTypeMap:
         """
         Get the mapping of content type to serializer.
 
