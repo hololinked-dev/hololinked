@@ -40,6 +40,7 @@ from .message import (
     SerializableData,
     qualified_operation_key,
 )
+from .utils import CrossLoopEvent
 
 
 Undefined = NotImplemented
@@ -304,7 +305,7 @@ class RPCServer(BaseZMQServer):
             # timeouts always reach client without truly blocking by the GIL. If reply does not arrive, all other requests
             # get invokation timeout.
             # await eventloop.run_in_executor(None, scheduler.wait_for_reply)
-            await scheduler.wait_for_reply(eventloop)
+            await scheduler.wait_for_reply()
             # check if reply is never undefined, Undefined is a sensible placeholder for NotImplemented singleton
             if scheduler.last_operation_reply is Undefined:
                 # this is a logic error, as the reply should never be undefined
@@ -358,12 +359,10 @@ class RPCServer(BaseZMQServer):
         await asyncio.sleep(0.001)
         # TODO - investigate and fix it
         scheduler = scheduler or self.per_thing_schedulers[instance.id]
-        eventloop = get_current_async_loop()
 
         while self._run and scheduler.run:
             # print("starting to serve thing {}".format(instance.id))
-            await scheduler.wait_for_operation(eventloop)
-            # await scheduler.wait_for_operation()
+            await scheduler.wait_for_operation()
             if scheduler.last_operation_request is Undefined:
                 logger.warning("No operation request found although an interruption to wait was made, continuing...")
                 continue
@@ -892,8 +891,8 @@ class Scheduler:
     OperationReply = tuple[SerializableData, PreserializedData, str | None]
     JobInvokationType = tuple[AsyncZMQServer, RequestMessage, asyncio.Task | None, asyncio.Event | None]
     # [UML Diagram](http://docs.hololinked.dev/UML/PDF/RPCServer.pdf)
-    _operation_execution_complete_event: asyncio.Event | threading.Event
-    _operation_execution_ready_event: asyncio.Event | threading.Event
+    _operation_execution_complete_event: CrossLoopEvent
+    _operation_execution_ready_event: CrossLoopEvent
 
     def __init__(self, instance: Thing, rpc_server: RPCServer) -> None:
         self.instance = instance  # type: Thing
@@ -935,19 +934,14 @@ class Scheduler:
         await self._job_queued_event.wait()
         self._job_queued_event.clear()
 
-    async def wait_for_operation(self, eventloop: asyncio.AbstractEventLoop | None) -> None:
-        # assert isinstance(self._operation_execution_ready_event, threading.Event), "not a threaded scheduler"
-        if isinstance(self._operation_execution_ready_event, threading.Event):
-            await eventloop.run_in_executor(None, self._operation_execution_ready_event.wait)  # ty: ignore[unresolved-attribute]
-        else:
-            await self._operation_execution_ready_event.wait()
+    async def wait_for_operation(self) -> None:
+        """Wait, on the `Thing`'s loop, until an operation has been handed over for execution."""
+        await self._operation_execution_ready_event.wait()
         self._operation_execution_ready_event.clear()
 
-    async def wait_for_reply(self, eventloop: asyncio.AbstractEventLoop | None) -> None:
-        if isinstance(self._operation_execution_complete_event, threading.Event):
-            await eventloop.run_in_executor(None, self._operation_execution_complete_event.wait)  # ty: ignore[unresolved-attribute]
-        else:
-            await self._operation_execution_complete_event.wait()
+    async def wait_for_reply(self) -> None:
+        """Wait, on the listener loop, until the `Thing` has finished and produced a reply."""
+        await self._operation_execution_complete_event.wait()
         self._operation_execution_complete_event.clear()
 
     @property
@@ -998,8 +992,8 @@ class QueuedScheduler(Scheduler):
         super().__init__(instance, rpc_server)
         self.queue = deque()
         self._one_shot = False
-        self._operation_execution_ready_event = threading.Event()
-        self._operation_execution_complete_event = threading.Event()
+        self._operation_execution_ready_event = CrossLoopEvent()
+        self._operation_execution_complete_event = CrossLoopEvent()
 
     @property
     def has_job(self) -> bool:
@@ -1034,8 +1028,8 @@ class AsyncScheduler(Scheduler):
         super().__init__(instance, rpc_server)
         self._job = None
         self._one_shot = True
-        self._operation_execution_ready_event = asyncio.Event()
-        self._operation_execution_complete_event = asyncio.Event()
+        self._operation_execution_ready_event = CrossLoopEvent()
+        self._operation_execution_complete_event = CrossLoopEvent()
 
     @property
     def has_job(self) -> bool:
@@ -1063,8 +1057,8 @@ class ThreadedScheduler(Scheduler):
         self._job = None
         self._execution_thread = None
         self._one_shot = True
-        self._operation_execution_ready_event = threading.Event()
-        self._operation_execution_complete_event = threading.Event()
+        self._operation_execution_ready_event = CrossLoopEvent()
+        self._operation_execution_complete_event = CrossLoopEvent()
 
     @property
     def has_job(self) -> bool:
