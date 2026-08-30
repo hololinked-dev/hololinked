@@ -1,6 +1,6 @@
 """Message types - requests, responses and events, with their headers and payloads."""
 
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 import msgspec
@@ -51,6 +51,29 @@ INDEX_BODY = 3
 INDEX_PRESERIALIZED_BODY = 4
 
 
+def qualified_operation_key(thing_id: str, objekt: str, operation: str) -> str:
+    """
+    A unique string representing one operation on one interaction affordance of one `Thing`.
+
+    Can be used as a key in dictionaries as a unique identifier for an operation.
+
+    Parameters
+    ----------
+    thing_id: str
+        `id` of the `Thing`
+    objekt: str
+        name of the property, action or event
+    operation: str
+        the operation, like `Operations.invokeaction`
+
+    Returns
+    -------
+    str
+        the qualified operation key
+    """
+    return f"{thing_id}.{objekt}.{operation}"
+
+
 class ServerExecutionContext(msgspec.Struct):
     """Additional context for the server while executing an operation."""
 
@@ -86,11 +109,11 @@ class RequestHeader(msgspec.Struct):
     thingExecutionContext: ThingExecutionContext = msgspec.field(
         default_factory=lambda: default_thing_execution_context
     )
-    thingID: Optional[str] = ""
-    objekt: Optional[str] = ""
-    operation: Optional[str] = ""
-    payloadContentType: Optional[str] = "application/json"
-    preencodedPayloadContentType: Optional[str] = "text/plain"
+    thingID: str | None = ""
+    objekt: str | None = ""
+    operation: str | None = ""
+    payloadContentType: str | None = "application/json"
+    preencodedPayloadContentType: str | None = "text/plain"
 
     def __getitem__(self, key: str) -> Any:
         try:
@@ -117,8 +140,8 @@ class ResponseHeader(msgspec.Struct):
     messageID: str
     receiverID: str
     senderID: str
-    payloadContentType: Optional[str] = "application/json"
-    preencodedPayloadContentType: Optional[str] = ""
+    payloadContentType: str | None = "application/json"
+    preencodedPayloadContentType: str | None = ""
 
     def __getitem__(self, key: str) -> Any:
         try:
@@ -145,8 +168,8 @@ class EventHeader(msgspec.Struct):
     messageID: str
     senderID: str
     eventID: str
-    payloadContentType: Optional[str] = "application/json"
-    preencodedPayloadContentType: Optional[str] = ""
+    payloadContentType: str | None = "application/json"
+    preencodedPayloadContentType: str | None = ""
 
     def __getitem__(self, key: str) -> Any:
         try:
@@ -255,7 +278,11 @@ class RequestMessage:
     @property
     def qualified_operation(self) -> str:
         """Qualified objekt - a possibly unique string for the operation."""
-        return f"{self.header['thingID']}.{self.header['objekt']}.{self.header['operation']}"
+        return qualified_operation_key(
+            self.header["thingID"],
+            self.header["objekt"],
+            self.header["operation"],
+        )
 
     def parse_header(self) -> None:
         """
@@ -345,7 +372,7 @@ class RequestMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(receiver_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -389,7 +416,7 @@ class RequestMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(receiver_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -570,7 +597,7 @@ class ResponseMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(receiver_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -613,7 +640,7 @@ class ResponseMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(request_message.sender_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -659,7 +686,7 @@ class ResponseMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(request_message.sender_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -726,7 +753,7 @@ class EventMessage(ResponseMessage):
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(event_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,

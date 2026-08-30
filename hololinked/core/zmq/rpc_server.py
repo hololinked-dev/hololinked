@@ -38,6 +38,7 @@ from .message import (
     PreserializedData,
     RequestMessage,
     SerializableData,
+    qualified_operation_key,
 )
 
 
@@ -85,8 +86,21 @@ class RPCServer(BaseZMQServer):
         remote=False,
     )  # type: list[Thing]
 
-    # scheduler *classes* keyed by qualified operation, scheduler *instances* keyed by thing id
-    schedulers: dict[str, Any]
+    per_job_scheduler_types: dict[str, type[Scheduler]]
+    """
+    Scheduler class constructed fresh for every operation.
+
+    `AsyncScheduler` and `ThreadedScheduler` live here: they run their operation concurrently and
+    each carries its own reply.
+    """
+
+    per_thing_schedulers: dict[str, Scheduler]
+    """
+    Long-lived scheduler shared by every queued operation on that `Thing`.
+
+    `QueuedScheduler` lives here: it owns the queue that serializes operations, so there can only
+    be one of it per `Thing`.
+    """
 
     def __init__(
         self,
@@ -113,6 +127,9 @@ class RPCServer(BaseZMQServer):
         """
         super().__init__(id=id, **kwargs)
         self.things = []
+        # both scheduler tables must exist before add_things(), which writes to the first of them
+        self.per_job_scheduler_types = dict()
+        self.per_thing_schedulers = dict()
         self.add_things(*(things or []))
 
         if isinstance(access_point, str):
@@ -134,7 +151,6 @@ class RPCServer(BaseZMQServer):
             access_point=access_point,
             **kwargs,
         )
-        self.schedulers = dict()
 
     def __post_init__(self):
         # post init is not called, dont add logic here
@@ -148,11 +164,10 @@ class RPCServer(BaseZMQServer):
         for instance in all_things:
             instance.rpc_server = self
             for action in instance.actions.descriptors.values():
-                if action.iscoroutine and not action.synchronous:
-                    self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = AsyncScheduler
-                elif not action.synchronous:
-                    self.schedulers[f"{instance.id}.{action.name}.invokeAction"] = ThreadedScheduler
-                # else QueuedScheduler which is default
+                if action.synchronous:
+                    continue  # QueuedScheduler, which is the default and is shared per Thing
+                key = qualified_operation_key(instance.id, action.name, Operations.invokeaction)
+                self.per_job_scheduler_types[key] = AsyncScheduler if action.iscoroutine else ThreadedScheduler
             # properties need not dealt yet, but may be in future)
         if self.things is None:
             self.things = []
@@ -220,12 +235,13 @@ class RPCServer(BaseZMQServer):
                         timeout_task,
                         ready_to_process_event,
                     )  # type: Scheduler.JobInvokationType
-                    if request_message.qualified_operation in self.schedulers:
-                        scheduler = self.schedulers[request_message.qualified_operation](
-                            things[request_message.thing_id], self
-                        )
+                    scheduler_type = self.per_job_scheduler_types.get(request_message.qualified_operation)
+                    if scheduler_type is not None:
+                        # async/threaded: a fresh scheduler per job, since they run concurrently
+                        scheduler = scheduler_type(things[request_message.thing_id], self)
                     else:
-                        scheduler = self.schedulers[request_message.thing_id]
+                        # queued (the default): the one scheduler shared by this Thing
+                        scheduler = self.per_thing_schedulers[request_message.thing_id]
                     scheduler.dispatch_job(job)
 
                 except Exception as ex:
@@ -341,7 +357,7 @@ class RPCServer(BaseZMQServer):
         # This loop crashes for log levels above ERROR without the following statement
         await asyncio.sleep(0.001)
         # TODO - investigate and fix it
-        scheduler = scheduler or self.schedulers[instance.id]
+        scheduler = scheduler or self.per_thing_schedulers[instance.id]
         eventloop = get_current_async_loop()
 
         while self._run and scheduler.run:
@@ -610,7 +626,8 @@ class RPCServer(BaseZMQServer):
         eventloop.run_until_complete(
             asyncio.gather(
                 self.recv_requests_and_dispatch_jobs(self.req_rep_server),
-                *[self.tunnel_message_to_things(scheduler) for scheduler in self.schedulers.values()],
+                # only the shared per-Thing schedulers exist at startup, others are created on demand and will be awaited by the scheduler itself
+                *[self.tunnel_message_to_things(scheduler) for scheduler in self.per_thing_schedulers.values()],
                 *existing_tasks,
             )
         )
@@ -643,13 +660,16 @@ class RPCServer(BaseZMQServer):
         self._run = True
         self.logger.info("starting RPC server")
         for thing in self.things:
-            self.schedulers[thing.id] = QueuedScheduler(thing, self)
+            self.per_thing_schedulers[thing.id] = QueuedScheduler(thing, self)
         threads = dict()  # type: dict[int, threading.Thread]
         for thing in self.things:
             thread = threading.Thread(target=self.run_things, args=([thing],))
             thread.start()
             threads[thread.ident] = thread
-        self.run_zmq_request_listener()
+        try:
+            self.run_zmq_request_listener()
+        finally:
+            self.stop()
         for thread in threads.values():
             thread.join()
         self.logger.info("RPC server stopped")
@@ -658,7 +678,7 @@ class RPCServer(BaseZMQServer):
         """Stop the server. This method is threadsafe."""
         self._run = False
         self.req_rep_server.stop_polling()
-        for scheduler in self.schedulers.values():
+        for scheduler in self.per_thing_schedulers.values():
             scheduler.cleanup()
 
     def exit(self):
