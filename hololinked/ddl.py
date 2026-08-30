@@ -13,7 +13,7 @@ from hololinked.core.interfaces import (
     Metadata,
     PropertyMetadata,
 )
-from hololinked.metadata.td import (  # noqa: F401
+from hololinked.metadata.td import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,
