@@ -142,7 +142,16 @@ class ClientFactory:
             ZMQEvent,
             ZMQProperty,
         )
-        from hololinked.server.zmq import AsyncZMQClient, SyncZMQClient
+
+        try:
+            from hololinked.server.zmq import AsyncZMQClient, SyncZMQClient
+        except ModuleNotFoundError as ex:
+            if ex.name != "zmq" and not (ex.name or "").startswith("zmq."):
+                raise
+            raise ImportError(
+                "the ZMQ client needs the ZMQ transport, which is an optional dependency. "
+                + "Install it with `pip install hololinked[zmq]`."
+            ) from ex
 
         id = kwargs.get("id", f"{server_id}|{thing_id}|{access_point}|{uuid_hex()}")
 
