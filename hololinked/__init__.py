@@ -8,7 +8,8 @@ from .injection import (
     MetadataFormats as MetadataFormats,
     SchemaValidators as SchemaValidators,
     Serializers as Serializers,
+    StorageBackends as StorageBackends,
+    prepare_object_storage as prepare_object_storage,
 )
-from .persistence import prepare_object_storage  # noqa
 
 import hololinked.core  # noqa: F401 # this one is lazy for most part

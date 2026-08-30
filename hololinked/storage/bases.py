@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import threading
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Self
 
 from hololinked.config import global_config
 from hololinked.core.interfaces import BaseConfigurationRepository
@@ -50,6 +50,25 @@ class BaseDB(BaseConfigurationRepository):
             ),
         )
         self._batch_call_context = {}
+
+    @classmethod
+    def from_thing(cls, thing: Thing, **kwargs: Any) -> Self:
+        """
+        Build the database engine for a `Thing`, taking its configuration from the `db_config_file` argument.
+
+        Parameters
+        ----------
+        thing: Thing
+            the `Thing` instance whose configuration is stored in this database
+        kwargs: dict[str, Any]
+            the keyword arguments given to the `Thing`; `db_config_file` is read from here and the rest ignored
+
+        Returns
+        -------
+        Self
+            the database engine, connected and ready to use
+        """
+        return cls(thing=thing, config_file=kwargs.get("db_config_file"))
 
     @staticmethod
     def load_conf(

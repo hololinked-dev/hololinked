@@ -10,7 +10,7 @@ If you are a web developer or an industry professional looking for a web standar
 
 Benefits you get when you use hololinked:
 
-- technology independent and technology extensible architecture -> handles technology changes. Its not a solution that uses "different set of technologies to solve the same problem". It solves a problem irrespective of the underlying technogies. You chose the tech stack or extend it with your stack (PRs welcome for new tech adapters and new features).  
+- technology independent and technology extensible architecture -> handles technology changes. Its not a solution that uses "different set of technologies to solve the same problem". It solves a problem irrespective of the underlying technogies. AI included. You chose the tech stack or extend it with your stack (PRs welcome for new tech adapters and new features).  
 - simple to understand and simplifies contradicting viewpoints
 - scalable, performant, interoperable and can be used in different domains (IoT, microservices, networked control systems, web, RPCs etc.)
 - metadata rich - use AI agents, API tools, whatever.

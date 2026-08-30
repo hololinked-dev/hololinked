@@ -319,7 +319,7 @@ class Property(Parameter):
             )
 
     def _post_value_set(self, obj, value: Any) -> None:
-        if (self.db_persist or self.db_commit) and hasattr(obj, "db_engine"):
+        if (self.db_persist or self.db_commit) and getattr(obj, "db_engine", None) is not None:
             obj.db_engine.set_property(self, value)
         self.push_change_event(obj, value)
         return super()._post_value_set(obj, value)

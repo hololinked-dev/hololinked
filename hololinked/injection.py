@@ -5,14 +5,23 @@ from __future__ import annotations
 import warnings
 
 from collections.abc import Callable, Iterator, Mapping
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel
 
 from hololinked.config import global_config
-from hololinked.core.interfaces import BaseSchemaValidator, BaseSerializer, MetadataFormat
+from hololinked.core.interfaces import (
+    BaseConfigurationRepository,
+    BaseSchemaValidator,
+    BaseSerializer,
+    MetadataFormat,
+)
 from hololinked.param.parameters import Parameter, String
 from hololinked.utils import MappableSingleton, issubklass
+
+
+if TYPE_CHECKING:
+    from hololinked.core.thing import Thing
 
 
 class AdapterRegistry(MappableSingleton):
@@ -820,3 +829,150 @@ class MetadataFormats(Registry):
     def reset(cls) -> None:
         """Reset the metadata format registry."""
         cls.forget_adapters()
+
+
+class StorageBackends(Registry):
+    """
+    A singleton registry of the storage backends a `Thing` can persist its configuration to.
+
+    All members are class attributes and settings are applied process-wide (python process).
+    A storage backend is a `BaseConfigurationRepository` subclass, instantiated once per `Thing` through its `from_thing()`.
+    The storage is used for persisting device configuration only, not captured data. One needs to currently arrange that
+    on one's own. JSON file, MongoDB and SQLAlchemy backends are built in, but others can be registered. For example:
+
+    ```python
+    from hololinked import StorageBackends
+
+    StorageBackends.register(TomlFile, "tomlfile", flag="use_toml_file")
+
+    class MyThing(Thing):
+        use_toml_file = True
+    ```
+    """
+
+    adapter_kind: ClassVar[str] = "storage backend"
+    package: ClassVar[str] = "hololinked.storage"
+    tables: ClassVar[tuple[str, ...]] = ("modules", "flags")
+
+    modules: ClassVar[dict[str, str | tuple[str, str]]] = {
+        "sqlalchemy": "SQLAlchemyDB",
+        "mongo": "MongoDB",
+        "json_file": "JSONFileStorage",
+    }
+
+    sqlalchemy: type[BaseConfigurationRepository]
+    """SQLAlchemy based storage, supporting SQLite, PostgreSQL and MySQL."""
+    mongo: type[BaseConfigurationRepository]
+    """MongoDB based storage."""
+    json_file: type[BaseConfigurationRepository]
+    """Plain JSON file based storage, needing no database server."""
+
+    flags: ClassVar[dict[str, str]] = {
+        "use_default_db": "sqlalchemy",
+        "use_mongo_db": "mongo",
+        "use_json_file": "json_file",
+    }
+    """Name of a `Thing` keyword argument mapped to the backend it selects."""
+
+    default_name: ClassVar[str] = "sqlalchemy"
+    """The backend used when no flag is set but a database configuration file is supplied."""
+
+    @classmethod
+    def register(cls, backend: type[BaseConfigurationRepository], name: str, flag: str) -> None:
+        """
+        Register a storage backend under a given name.
+
+        Parameters
+        ----------
+        backend: type[BaseConfigurationRepository]
+            the backend class to register, must be a subclass of `BaseConfigurationRepository`
+        name: str
+            the name to register the backend under, for example 'sqlalchemy' or 'mongo'
+        flag: str
+            the keyword argument, or class attribute, that selects this backend, for example 'use_mongo_db'
+
+        Raises
+        ------
+        TypeError
+            if the backend is not a subclass of `BaseConfigurationRepository`
+        """
+        if not issubklass(backend, BaseConfigurationRepository):
+            raise TypeError(f"backend must be a subclass of BaseConfigurationRepository, given : {backend}")
+        cls.install(name, backend)
+        cls.flags.pop(name, None)
+        cls.flags[flag] = name
+
+    @classmethod
+    def name_for_thing(cls, thing: Thing, **kwargs: Any) -> str | None:
+        """
+        Get the name of the backend selected for a `Thing`.
+
+        Parameters
+        ----------
+        thing: Thing
+            the `Thing` to find a backend for
+        kwargs: dict[str, Any]
+            the keyword arguments the `Thing` was created with
+
+        Returns
+        -------
+        str | None
+            the name the selected backend is registered under, None if the `Thing` persists nothing
+        """
+        for flag in reversed(cls.flags):
+            if kwargs.get(flag, getattr(thing.__class__, flag, False)):
+                return cls.flags[flag]
+        if kwargs.get("db_config_file", global_config.DB_CONFIG_FILE):
+            return cls.default_name
+        return None
+
+    @classmethod
+    def for_thing(cls, thing: Thing, **kwargs: Any) -> type[BaseConfigurationRepository] | None:
+        """
+        Get the backend class a `Thing` persists to.
+
+        Parameters
+        ----------
+        thing: Thing
+            the `Thing` to find a backend for
+        kwargs: dict[str, Any]
+            the keyword arguments the `Thing` was created with
+
+        Returns
+        -------
+        type[BaseConfigurationRepository] | None
+            the backend class, to be built with its `from_thing()`, None if the `Thing` persists nothing
+        """
+        name = cls.name_for_thing(thing, **kwargs)
+        return None if name is None else getattr(cls, name)
+
+    @classmethod
+    def reset(cls) -> None:
+        """Reset the storage backend registry."""
+        cls.forget_adapters()
+
+
+def prepare_object_storage(thing: Thing, **kwargs: Any) -> None:
+    """
+    Attach the storage backend a `Thing` persists its configuration to, if it asked for one.
+
+    Parameters
+    ----------
+    thing: Thing
+        The `Thing` instance to prepare storage for
+    kwargs:
+        Additional keyword arguments to configure storage backend
+
+        - `use_json_file`: `bool`, whether to use JSON file storage (default: False)
+        - `use_default_db`: `bool`, whether to use default SQLite database storage (default: False)
+        - `use_mongo_db`: `bool`, whether to use MongoDB storage (default: False)
+        - `db_config_file`: `str`, path to database configuration file (default: from `global_config.DB_CONFIG_FILE`)
+        - `json_filename`: `str`, filename for JSON file storage (default: derived from thing instance)
+    """
+    kwargs.setdefault("db_config_file", global_config.DB_CONFIG_FILE)
+    backend = StorageBackends.for_thing(thing, **kwargs)
+    if backend is None:
+        thing.db_engine = None
+        return
+    thing.db_engine = backend.from_thing(thing, **kwargs)
+    thing.logger.info(f"using {backend.__name__} for configuration storage")
