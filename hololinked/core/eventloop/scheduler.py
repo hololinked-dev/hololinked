@@ -20,7 +20,6 @@ import threading
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
-from ...utils import get_current_async_loop
 from ..thing import Thing
 from ..utils import CrossLoopEvent
 from .operations import Job, Operation, Reply
@@ -54,7 +53,10 @@ class Scheduler:
         self._one_shot = False  # type: bool
         self._last_operation_request = Undefined  # type: Operation
         self._last_operation_reply = Undefined  # type: Reply
-        self._job_queued_event = asyncio.Event()  # type: asyncio.Event
+        # cross-loop like the other two: `dispatch_job()` runs on whichever thread submitted, while
+        # the drain loop waiting on this runs on the engine's. A plain `asyncio.Event` cannot cross
+        # that gap - `set()` from another thread does not reliably wake the waiter.
+        self._job_queued_event = CrossLoopEvent()  # type: CrossLoopEvent
 
     @property
     def last_operation_request(self) -> OperationRequest:
@@ -146,6 +148,8 @@ class QueuedScheduler(Scheduler):
         job: Job
             the operation to run, and the future that answers whoever submitted it
         """
+        # `deque.append` is atomic and the drain loop is the only consumer, so no lock is needed
+        # here however many threads submit at once
         self.queue.append(job)
         self._job_queued_event.set()
 
@@ -175,10 +179,20 @@ class AsyncScheduler(Scheduler):
         return self._job
 
     def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
+        """
+        Store the job and start both halves of it as tasks on the engine's loop.
+
+        Onto the engine's loop, never the caller's: a submission from a protocol server's thread
+        must not end up running a `Thing`'s coordination on that server's loop.
+
+        Parameters
+        ----------
+        job: Job
+            the operation to run, and the future that answers whoever submitted it
+        """
         self._job = job
-        eventloop = get_current_async_loop()
-        eventloop.create_task(self.engine.tunnel_message_to_things(self))
-        eventloop.create_task(self.engine.run_thing_instance(self.instance, self))
+        self.engine.call_on_engine_loop(self.engine.tunnel_message_to_things(self))
+        self.engine.call_on_engine_loop(self.engine.run_thing_instance(self.instance, self))
         self._job_queued_event.set()
 
 
@@ -204,10 +218,18 @@ class ThreadedScheduler(Scheduler):
         return self._job
 
     def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
-        """Store the job and start a thread to execute it on the `Thing` instance."""
+        """
+        Store the job and start a thread to execute it on the `Thing` instance.
+
+        The drain half goes onto the engine's loop, not the caller's - see `AsyncScheduler`.
+
+        Parameters
+        ----------
+        job: Job
+            the operation to run, and the future that answers whoever submitted it
+        """
         self._job = job
-        eventloop = get_current_async_loop()
-        eventloop.create_task(self.engine.tunnel_message_to_things(self))
+        self.engine.call_on_engine_loop(self.engine.tunnel_message_to_things(self))
         self._execution_thread = threading.Thread(
             target=asyncio.run,
             args=(self.engine.run_thing_instance(self.instance, self),),

@@ -16,6 +16,7 @@ import logging
 import threading
 
 from collections.abc import Callable, Coroutine, Sequence
+from concurrent.futures import Future
 from typing import Any
 
 import structlog
@@ -36,6 +37,7 @@ from ..payloads import PreserializedData, SerializableData
 from ..properties import TypedList
 from ..property import Property
 from ..thing import Thing
+from ..utils import CrossLoopEvent
 from .operations import TIMED_OUT_REPLY, Job, Operation, Reply, ReplyKind, qualified_operation_key
 from .pubsub import EventBus
 from .scheduler import (
@@ -128,12 +130,30 @@ class EventLoop:
         self.event_bus = EventBus()
         self.protocol_servers = []  # type: list[Any]
         self._stop_hooks = []  # type: list[Callable[[], None]]
+        self._loop = None  # type: asyncio.AbstractEventLoop | None
         self._thing_description_provider = thing_description_provider
         self._run = False  # flag to stop the engine and everything hooked onto it
         self.add_things(*(things or []))
 
     def add_thing(self, thing: Thing) -> None:
-        """Adds a thing to the list of things to serve."""
+        """
+        Adds a thing to the list of things to serve.
+
+        Parameters
+        ----------
+        thing: Thing
+            the `Thing` to serve, along with its sub-things
+
+        Raises
+        ------
+        RuntimeError
+            if the engine is already running - the registries it writes to are read without a lock
+            by every submission, on the understanding that they stop changing once things are served
+        """
+        if self._run:
+            raise RuntimeError(
+                f"cannot add thing {thing.id} while the engine is running - add every thing before run()"
+            )
         # setup scheduling requirements
         all_things = get_all_sub_things_recusively(thing)
         for instance in all_things:
@@ -159,13 +179,43 @@ class EventLoop:
         """Check if the server is running or not."""
         return self._run
 
-    def submit(self, operation: Operation) -> asyncio.Future:
+    def call_on_engine_loop(self, coro: Coroutine[Any, Any, Any]) -> Future:
+        """
+        Run a coroutine on the engine's own loop, from whichever thread is asking.
+
+        Everything the engine does internally has to happen on one loop, so that the drain loops and
+        the futures they resolve stay on speaking terms. Callers may be anywhere.
+
+        Parameters
+        ----------
+        coro: Coroutine
+            the coroutine to schedule
+
+        Returns
+        -------
+        concurrent.futures.Future
+            resolved with the coroutine's result
+
+        Raises
+        ------
+        RuntimeError
+            if the engine is not running, so there is no loop to schedule onto
+        """
+        if self._loop is None:
+            coro.close()
+            raise RuntimeError("the engine is not running, call run() before submitting operations")
+        return asyncio.run_coroutine_threadsafe(coro, self._loop)
+
+    def submit(self, operation: Operation) -> Future:
         """
         Schedule an operation on its `Thing` and return the promise of its reply.
 
-        Non-blocking. Which scheduling policy applies is decided here, from the action descriptor,
-        and is invisible to the caller. This is the only entry point into the execution engine -
-        nothing below it knows which protocol the operation arrived on, or whether one did at all.
+        Non-blocking, and safe to call from any thread, with or without a running event loop of your
+        own. Which scheduling policy applies is decided here, from the action descriptor, and is
+        invisible to the caller. This is the only entry point into the execution engine - nothing
+        below it knows which protocol the operation arrived on, or whether one did at all.
+
+        Coroutines should use `submit_and_wait()`, which parks the wait on their own loop.
 
         Parameters
         ----------
@@ -174,24 +224,25 @@ class EventLoop:
 
         Returns
         -------
-        asyncio.Future
+        concurrent.futures.Future
             resolved with a `Reply`, the timeout kinds included
 
         Raises
         ------
         KeyError
             if no `Thing` with that id is being served
+        RuntimeError
+            if the engine is not running
         """
+        if not self._run:
+            # otherwise this surfaces further down as a KeyError on a scheduler table that run()
+            # has not filled in yet, which says nothing about what went wrong
+            raise RuntimeError("the engine is not running, call run() before submitting operations")
         thing = self._things_by_id[operation.thing_id]
-        eventloop = get_current_async_loop()
-        job = Job(
-            operation=operation,
-            future=eventloop.create_future(),
-            started=asyncio.Event(),
-        )
+        job = Job(operation=operation, future=Future(), started=CrossLoopEvent())
         if operation.invokation_timeout is not None:
             # races against the job leaving the queue - whichever gets there first answers the caller
-            job.invokation_timeout_task = eventloop.create_task(
+            job.invokation_timeout_task = self.call_on_engine_loop(
                 self._answer_if_never_started(job, operation.invokation_timeout)
             )
 
@@ -204,6 +255,32 @@ class EventLoop:
             scheduler = self.per_thing_schedulers[operation.thing_id]
         scheduler.dispatch_job(job)
         return job.future
+
+    async def submit_and_wait(self, operation: Operation) -> Reply:
+        """
+        Schedule an operation and wait for its reply, on the calling coroutine's own loop.
+
+        The async face of `submit()`. Whichever loop calls this is the loop the wait is parked on,
+        so a protocol server never blocks, nor borrows, the engine's loop.
+
+        Parameters
+        ----------
+        operation: Operation
+            what to do, on which `Thing`
+
+        Returns
+        -------
+        Reply
+            how the operation finished, including the two timeout kinds
+
+        Raises
+        ------
+        KeyError
+            if no `Thing` with that id is being served
+        RuntimeError
+            if the engine is not running
+        """
+        return await asyncio.wrap_future(self.submit(operation))
 
     async def _answer_if_never_started(self, job: Job, timeout: float) -> bool:
         """
@@ -254,7 +331,7 @@ class EventLoop:
 
             job = scheduler.next_job  # type: Job
             job.started.set()  # releases the invokation timeout
-            if job.invokation_timeout_task is not None and await job.invokation_timeout_task:
+            if job.invokation_timeout_task is not None and await asyncio.wrap_future(job.invokation_timeout_task):
                 # the timeout already answered the caller, drop the call rather than run it
                 continue
 
@@ -628,6 +705,8 @@ class EventLoop:
             coroutines to run beside the drain loops, usually a protocol server's request listeners
         """
         self._run = True
+        # recorded before anything can submit, since submissions from other threads land here
+        self._loop = get_current_async_loop()
         self.logger.info("starting execution engine")
         for thing in self.things:
             self.per_thing_schedulers[thing.id] = QueuedScheduler(thing, self)
@@ -637,7 +716,7 @@ class EventLoop:
             thread.start()
             threads[thread.ident] = thread
         try:
-            eventloop = get_current_async_loop()
+            eventloop = self._loop
             existing_tasks = asyncio.all_tasks(eventloop)
             eventloop.run_until_complete(
                 asyncio.gather(
@@ -650,6 +729,7 @@ class EventLoop:
             )
             eventloop.close()
         finally:
+            self._loop = None  # nothing may be scheduled onto a closed loop
             self.stop()
         for thread in threads.values():
             thread.join()

@@ -76,7 +76,9 @@ class EventBus:
         Parameters
         ----------
         callback: Callable[[EventDispatcher, Any], None]
-            called synchronously, on whichever thread pushed the event
+            called synchronously, on whichever thread pushed the event - which is a `Thing`'s own
+            thread, not the subscriber's. A subscriber that owns loop-bound state (a protocol
+            server's connections, say) must hop to its loop itself, with `call_soon_threadsafe`.
         """
         with self._lock:
             if callback not in self._subscribers:

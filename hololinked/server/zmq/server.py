@@ -268,7 +268,7 @@ class ZMQServer(BaseProtocolServer):
         """
         try:
             operation = request_message.to_operation()
-            reply = await self.engine.submit(operation)  # type: Reply
+            reply = await self.engine.submit_and_wait(operation)  # type: Reply
         except Exception as ex:
             self.logger.error(
                 f"exception occurred for message - {ex!s}",

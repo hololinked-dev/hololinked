@@ -992,7 +992,7 @@ class EventSource:
         return self._events_registry
 
     @property
-    def event_publisher(self) -> "EventBus | None":
+    def event_bus(self) -> "EventBus | None":
         """
         The `EventBus` this object's events are published through.
 
@@ -1003,3 +1003,23 @@ class EventSource:
             return self.engine.event_bus if self.engine else None
         except AttributeError:
             return None
+
+    @property
+    def event_publisher(self) -> "EventBus | None":
+        """
+        Deprecated alias of `event_bus`.
+
+        Events used to be published straight onto a ZMQ PUB socket, and this returned the object
+        owning it. It now returns the transport-neutral bus that took its place.
+        """
+        return self.event_bus
+
+    @property
+    def rpc_server(self) -> "EventLoop | None":
+        """
+        Deprecated alias of `engine`.
+
+        The engine used to be an RPC server that owned ZMQ sockets. It is now transport-neutral, and
+        the sockets belong to whichever protocol servers sit in front of it.
+        """
+        return self.engine

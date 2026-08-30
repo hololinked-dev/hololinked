@@ -13,13 +13,13 @@ clients bypassed the typed header and sent a raw dict.
 
 from __future__ import annotations
 
-import asyncio
-
+from concurrent.futures import Future, InvalidStateError
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
 from ..payloads import PreserializedData, SerializableData
+from ..utils import CrossLoopEvent
 
 
 @dataclass
@@ -117,17 +117,39 @@ class Job:
 
     operation: Operation
     """what to do."""
-    future: asyncio.Future
-    """resolved with a `Reply`, the timeout kinds included, so the caller can tell them apart."""
-    started: asyncio.Event
+    future: Future
+    """
+    Resolved with a `Reply`, the timeout kinds included, so the caller can tell them apart.
+
+    A `concurrent.futures.Future` rather than an `asyncio` one: it is created by whoever submitted
+    and resolved by whichever thread the `Thing` ran on, and only this kind is safe across that gap.
+    An async caller wraps it onto its own loop - see `EventLoop.submit_and_wait()`.
+    """
+    started: CrossLoopEvent
     """set when the operation leaves the queue. The invokation timeout races against this."""
-    invokation_timeout_task: asyncio.Task | None = None
-    """the racing timeout, if one was armed. Awaited once `started` is set, to settle the race."""
+    invokation_timeout_task: Future | None = None
+    """
+    The racing timeout, if one was armed, as returned by `asyncio.run_coroutine_threadsafe`.
+
+    Awaited once `started` is set, to settle the race before deciding whether to run the operation.
+    """
 
     def answer(self, reply: Reply) -> None:
-        """Resolve the caller's future, unless a timeout already answered for us."""
-        if not self.future.done():
+        """
+        Resolve the caller's future, unless a timeout already answered for us.
+
+        Safe to call from any thread, and safe to call twice - the loser is dropped rather than
+        raising, which is what lets a timeout and a real reply race without coordination.
+
+        Parameters
+        ----------
+        reply: Reply
+            the outcome to hand back to whoever submitted
+        """
+        try:
             self.future.set_result(reply)
+        except InvalidStateError:
+            pass  # somebody got there first: a timeout, or a second answer for the same job
 
 
 def qualified_operation_key(thing_id: str, objekt: str, operation: str) -> str:
