@@ -2,7 +2,7 @@
 
 import ssl
 
-from typing import Optional, Type  # noqa: F401
+from typing import Any, Optional, Type  # noqa: F401
 
 import aiomqtt
 import structlog
@@ -71,11 +71,11 @@ class MQTTPublisher(BaseProtocolServer):
         kwargs: dict
             Additional keyword arguments
         """
-        default_config = dict(
+        default_config: dict[str, Any] = dict(
             topic_publisher=kwargs.get("topic_publisher", TopicPublisher),
             thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            thing_repository=kwargs.get("thing_repository", dict()),
+            engine=kwargs.get("engine", None),
             qos=qos,
         )
         default_config.update(config or dict())
@@ -128,10 +128,15 @@ class MQTTPublisher(BaseProtocolServer):
         """
         eventloop = get_current_async_loop()
         if not thing.engine:
-            raise ValueError(f"Thing {thing.id} is not associated with any RPC server")
-
-        await self._instantiate_broker(server_id=thing.engine.id, thing_id=thing.id, access_point="INPROC")
-        TD = self.config.thing_repository[thing.id].TD
+            raise ValueError(f"Thing {thing.id} is not associated with any execution engine")
+        if self.config.engine is None:
+            self.config.engine = thing.engine
+        elif self.config.engine is not thing.engine:
+            raise ValueError(
+                "every Thing published over MQTT must be run by the same engine, "
+                + f"but {thing.id} belongs to a different one"
+            )
+        TD = thing.engine.get_thing_model(thing.id, ignore_errors=True)
 
         for event_name in TD.get("events", {}).keys():
             event_affordance = EventAffordance.from_TD(event_name, TD)
@@ -161,7 +166,7 @@ class MQTTPublisher(BaseProtocolServer):
         td_publisher = self.config.thing_description_publisher(
             client=self.client,
             logger=self.logger,
-            ZMQ_TD=TD,
+            thing_model=TD,
             config=self.config,
         )
         self.publishers[td_publisher.topic] = td_publisher

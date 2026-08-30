@@ -613,6 +613,43 @@ class EventLoop:
         self.logger.info(f"exiting event loop in thread {threading.get_ident()}")
         thing_executor_loop.close()
 
+    def get_thing_model(
+        self,
+        thing_id: str,
+        ignore_errors: bool = False,
+        skip_names: list[str] = [],
+    ) -> dict[str, Any]:
+        """
+        Describe one served `Thing` in the only terms the engine has: affordances, and no forms.
+
+        A Thing Model is a Thing Description without the forms, and forms are the part that names a
+        protocol's wire. Every protocol server builds its own description on top of this.
+
+        Read-only introspection of descriptors, so it is answered directly rather than queued behind
+        whatever the `Thing` happens to be doing.
+
+        Parameters
+        ----------
+        thing_id: str
+            `id` of the `Thing` to describe
+        ignore_errors: bool
+            whether to skip affordances whose metadata cannot be generated
+        skip_names: list[str]
+            property, action or event names to leave out
+
+        Returns
+        -------
+        dict[str, Any]
+            the Thing Model
+
+        Raises
+        ------
+        KeyError
+            if no `Thing` with that id is being served
+        """
+        instance = self._things_by_id[thing_id]
+        return instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()
+
     def get_thing_description(
         self,
         instance: Thing,

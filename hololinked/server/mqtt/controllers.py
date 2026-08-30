@@ -10,9 +10,8 @@ from paho.mqtt.properties import Properties
 
 from hololinked import Serializers
 
+from ...core.eventloop import EventSubscription, encode_event
 from ...metadata.td import EventAffordance, PropertyAffordance
-from ..repository import BrokerThing  # noqa: F401
-from ..zmq.message import EventMessage  # noqa: F401
 
 
 class TopicPublisher:
@@ -50,7 +49,7 @@ class TopicPublisher:
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="controller", impl=self.__class__.__name__, topic=self.topic)
-        self.thing = self.config.thing_repository[resource.thing_id]  # type: BrokerThing
+        self.engine = self.config.engine
         self.qos = self.config.qos
         self._stop_publishing = False
 
@@ -60,25 +59,31 @@ class TopicPublisher:
 
     async def publish(self):
         """Publishes events to the MQTT broker in an infinite loop."""
-        consumer = self.thing.subscribe_event(self.resource)
+        subscription = EventSubscription(
+            self.engine.event_bus,
+            f"{self.resource.thing_id}/{self.resource.name}",
+        )
         self.logger.info(f"Starting to publish events for {self.resource.name} to MQTT broker on topic {self.topic}")
-        while not self._stop_publishing:
-            try:
-                message = await consumer.receive()  # type: EventMessage | None
-                if message is None:
-                    continue
-                payload = self.thing.get_response_payload(message)
-                properties = Properties(PacketTypes.PUBLISH)
-                properties.ContentType = payload.content_type
-                await self.client.publish(
-                    topic=self.topic,
-                    payload=payload.value,
-                    qos=self.qos,
-                    properties=properties,
-                )
-                self.logger.debug(f"Published MQTT message for {self.resource.name} on topic {self.topic}")
-            except Exception as ex:
-                self.logger.error(f"Error publishing MQTT message for {self.resource.name}: {ex}")
+        try:
+            while not self._stop_publishing:
+                try:
+                    received = await subscription.receive(timeout=10)
+                    if received is None:
+                        continue
+                    body, content_type = encode_event(*received)
+                    properties = Properties(PacketTypes.PUBLISH)
+                    properties.ContentType = content_type
+                    await self.client.publish(
+                        topic=self.topic,
+                        payload=body,
+                        qos=self.qos,
+                        properties=properties,
+                    )
+                    self.logger.debug(f"Published MQTT message for {self.resource.name} on topic {self.topic}")
+                except Exception as ex:
+                    self.logger.error(f"Error publishing MQTT message for {self.resource.name}: {ex}")
+        finally:
+            subscription.unsubscribe()
         self.logger.info(f"Stopped publishing events for {self.resource.name} to MQTT broker on topic {self.topic}")
 
 
@@ -94,7 +99,7 @@ class ThingDescriptionPublisher:
         client: aiomqtt.Client,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
-        ZMQ_TD: dict[str, Any],
+        thing_model: dict[str, Any],
     ) -> None:
         """
         Initialize the Thing Description publisher.
@@ -107,16 +112,15 @@ class ThingDescriptionPublisher:
             The runtime configuration for the MQTT publisher
         logger: structlog.stdlib.BoundLogger
             The logger to use for logging messages
-        ZMQ_TD: dict[str, Any]
-            The ZMQ Thing Description message received from ZMQ broker
+        thing_model: dict[str, Any]
+            The Thing Model of the `Thing` whose description is being published
         """
         from .config import RuntimeConfig  # noqa: F401
 
         self.client = client
-        self.topic = f"{ZMQ_TD['id']}/thing-description"
+        self.topic = f"{thing_model['id']}/thing-description"
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
-        self.thing = self.config.thing_repository[ZMQ_TD["id"]]
         self.thing_description = self.config.thing_description_service(
             hostname=self.client._hostname,
             port=self.client._port,
@@ -124,9 +128,9 @@ class ThingDescriptionPublisher:
             ssl=self.client._client._ssl_context is not None,
         )
 
-    async def publish(self, ZMQ_TD: dict[str, Any]) -> None:
+    async def publish(self, thing_model: dict[str, Any]) -> None:
         """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True."""
-        TD = await self.thing_description.generate(ZMQ_TD)
+        TD = await self.thing_description.generate(thing_model)
 
         properties = Properties(PacketTypes.PUBLISH)
         properties.ContentType = "application/json"

@@ -18,8 +18,37 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+import msgspec
+
 from ..payloads import PreserializedData, SerializableData
 from ..utils import CrossLoopEvent
+
+
+# The execution context a caller asks for, in the camelCase the ZMQ header declares. It lives here
+# rather than with that header because it is what a caller wants, not how one protocol spells it -
+# `as_execution_kwargs()` reads both spellings onto the `Operation` fields below.
+
+
+class ServerExecutionContext(msgspec.Struct):
+    """Additional context for the server while executing an operation."""
+
+    invokationTimeout: float
+    executionTimeout: float
+    oneway: bool
+
+
+class ThingExecutionContext(msgspec.Struct):
+    """Additional context for the thing while executing an operation."""
+
+    fetchExecutionLogs: bool
+
+
+default_server_execution_context = ServerExecutionContext(invokationTimeout=5, executionTimeout=5, oneway=False)
+
+default_thing_execution_context = ThingExecutionContext(fetchExecutionLogs=False)
+
+SerializableNone = SerializableData(None, content_type="application/json")
+PreserializedEmptyByte = PreserializedData(b"", content_type="text/plain")
 
 
 @dataclass

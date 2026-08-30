@@ -10,11 +10,14 @@ that any of them exist.
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import warnings
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
+
+from hololinked import Serializers
 
 
 if TYPE_CHECKING:
@@ -123,4 +126,118 @@ class EventBus:
                 callback(event, data)
 
 
-__all__ = [EventBus.__name__]
+class EventSubscription:
+    """
+    One event's payloads, delivered onto the subscriber's own loop.
+
+    `EventBus.publish()` fans out synchronously on whichever thread pushed the event - a `Thing`'s
+    thread - so a subscriber that owns loop-bound state cannot be called directly. This parks each
+    payload on a queue belonging to the subscriber's loop and lets it `await` them in its own time.
+
+    Bounded on purpose: a client that stops reading must not grow the queue without limit, so the
+    oldest payload is dropped once it is full, which is what a live stream wants.
+    """
+
+    def __init__(
+        self,
+        bus: EventBus,
+        unique_identifier: str,
+        loop: asyncio.AbstractEventLoop | None = None,
+        maxsize: int = 100,
+    ) -> None:
+        """
+        Subscribe to one event.
+
+        Parameters
+        ----------
+        bus: EventBus
+            the bus to subscribe to
+        unique_identifier: str
+            the event to listen for, as `<thing id>/<event name>`
+        loop: asyncio.AbstractEventLoop, optional
+            the loop to deliver on. The running one by default.
+        maxsize: int
+            how many payloads to hold before dropping the oldest
+        """
+        self._bus = bus
+        self._unique_identifier = unique_identifier
+        self._loop = loop or asyncio.get_running_loop()
+        self._queue = asyncio.Queue(maxsize=maxsize)  # type: asyncio.Queue
+        self.dropped = 0
+        """how many payloads were dropped because the reader fell behind."""
+        bus.subscribe(self._on_event)
+
+    def _on_event(self, event: EventDispatcher, data: Any) -> None:
+        """Called on the pushing thread - hand the payload over and get out of the way."""
+        if event._unique_identifier != self._unique_identifier:
+            return
+        try:
+            self._loop.call_soon_threadsafe(self._offer, event, data)
+        except RuntimeError:
+            pass  # the subscriber's loop is gone, so there is nobody left to deliver to
+
+    def _offer(self, event: EventDispatcher, data: Any) -> None:
+        """Called on the subscriber's loop."""
+        if self._queue.full():
+            try:
+                self._queue.get_nowait()
+                self.dropped += 1
+            except asyncio.QueueEmpty:
+                pass
+        self._queue.put_nowait((event, data))
+
+    async def receive(self, timeout: float | None = None) -> tuple[EventDispatcher, Any] | None:
+        """
+        Wait for the next payload.
+
+        Parameters
+        ----------
+        timeout: float, optional
+            seconds to wait. Waits indefinitely when not given.
+
+        Returns
+        -------
+        tuple[EventDispatcher, Any] | None
+            the event and its payload, or `None` if the timeout elapsed first
+        """
+        if timeout is None:
+            return await self._queue.get()
+        try:
+            return await asyncio.wait_for(self._queue.get(), timeout)
+        except TimeoutError:
+            return None
+
+    def unsubscribe(self) -> None:
+        """Stop receiving. Safe to call more than once."""
+        self._bus.unsubscribe(self._on_event)
+
+
+def encode_event(event: EventDispatcher, data: Any) -> tuple[bytes, str]:
+    """
+    Encode one event's payload the way its objekt is registered to be encoded.
+
+    Every protocol needs this and none of them should be reimplementing the registry lookup.
+    `bytes` are passed through untouched, which is the escape hatch for anything a serializer would
+    only get in the way of.
+
+    Parameters
+    ----------
+    event: EventDispatcher
+        the event being published
+    data: Any
+        its payload
+
+    Returns
+    -------
+    tuple[bytes, str]
+        the encoded body and the content type to declare for it
+    """
+    owner, name = event._owner_inst, event._descriptor.name
+    if isinstance(data, bytes):
+        content_type = Serializers.get_content_type_for_object(owner.id, owner.__class__.__name__, name)
+        return data, content_type or "application/octet-stream"
+    serializer = Serializers.for_object(owner.id, owner.__class__.__name__, name)
+    return serializer.dumps(data), serializer.content_type
+
+
+__all__ = [EventBus.__name__, EventSubscription.__name__]

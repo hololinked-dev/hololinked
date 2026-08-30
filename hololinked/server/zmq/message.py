@@ -11,7 +11,13 @@ from hololinked.param.parameters import Integer
 
 from ...core.eventloop.operations import (  # noqa: F401
     Operation,
+    PreserializedEmptyByte,
+    SerializableNone,
+    ServerExecutionContext,
+    ThingExecutionContext,
     as_execution_kwargs,
+    default_server_execution_context,
+    default_thing_execution_context,
     qualified_operation_key,
 )
 from ...core.payloads import PreserializedData, SerializableData
@@ -54,28 +60,6 @@ INDEX_DELIMITER = 1
 INDEX_HEADER = 2
 INDEX_BODY = 3
 INDEX_PRESERIALIZED_BODY = 4
-
-
-class ServerExecutionContext(msgspec.Struct):
-    """Additional context for the server while executing an operation."""
-
-    invokationTimeout: float
-    executionTimeout: float
-    oneway: bool
-
-
-class ThingExecutionContext(msgspec.Struct):
-    """Additional context for the thing while executing an operation."""
-
-    fetchExecutionLogs: bool
-
-
-default_server_execution_context = ServerExecutionContext(invokationTimeout=5, executionTimeout=5, oneway=False)
-
-default_thing_execution_context = ThingExecutionContext(fetchExecutionLogs=False)
-
-SerializableNone = SerializableData(None, content_type="application/json")
-PreserializedEmptyByte = PreserializedData(EMPTY_BYTE, content_type="text/plain")
 
 
 class RequestHeader(msgspec.Struct):

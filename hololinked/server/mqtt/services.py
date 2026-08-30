@@ -45,7 +45,7 @@ class ThingDescriptionService:
 
     async def generate(
         self,
-        ZMQ_TD: dict[str, Any],
+        thing_model: dict[str, Any],
         ignore_errors: bool = False,
         skip_names: list[str] = [],
     ) -> dict[str, Any]:
@@ -54,7 +54,7 @@ class ThingDescriptionService:
 
         Parameters
         ----------
-        ZMQ_TD: dict[str, Any]
+        thing_model: dict[str, Any]
             The ZMQ Thing Description message received from ZMQ broker
         ignore_errors: bool
             Whether to ignore errors when adding properties/events to the TD
@@ -66,19 +66,19 @@ class ThingDescriptionService:
         dict[str, Any]
             The generated MQTT Thing Description
         """
-        TD = copy.deepcopy(ZMQ_TD)
+        TD = copy.deepcopy(thing_model)
         # remove actions as they dont push events
         TD.pop("actions", None)
 
-        self.add_properties(TD, ZMQ_TD, ignore_errors, skip_names)
-        self.add_events(TD, ZMQ_TD, ignore_errors, skip_names)
+        self.add_properties(TD, thing_model, ignore_errors, skip_names)
+        self.add_events(TD, thing_model, ignore_errors, skip_names)
 
         return TD
 
     def add_properties(
         self,
         TD: dict[str, Any],
-        ZMQ_TD: dict[str, Any],
+        thing_model: dict[str, Any],
         ignore_errors: bool = False,
         skip_names: list[str] = [],
     ) -> None:
@@ -90,18 +90,18 @@ class ThingDescriptionService:
         TD: dict[str, Any]
             The seed Thing Description to modify in place. This method does not have a return value, therefore
             just supply the TD dict and it will be modified. Non-observable properties will be removed.
-        ZMQ_TD: dict[str, Any]
+        thing_model: dict[str, Any]
             The ZMQ Thing Description message received from ZMQ broker
         ignore_errors: bool
             Whether to ignore errors when adding properties to the TD
         skip_names: list[str]
             List of property names to skip when adding to the TD
         """
-        for name in ZMQ_TD.get("properties", {}).keys():
+        for name in thing_model.get("properties", {}).keys():
             if name in skip_names:
                 continue
             try:
-                affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
+                affordance = PropertyAffordance.from_TD(name, thing_model)
                 if not affordance.observable:
                     TD["properties"].pop(name)
                     continue
@@ -119,7 +119,7 @@ class ThingDescriptionService:
     def add_events(
         self,
         TD: dict[str, Any],
-        ZMQ_TD: dict[str, Any],
+        thing_model: dict[str, Any],
         ignore_errors: bool = False,
         skip_names: list[str] = [],
     ) -> None:
@@ -131,7 +131,7 @@ class ThingDescriptionService:
         TD: dict[str, Any]
             The seed Thing Description to modify in place. This method does not have a return value, therefore
             just supply the TD dict and it will be modified.
-        ZMQ_TD: dict[str, Any]
+        thing_model: dict[str, Any]
             The ZMQ Thing Description message received from ZMQ broker
         ignore_errors: bool
             Whether to ignore errors when adding events to the TD
@@ -139,11 +139,11 @@ class ThingDescriptionService:
             List of event names to skip when adding to the TD
         """
         # repurpose event
-        for name in ZMQ_TD.get("events", {}).keys():
+        for name in thing_model.get("events", {}).keys():
             if name in skip_names:
                 continue
             try:
-                affordance = EventAffordance.from_TD(name, ZMQ_TD)
+                affordance = EventAffordance.from_TD(name, thing_model)
                 TD["events"][name]["forms"] = []
                 form = affordance.retrieve_form(Operations.subscribeevent)
                 form.href = f"mqtt{'s' if self.ssl else ''}://{self.hostname}:{self.port}"

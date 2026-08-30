@@ -21,17 +21,12 @@ from hololinked.utils import (
     uuid_hex,
 )
 
-from ..config import global_config
 from ..constants import ZMQ_TRANSPORTS
 from ..core import Thing
+from ..core.eventloop import EventLoop
 from ..core.properties import ClassSelector, Integer, TypedList
 from ..param import Parameterized
 from ..param.parameters import String
-from .repository import (
-    BrokerThing,
-    consume_broker_pubsub,
-    consume_broker_queue,
-)
 
 
 class BaseProtocolServer(Parameterized):
@@ -61,12 +56,10 @@ class BaseProtocolServer(Parameterized):
     """List of things to be served"""
 
     def __init__(self, **kwargs) -> None:
-        self.zmq_client_pool = None
         self.config: Any = None
         super().__init__(**kwargs)
         if self.things is None:
             self.things = []
-        self._disconnected_things = []  # type: list[BrokerThing]
 
     def add_thing(self, thing: Thing) -> None:
         """Adds a thing to the list of things to serve."""
@@ -109,54 +102,6 @@ class BaseProtocolServer(Parameterized):
             if the protocol does not support this operation
         """
         raise NotImplementedError("Not implemented for this protocol")
-
-    async def _instantiate_broker(
-        self,
-        server_id: str,
-        thing_id: str,
-        access_point: str = "INPROC",
-    ) -> None:
-        try:
-            broker_thing = BrokerThing(server_id=server_id, id=thing_id, access_point=access_point)
-
-            self._disconnected_things.append(broker_thing)
-
-            client, TD = await consume_broker_queue(
-                id=f"{self.id}|client|{thing_id}",
-                server_id=server_id,
-                thing_id=thing_id,
-                access_point=access_point,
-            )
-
-            event_consumer = consume_broker_pubsub(
-                id=f"{self.id}|event-consumer|{thing_id}",
-                access_point=f"{client.socket_address}/event-publisher",
-            )
-
-            self._disconnected_things.remove(broker_thing)
-
-            broker_thing.set_req_rep_client(client)
-            broker_thing.set_event_consumer(event_consumer)
-            broker_thing.TD = TD
-            broker_thing.logger = structlog.get_logger().bind(
-                layer="repository",
-                impl=broker_thing.__class__.__name__,
-                thing_id=thing_id,
-            )
-
-            if self.zmq_client_pool:
-                self.zmq_client_pool.register(client, thing_id)
-                broker_thing.req_rep_client = self.zmq_client_pool
-
-            self.config.thing_repository[thing_id] = broker_thing
-
-        except ConnectionError:
-            self.logger.warning(
-                f"could not connect to {thing_id} on server {server_id} with access_point {access_point}"
-            )
-        except Exception as ex:
-            self.logger.error(f"could not connect to {thing_id} on server {server_id} with access_point {access_point}")
-            self.logger.exception(ex)
 
     async def setup(self) -> None:
         # This method should not block, just create side-effects
@@ -211,6 +156,26 @@ class BaseProtocolServer(Parameterized):
         raise NotImplementedError("Not implemented for this protocol")
 
 
+def _is_zmq_server(server: BaseProtocolServer) -> bool:
+    """
+    Whether a server is the ZMQ one, without importing ZMQ to find out.
+
+    `pyzmq` is optional, so asking `isinstance(server, ZMQServer)` would make every deployment pay
+    for a transport it may not have installed.
+
+    Parameters
+    ----------
+    server: BaseProtocolServer
+        the server to test
+
+    Returns
+    -------
+    bool
+        `True` if it is a `ZMQServer` or one of its subclasses
+    """
+    return any(cls.__module__ == "hololinked.server.zmq.server" for cls in type(server).__mro__)
+
+
 @forkable
 def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_message: bool = True) -> None:
     """
@@ -230,15 +195,12 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
     ValueError
         if more than one `ZMQServer` or `RPCServer` is given - add all your `Thing`s to one instance
     """
-    from .zmq import RPCServer, ZMQServer
-
     loop = get_current_async_loop()  # initialize an event loop if it does not exist
 
     things = [thing for server in servers if server.things is not None for thing in server.things]
     things = list(set(things))  # remove duplicates
 
-    zmq_servers = [server for server in servers if isinstance(server, ZMQServer)]
-    rpc_server = None
+    zmq_servers = [server for server in servers if _is_zmq_server(server)]
 
     if len(zmq_servers) > 1:
         raise ValueError(
@@ -246,17 +208,15 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
             + "please add all your things to one instance"
         )
     elif len(zmq_servers) == 1:
-        rpc_server = zmq_servers[0]
+        # the ZMQ server owns an engine of its own, and every other protocol shares it
+        engine_owner = zmq_servers[0]
+        engine = engine_owner.engine  # ty: ignore[unresolved-attribute]  # _is_zmq_server() decided this
     else:
-        # HTTP and MQTT still reach a `Thing` over INPROC, so one ZMQ server is created for them
-        # even when nobody asked for ZMQ. Removed once they can call the engine directly.
-        rpc_server = RPCServer(
-            id=f"rpc-broker-{uuid_hex()}",
-            things=things,
-            context=global_config.zmq_context(),
-        )
+        # nobody asked for ZMQ, so there is no reason to create any of it
+        engine_owner = None
+        engine = EventLoop(id=f"engine-{uuid_hex()}", things=things)
 
-    threading.Thread(target=rpc_server.run).start()
+    threading.Thread(target=(engine_owner or engine).run).start()
 
     shutdown_event = asyncio.Event()
     run.shutdown_event = shutdown_event
@@ -267,7 +227,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
 
     loop = get_current_async_loop()
     for server in servers:
-        if server == rpc_server:
+        if server is engine_owner:
             continue
         loop.create_task(server.start())
 
@@ -275,7 +235,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
         _print_welcome_message(servers)
 
     loop.run_until_complete(shutdown())
-    rpc_server.stop()
+    engine.stop()
     cancel_pending_tasks_in_current_loop()
 
 

@@ -10,12 +10,18 @@ from .operations import (  # noqa: F401
     TIMED_OUT_REPLY,
     Job,
     Operation,
+    PreserializedEmptyByte,
     Reply,
     ReplyKind,
+    SerializableNone,
+    ServerExecutionContext,
+    ThingExecutionContext,
     as_execution_kwargs,
+    default_server_execution_context,
+    default_thing_execution_context,
     qualified_operation_key,
 )
-from .pubsub import EventBus  # noqa: F401
+from .pubsub import EventBus, EventSubscription, encode_event  # noqa: F401
 from .scheduler import (  # noqa: F401
     AsyncScheduler,
     QueuedScheduler,
@@ -28,12 +34,16 @@ from .scheduler import (  # noqa: F401
 __all__ = [
     "AsyncScheduler",
     "EventBus",
+    "EventSubscription",
     "EventLoop",
     "Job",
     "Operation",
     "QueuedScheduler",
     "Reply",
+    "ServerExecutionContext",
+    "ThingExecutionContext",
     "ReplyKind",
     "Scheduler",
     "ThreadedScheduler",
+    "encode_event",
 ]
