@@ -14,21 +14,18 @@ from .interfaces import BaseSerializer as BaseSerializer
 
 
 __all__ = [
+    "Action",
+    "BaseConfigurationRepository",
     "BaseSchemaValidator",
     "BaseSerializer",
-    "BaseConfigurationRepository",
-    "action",
-    "Action",
     "Event",
-    "ThingMeta",
     "Property",
     "StateMachine",
     "Thing",
+    "ThingMeta",
+    "action",
 ]
 
-# Submodules that use SchemaValidatorClasses / Serializers are loaded lazily so
-# that hololinked/__init__.py can finish registering the adapters (schema_validators,
-# serializers) before any class body in meta.py / actions.py / property.py executes.
 _lazy: dict[str, tuple[str, str]] = {
     "action": (".actions", "action"),
     "Action": (".actions", "Action"),

@@ -11,36 +11,23 @@ from typing import Any  # noqa: F401
 
 import structlog
 
-from ..constants import JSON
+from pydantic import BaseModel, ConfigDict, Field
+
 from .actions import action as remote_method
 from .events import Event
 from .properties import Integer, List, Number
 from .thing import Thing as RemoteObject
 
 
-log_message_schema: JSON = {
-    "type": "object",
-    "properties": {
-        "level": {
-            "type": "string",
-            "description": "log level, one of DEBUG, INFO, WARN, ERROR, CRITICAL",
-        },
-        "timestamp": {
-            "type": "string",
-            "description": "timestamp of the log entry",
-        },
-        "thread_id": {
-            "type": "integer",
-            "description": "ID of the thread that generated the log entry",
-        },
-        "message": {
-            "type": "string",
-            "description": "log message",
-        },
-    },
-    "required": ["level", "timestamp", "thread_id", "message"],
-    "additionalProperties": False,
-}
+class LogMessage(BaseModel):
+    """Data schema of a single log entry streamed by `RemoteAccessHandler.log_events`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    level: str = Field(description="log level, one of DEBUG, INFO, WARN, ERROR, CRITICAL")
+    timestamp: str = Field(description="timestamp of the log entry")
+    thread_id: int = Field(description="ID of the thread that generated the log entry")
+    message: str = Field(description="log message")
 
 
 class RemoteAccessHandler(logging.Handler, RemoteObject):
@@ -118,7 +105,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         self._push_events = False
         self._events_thread = None
 
-    log_events = Event(doc="stream logs", schema=log_message_schema)
+    log_events = Event(doc="stream logs", schema=LogMessage)
 
     stream_interval = Number(
         default=1.0,
@@ -149,12 +136,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         doc="length of execution log history to store",
     )  # type: int
 
-    @remote_method(
-        input_schema={
-            "scheduling": {"type": "string", "enum": ["threaded", "async"]},
-            "stream_interval": {"type": "number", "minimum": 0.025},
-        },
-    )
+    @remote_method()
     def push_events(self, scheduling: str = "threaded", stream_interval: float = 1) -> None:
         """
         Push log events to a client.

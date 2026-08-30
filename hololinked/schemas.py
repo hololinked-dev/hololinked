@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import Any, ClassVar
+
+from pydantic import BaseModel
 
 from hololinked.constants import JSON
 from hololinked.core.interfaces import BaseSchemaValidator
+from hololinked.utils import MappableSingleton, issubklass
 
 
 class JSONSchema:
@@ -25,9 +29,9 @@ class JSONSchema:
     class which is separate.
     """
 
-    _allowed_types = ("string", "number", "integer", "boolean", "object", "array", None)
+    _allowed_types: ClassVar = ("string", "number", "integer", "boolean", "object", "array", None)
 
-    _replacements = {
+    _replacements: ClassVar[dict[type, str | dict]] = {
         int: "integer",
         float: "number",
         str: "string",
@@ -47,9 +51,9 @@ class JSONSchema:
             },
             "required": ["message", "type", "traceback"],
         },
-    }  # type: dict[type, str | dict]
+    }
 
-    _schemas = {}
+    _schemas: ClassVar = {}
 
     @classmethod
     def is_allowed_type(cls, typ: Any) -> bool:
@@ -76,9 +80,7 @@ class JSONSchema:
         bool
             True or False
         """
-        if typ in JSONSchema._replacements.keys():
-            return True
-        return False
+        return typ in JSONSchema._replacements
 
     @classmethod
     def get_base_type(cls, typ: Any) -> str:
@@ -114,7 +116,7 @@ class JSONSchema:
         if isinstance(typ, str):
             return typ
         if isinstance(typ, dict) and "type" in typ:
-            return typ["type"]  # type: ignore
+            return typ["type"]
         return "object"
 
     @classmethod
@@ -175,9 +177,7 @@ class JSONSchema:
         bool
             True, if additional schema definitions exist for the type
         """
-        if typ in JSONSchema._schemas.keys():
-            return True
-        return False
+        return typ in JSONSchema._schemas
 
     @classmethod
     def get_additional_schema_definitions(cls, typ: Any):
@@ -199,13 +199,210 @@ class JSONSchema:
         return JSONSchema._schemas[typ]
 
 
-class SchemaValidatorClasses:
-    """Utility class to store schema validators of different types."""
+class SchemaValidatorRegistry(MappableSingleton):
+    """
+    Metaclass that imports a schema validator adapter the first time it is asked for.
+
+    Each adapter lives in its own module, so resolving one never imports the dependencies of the others.
+    """
+
+    modules: ClassVar[dict[str, tuple[str, str]]] = {
+        "json_schema": ("hololinked.schema_validators.json_schema", "JSONSchemaValidator"),
+        "pydantic": ("hololinked.schema_validators.pydantic_model", "PydanticSchemaValidator"),
+    }
+
+    def __getattr__(cls, name: str) -> type[BaseSchemaValidator]:
+        if name not in cls.modules:
+            raise AttributeError(f"no schema validator is registered under the name {name!r}")
+        import importlib
+
+        module_path, attribute = cls.modules[name]
+        try:
+            validator = getattr(importlib.import_module(module_path), attribute)
+        except ModuleNotFoundError as ex:
+            if ex.name and not ex.name.startswith("hololinked"):
+                raise ModuleNotFoundError(
+                    f"the {name!r} schema validator needs {ex.name!r}, which is not installed. "
+                    + "Please install first."
+                ) from ex
+            raise
+        setattr(cls, name, validator)  # cache so subsequent access skips __getattr__
+        return validator
+
+
+class SchemaValidators(metaclass=SchemaValidatorRegistry):
+    """
+    A singleton registry that decides which schema validator class validates against a given schema.
+
+    All members are class attributes and settings are applied process-wide (python process).
+    Which validator handles a schema is decided by the class of the payload type.
+    Usually pydantic models invoke a pydantic validator and dictionaries invoke a JSON schema validator,
+    but the mapping can be changed by registering a new validator. Use `register()` with a `predicate` function to
+    activate a custom validator.
+
+    ```python
+    from hololinked import SchemaValidators
+
+    SchemaValidators.register_lazy(
+        "my_package.validators",
+        "MsgspecValidator",
+        "msgspec",
+        predicate=lambda schema: issubklass(schema, msgspec.Struct),
+    )
+
+    class MyThing(Thing):
+        @action(input_schema=MyStruct)  # validated by MsgspecValidator
+        def act(self, value): ...
+    ```
+
+    A validator registered later is selected for a schema in preference to one registered earlier, so the built-in
+    JSON schema and pydantic validators can be superseded for schemas they would otherwise handle.
+    """
 
     json_schema: type[BaseSchemaValidator]
     """JSON Schema validator class that can be instantiated with a JSON schema to validate data against that schema."""
     pydantic: type[BaseSchemaValidator]
     """
-    Pydantic validator class that can be instantiated with a Pydantic model to validate data against 
+    Pydantic validator class that can be instantiated with a Pydantic model to validate data against
     the schema defined by that model.
     """
+
+    predicates: ClassVar[dict[str, Callable[[Any], bool]]] = {
+        "json_schema": lambda schema: isinstance(schema, dict),
+        "pydantic": lambda schema: issubklass(schema, BaseModel),  # RootModel is a subclass of BaseModel
+    }
+    """
+    Name of a validator mapped to a predicate deciding whether it can validate against a given schema.
+
+    Insertion ordered and consulted in reverse, so a validator registered later is selected for a schema in
+    preference to one registered earlier. Predicates must be answerable without importing the adapter they
+    belong to, since they are what decides which adapter to import in the first place.
+    """
+
+    @classmethod
+    def register(
+        cls,
+        validator: type[BaseSchemaValidator],
+        name: str,
+        predicate: Callable[[Any], bool],
+    ) -> None:
+        """
+        Register a schema validator class under a given name, overriding any validator already using that name.
+
+        Parameters
+        ----------
+        validator: type[BaseSchemaValidator]
+            the validator class to register, must be a subclass of `BaseSchemaValidator`
+        name: str
+            the name to register the validator under, for example 'json_schema' or 'pydantic'
+        predicate: Callable[[Any], bool]
+            predicate returning whether this validator can validate against a given schema, which is how a
+            property or action picks a validator for the schema it was declared with.
+
+        Raises
+        ------
+        TypeError
+            if the validator is not a subclass of `BaseSchemaValidator`
+        """
+        if not issubklass(validator, BaseSchemaValidator):
+            raise TypeError(f"validator must be a subclass of BaseSchemaValidator, given : {validator}")
+        setattr(cls, name, validator)
+        cls.predicates.pop(name, None)
+        cls.predicates[name] = predicate
+
+    @classmethod
+    def name_for_schema(cls, schema: Any) -> str | None:
+        """
+        Get the name of the validator selected for the given schema.
+
+        ```python
+        print(SchemaValidators.name_for_schema({"type": "string"}))
+        # prints 'json_schema'
+        print(SchemaValidators.name_for_schema(MyPydanticModel))
+        # prints 'pydantic'
+        ```
+
+        Parameters
+        ----------
+        schema: Any
+            the schema to find a validator for
+
+        Returns
+        -------
+        str | None
+            the name the selected validator is registered under, None if no registered validator matches the schema
+        """
+        for name in reversed(cls.predicates):
+            if cls.predicates[name](schema):
+                return name
+        return None
+
+    @classmethod
+    def is_supported(cls, schema: Any) -> bool:
+        """
+        Check whether any registered validator can validate against the given schema.
+
+        Parameters
+        ----------
+        schema: Any
+            the schema to check
+
+        Returns
+        -------
+        bool
+            True if a registered validator matches the schema
+        """
+        return cls.name_for_schema(schema) is not None
+
+    @classmethod
+    def for_schema(cls, schema: Any) -> type[BaseSchemaValidator]:
+        """
+        Get the validator class that validates against the given schema, importing it if necessary.
+
+        Parameters
+        ----------
+        schema: Any
+            the schema to find a validator for
+
+        Returns
+        -------
+        type[BaseSchemaValidator]
+            the validator class, to be instantiated with the schema
+
+        Raises
+        ------
+        TypeError
+            if no registered validator matches the schema
+        """
+        name = cls.name_for_schema(schema)
+        if name is None:
+            raise TypeError(
+                f"no registered schema validator can validate against a schema of type {type(schema)}. "
+                + "Register one with SchemaValidators.register() or SchemaValidators.register_lazy(), "
+                + "supplying a 'predicate' that recognises it."
+            )
+        return getattr(cls, name)
+
+    @classmethod
+    def check_schema(cls, schema: Any) -> None:
+        """
+        Check that the given object is a well formed schema, using whichever validator is selected for it.
+
+        Does nothing if the selected validator has no notion of checking a schema, as is the case for pydantic
+        models.
+
+        Parameters
+        ----------
+        schema: Any
+            the schema to check
+
+        Raises
+        ------
+        TypeError
+            if no registered validator matches the schema
+        Exception
+            whatever the selected validator raises for a malformed schema
+        """
+        check = getattr(cls.for_schema(schema), "check_schema", None)
+        if check is not None:
+            check(schema)

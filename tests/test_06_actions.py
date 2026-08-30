@@ -10,7 +10,6 @@ from hololinked.core.actions import (
     BoundAsyncAction,
     BoundSyncAction,
 )
-from hololinked.core.dataklasses import ActionInfoValidator
 from hololinked.core.thing import action
 from hololinked.metadata.td.interaction_affordance import ActionAffordance
 from hololinked.schema_validators import JSONSchemaValidator
@@ -23,6 +22,11 @@ try:
 except ImportError:
     from things import TestThing
     from things.test_thing import replace_methods_with_actions
+
+
+def unbound(action) -> Action:
+    """Return the unbound `Action` descriptor behind an `Action` or a `BoundAction`."""
+    return action if isinstance(action, Action) else action.descriptor
 
 
 @pytest.fixture(scope="module")
@@ -81,7 +85,7 @@ def test_02_bound_method(thing: TestThing):
     assert thing.action_echo.name == "action_echo"
     assert thing.action_echo.owner_inst == thing
     assert thing.action_echo.owner == TestThing
-    assert thing.action_echo.execution_info == TestThing.action_echo.execution_info
+    assert unbound(thing.action_echo) == unbound(TestThing.action_echo)
     assert str(thing.action_echo) == f"<BoundAction({TestThing.__name__}.{thing.action_echo.name} of {thing.id})>"
     assert thing.action_echo != TestThing.action_echo
     assert thing.action_echo.bound_obj == thing
@@ -98,7 +102,7 @@ def test_02_bound_method(thing: TestThing):
     assert thing.action_echo_with_classmethod.name == "action_echo_with_classmethod"
     assert thing.action_echo_with_classmethod.owner_inst == thing
     assert thing.action_echo_with_classmethod.owner == TestThing
-    assert thing.action_echo_with_classmethod.execution_info == TestThing.action_echo_with_classmethod.execution_info
+    assert unbound(thing.action_echo_with_classmethod) == unbound(TestThing.action_echo_with_classmethod)
     assert (
         str(thing.action_echo_with_classmethod)
         == f"<BoundAction({TestThing.__name__}.{thing.action_echo_with_classmethod.name} of {thing.id})>"
@@ -117,7 +121,7 @@ def test_02_bound_method(thing: TestThing):
     assert thing.action_echo_async.name == "action_echo_async"
     assert thing.action_echo_async.owner_inst == thing
     assert thing.action_echo_async.owner == TestThing
-    assert thing.action_echo_async.execution_info == TestThing.action_echo_async.execution_info
+    assert unbound(thing.action_echo_async) == unbound(TestThing.action_echo_async)
     assert (
         str(thing.action_echo_async)
         == f"<BoundAction({TestThing.__name__}.{thing.action_echo_async.name} of {thing.id})>"
@@ -137,10 +141,7 @@ def test_02_bound_method(thing: TestThing):
     assert thing.action_echo_async_with_classmethod.name == "action_echo_async_with_classmethod"
     assert thing.action_echo_async_with_classmethod.owner_inst == thing
     assert thing.action_echo_async_with_classmethod.owner == TestThing
-    assert (
-        thing.action_echo_async_with_classmethod.execution_info
-        == TestThing.action_echo_async_with_classmethod.execution_info
-    )
+    assert unbound(thing.action_echo_async_with_classmethod) == unbound(TestThing.action_echo_async_with_classmethod)
     assert (
         str(thing.action_echo_async_with_classmethod)
         == f"<BoundAction({TestThing.__name__}.{thing.action_echo_async_with_classmethod.name} of {thing.id})>"
@@ -159,7 +160,7 @@ def test_02_bound_method(thing: TestThing):
     assert thing.parameterized_action.name == "parameterized_action"
     assert thing.parameterized_action.owner_inst == thing
     assert thing.parameterized_action.owner == TestThing
-    assert thing.parameterized_action.execution_info == TestThing.parameterized_action.execution_info
+    assert unbound(thing.parameterized_action) == unbound(TestThing.parameterized_action)
     assert (
         str(thing.parameterized_action)
         == f"<BoundAction({TestThing.__name__}.{thing.parameterized_action.name} of {thing.id})>"
@@ -178,10 +179,7 @@ def test_02_bound_method(thing: TestThing):
     assert thing.parameterized_action_without_call.name == "parameterized_action_without_call"
     assert thing.parameterized_action_without_call.owner_inst == thing
     assert thing.parameterized_action_without_call.owner == TestThing
-    assert (
-        thing.parameterized_action_without_call.execution_info
-        == TestThing.parameterized_action_without_call.execution_info
-    )
+    assert unbound(thing.parameterized_action_without_call) == unbound(TestThing.parameterized_action_without_call)
     assert (
         str(thing.parameterized_action_without_call)
         == f"<BoundAction({TestThing.__name__}.{thing.parameterized_action_without_call.name} of {thing.id})>"
@@ -200,7 +198,7 @@ def test_02_bound_method(thing: TestThing):
     assert thing.parameterized_action_async.name == "parameterized_action_async"
     assert thing.parameterized_action_async.owner_inst == thing
     assert thing.parameterized_action_async.owner == TestThing
-    assert thing.parameterized_action_async.execution_info == TestThing.parameterized_action_async.execution_info
+    assert unbound(thing.parameterized_action_async) == unbound(TestThing.parameterized_action_async)
     assert (
         str(thing.parameterized_action_async)
         == f"<BoundAction({TestThing.__name__}.{thing.parameterized_action_async.name} of {thing.id})>"
@@ -219,7 +217,7 @@ def test_02_bound_method(thing: TestThing):
     assert thing.json_schema_validated_action.name == "json_schema_validated_action"
     assert thing.json_schema_validated_action.owner_inst == thing
     assert thing.json_schema_validated_action.owner == TestThing
-    assert thing.json_schema_validated_action.execution_info == TestThing.json_schema_validated_action.execution_info
+    assert unbound(thing.json_schema_validated_action) == unbound(TestThing.json_schema_validated_action)
     assert (
         str(thing.json_schema_validated_action)
         == f"<BoundAction({TestThing.__name__}.{thing.json_schema_validated_action.name} of {thing.id})>"
@@ -228,78 +226,64 @@ def test_02_bound_method(thing: TestThing):
     assert thing.json_schema_validated_action.bound_obj == thing
 
 
-def test_03_remote_info():
+def test_03_metadata():
     """Test if the validator is working correctly, on which the logic of the action is based"""
-    remote_info = TestThing.action_echo.execution_info
-    assert isinstance(remote_info, ActionInfoValidator)
-    assert remote_info.isaction
-    assert not remote_info.isproperty
-    assert not remote_info.isparameterized
-    assert not remote_info.iscoroutine
-    assert not remote_info.safe
-    assert not remote_info.idempotent
-    assert remote_info.synchronous
+    action = unbound(TestThing.action_echo)
+    assert isinstance(action, Action)
+    assert not action.isparameterized
+    assert not action.iscoroutine
+    assert not action.safe
+    assert not action.idempotent
+    assert action.synchronous
 
-    remote_info = TestThing.action_echo_async.execution_info
-    assert isinstance(remote_info, ActionInfoValidator)
-    assert remote_info.isaction
-    assert remote_info.iscoroutine
-    assert not remote_info.isproperty
-    assert not remote_info.isparameterized
-    assert not remote_info.safe
-    assert not remote_info.idempotent
-    assert remote_info.synchronous
+    action = unbound(TestThing.action_echo_async)
+    assert isinstance(action, Action)
+    assert action.iscoroutine
+    assert not action.isparameterized
+    assert not action.safe
+    assert not action.idempotent
+    assert action.synchronous
 
-    remote_info = TestThing.action_echo_with_classmethod.execution_info
-    assert isinstance(remote_info, ActionInfoValidator)
-    assert remote_info.isaction
-    assert not remote_info.iscoroutine
-    assert not remote_info.isproperty
-    assert not remote_info.isparameterized
-    assert not remote_info.safe
-    assert not remote_info.idempotent
-    assert remote_info.synchronous
+    action = unbound(TestThing.action_echo_with_classmethod)
+    assert isinstance(action, Action)
+    assert not action.iscoroutine
+    assert not action.isparameterized
+    assert not action.safe
+    assert not action.idempotent
+    assert action.synchronous
 
-    remote_info = TestThing.parameterized_action.execution_info
-    assert isinstance(remote_info, ActionInfoValidator)
-    assert remote_info.isaction
-    assert not remote_info.iscoroutine
-    assert not remote_info.isproperty
-    assert remote_info.isparameterized
-    assert remote_info.safe
-    assert not remote_info.idempotent
-    assert remote_info.synchronous
+    action = unbound(TestThing.parameterized_action)
+    assert isinstance(action, Action)
+    assert not action.iscoroutine
+    assert action.isparameterized
+    assert action.safe
+    assert not action.idempotent
+    assert action.synchronous
 
-    remote_info = TestThing.parameterized_action_without_call.execution_info
-    assert isinstance(remote_info, ActionInfoValidator)
-    assert remote_info.isaction
-    assert not remote_info.iscoroutine
-    assert not remote_info.isproperty
-    assert remote_info.isparameterized
-    assert not remote_info.safe
-    assert remote_info.idempotent
-    assert remote_info.synchronous
+    action = unbound(TestThing.parameterized_action_without_call)
+    assert isinstance(action, Action)
+    assert not action.iscoroutine
+    assert action.isparameterized
+    assert not action.safe
+    assert action.idempotent
+    assert action.synchronous
 
-    remote_info = TestThing.parameterized_action_async.execution_info
-    assert isinstance(remote_info, ActionInfoValidator)
-    assert remote_info.isaction
-    assert remote_info.iscoroutine
-    assert not remote_info.isproperty
-    assert remote_info.isparameterized
-    assert not remote_info.safe
-    assert not remote_info.idempotent
-    assert remote_info.synchronous
+    action = unbound(TestThing.parameterized_action_async)
+    assert isinstance(action, Action)
+    assert action.iscoroutine
+    assert action.isparameterized
+    assert not action.safe
+    assert not action.idempotent
+    assert action.synchronous
 
-    remote_info = TestThing.json_schema_validated_action.execution_info
-    assert isinstance(remote_info, ActionInfoValidator)
-    assert remote_info.isaction
-    assert not remote_info.iscoroutine
-    assert not remote_info.isproperty
-    assert not remote_info.isparameterized
-    assert not remote_info.safe
-    assert not remote_info.idempotent
-    assert remote_info.synchronous
-    assert isinstance(remote_info.schema_validator, JSONSchemaValidator)
+    action = unbound(TestThing.json_schema_validated_action)
+    assert isinstance(action, Action)
+    assert not action.iscoroutine
+    assert not action.isparameterized
+    assert not action.safe
+    assert not action.idempotent
+    assert action.synchronous
+    assert isinstance(action.schema_validator, JSONSchemaValidator)
 
 
 def test_04_api_and_invalid_actions():

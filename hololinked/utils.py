@@ -532,6 +532,32 @@ def get_input_model_from_signature(
     return model
 
 
+class ModelRoot(RootModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+def wrap_plain_types_in_rootmodel(model: Any) -> type[BaseModel | RootModel]:
+    """
+    Ensure a type is a subclass of BaseModel.
+
+    If a `BaseModel` subclass is passed to this function, we will pass it
+    through unchanged. Otherwise, we wrap the type in a RootModel.
+    In the future, we may explicitly check that the argument is a type
+    and not a model instance.
+
+    Returns
+    -------
+    Type[BaseModel] | Type[RootModel]
+        a `BaseModel` subclass which can be used for validation. If the input was already a `BaseModel` subclass,
+        it is returned unchanged. Otherwise, a new `RootModel` subclass is returned which wraps the input type.
+    """
+    if model is None:
+        return  # ty: ignore[invalid-return-type]
+    if issubklass(model, BaseModel):
+        return model
+    return create_model(f"{model!r}", root=(model, ...), __base__=ModelRoot)  # type: ignore[call-overload]
+
+
 def get_return_type_from_signature(func: Callable) -> RootModel | None:
     """
     Determine the return type of a function.
@@ -548,7 +574,6 @@ def get_return_type_from_signature(func: Callable) -> RootModel | None:
         # We use `get_type_hints` rather than just `sig.return_annotation`
         # because it resolves forward references, etc.
         type_hints = typing.get_type_hints(func, include_extras=True)
-        from .core.property import wrap_plain_types_in_rootmodel
 
         if (
             "return" not in type_hints
@@ -738,6 +763,7 @@ __all__ = [
     isclassmethod.__name__,
     issubklass.__name__,
     get_input_model_from_signature.__name__,
+    wrap_plain_types_in_rootmodel.__name__,
     pydantic_validate_args_kwargs.__name__,
     get_return_type_from_signature.__name__,
     getattr_without_descriptor_read.__name__,

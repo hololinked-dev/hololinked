@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Type
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, RootModel, create_model
+from pydantic import BaseModel, RootModel
 
-from hololinked import SchemaValidatorClasses
+from hololinked import SchemaValidators
+from hololinked.config import global_config
 
 from ..param.parameterized import Parameter, ParameterizedMetaclass
-from ..utils import issubklass
-from .dataklasses import RemoteResourceInfoValidator
+from ..param.parameters import Tuple
+from ..utils import issubklass, wrap_plain_types_in_rootmodel
 from .events import Event, EventDispatcher  # noqa: F401
 from .exceptions import StateMachineError
 
 
 if TYPE_CHECKING:
-    from hololinked.core.interfaces import PropertyMetadata
+    from hololinked.core.interfaces import BaseSchemaValidator, PropertyMetadata
     from hololinked.core.thing import Thing
 
 
@@ -29,21 +31,28 @@ class Property(Parameter):
     `Property` objects are similar to python's `property` but not a subclass of it due to limitations and redundancy.
     """
 
-    execution_info: RemoteResourceInfoValidator
-
     __slots__ = [
-        "db_persist",
-        "db_init",
-        "db_commit",
-        "model",
-        "metadata",
-        "fcomparator",
-        "validator",
-        "execution_info",
-        "_execution_info_validator",
         "_observable_event_descriptor",
         "_old_value_internal_name",
+        "_remote",
+        "_validator",
+        "db_commit",
+        "db_init",
+        "db_persist",
+        "fcomparator",
+        "metadata",
+        "model",
+        "state",
     ]
+
+    state: tuple[Enum | str] | None
+    """state machine state(s) in which this property can be written, any state when None"""
+
+    model: Any
+    """
+    schema the value is validated against - a JSON schema, a pydantic model, or any other kind of schema for
+    which a validator is registered with `SchemaValidators`. None when the property has no schema.
+    """
 
     def __init__(
         self,
@@ -59,7 +68,7 @@ class Property(Parameter):
         db_init: bool = False,
         db_commit: bool = False,
         observable: bool = False,
-        model: type[BaseModel] | dict[str, Any] | None = None,
+        model: Any = None,
         class_member: bool = False,
         fget: Callable | None = None,
         fset: Callable | None = None,
@@ -181,26 +190,29 @@ class Property(Parameter):
         self._observable_event_descriptor = None
         if observable:
             self._observable_event_descriptor = Event()
-        self._execution_info_validator = None
-        self.execution_info = None  # ty: ignore[invalid-assignment]  # RemoteResource | None
-        if remote:
-            # TODO, this execution info validator can be refactored & removed later, adds an additional layer of info
-            self._execution_info_validator = RemoteResourceInfoValidator(state=state, isproperty=True, obj=self)
-            self.execution_info = self._execution_info_validator  # TODO: use dataclass or remove this attribute
+        self._remote = remote
+
+        self.state = Tuple(
+            default=None,
+            item_type=(Enum, str),
+            allow_None=True,
+            accept_list=True,
+            accept_item=True,
+        ).validate_and_adapt(state)
+
         self.model = None
-        self.validator = None
-        if model:
-            if isinstance(model, dict):
-                self.model = model
-                self.validator = SchemaValidatorClasses.json_schema(model).validate
-            else:
-                self.model = wrap_plain_types_in_rootmodel(model)
-                self.validator = self.model.model_validate
+        self._validator = None
+        if not model:
+            return
+        if SchemaValidators.is_supported(model):
+            self.model = model
+            if global_config.VALIDATE_SCHEMAS:
+                SchemaValidators.check_schema(model)
+        else:
+            self.model = wrap_plain_types_in_rootmodel(model)
 
     def __set_name__(self, owner: Any, attrib_name: str) -> None:
         super().__set_name__(owner, attrib_name)
-        if self._execution_info_validator:
-            self._execution_info_validator.obj_name = attrib_name
         if self._observable_event_descriptor:
             _observable_event_name = f"{self.name}_change_event"
             self._old_value_internal_name = f"{self._internal_name}_old_value"
@@ -209,6 +221,13 @@ class Property(Parameter):
             self._observable_event_descriptor.__set_name__(owner, _observable_event_name)
             # This is a descriptor object, so we need to set it on the owner class
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
+
+    @property
+    def validator(self) -> BaseSchemaValidator | None:
+        """Validator for the value of this property, None if the property is validated by a pydantic model instead."""
+        if self._validator is None and self.model is not None and not issubklass(self.model, BaseModel):
+            self._validator = SchemaValidators.for_schema(self.model)(self.model)
+        return self._validator
 
     def __get__(self, obj: Thing, objtype: ParameterizedMetaclass) -> Any:  # ty: ignore[invalid-method-override]
         read_value = super().__get__(obj, objtype)
@@ -266,10 +285,11 @@ class Property(Parameter):
             else:
                 raise ValueError(f"Property {self.name} does not allow None values")
         if self.model:
-            if isinstance(self.model, dict):
-                self.validator(value)  # ty: ignore[call-non-callable]
+            validator = self.validator
+            if validator is not None:
+                validator.validate(value)
             elif issubklass(self.model, RootModel):
-                value = self.model(value)  # ty: ignore[too-many-positional-arguments]
+                value = self.model(value)
             elif issubklass(self.model, BaseModel):
                 value = self.model(**value)
         return super().validate_and_adapt(value)
@@ -285,8 +305,8 @@ class Property(Parameter):
         StateMachineError
             If the `Thing` instance is in a state where this property cannot be written.
         """
-        if self.execution_info.state is None or (
-            hasattr(obj, "state_machine") and obj.state_machine.current_state in self.execution_info.state  # ty: ignore[unresolved-attribute]
+        if self.state is None or (
+            hasattr(obj, "state_machine") and obj.state_machine.current_state in self.state  # ty: ignore[unresolved-attribute]
         ):
             return self.__set__(obj, value)
         else:
@@ -294,7 +314,7 @@ class Property(Parameter):
                 "Thing {} is in `{}` state, however attribute can be written only in `{}` state".format(
                     obj.id,
                     obj.state_machine.current_state,  # ty: ignore[unresolved-attribute]
-                    self.execution_info.state,
+                    self.state,
                 )
             )
 
@@ -333,7 +353,7 @@ class Property(Parameter):
     @property
     def is_remote(self):
         """`False` if the property is not remotely accessible."""
-        return self._execution_info_validator is not None
+        return self._remote
 
     @property
     def observable(self) -> bool:
@@ -366,34 +386,6 @@ class Property(Parameter):
         from hololinked.ddl import MetadataFormats
 
         return MetadataFormats.get(format).property.from_descriptor(self, owner_inst or self.owner)
-
-
-class ModelRoot(RootModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-def wrap_plain_types_in_rootmodel(
-    model: type | None,
-) -> Type[BaseModel] | Type[RootModel]:
-    """
-    Ensure a type is a subclass of BaseModel.
-
-    If a `BaseModel` subclass is passed to this function, we will pass it
-    through unchanged. Otherwise, we wrap the type in a RootModel.
-    In the future, we may explicitly check that the argument is a type
-    and not a model instance.
-
-    Returns
-    -------
-    Type[BaseModel] | Type[RootModel]
-        a `BaseModel` subclass which can be used for validation. If the input was already a `BaseModel` subclass,
-        it is returned unchanged. Otherwise, a new `RootModel` subclass is returned which wraps the input type.
-    """
-    if model is None:
-        return  # ty: ignore[invalid-return-type]
-    if issubklass(model, BaseModel):
-        return model  # ty: ignore[invalid-return-type]
-    return create_model(f"{model!r}", root=(model, ...), __base__=ModelRoot)  # type: ignore[call-overload]
 
 
 __all__ = [Property.__name__]

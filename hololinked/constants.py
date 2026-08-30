@@ -16,7 +16,6 @@ byte_types = (bytes, bytearray, memoryview)
 
 # decorator constants
 # naming
-USE_OBJECT_NAME: str = "USE_OBJECT_NAME"
 # state machine
 ANY_STATE: str = "ANY_STATE"
 UNSPECIFIED: str = "UNSPECIFIED"
