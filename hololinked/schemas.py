@@ -116,7 +116,7 @@ class JSONSchema:
         if isinstance(typ, str):
             return typ
         if isinstance(typ, dict) and "type" in typ:
-            return typ["type"]  # type: ignore
+            return typ["type"]
         return "object"
 
     @classmethod

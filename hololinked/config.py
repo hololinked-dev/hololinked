@@ -108,7 +108,7 @@ class Configuration:
         self.USE_UVLOOP = False
         self.TRACE_MALLOC = False
         # self.VALIDATE_SCHEMA_ON_CLIENT = False
-        self.VALIDATE_SCHEMAS = True
+        self.VALIDATE_SCHEMAS = False
         self.ZMQ_CONTEXT = zmq.asyncio.Context()  # ty: ignore[invalid-argument-type]  # the async context is the one this package uses throughout
         self.DEBUG = False
         self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
@@ -360,4 +360,4 @@ for TCP socket binding, used for event addresses. default `65535`.
 `ALLOW_UNKNOWN_SERIALIZATION` - whether to allow unknown serialization formats, specifically from clients. default `False`.
 """
 
-__all__ = ["global_config", "Configuration"]
+__all__ = ["Configuration", "global_config"]

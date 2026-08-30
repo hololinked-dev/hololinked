@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, overload
 
+from pydantic import BaseModel
+
 from hololinked import SchemaValidators
 from hololinked.config import global_config
 from hololinked.constants import JSON
@@ -38,7 +40,7 @@ class Event:
     def __init__(
         self,
         doc: str | None = None,
-        schema: JSON | None = None,
+        schema: JSON | type[BaseModel] | None = None,
         label: str | None = None,
     ) -> None:
         """
@@ -48,8 +50,9 @@ class Event:
         ----------
         doc: str
             docstring for the event
-        schema: JSON
-            schema of the event
+        schema: JSON | type[BaseModel]
+            schema of the event data, either a JSON schema or a pydantic model. Any other kind of schema is
+            accepted as well, as long as a validator that matches it is registered with `SchemaValidators`.
         label: str
             a descriptive label for the event, to be shown in a GUI for example.
         """

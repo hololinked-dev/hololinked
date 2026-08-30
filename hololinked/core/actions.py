@@ -268,7 +268,7 @@ class BoundAction:
         ActionAffordance
             the affordance TD fragment for this action
         """
-        return Action.to_metadata(self.action, owner_inst or self.owner_inst or self.owner, format=format)
+        return Action.to_metadata(self.descriptor, owner_inst or self.owner_inst or self.owner, format=format)
 
 
 class BoundSyncAction(BoundAction):

@@ -6,14 +6,14 @@ from collections.abc import Callable
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, RootModel, create_model
+from pydantic import BaseModel, RootModel
 
 from hololinked import SchemaValidators
 from hololinked.config import global_config
 
 from ..param.parameterized import Parameter, ParameterizedMetaclass
 from ..param.parameters import Tuple
-from ..utils import issubklass
+from ..utils import issubklass, wrap_plain_types_in_rootmodel
 from .events import Event, EventDispatcher  # noqa: F401
 from .exceptions import StateMachineError
 
@@ -48,6 +48,12 @@ class Property(Parameter):
     state: tuple[Enum | str] | None
     """state machine state(s) in which this property can be written, any state when None"""
 
+    model: Any
+    """
+    schema the value is validated against - a JSON schema, a pydantic model, or any other kind of schema for
+    which a validator is registered with `SchemaValidators`. None when the property has no schema.
+    """
+
     def __init__(
         self,
         default: Any = None,
@@ -62,7 +68,7 @@ class Property(Parameter):
         db_init: bool = False,
         db_commit: bool = False,
         observable: bool = False,
-        model: type[BaseModel] | dict[str, Any] | None = None,
+        model: Any = None,
         class_member: bool = False,
         fget: Callable | None = None,
         fset: Callable | None = None,
@@ -196,13 +202,14 @@ class Property(Parameter):
 
         self.model = None
         self._validator = None
-        if model:
-            if SchemaValidators.is_supported(model):
-                self.model = model
-                if global_config.VALIDATE_SCHEMAS:
-                    SchemaValidators.check_schema(model)
-            else:
-                self.model = wrap_plain_types_in_rootmodel(model)
+        if not model:
+            return
+        if SchemaValidators.is_supported(model):
+            self.model = model
+            if global_config.VALIDATE_SCHEMAS:
+                SchemaValidators.check_schema(model)
+        else:
+            self.model = wrap_plain_types_in_rootmodel(model)
 
     def __set_name__(self, owner: Any, attrib_name: str) -> None:
         super().__set_name__(owner, attrib_name)
@@ -278,12 +285,13 @@ class Property(Parameter):
             else:
                 raise ValueError(f"Property {self.name} does not allow None values")
         if self.model:
-            if issubklass(self.model, RootModel):
-                value = self.model(value)  # ty: ignore[too-many-positional-arguments]
+            validator = self.validator
+            if validator is not None:
+                validator.validate(value)
+            elif issubklass(self.model, RootModel):
+                value = self.model(value)
             elif issubklass(self.model, BaseModel):
                 value = self.model(**value)
-            else:
-                self.validator.validate(value)
         return super().validate_and_adapt(value)
 
     def external_set(self, obj: Thing, value: Any) -> None:
@@ -378,34 +386,6 @@ class Property(Parameter):
         from hololinked.ddl import MetadataFormats
 
         return MetadataFormats.get(format).property.from_descriptor(self, owner_inst or self.owner)
-
-
-class ModelRoot(RootModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-def wrap_plain_types_in_rootmodel(
-    model: type | None,
-) -> type[BaseModel | RootModel]:
-    """
-    Ensure a type is a subclass of BaseModel.
-
-    If a `BaseModel` subclass is passed to this function, we will pass it
-    through unchanged. Otherwise, we wrap the type in a RootModel.
-    In the future, we may explicitly check that the argument is a type
-    and not a model instance.
-
-    Returns
-    -------
-    Type[BaseModel] | Type[RootModel]
-        a `BaseModel` subclass which can be used for validation. If the input was already a `BaseModel` subclass,
-        it is returned unchanged. Otherwise, a new `RootModel` subclass is returned which wraps the input type.
-    """
-    if model is None:
-        return  # ty: ignore[invalid-return-type]
-    if issubklass(model, BaseModel):
-        return model  # ty: ignore[invalid-return-type]
-    return create_model(f"{model!r}", root=(model, ...), __base__=ModelRoot)  # type: ignore[call-overload]
 
 
 __all__ = [Property.__name__]
