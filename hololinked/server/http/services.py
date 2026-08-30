@@ -9,8 +9,8 @@ import structlog
 from hololinked import Serializers
 
 from ...constants import JSONSerializable, Operations
+from ...core.payloads import SerializableData
 from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
-from ...core.zmq.payloads import SerializableData
 from ...metadata.td import (
     ActionAffordance,
     EventAffordance,

@@ -27,9 +27,11 @@ from hololinked.utils import (
 from ..actions import BoundAction
 from ..exceptions import BreakInnerLoop, BreakLoop
 from ..logger import LogHistoryHandler
+from ..operations import Operation, Reply, ReplyKind
 from ..properties import TypedList
 from ..property import Property
 from ..thing import Thing
+from ..utils import CrossLoopEvent
 from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
 from .message import (
     EMPTY_BYTE,
@@ -40,10 +42,16 @@ from .message import (
     SerializableData,
     qualified_operation_key,
 )
-from .utils import CrossLoopEvent
 
 
 Undefined = NotImplemented
+
+_ZMQ_MESSAGE_TYPE_FOR_REPLY = {
+    ReplyKind.OK: REPLY,
+    ReplyKind.ERROR: ERROR,
+    ReplyKind.EXIT: None,  # let the broker decide, as it did before
+}
+"""How the engine's outcome maps onto ZMQ's message-type vocabulary. The engine does not know these."""
 
 
 class RPCServer(BaseZMQServer):
@@ -212,7 +220,7 @@ class RPCServer(BaseZMQServer):
             for request_message in request_messages:
                 try:
                     # handle invokation timeout
-                    invokation_timeout = request_message.server_execution_context.get("invokation_timeout", None)
+                    invokation_timeout = request_message.to_operation().invokation_timeout
 
                     ready_to_process_event = None
                     timeout_task = None
@@ -270,7 +278,6 @@ class RPCServer(BaseZMQServer):
 
             # retrieve from messages list - message, execution context, event, timeout task, origin socket
             origin_server, request_message, timeout_task, ready_to_process_event = scheduler.next_job
-            server_execution_context = request_message.server_execution_context
 
             # handle invokation timeout
             invokation_timed_out = True
@@ -281,11 +288,12 @@ class RPCServer(BaseZMQServer):
                 # drop call to thing, timeout message was already sent in _process_timeouts()
                 continue
 
-            # handle execution through thing
-            scheduler.last_operation_request = scheduler.extract_operation_tuple_from_request(request_message)
+            # handle execution through thing - convert at the border, the engine never sees the wire format
+            operation = request_message.to_operation()
+            scheduler.last_operation_request = operation
 
             # schedule an execution timeout
-            execution_timeout = server_execution_context.get("execution_timeout", None)
+            execution_timeout = operation.execution_timeout
             execution_completed_event = None
             execution_timeout_task = None
             execution_timed_out = True
@@ -314,7 +322,7 @@ class RPCServer(BaseZMQServer):
                     exception=RuntimeError("No reply from thing - logic error"),
                 )
                 continue
-            payload, preserialized_payload, reply_message_type = scheduler.last_operation_reply
+            reply: Reply = scheduler.last_operation_reply
             scheduler.reset_operation_reply()
 
             # check if execution completed within time
@@ -324,16 +332,16 @@ class RPCServer(BaseZMQServer):
             if execution_timeout_task is not None and execution_timed_out:
                 # drop reply to client as timeout was already sent
                 continue
-            if server_execution_context.get("oneway", False):
+            if operation.oneway:
                 # drop reply if oneway
                 continue
 
-            # send reply to client
+            # send reply to client, mapping the engine's outcome onto ZMQ's message types
             await origin_server.async_send_response_with_message_type(
                 request_message=request_message,
-                message_type=reply_message_type,  # ty: ignore[invalid-argument-type]
-                payload=payload,
-                preserialized_payload=preserialized_payload,
+                message_type=_ZMQ_MESSAGE_TYPE_FOR_REPLY[reply.kind],  # ty: ignore[invalid-argument-type]
+                payload=reply.payload,
+                preserialized_payload=reply.preserialized_payload,
             )
 
         scheduler.cleanup()
@@ -368,24 +376,16 @@ class RPCServer(BaseZMQServer):
                 continue
 
             try:
-                # fetch operation_request which is a tuple of
-                # (thing_id, objekt, operation, payload, preserialized_payload, execution_context)
-                (
-                    thing_id,
-                    objekt,
-                    operation,
-                    payload,
-                    preserialized_payload,
-                    execution_context,
-                ) = scheduler.last_operation_request
+                request: Operation = scheduler.last_operation_request
+                thing_id, objekt, operation = request.thing_id, request.objekt, request.operation
 
                 # deserializing the payload required to execute the operation
-                payload = payload.deserialize()
-                preserialized_payload = preserialized_payload.value
+                payload = request.payload.deserialize()
+                preserialized_payload = request.preserialized_payload.value
                 instance.logger.debug(f"starting execution of operation {operation} on {objekt}")
 
                 # start activities related to thing execution context
-                fetch_execution_logs = execution_context.pop("fetch_execution_logs", False)
+                fetch_execution_logs = request.fetch_execution_logs
                 if fetch_execution_logs:
                     list_handler = LogHistoryHandler([])
                     list_handler.setLevel(logging.DEBUG)
@@ -423,11 +423,7 @@ class RPCServer(BaseZMQServer):
                 rpayload.require_serialized()
 
                 # set reply
-                scheduler.last_operation_reply = (
-                    rpayload,
-                    rpreserialized_payload,
-                    REPLY,
-                )
+                scheduler.last_operation_reply = Reply(rpayload, rpreserialized_payload, ReplyKind.OK)
 
             except BreakInnerLoop:
                 # exit the loop and stop the thing
@@ -443,12 +439,8 @@ class RPCServer(BaseZMQServer):
                         execution_logs=list_handler.log_list,
                     )
 
-                # set reply, let the message broker decide
-                scheduler.last_operation_reply = (
-                    rpayload,
-                    rpreserialized_payload,
-                    None,
-                )
+                # set reply, let the protocol at the border decide how to signal an exit
+                scheduler.last_operation_reply = Reply(rpayload, rpreserialized_payload, ReplyKind.EXIT)
 
                 # quit the loop
                 break
@@ -468,11 +460,7 @@ class RPCServer(BaseZMQServer):
                     rpayload.value["execution_logs"] = list_handler.log_list
 
                 # set error reply
-                scheduler.last_operation_reply = (
-                    rpayload,
-                    rpreserialized_payload,
-                    ERROR,
-                )
+                scheduler.last_operation_reply = Reply(rpayload, rpreserialized_payload, ReplyKind.ERROR)
 
             finally:
                 # cleanup
@@ -887,8 +875,8 @@ class Scheduler:
     [UML Diagram subclasses](http://docs.hololinked.dev/UML/PDF/Scheduler.pdf)
     """
 
-    OperationRequest = tuple[str, str, str, SerializableData, PreserializedData, dict[str, Any]]
-    OperationReply = tuple[SerializableData, PreserializedData, str | None]
+    OperationRequest = Operation
+    OperationReply = Reply
     JobInvokationType = tuple[AsyncZMQServer, RequestMessage, asyncio.Task | None, asyncio.Event | None]
     # [UML Diagram](http://docs.hololinked.dev/UML/PDF/RPCServer.pdf)
     _operation_execution_complete_event: CrossLoopEvent
@@ -899,8 +887,8 @@ class Scheduler:
         self.rpc_server = rpc_server  # type: RPCServer
         self.run = True  # type: bool
         self._one_shot = False  # type: bool
-        self._last_operation_request = Undefined  # type: Scheduler.OperationRequest
-        self._last_operation_reply = Undefined  # type: Scheduler.OperationRequest
+        self._last_operation_request = Undefined  # type: Operation
+        self._last_operation_reply = Undefined  # type: Reply
         self._job_queued_event = asyncio.Event()  # type: asyncio.Event
 
     @property
@@ -960,25 +948,6 @@ class Scheduler:
         self._job_queued_event.set()
         self._operation_execution_ready_event.set()
         self._operation_execution_complete_event.set()
-
-    @classmethod
-    def extract_operation_tuple_from_request(self, request_message: RequestMessage) -> OperationRequest:
-        """
-        Thing execution info.
-
-        Returns
-        -------
-        operation_request: OperationRequest
-            thing id, objekt, operation, payload, preserialized payload and thing execution context
-        """
-        return (  # ty: ignore[invalid-return-type]
-            request_message.header["thingID"],
-            request_message.header["objekt"],
-            request_message.header["operation"],
-            request_message.body[0],
-            request_message.body[1],
-            request_message.header["thingExecutionContext"],
-        )
 
     @classmethod
     def format_reply_tuple(self, return_value: Any) -> OperationReply:

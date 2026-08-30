@@ -9,7 +9,8 @@ from hololinked import Serializers
 from hololinked.constants import byte_types
 from hololinked.param.parameters import Integer
 
-from .payloads import PreserializedData, SerializableData
+from ..operations import Operation, as_execution_kwargs
+from ..payloads import PreserializedData, SerializableData
 
 
 # message types
@@ -282,6 +283,30 @@ class RequestMessage:
             self.header["thingID"],
             self.header["objekt"],
             self.header["operation"],
+        )
+
+    def to_operation(self) -> Operation:
+        """
+        Convert this ZMQ message into the transport-neutral unit the execution engine schedules.
+
+        This is the border. Everything above it - the 5-frame layout, the header structs, the
+        message types - is a ZMQ artifact and stops here.
+
+        Returns
+        -------
+        Operation
+            the operation this message is asking for
+        """
+        return Operation(
+            thing_id=self.header["thingID"],
+            objekt=self.header["objekt"],
+            operation=self.header["operation"],
+            payload=self.body[0],  # ty: ignore[invalid-argument-type]
+            preserialized_payload=self.body[1],  # ty: ignore[invalid-argument-type]
+            id=self.id,
+            sender_id=self.sender_id,
+            **as_execution_kwargs(self.header["serverExecutionContext"]),
+            **as_execution_kwargs(self.header["thingExecutionContext"]),
         )
 
     def parse_header(self) -> None:
