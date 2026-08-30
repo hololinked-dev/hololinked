@@ -1,7 +1,6 @@
 """JSON schema validator based on the `fastjsonschema` package. `pip install fastjsonschema` to use."""
 
 import fastjsonschema
-import jsonschema
 
 from hololinked.constants import JSONSchemaType
 from hololinked.core.interfaces import BaseSchemaValidator
@@ -48,7 +47,7 @@ class FastJSONSchemaValidator(BaseSchemaValidator):
         """
         Check that the given object is itself a valid JSON schema.
 
-        `fastjsonschema` has no schema checker of its own, therefore the standard `jsonschema` package is used.
+        `fastjsonschema` has no dedicated schema checker, so the schema is compiled and the result discarded.
 
         Parameters
         ----------
@@ -57,10 +56,10 @@ class FastJSONSchemaValidator(BaseSchemaValidator):
 
         Raises
         ------
-        jsonschema.SchemaError
+        fastjsonschema.JsonSchemaDefinitionException
             if the schema is not a valid JSON schema
         """
-        jsonschema.Draft7Validator.check_schema(schema)
+        fastjsonschema.compile(schema)
 
     def validate(self, data) -> None:  # noqa: D102
         self.validator(data)

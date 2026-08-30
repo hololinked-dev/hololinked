@@ -217,7 +217,15 @@ class SchemaValidatorRegistry(MappableSingleton):
         import importlib
 
         module_path, attribute = cls.modules[name]
-        validator = getattr(importlib.import_module(module_path), attribute)
+        try:
+            validator = getattr(importlib.import_module(module_path), attribute)
+        except ModuleNotFoundError as ex:
+            if ex.name and not ex.name.startswith("hololinked"):
+                raise ModuleNotFoundError(
+                    f"the {name!r} schema validator needs {ex.name!r}, which is not installed. "
+                    + "Please install first."
+                ) from ex
+            raise
         setattr(cls, name, validator)  # cache so subsequent access skips __getattr__
         return validator
 
