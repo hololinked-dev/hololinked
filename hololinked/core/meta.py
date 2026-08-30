@@ -628,10 +628,10 @@ class PropertiesRegistry(DescriptorRegistry):
         AttributeError
             if the owning `Thing` instance is not connected to a database
         """
-        if not hasattr(self.owner_inst, "db_engine"):
+        if self.owner_inst is None or self.owner_inst.db_engine is None:
             raise AttributeError("database engine not set, this object is not connected to a database")
         # `deserialized=True` (the default) makes every backend return a dict, not a Sequence
-        props: dict = self.owner_inst.db_engine.get_all_properties()  # ty: ignore[unresolved-attribute, invalid-assignment]
+        props: dict = self.owner_inst.db_engine.get_all_properties()  # ty: ignore[invalid-assignment]
         final_list = {}
         for name, prop in props.items():
             try:
@@ -648,10 +648,10 @@ class PropertiesRegistry(DescriptorRegistry):
     @supports_only_instance_access("database operations are only supported at instance level")
     def load_from_DB(self):
         """Load and apply property values from database which have `db_init` or `db_persist` set to `True`."""
-        if not hasattr(self.owner_inst, "db_engine"):
+        if self.owner_inst is None or self.owner_inst.db_engine is None:
             return
             # raise AttributeError("database engine not set, this object is not connected to a database")
-        missing_properties = self.owner_inst.db_engine.create_missing_properties(  # ty: ignore[unresolved-attribute]
+        missing_properties = self.owner_inst.db_engine.create_missing_properties(
             self.db_init_objects, get_missing_property_names=True
         )
         # 4. read db_init and db_persist objects

@@ -11,12 +11,6 @@ import zmq.asyncio
 
 from hololinked import Serializers
 from hololinked.config import global_config
-from hololinked.serializers import (
-    JSONSerializer,
-    MsgpackSerializer,
-    PickleSerializer,
-    TextSerializer,
-)
 from hololinked.server import stop
 
 
@@ -63,7 +57,6 @@ def setup_test_environment():
     stop()
     # Reset serializers after each test
     Serializers().reset()
-    init_serializers()
     global_config.ZMQ_CONTEXT.destroy(linger=0)
     global_config.ZMQ_CONTEXT.term()
 
@@ -76,14 +69,3 @@ def app_ids() -> AppIDs:
         client_id=f"test-client-{uuid4().hex[:8]}",
         thing_id=f"test-thing-{uuid4().hex[:8]}",
     )
-
-
-def init_serializers() -> None:
-    """Initialize serializers for testing. Copy the code in `serializers.__init__`."""
-    default_serializer = JSONSerializer()
-    Serializers.default = default_serializer
-
-    Serializers.register(default_serializer, "json")
-    Serializers.register(MsgpackSerializer(), "msgpack")
-    Serializers.register(PickleSerializer(), "pickle")
-    Serializers.register(TextSerializer(), "text")

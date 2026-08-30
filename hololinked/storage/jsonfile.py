@@ -5,10 +5,12 @@ from __future__ import annotations
 import os
 import threading
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
+from hololinked.config import global_config
 from hololinked.core.interfaces import BaseConfigurationRepository, BaseSerializer
 from hololinked.serializers import JSONSerializer
+from hololinked.utils import get_sanitized_filename_from_random_string
 
 
 if TYPE_CHECKING:
@@ -41,6 +43,31 @@ class JSONFileStorage(BaseConfigurationRepository):
         self._serializer = serializer or JSONSerializer()
         self._lock = threading.RLock()
         self._data = self._load()
+
+    @classmethod
+    def from_thing(cls, thing: Thing, **kwargs: Any) -> Self:
+        """
+        Build the JSON file storage for a `Thing`, deriving the file name from its ID if none was given.
+
+        The file always lives under `global_config.TEMP_DIR_DB`, so a relative `json_filename` cannot escape it.
+
+        Parameters
+        ----------
+        thing: Thing
+            the `Thing` instance whose configuration is stored in the file
+        kwargs: dict[str, Any]
+            the keyword arguments given to the `Thing`; `json_filename` is read from here and the rest ignored
+
+        Returns
+        -------
+        Self
+            the storage engine, with the file loaded if it already exists
+        """
+        filename = kwargs.get("json_filename") or get_sanitized_filename_from_random_string(
+            thing.id,
+            extension="json",
+        )
+        return cls(thing=thing, filename=os.path.join(global_config.TEMP_DIR_DB, filename))
 
     def _load(self) -> dict[str, Any]:
         """

@@ -105,7 +105,7 @@ class Event:
         EventAffordance
             the affordance TD fragment for this event
         """
-        from hololinked.ddl import MetadataFormats
+        from hololinked import MetadataFormats
 
         return MetadataFormats.get(format).event.from_descriptor(self, owner_inst or self.owner)
 

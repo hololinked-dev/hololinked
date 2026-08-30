@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import pytest
 
@@ -347,8 +347,8 @@ def test_08_no_model_func_with_args_and_kwargs():
 def test_08_model_func_with_args_and_kwargs():
     model = get_input_model_from_signature(func_with_args_and_kwargs, model_for_empty_annotations=True)
     assert issubklass(model, BaseModel)
-    assert model.model_fields["args"].annotation == Tuple or model.model_fields["args"].annotation is tuple
-    assert model.model_fields["kwargs"].annotation == Dict[str, Any] or model.model_fields["kwargs"].annotation is dict
+    assert model.model_fields["args"].annotation is tuple
+    assert model.model_fields["kwargs"].annotation == dict[str, Any]
     assert len(model.model_fields) == 2
     assert model.model_config["extra"] == "forbid"
 

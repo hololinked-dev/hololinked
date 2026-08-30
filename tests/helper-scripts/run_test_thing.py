@@ -12,8 +12,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"
 
 from things import OceanOpticsSpectrometer, TestThing
 
+from hololinked import Serializers
 from hololinked.config import global_config
-from hololinked.serializers import Serializers
 from hololinked.server import run, stop
 from hololinked.server.http import HTTPServer
 from hololinked.server.mqtt import MQTTPublisher

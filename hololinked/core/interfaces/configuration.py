@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, Self
 
 
 if TYPE_CHECKING:
@@ -25,6 +26,25 @@ class BaseConfigurationRepository:
 
     def __init__(self, thing: Thing) -> None:
         self.thing = thing
+
+    @classmethod
+    def from_thing(cls, thing: Thing, **kwargs: Any) -> Self:
+        """
+        Build the repository for a `Thing` from the keyword arguments the `Thing` was created with.
+
+        Parameters
+        ----------
+        thing: Thing
+            the `Thing` instance the repository stores the configuration of
+        kwargs: dict[str, Any]
+            the keyword arguments given to the `Thing`, for example `db_config_file` or `json_filename`
+
+        Returns
+        -------
+        Self
+            the repository, ready to be used as the `Thing`'s storage backend
+        """
+        return cls(thing=thing)
 
     def fetch_own_info(self) -> Any:
         """Fetch `Thing` instance's own information (some useful metadata which could help the `Thing` run)."""
