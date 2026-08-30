@@ -19,7 +19,7 @@ Benefits you get when you use hololinked:
 
 ## To Install
 
-From pip - `pip install hololinked` <br>
+From pip - `pip install hololinked`/`pip install hololinked[all]` <br>
 From conda - <br>
 `pip install aiomqtt` (needs to be installed separately) <br>
 `conda install -c conda-forge hololinked` <br>
