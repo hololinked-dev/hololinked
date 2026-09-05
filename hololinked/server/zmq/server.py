@@ -106,10 +106,7 @@ class ZMQServer(BaseProtocolServer):
         BaseProtocolServer.__init__(self, id=id, logger=logger)
         self.logger = logger
 
-        # the event loop shares this server's id, so `thing.eventloop.id` names the INPROC address that
-        # other protocol servers in this process connect to
         self.eventloop = eventloop or EventLoop(
-            id=id,
             logger=logger,
             thing_description_provider=self.get_thing_description,
         )

@@ -18,13 +18,13 @@ from ...constants import Operations
 from ...core.eventloop import (
     EventSubscription,
     Operation,
-    SerializableNone,
     ServerExecutionContext,
     ThingExecutionContext,
     default_server_execution_context,
     default_thing_execution_context,
     encode_event,
 )
+from ...core.eventloop.operations import SerializableNone
 from ...core.eventloop.payloads import PreserializedData, SerializableData
 from ...metadata.td import (
     ActionAffordance,

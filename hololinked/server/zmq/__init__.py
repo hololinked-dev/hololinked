@@ -2,6 +2,15 @@
 
 from typing import TYPE_CHECKING
 
+
+try:
+    import zmq  # noqa: F401
+except ImportError:
+    raise ImportError(
+        "Please install pyzmq to use ZMQ server or client - `pip install pyzmq`."
+        + "Version should be less than 26.2 to support IPC in windows machines."
+    )
+
 from .brokers import (  # noqa: F401
     AsyncEventConsumer,
     AsyncZMQClient,
@@ -14,9 +23,6 @@ from .brokers import (  # noqa: F401
 )
 
 
-# `ZMQServer` is the only thing here that needs `BaseProtocolServer`, and `server/server.py` imports
-# `repository.py`, which imports the brokers from this package, while it is still initialising.
-# Resolving the server on first access keeps the sockets and the wire format importable on their own.
 _lazy = {"RPCServer": (".server", "RPCServer"), "ZMQServer": (".server", "ZMQServer")}
 
 

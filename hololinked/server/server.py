@@ -18,7 +18,6 @@ from hololinked.utils import (
     cancel_pending_tasks_in_current_loop,
     forkable,
     get_current_async_loop,
-    uuid_hex,
 )
 
 from ..constants import ZMQ_TRANSPORTS
@@ -214,7 +213,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
     else:
         # nobody asked for ZMQ, so there is no reason to create any of it
         eventloop_owner = None
-        eventloop = EventLoop(id=f"eventloop-{uuid_hex()}", things=things)
+        eventloop = EventLoop(things=things)
 
     threading.Thread(target=(eventloop_owner or eventloop).run).start()
 

@@ -1,13 +1,4 @@
-"""
-The event loop: what actually runs an operation on a `Thing`.
-
-`EventLoop` accepts `Operation`s through `submit()` and answers with `Reply`s. It owns the `Thing`
-threads, the schedulers that decide whether an operation queues or runs at once, and the `EventBus`
-that events are pushed onto. It owns no sockets and knows no wire format - a protocol server sits in
-front of it and converts, at its own border, in both directions.
-
-[UML Diagram](http://docs.hololinked.dev/UML/PDF/RPCServer.pdf)
-"""
+"""Concrete implementation of EventLoop class."""
 
 from __future__ import annotations
 
@@ -55,28 +46,26 @@ class EventLoop:
     """
 
     things: dict[str, Thing]
-    """Every served `Thing`, sub-things included, keyed by id. What `submit()` resolves against."""
+    """Every served `Thing`, sub-things included."""
 
     per_job_scheduler_types: dict[str, type[Scheduler]]
     """
     Scheduler class constructed fresh for every operation.
 
-    `AsyncScheduler` and `ThreadedScheduler` live here: they run their operation concurrently and
-    each carries its own reply.
+    `AsyncScheduler` and `ThreadedScheduler` usually live here. They are instantiated per operation.
+    Please only assign types or classes, not instances. There is no validation.
     """
 
     per_thing_schedulers: dict[str, Scheduler]
     """
-    Long-lived scheduler shared by every queued operation on that `Thing`.
+    Long-lived scheduler shared by every operation on that `Thing`.
 
-    `QueuedScheduler` lives here: it owns the queue that serializes operations, so there can only
-    be one of it per `Thing`.
+    `QueuedScheduler` usually lives here. Please only assign scheduler instances here, not types or classes.
     """
 
     def __init__(
         self,
         *,
-        id: str,
         things: list[Thing] | None = None,
         logger: structlog.stdlib.BoundLogger | None = None,
         thing_description_provider: Callable[..., dict[str, Any]] | None = None,
@@ -87,8 +76,6 @@ class EventLoop:
 
         Parameters
         ----------
-        id: str
-            `id` of the event loop, usually shared with the protocol server that owns it
         things: list[Thing]
             list of `Thing` instances to be served
         logger: structlog.stdlib.BoundLogger, optional
@@ -96,12 +83,9 @@ class EventLoop:
         thing_description_provider: Callable, optional
             the owning protocol server's TD generator - see `get_thing_description()`
         """
-        self.id = id
         if not logger:
             logger = structlog.get_logger()
-        self.logger = logger.bind(component="eventloop", impl=self.__class__.__name__, id=self.id)
-        # all four must exist before add_things(): it writes to two of them, and a `Thing` reads the
-        # bus as soon as one of its events is first accessed
+        self.logger = logger.bind(component="eventloop", impl=self.__class__.__name__)
         self.things = dict()
         self.per_job_scheduler_types = dict()
         self.per_thing_schedulers = dict()
@@ -115,7 +99,7 @@ class EventLoop:
 
     def add_thing(self, thing: Thing) -> None:
         """
-        Adds a thing to the list of things to serve.
+        Adds a thing to the list of things to serve with the event loop.
 
         Parameters
         ----------
@@ -171,7 +155,7 @@ class EventLoop:
         Raises
         ------
         RuntimeError
-            if the event loop is not running, so there is no asyncio loop to schedule onto
+            if the asyncio loop is not running
         """
         if self._loop is None:
             coro.close()
@@ -181,9 +165,6 @@ class EventLoop:
     def submit(self, operation: Operation) -> Future:
         """
         Schedule an operation on its `Thing` and return the promise of its reply.
-
-        Non-blocking, and safe to call from any thread, with or without a running asyncio event loop of your
-        own. To complete the operation, use `execute()` instead.
 
         Parameters
         ----------
@@ -225,9 +206,6 @@ class EventLoop:
         """
         Schedule an operation and wait for its reply, on the calling coroutine's own loop.
 
-        The async face of `submit()`. Whichever loop calls this is the loop the wait is parked on,
-        so a protocol server never blocks, nor borrows, the `EventLoop`'s own asyncio loop.
-
         Parameters
         ----------
         operation: Operation
@@ -236,7 +214,7 @@ class EventLoop:
         Returns
         -------
         Reply
-            how the operation finished, including the two timeout kinds
+            the reply of the operation. Use `kind` to find out if it errored or timed out or completed successfully.
 
         Raises
         ------
@@ -249,10 +227,9 @@ class EventLoop:
 
     async def tunnel_message_to_things(self, scheduler: Scheduler) -> None:
         """
-        Drain one scheduler's queue, handing each operation to its `Thing` and answering the caller.
+        Drain one scheduler's queue, handing each operation to its `Thing`.
 
-        Runs on the loop that submitted, never on the `Thing`'s - that separation is the whole point,
-        and is what keeps the request side responsive however long an operation takes.
+        Does not have to be invoked by the caller. It's always running once the event loop is started.
 
         Parameters
         ----------
@@ -546,23 +523,6 @@ class EventLoop:
             preserialized_payload = PreserializedData(b"", content_type="text/plain")
         return payload, preserialized_payload
 
-    def run_things(self, things: list[Thing]):
-        """
-        Run loop that executes operations on `Thing` instances. This method is blocking and is called by `run()` method.
-
-        Parameters
-        ----------
-        things: List[Thing]
-            list of `Thing` instances to be executed
-        """
-        thing_executor_loop = get_current_async_loop()
-        self.logger.info(f"starting thing in thread {threading.get_ident()} for {[obj.id for obj in things]}")
-        thing_executor_loop.run_until_complete(
-            asyncio.gather(*[self.run_thing_instance(instance) for instance in things])
-        )
-        self.logger.info(f"exiting event loop in thread {threading.get_ident()}")
-        thing_executor_loop.close()
-
     def get_thing_model(
         self,
         thing_id: str,
@@ -681,22 +641,20 @@ class EventLoop:
         """
         Start & run the event loop. This method is blocking.
 
-        Creates the shared scheduler for each `Thing`, gives each `Thing` a thread of its own, then
-        runs the drain loops - along with whatever coroutines a protocol server hands over, which is
-        how a socket poller ends up on the same loop the replies are resolved on. Call `stop()`
-        (threadsafe) to stop.
+        Creates the shared scheduler for each `Thing`, gives each `Thing` a thread of its own.
+        Call `stop()` (threadsafe) to stop. Pass any extra coroutines to run alongside the event loop's own tasks
+        via the `extra_coroutines` parameter. This would be usually the protocol server's request listeners.
 
         Parameters
         ----------
         extra_coroutines: Sequence[Coroutine]
-            coroutines to run beside the drain loops, usually a protocol server's request listeners
+            coroutines to run beside the event loop's own tasks.
         """
         self._run = True
-        # recorded before anything can submit, since submissions from other threads land here
         self._loop = get_current_async_loop()
         self.logger.info("starting event loop")
         # only the `Thing`s added directly get a scheduler and a thread; a sub-thing runs within
-        # its owner's, which is also why `Thing.exit()` refuses on a composed object
+        # its owner's
         top_level_things = [thing for thing in self.things.values() if not thing._owners]
         for thing in top_level_things:
             self.per_thing_schedulers[thing.id] = QueuedScheduler(thing, self)
@@ -710,8 +668,6 @@ class EventLoop:
             existing_tasks = asyncio.all_tasks(loop)
             loop.run_until_complete(
                 asyncio.gather(
-                    # only the shared per-Thing schedulers exist at startup, the one-shot ones are
-                    # created on demand and arrange their own drain loop
                     *[self.tunnel_message_to_things(scheduler) for scheduler in self.per_thing_schedulers.values()],
                     *extra_coroutines,
                     *existing_tasks,
@@ -725,6 +681,23 @@ class EventLoop:
             thread.join()
         self.logger.info("event loop stopped")
 
+    def run_things(self, things: list[Thing]):
+        """
+        Run loop that executes operations on `Thing` instances. This method is blocking and is called by `run()` method.
+
+        Parameters
+        ----------
+        things: List[Thing]
+            list of `Thing` instances to be executed in this particular loop iteration.
+        """
+        thing_executor_loop = get_current_async_loop()
+        self.logger.info(f"starting thing in thread {threading.get_ident()} for {[obj.id for obj in things]}")
+        thing_executor_loop.run_until_complete(
+            asyncio.gather(*[self.run_thing_instance(instance) for instance in things])
+        )
+        self.logger.info(f"exiting event loop in thread {threading.get_ident()}")
+        thing_executor_loop.close()
+
     def stop(self) -> None:
         """Stop the event loop, and everything hooked onto it. This method is threadsafe."""
         self._run = False
@@ -736,16 +709,8 @@ class EventLoop:
         for scheduler in self.per_thing_schedulers.values():
             scheduler.cleanup()
 
-    def __hash__(self):
-        return hash(str(self))
-
-    def __eq__(self, other):
-        if not isinstance(other, EventLoop):
-            return False
-        return self.id == other.id
-
     def __str__(self):
-        return f"EventLoop({self.id}, things: {list(self.things)})"
+        return f"EventLoop(things: {list(self.things)})"
 
 
 __all__ = [EventLoop.__name__]
