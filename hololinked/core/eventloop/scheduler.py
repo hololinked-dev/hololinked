@@ -46,16 +46,13 @@ class Scheduler:
     _operation_execution_complete_event: CrossLoopEvent
     _operation_execution_ready_event: CrossLoopEvent
 
-    def __init__(self, instance: Thing, engine: EventLoop) -> None:
+    def __init__(self, instance: Thing, eventloop: EventLoop) -> None:
         self.instance = instance  # type: Thing
-        self.engine = engine  # type: EventLoop
+        self.eventloop = eventloop  # type: EventLoop
         self.run = True  # type: bool
         self._one_shot = False  # type: bool
         self._last_operation_request = Undefined  # type: Operation
         self._last_operation_reply = Undefined  # type: Reply
-        # cross-loop like the other two: `dispatch_job()` runs on whichever thread submitted, while
-        # the drain loop waiting on this runs on the engine's. A plain `asyncio.Event` cannot cross
-        # that gap - `set()` from another thread does not reliably wake the waiter.
         self._job_queued_event = CrossLoopEvent()  # type: CrossLoopEvent
 
     @property
@@ -124,8 +121,8 @@ class Scheduler:
 class QueuedScheduler(Scheduler):
     """Scheduler class to schedule the operations of a thing in a queued loop."""
 
-    def __init__(self, instance: Thing, engine: EventLoop) -> None:
-        super().__init__(instance, engine)
+    def __init__(self, instance: Thing, eventloop: EventLoop) -> None:
+        super().__init__(instance, eventloop)
         self.queue = deque()
         self._one_shot = False
         self._operation_execution_ready_event = CrossLoopEvent()
@@ -161,8 +158,8 @@ class QueuedScheduler(Scheduler):
 class AsyncScheduler(Scheduler):
     """Scheduler class to schedule the operations of a thing in an async loop."""
 
-    def __init__(self, instance: Thing, engine: EventLoop) -> None:
-        super().__init__(instance, engine)
+    def __init__(self, instance: Thing, eventloop: EventLoop) -> None:
+        super().__init__(instance, eventloop)
         self._job = None
         self._one_shot = True
         self._operation_execution_ready_event = CrossLoopEvent()
@@ -180,9 +177,9 @@ class AsyncScheduler(Scheduler):
 
     def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
         """
-        Store the job and start both halves of it as tasks on the engine's loop.
+        Store the job and start both halves of it as tasks on the `EventLoop`'s own asyncio loop.
 
-        Onto the engine's loop, never the caller's: a submission from a protocol server's thread
+        Onto that loop, never the caller's: a submission from a protocol server's thread
         must not end up running a `Thing`'s coordination on that server's loop.
 
         Parameters
@@ -191,16 +188,16 @@ class AsyncScheduler(Scheduler):
             the operation to run, and the future that answers whoever submitted it
         """
         self._job = job
-        self.engine.call_on_engine_loop(self.engine.tunnel_message_to_things(self))
-        self.engine.call_on_engine_loop(self.engine.run_thing_instance(self.instance, self))
+        self.eventloop.run_coro_threadsafe(self.eventloop.tunnel_message_to_things(self))
+        self.eventloop.run_coro_threadsafe(self.eventloop.run_thing_instance(self.instance, self))
         self._job_queued_event.set()
 
 
 class ThreadedScheduler(Scheduler):
     """Scheduler class to schedule the operations of a thing in a threaded loop."""
 
-    def __init__(self, instance: Thing, engine: EventLoop) -> None:
-        super().__init__(instance, engine)
+    def __init__(self, instance: Thing, eventloop: EventLoop) -> None:
+        super().__init__(instance, eventloop)
         self._job = None
         self._execution_thread = None
         self._one_shot = True
@@ -221,7 +218,7 @@ class ThreadedScheduler(Scheduler):
         """
         Store the job and start a thread to execute it on the `Thing` instance.
 
-        The drain half goes onto the engine's loop, not the caller's - see `AsyncScheduler`.
+        The drain half goes onto the `EventLoop`'s own asyncio loop, not the caller's - see `AsyncScheduler`.
 
         Parameters
         ----------
@@ -229,10 +226,10 @@ class ThreadedScheduler(Scheduler):
             the operation to run, and the future that answers whoever submitted it
         """
         self._job = job
-        self.engine.call_on_engine_loop(self.engine.tunnel_message_to_things(self))
+        self.eventloop.run_coro_threadsafe(self.eventloop.tunnel_message_to_things(self))
         self._execution_thread = threading.Thread(
             target=asyncio.run,
-            args=(self.engine.run_thing_instance(self.instance, self),),
+            args=(self.eventloop.run_thing_instance(self.instance, self),),
         )
         self._execution_thread.start()
         self._job_queued_event.set()

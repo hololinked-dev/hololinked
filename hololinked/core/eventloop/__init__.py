@@ -1,8 +1,13 @@
 """
-The execution engine and everything it needs: operations, schedulers and the event bus.
+The implementation of an eventloop and how it executes operations.
 
-Nothing in this package imports a transport. A protocol server converts, at its own border, between
-its wire format and the `Operation`/`Reply` pair the engine speaks.
+The execution of operations is independent of the protocols or transport mechanisams,
+and all protocols must instantiate an event loop object and simply submit their executions to it.
+
+This would also mean that the protocol simply implement some parsing of incoming/outgoing messages
+and comply them to a standard operation that we understand.
+
+Schedulers control how event loop executes the submitted operations, queued, thread, async etc.
 """
 
 from .eventloop import EventLoop  # noqa: F401

@@ -79,7 +79,7 @@ class Event:
                 return self
             return EventDispatcher(
                 unique_identifier=f"{obj._qualified_id}/{self.name}",
-                publisher=obj.engine.event_bus if obj.engine else None,
+                publisher=obj.eventloop.event_bus if obj.eventloop else None,
                 owner_inst=obj,
                 descriptor=self,
             )

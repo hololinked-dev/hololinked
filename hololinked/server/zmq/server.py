@@ -3,7 +3,7 @@ ZeroMQ: the sockets, the wire format border, and the protocol server that owns t
 
 `ZMQServer` puts an `EventLoop` behind ZMQ. It owns every socket - `INPROC` for callers inside this
 process, `IPC` and `TCP` for callers outside it - and converts, at its own border, between the
-5-frame wire format and the transport-neutral `Operation`/`Reply` the engine speaks.
+5-frame wire format and the transport-neutral `Operation`/`Reply` the event loop speaks.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ _ZMQ_MESSAGE_TYPE_FOR_REPLY = {
     ReplyKind.ERROR: ERROR,
     ReplyKind.EXIT: None,  # let the broker decide, as it did before
 }
-"""How the engine's outcome maps onto ZMQ's message-type vocabulary. The engine does not know these."""
+"""How a `Reply` maps onto ZMQ's message-type vocabulary. The event loop does not know these."""
 
 
 class ZMQServer(BaseProtocolServer):
@@ -61,7 +61,7 @@ class ZMQServer(BaseProtocolServer):
         access_points: ZMQ_TRANSPORTS | str | list[ZMQ_TRANSPORTS | str] = ZMQ_TRANSPORTS.IPC,
         things: list[Thing] | None = None,
         context: zmq.asyncio.Context | None = None,
-        engine: EventLoop | None = None,
+        eventloop: EventLoop | None = None,
         **kwargs,
     ) -> None:
         """
@@ -70,7 +70,7 @@ class ZMQServer(BaseProtocolServer):
         Parameters
         ----------
         id: str
-            Unique identifier for the server instance. The engine shares it, so that a `Thing` can
+            Unique identifier for the server instance. The event loop shares it, so that a `Thing` can
             report the address other protocols in this process should connect to.
         access_points: ZMQ_TRANSPORTS or list[ZMQ_TRANSPORTS], default ZMQ_TRANSPORTS.IPC
             Transport protocols for communication. Supported values are `ZMQ_TRANSPORTS.INPROC`,
@@ -80,8 +80,8 @@ class ZMQServer(BaseProtocolServer):
             List of `Thing` instances to be served.
         context: zmq.asyncio.Context, optional
             ZeroMQ context for socket management. If `None`, a global context is used.
-        engine: EventLoop, optional
-            An existing engine to serve. A new one is created when none is given.
+        eventloop: EventLoop, optional
+            An existing event loop to serve. A new one is created when none is given.
         **kwargs
             Additional keyword arguments for server configuration. Usually:
 
@@ -106,15 +106,15 @@ class ZMQServer(BaseProtocolServer):
         BaseProtocolServer.__init__(self, id=id, logger=logger)
         self.logger = logger
 
-        # the engine shares this server's id, so `thing.engine.id` names the INPROC address that
+        # the event loop shares this server's id, so `thing.eventloop.id` names the INPROC address that
         # other protocol servers in this process connect to
-        self.engine = engine or EventLoop(
+        self.eventloop = eventloop or EventLoop(
             id=id,
             logger=logger,
             thing_description_provider=self.get_thing_description,
         )
-        self.engine.attach(self)
-        self.engine.add_stop_hook(self.stop_polling)
+        self.eventloop.attach(self)
+        self.eventloop.add_stop_hook(self.stop_polling)
         self.add_things(*(things or []))
 
         self.context = context or global_config.zmq_context()
@@ -136,7 +136,7 @@ class ZMQServer(BaseProtocolServer):
                 transports.append(transport)
 
         # INPROC is always served: it is how HTTP, MQTT and anything else in this process reach the
-        # engine, and it is the transport the internal clients assume
+        # event loop, and it is the transport the internal clients assume
         self.req_rep_server = AsyncZMQServer(
             id=self.id,
             context=self.context,
@@ -151,7 +151,7 @@ class ZMQServer(BaseProtocolServer):
             **kwargs,
         )
         # one of possibly several protocols listening to the bus - ZMQ has no special standing here
-        self.engine.event_bus.subscribe(self.event_publisher.publish)
+        self.eventloop.event_bus.subscribe(self.event_publisher.publish)
 
         # then every externally visible transport that was asked for
         if ZMQ_TRANSPORTS.TCP in transports or "TCP" in transports:
@@ -173,7 +173,7 @@ class ZMQServer(BaseProtocolServer):
                 access_point=tcp_socket_address,
                 **kwargs,
             )
-            self.engine.event_bus.subscribe(self.tcp_event_publisher.publish)
+            self.eventloop.event_bus.subscribe(self.tcp_event_publisher.publish)
         if ZMQ_TRANSPORTS.IPC in transports or "IPC" in transports:
             self.ipc_server = AsyncZMQServer(
                 id=self.id,
@@ -187,26 +187,26 @@ class ZMQServer(BaseProtocolServer):
                 access_point=ZMQ_TRANSPORTS.IPC,
                 **kwargs,
             )
-            self.engine.event_bus.subscribe(self.ipc_event_publisher.publish)
+            self.eventloop.event_bus.subscribe(self.ipc_event_publisher.publish)
 
     @property
     def is_running(self) -> bool:
-        """Whether the engine behind this server is running."""
-        return self.engine.is_running
+        """Whether the event loop behind this server is running."""
+        return self.eventloop.is_running
 
     @property
     def _run(self) -> bool:
-        """The engine's run flag, which the polling loops check."""
-        return self.engine._run
+        """The event loop's run flag, which the polling loops check."""
+        return self.eventloop._run
 
     @property
     def event_bus(self):
-        """The engine's `EventBus`, which this server's publishers are subscribed to."""
-        return self.engine.event_bus
+        """The event loop's `EventBus`, which this server's publishers are subscribed to."""
+        return self.eventloop.event_bus
 
     def add_thing(self, thing: Thing) -> None:
         """Adds a thing to the list of things to serve."""
-        self.engine.add_thing(thing)
+        self.eventloop.add_thing(thing)
         if self.things is None:
             self.things = []
         if thing not in self.things:
@@ -225,9 +225,9 @@ class ZMQServer(BaseProtocolServer):
 
     async def recv_requests_and_dispatch_jobs(self, server: AsyncZMQServer) -> None:
         """
-        Poll a ZMQ socket, hand every request to the engine and write each reply back.
+        Poll a ZMQ socket, hand every request to the event loop and write each reply back.
 
-        This is the ZMQ border: `RequestMessage` in, `Operation` to the engine, `Reply` back,
+        This is the ZMQ border: `RequestMessage` in, `Operation` to the event loop, `Reply` back,
         `ResponseMessage` out. Messages that need no job at all, like `HANDSHAKE` and `EXIT`, are
         already dealt with by `poll_requests()`.
 
@@ -237,7 +237,7 @@ class ZMQServer(BaseProtocolServer):
             the server instance to poll for requests
         """
         self.logger.debug(f"started polling at socket {server.socket_address}")
-        eventloop = get_current_async_loop()
+        loop = get_current_async_loop()
         while self._run:
             try:
                 request_messages = await server.poll_requests()
@@ -251,13 +251,13 @@ class ZMQServer(BaseProtocolServer):
 
             for request_message in request_messages:
                 # a task per request, so that waiting for one reply never stalls the poller
-                eventloop.create_task(self._serve_one_request(server, request_message))
+                loop.create_task(self._serve_one_request(server, request_message))
         self.stop()
         self.logger.info(f"stopped polling at socket {server.socket_address.split(':')[0].upper()}")
 
     async def _serve_one_request(self, server: AsyncZMQServer, request_message: RequestMessage) -> None:
         """
-        Convert one ZMQ request, run it through the engine and write the answer back.
+        Convert one ZMQ request, run it through the event loop and write the answer back.
 
         Parameters
         ----------
@@ -268,7 +268,7 @@ class ZMQServer(BaseProtocolServer):
         """
         try:
             operation = request_message.to_operation()
-            reply = await self.engine.submit_and_wait(operation)  # type: Reply
+            reply = await self.eventloop.submit_and_wait(operation)  # type: Reply
         except Exception as ex:
             self.logger.error(
                 f"exception occurred for message - {ex!s}",
@@ -472,14 +472,14 @@ class ZMQServer(BaseProtocolServer):
 
     def run(self) -> None:
         """
-        Start & run the server, and the engine behind it. This method is blocking.
+        Start & run the server, and the event loop behind it. This method is blocking.
 
-        The request listeners are handed to the engine so they run on the same async loop as the
+        The request listeners are handed to the event loop so they run on the same async loop as the
         drain loops that resolve their replies. Call `stop()` (threadsafe) to stop.
         """
         self.logger.info("starting ZMQ server")
         try:
-            self.engine.run(
+            self.eventloop.run(
                 extra_coroutines=[self.recv_requests_and_dispatch_jobs(server) for server in self._request_servers()]
             )
         finally:
@@ -487,13 +487,13 @@ class ZMQServer(BaseProtocolServer):
         self.logger.info("ZMQ server stopped")
 
     def stop_polling(self) -> None:
-        """Stop every request listener. Registered with the engine, so stopping it stops these too."""
+        """Stop every request listener. Registered with the event loop, so stopping it stops these too."""
         for server in self._request_servers():
             server.stop_polling()
 
     def stop(self) -> None:
-        """Stop the server and the engine behind it. This method is threadsafe."""
-        self.engine.stop()
+        """Stop the server and the event loop behind it. This method is threadsafe."""
+        self.eventloop.stop()
 
     def exit(self) -> None:
         """Stop, then close every socket and event publisher."""
@@ -562,7 +562,7 @@ class RPCServer(ZMQServer):
     """
     Deprecated. A `ZMQServer` serving `INPROC` only.
 
-    The execution engine it used to be now lives in `hololinked.core.eventloop.EventLoop`, and this
+    The event loop it used to be now lives in `hololinked.core.eventloop.EventLoop`, and this
     is what is left: the ZMQ transport in front of one. Use `ZMQServer`, or `EventLoop` directly if
     no ZMQ is wanted at all.
     """

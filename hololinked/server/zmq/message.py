@@ -252,7 +252,7 @@ class RequestMessage:
 
     def to_operation(self) -> Operation:
         """
-        Convert this ZMQ message into the transport-neutral unit the execution engine schedules.
+        Convert this ZMQ message into the transport-neutral unit the event loop schedules.
 
         This is the border. Everything above it - the 5-frame layout, the header structs, the
         message types - is a ZMQ artifact and stops here.

@@ -135,14 +135,14 @@ def run_coro_sync(coro: Coroutine) -> Any:
     RuntimeError
         if the event loop of the current thread is already running
     """
-    eventloop = get_current_async_loop()
-    if eventloop.is_running():
+    loop = get_current_async_loop()
+    if loop.is_running():
         raise RuntimeError(
             "asyncio event loop is already running, cannot setup coroutine "
             + f"{coro.__name__} to run sync, please await it."
         )
     else:
-        return eventloop.run_until_complete(coro)
+        return loop.run_until_complete(coro)
 
 
 def run_callable_somehow(method: Callable | Coroutine) -> Any:
@@ -169,13 +169,13 @@ def run_callable_somehow(method: Callable | Coroutine) -> Any:
             return result  # truly synchronous
     else:
         raise TypeError("method must be a callable or an awaitable")
-    eventloop = get_current_async_loop()
-    if eventloop.is_running():
+    loop = get_current_async_loop()
+    if loop.is_running():
         # task =  # check later if lambda is necessary
-        eventloop.create_task(coro)  # ty: ignore[invalid-argument-type]  # narrowed to an awaitable above
+        loop.create_task(coro)  # ty: ignore[invalid-argument-type]  # narrowed to an awaitable above
     else:
         # task = method
-        return eventloop.run_until_complete(coro)
+        return loop.run_until_complete(coro)
 
 
 def complete_pending_tasks_in_current_loop() -> None:

@@ -52,8 +52,8 @@ class RuntimeConfig(BaseModel):
     thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
     """service class to be used for generating thing description"""
 
-    engine: Any = Field(default=None)  # type: EventLoop | None
-    """the execution engine that runs operations on the served `Thing`s"""
+    eventloop: Any = Field(default=None)  # type: EventLoop | None
+    """the event loop that runs operations on the served `Thing`s"""
 
     thing_models: Any = Field(default_factory=dict)  # type: dict[str, dict[str, Any]]
     """Thing Model per served `Thing`, which this server's Thing Descriptions are built on"""

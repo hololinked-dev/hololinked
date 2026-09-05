@@ -208,15 +208,15 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
             + "please add all your things to one instance"
         )
     elif len(zmq_servers) == 1:
-        # the ZMQ server owns an engine of its own, and every other protocol shares it
-        engine_owner = zmq_servers[0]
-        engine = engine_owner.engine  # ty: ignore[unresolved-attribute]  # _is_zmq_server() decided this
+        # the ZMQ server owns an event loop of its own, and every other protocol shares it
+        eventloop_owner = zmq_servers[0]
+        eventloop = eventloop_owner.eventloop  # ty: ignore[unresolved-attribute]  # _is_zmq_server() decided this
     else:
         # nobody asked for ZMQ, so there is no reason to create any of it
-        engine_owner = None
-        engine = EventLoop(id=f"engine-{uuid_hex()}", things=things)
+        eventloop_owner = None
+        eventloop = EventLoop(id=f"eventloop-{uuid_hex()}", things=things)
 
-    threading.Thread(target=(engine_owner or engine).run).start()
+    threading.Thread(target=(eventloop_owner or eventloop).run).start()
 
     shutdown_event = asyncio.Event()
     run.shutdown_event = shutdown_event
@@ -227,7 +227,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
 
     loop = get_current_async_loop()
     for server in servers:
-        if server is engine_owner:
+        if server is eventloop_owner:
             continue
         loop.create_task(server.start())
 
@@ -235,7 +235,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
         _print_welcome_message(servers)
 
     loop.run_until_complete(shutdown())
-    engine.stop()
+    eventloop.stop()
     cancel_pending_tasks_in_current_loop()
 
 

@@ -1,10 +1,11 @@
 """
 The transport-neutral half of pushing an event: who may push, and who wants to be told.
 
-An `EventBus` belongs to one execution engine. `Thing`s register their events with it and push
+An `EventBus` belongs to one event loop. `Thing`s register their events with it and push
 payloads through it; protocols subscribe to it and are handed the dispatcher and the raw payload.
 Encoding that payload and getting it onto a wire is each subscriber's own business, which is what
-lets one event reach a ZMQ PUB socket, an SSE stream and an MQTT topic without the engine knowing
+lets one event reach a ZMQ PUB socket, an SSE stream and an MQTT topic without the event loop
+knowing
 that any of them exist.
 """
 

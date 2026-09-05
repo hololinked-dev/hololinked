@@ -134,6 +134,13 @@ class ClientFactory:
         -------
         ObjectProxy
             An `ObjectProxy` instance representing the remote `Thing` with ZMQ protocol.
+
+        Raises
+        ------
+        ImportError
+            if `pyzmq` is not installed - install `hololinked[zmq]` to use the ZMQ transports
+        ModuleNotFoundError
+            if some other dependency of the ZMQ client is missing
         """
         from hololinked.client.zmq.consumed_interactions import (
             ReadMultipleProperties,

@@ -128,7 +128,7 @@ class HTTPServer(BaseProtocolServer):
             readiness_probe_handler=kwargs.get("readiness_handler", ReadinessProbeHandler),
             stop_handler=kwargs.get("stop_handler", StopHandler),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            engine=kwargs.get("engine", None),
+            eventloop=kwargs.get("eventloop", None),
             thing_models=dict(),
             pending_operations=PendingOperations(),
             allowed_clients=allowed_clients,
@@ -193,18 +193,18 @@ class HTTPServer(BaseProtocolServer):
         ioloop.IOLoop.clear_current()
         # 2. sets async loop for a non-possessing thread as well
         get_current_async_loop()
-        # 3. take hold of the engine that runs the things, and of how each one describes itself
+        # 3. take hold of the event loop that runs the things, and of how each one describes itself
         for thing in self.things:
-            if not thing.engine:
+            if not thing.eventloop:
                 raise ValueError(f"You need to expose thing {thing.id} via an EventLoop before trying to serve it")
-            if self.config.engine is None:
-                self.config.engine = thing.engine
-            elif self.config.engine is not thing.engine:
+            if self.config.eventloop is None:
+                self.config.eventloop = thing.eventloop
+            elif self.config.eventloop is not thing.eventloop:
                 raise ValueError(
-                    "every Thing served over HTTP must be run by the same engine, "
+                    "every Thing served over HTTP must be run by the same event loop, "
                     + f"but {thing.id} belongs to a different one"
                 )
-            self.config.thing_models[thing.id] = thing.engine.get_thing_model(thing.id, ignore_errors=True)
+            self.config.thing_models[thing.id] = thing.eventloop.get_thing_model(thing.id, ignore_errors=True)
         # 4. finally also get a reference of the same event loop from tornado
         self.tornado_event_loop = ioloop.IOLoop.current()
 

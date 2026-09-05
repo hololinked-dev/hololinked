@@ -75,7 +75,7 @@ class MQTTPublisher(BaseProtocolServer):
             topic_publisher=kwargs.get("topic_publisher", TopicPublisher),
             thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            engine=kwargs.get("engine", None),
+            eventloop=kwargs.get("eventloop", None),
             qos=qos,
         )
         default_config.update(config or dict())
@@ -126,17 +126,17 @@ class MQTTPublisher(BaseProtocolServer):
         ValueError
             if the `Thing` is not exposed through an `RPCServer`
         """
-        eventloop = get_current_async_loop()
-        if not thing.engine:
-            raise ValueError(f"Thing {thing.id} is not associated with any execution engine")
-        if self.config.engine is None:
-            self.config.engine = thing.engine
-        elif self.config.engine is not thing.engine:
+        loop = get_current_async_loop()
+        if not thing.eventloop:
+            raise ValueError(f"Thing {thing.id} is not associated with any event loop")
+        if self.config.eventloop is None:
+            self.config.eventloop = thing.eventloop
+        elif self.config.eventloop is not thing.eventloop:
             raise ValueError(
-                "every Thing published over MQTT must be run by the same engine, "
+                "every Thing published over MQTT must be run by the same event loop, "
                 + f"but {thing.id} belongs to a different one"
             )
-        TD = thing.engine.get_thing_model(thing.id, ignore_errors=True)
+        TD = thing.eventloop.get_thing_model(thing.id, ignore_errors=True)
 
         for event_name in TD.get("events", {}).keys():
             event_affordance = EventAffordance.from_TD(event_name, TD)
@@ -147,7 +147,7 @@ class MQTTPublisher(BaseProtocolServer):
                 config=self.config,
             )
             self.publishers[topic_publisher.topic] = topic_publisher
-            eventloop.create_task(topic_publisher.publish())
+            loop.create_task(topic_publisher.publish())
             self.logger.info(f"MQTT will publish events for {event_name} of thing {thing.id}")
         for prop_name in TD.get("properties", {}).keys():
             property_affordance = PropertyAffordance.from_TD(prop_name, TD)
@@ -160,7 +160,7 @@ class MQTTPublisher(BaseProtocolServer):
                 config=self.config,
             )
             self.publishers[topic_publisher.topic] = topic_publisher
-            eventloop.create_task(topic_publisher.publish())
+            loop.create_task(topic_publisher.publish())
             self.logger.info(f"MQTT will publish observable property changes for {prop_name} of thing {thing.id}")
         # TD publisher
         td_publisher = self.config.thing_description_publisher(
@@ -170,13 +170,13 @@ class MQTTPublisher(BaseProtocolServer):
             config=self.config,
         )
         self.publishers[td_publisher.topic] = td_publisher
-        eventloop.create_task(td_publisher.publish(TD))
+        loop.create_task(td_publisher.publish(TD))
 
     async def setup(self) -> None:
         """Setup MQTT publishers per `Thing` post connection to broker."""
-        eventloop = get_current_async_loop()
+        loop = get_current_async_loop()
         for thing in self.things:
-            eventloop.create_task(self.start_publishers(thing))
+            loop.create_task(self.start_publishers(thing))
 
     def stop(self):
         """Stop publishing, the client is not closed automatically."""

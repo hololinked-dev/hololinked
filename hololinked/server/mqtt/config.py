@@ -27,5 +27,5 @@ class RuntimeConfig(BaseModel):
     thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
     """Thing Description generation service, used by `ThingDescriptionPublisher` to generate the Thing Description"""
 
-    engine: Any = Field(default=None)  # type: EventLoop | None
-    """the execution engine that runs operations on the served `Thing`s"""
+    eventloop: Any = Field(default=None)  # type: EventLoop | None
+    """the event loop that runs operations on the served `Thing`s"""

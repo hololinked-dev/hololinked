@@ -49,7 +49,7 @@ class TopicPublisher:
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="controller", impl=self.__class__.__name__, topic=self.topic)
-        self.engine = self.config.engine
+        self.eventloop = self.config.eventloop
         self.qos = self.config.qos
         self._stop_publishing = False
 
@@ -60,7 +60,7 @@ class TopicPublisher:
     async def publish(self):
         """Publishes events to the MQTT broker in an infinite loop."""
         subscription = EventSubscription(
-            self.engine.event_bus,
+            self.eventloop.event_bus,
             f"{self.resource.thing_id}/{self.resource.name}",
         )
         self.logger.info(f"Starting to publish events for {self.resource.name} to MQTT broker on topic {self.topic}")

@@ -85,7 +85,7 @@ class BaseHandler(RequestHandler):
             layer="controller",
             impl=self.__class__.__name__,
         )
-        self.engine = self.config.engine  # type: EventLoop
+        self.eventloop = self.config.eventloop  # type: EventLoop
         self.thing_id = self.resource.thing_id
         self.allowed_clients = self.config.allowed_clients
         self.security_schemes = self.config.security_schemes
@@ -446,7 +446,7 @@ class RPCHandler(BaseHandler):
         thing_execution_context: ThingExecutionContext,
     ) -> Operation:
         """
-        Turn one HTTP request into the transport-neutral unit the engine schedules.
+        Turn one HTTP request into the transport-neutral unit the event loop schedules.
 
         This is the HTTP border, and the mirror of what `RequestMessage.to_operation()` does for ZMQ.
 
@@ -484,7 +484,7 @@ class RPCHandler(BaseHandler):
 
     def write_reply(self, reply: Any) -> None:
         """
-        Write one engine `Reply` out as this HTTP response.
+        Write one event loop `Reply` out as this HTTP response.
 
         Only one payload reaches the client: an HTTP response carries a single body with a single
         content type, so a reply that has both a value and a binary part sends the binary part.
@@ -492,7 +492,7 @@ class RPCHandler(BaseHandler):
         Parameters
         ----------
         reply: Reply
-            what the engine answered with
+            what the event loop answered with
         """
         if reply.preserialized_payload.value:
             if reply.payload.value is not None:
@@ -539,16 +539,16 @@ class RPCHandler(BaseHandler):
             )
             if server_execution_context.oneway:
                 # no reply is wanted, so the future is dropped rather than awaited
-                self.engine.submit(request)
+                self.eventloop.submit(request)
                 self.set_status(204, "ok")
             elif local_execution_context.noblock:
                 # the client collects this on a second request, quoting the token back to us
                 token = uuid_hex()
-                self.config.pending_operations.add(token, self.engine.submit(request))
+                self.config.pending_operations.add(token, self.eventloop.submit(request))
                 self.set_status(204, "ok")
                 self.set_header("X-Message-ID", token)
             else:
-                reply = await self.engine.submit_and_wait(request)
+                reply = await self.eventloop.submit_and_wait(request)
                 if reply.timed_out:
                     self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
                     return
@@ -774,7 +774,7 @@ class EventHandler(BaseHandler):
         """Called by GET method and handles the event publishing."""
         try:
             subscription = EventSubscription(
-                self.engine.event_bus,
+                self.eventloop.event_bus,
                 f"{self.thing_id}/{self.resource.name}",
             )
             self.set_status(200)
@@ -864,8 +864,8 @@ class StopHandler(BaseHandler):
             origin = self.request.headers.get("Origin")
             self.logger.info(f"stopping HTTP server as per client request from {origin}, scheduling a stop message...")
             # create a task in current loop
-            eventloop = get_current_async_loop()
-            eventloop.create_task(self.server.async_stop())
+            loop = get_current_async_loop()
+            loop.create_task(self.server.async_stop())
             # dont call it in sequence, its not clear whether its designed for that
             self.set_status(204, "ok")
         except Exception as ex:
@@ -919,17 +919,26 @@ class ReadinessProbeHandler(BaseHandler):
         """Report whether every served `Thing` is connected and answering a ping."""  # noqa: DOC501
         self.set_custom_default_headers()
         try:
-            if len(self.server._disconnected_things) > 0:
-                raise RuntimeError("some things are disconnected, retry later")
-            replies = await self.server.zmq_client_pool.async_execute_in_all_things(
-                objekt="ping",
-                operation="invokeaction",
+            things = self.server.things or []
+            if not things:
+                self.set_status(200, "ok")  # nothing served, so nothing to be ready for
+                self.finish()
+                return
+            eventloop = self.config.eventloop
+            if eventloop is None or not eventloop.is_running:
+                raise RuntimeError("the event loop is not running yet, retry later")
+            replies = await asyncio.gather(
+                *[
+                    eventloop.submit_and_wait(
+                        Operation(thing_id=thing.id, objekt="ping", operation=Operations.invokeaction)
+                    )
+                    for thing in things
+                ]
             )
-            if not all(reply.body[0].deserialize() is None for thing_id, reply in replies.items()):
+            if any(reply.is_error or reply.timed_out for reply in replies):
                 self.set_status(500, "not all things are ready")
             else:
                 self.set_status(200, "ok")
-                # self.write({id: "ready" for id in replies.keys()})
         except Exception as ex:
             self.logger.error(f"error while checking readiness - {str(ex)}")
             self.set_status(500, f"error while checking readiness - {str(ex)}")

@@ -40,7 +40,7 @@ class ThingDescriptionService:
         self.resource = resource  # type: InteractionAffordance
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
-        self.engine = self.config.engine
+        self.eventloop = self.config.eventloop
         self.server = server  # type: HTTPServer
 
     async def generate(
@@ -386,7 +386,7 @@ class ThingDescriptionService:
         dict[str, JSONSerializable]
             the Thing Model
         """
-        return self.engine.get_thing_model(
+        return self.eventloop.get_thing_model(
             self.resource.thing_id,
             ignore_errors=ignore_errors,
             skip_names=skip_names,

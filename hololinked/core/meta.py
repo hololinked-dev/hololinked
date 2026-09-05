@@ -975,7 +975,7 @@ class EventSource:
     """
 
     id: str
-    engine: "EventLoop | None"
+    eventloop: "EventLoop | None"
 
     def __init__(self) -> None:
         self.create_events_registry()
@@ -1000,7 +1000,7 @@ class EventSource:
         protocols the bus then fans out to is not this object's concern.
         """
         try:
-            return self.engine.event_bus if self.engine else None
+            return self.eventloop.event_bus if self.eventloop else None
         except AttributeError:
             return None
 
@@ -1017,9 +1017,9 @@ class EventSource:
     @property
     def rpc_server(self) -> "EventLoop | None":
         """
-        Deprecated alias of `engine`.
+        Deprecated alias of `eventloop`.
 
-        The engine used to be an RPC server that owned ZMQ sockets. It is now transport-neutral, and
-        the sockets belong to whichever protocol servers sit in front of it.
+        The event loop used to be an RPC server that owned ZMQ sockets. It is now transport-neutral,
+        and the sockets belong to whichever protocol servers sit in front of it.
         """
-        return self.engine
+        return self.eventloop

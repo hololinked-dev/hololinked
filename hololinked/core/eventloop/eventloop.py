@@ -1,5 +1,5 @@
 """
-The execution engine: what actually runs an operation on a `Thing`.
+The event loop: what actually runs an operation on a `Thing`.
 
 `EventLoop` accepts `Operation`s through `submit()` and answers with `Reply`s. It owns the `Thing`
 threads, the schedulers that decide whether an operation queues or runs at once, and the `EventBus`
@@ -104,12 +104,12 @@ class EventLoop:
         **kwargs: Any,
     ) -> None:
         """
-        Initialize the engine.
+        Initialize the event loop.
 
         Parameters
         ----------
         id: str
-            `id` of the engine, usually shared with the protocol server that owns it
+            `id` of the event loop, usually shared with the protocol server that owns it
         things: list[Thing]
             list of `Thing` instances to be served
         logger: structlog.stdlib.BoundLogger, optional
@@ -120,7 +120,7 @@ class EventLoop:
         self.id = id
         if not logger:
             logger = structlog.get_logger()
-        self.logger = logger.bind(component="engine", impl=self.__class__.__name__, id=self.id)
+        self.logger = logger.bind(component="eventloop", impl=self.__class__.__name__, id=self.id)
         self.things = []
         # all four must exist before add_things(): it writes to two of them, and a `Thing` reads the
         # bus as soon as one of its events is first accessed
@@ -132,7 +132,7 @@ class EventLoop:
         self._stop_hooks = []  # type: list[Callable[[], None]]
         self._loop = None  # type: asyncio.AbstractEventLoop | None
         self._thing_description_provider = thing_description_provider
-        self._run = False  # flag to stop the engine and everything hooked onto it
+        self._run = False  # flag to stop the event loop and everything hooked onto it
         self.add_things(*(things or []))
 
     def add_thing(self, thing: Thing) -> None:
@@ -147,17 +147,17 @@ class EventLoop:
         Raises
         ------
         RuntimeError
-            if the engine is already running - the registries it writes to are read without a lock
+            if the event loop is already running - the registries it writes to are read without a lock
             by every submission, on the understanding that they stop changing once things are served
         """
         if self._run:
             raise RuntimeError(
-                f"cannot add thing {thing.id} while the engine is running - add every thing before run()"
+                f"cannot add thing {thing.id} while the event loop is running - add every thing before run()"
             )
         # setup scheduling requirements
         all_things = get_all_sub_things_recusively(thing)
         for instance in all_things:
-            instance.engine = self
+            instance.eventloop = self
             self._things_by_id[instance.id] = instance
             for action in instance.actions.descriptors.values():
                 if action.synchronous:
@@ -179,12 +179,12 @@ class EventLoop:
         """Check if the server is running or not."""
         return self._run
 
-    def call_on_engine_loop(self, coro: Coroutine[Any, Any, Any]) -> Future:
+    def run_coro_threadsafe(self, coro: Coroutine[Any, Any, Any]) -> Future:
         """
-        Run a coroutine on the engine's own loop, from whichever thread is asking.
+        Run a coroutine on this `EventLoop`'s own asyncio loop, from whichever thread is asking.
 
-        Everything the engine does internally has to happen on one loop, so that the drain loops and
-        the futures they resolve stay on speaking terms. Callers may be anywhere.
+        Everything an `EventLoop` does internally has to happen on one asyncio loop, so that the drain
+        loops and the futures they resolve stay on speaking terms. Callers may be anywhere.
 
         Parameters
         ----------
@@ -199,11 +199,11 @@ class EventLoop:
         Raises
         ------
         RuntimeError
-            if the engine is not running, so there is no loop to schedule onto
+            if the event loop is not running, so there is no asyncio loop to schedule onto
         """
         if self._loop is None:
             coro.close()
-            raise RuntimeError("the engine is not running, call run() before submitting operations")
+            raise RuntimeError("the event loop is not running, call run() before submitting operations")
         return asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     def submit(self, operation: Operation) -> Future:
@@ -212,7 +212,7 @@ class EventLoop:
 
         Non-blocking, and safe to call from any thread, with or without a running event loop of your
         own. Which scheduling policy applies is decided here, from the action descriptor, and is
-        invisible to the caller. This is the only entry point into the execution engine - nothing
+        invisible to the caller. This is the only entry point into the event loop - nothing
         below it knows which protocol the operation arrived on, or whether one did at all.
 
         Coroutines should use `submit_and_wait()`, which parks the wait on their own loop.
@@ -232,17 +232,17 @@ class EventLoop:
         KeyError
             if no `Thing` with that id is being served
         RuntimeError
-            if the engine is not running
+            if the event loop is not running
         """
         if not self._run:
             # otherwise this surfaces further down as a KeyError on a scheduler table that run()
             # has not filled in yet, which says nothing about what went wrong
-            raise RuntimeError("the engine is not running, call run() before submitting operations")
+            raise RuntimeError("the event loop is not running, call run() before submitting operations")
         thing = self._things_by_id[operation.thing_id]
         job = Job(operation=operation, future=Future(), started=CrossLoopEvent())
         if operation.invokation_timeout is not None:
             # races against the job leaving the queue - whichever gets there first answers the caller
-            job.invokation_timeout_task = self.call_on_engine_loop(
+            job.invokation_timeout_task = self.run_coro_threadsafe(
                 self._answer_if_never_started(job, operation.invokation_timeout)
             )
 
@@ -261,7 +261,7 @@ class EventLoop:
         Schedule an operation and wait for its reply, on the calling coroutine's own loop.
 
         The async face of `submit()`. Whichever loop calls this is the loop the wait is parked on,
-        so a protocol server never blocks, nor borrows, the engine's loop.
+        so a protocol server never blocks, nor borrows, the `EventLoop`'s own asyncio loop.
 
         Parameters
         ----------
@@ -278,7 +278,7 @@ class EventLoop:
         KeyError
             if no `Thing` with that id is being served
         RuntimeError
-            if the engine is not running
+            if the event loop is not running
         """
         return await asyncio.wrap_future(self.submit(operation))
 
@@ -321,7 +321,7 @@ class EventLoop:
             the scheduler whose jobs are to be drained
         """
         self.logger.info("started schedulers")
-        eventloop = get_current_async_loop()
+        loop = get_current_async_loop()
         while self._run and scheduler.run:
             # wait for a job first
             if not scheduler.has_job:
@@ -342,7 +342,7 @@ class EventLoop:
             # anything - the thing cannot be interrupted
             overdue = None
             if job.operation.execution_timeout is not None:
-                overdue = eventloop.create_task(self._answer_if_overdue(job, job.operation.execution_timeout))
+                overdue = loop.create_task(self._answer_if_overdue(job, job.operation.execution_timeout))
 
             # always drain the reply, even once a timeout has answered. Abandoning the wait leaves
             # the thing's answer sitting in the scheduler for the next job to pick up as its own.
@@ -620,7 +620,7 @@ class EventLoop:
         skip_names: list[str] = [],
     ) -> dict[str, Any]:
         """
-        Describe one served `Thing` in the only terms the engine has: affordances, and no forms.
+        Describe one served `Thing` in the only terms the event loop has: affordances, and no forms.
 
         A Thing Model is a Thing Description without the forms, and forms are the part that names a
         protocol's wire. Every protocol server builds its own description on top of this.
@@ -660,8 +660,8 @@ class EventLoop:
         """
         Get the Thing Description for one served `Thing`.
 
-        The engine cannot produce one on its own: a TD is largely forms, and a form is an address on
-        some protocol's wire. Whichever protocol server owns this engine supplies the generator.
+        An `EventLoop` cannot produce one on its own: a TD is largely forms, and a form is an address on
+        some protocol's wire. Whichever protocol server owns this event loop supplies the generator.
 
         Parameters
         ----------
@@ -686,7 +686,7 @@ class EventLoop:
         """
         if self._thing_description_provider is None:
             raise NotImplementedError(
-                "this engine has no protocol server attached, so it cannot generate forms. "
+                "this event loop has no protocol server attached, so it cannot generate forms. "
                 + "Use the thing model directly, or serve the Thing over a protocol."
             )
         return self._thing_description_provider(
@@ -698,9 +698,9 @@ class EventLoop:
 
     def attach(self, server: Any) -> None:
         """
-        Note that a protocol server is serving this engine.
+        Note that a protocol server is serving this event loop.
 
-        The engine never calls into a protocol server - it answers futures and leaves the rest alone.
+        The event loop never calls into a protocol server - it answers futures and leaves the rest alone.
         The list is here so that a `Thing` can find out how it is reachable, which is a question only
         the protocols in front can answer.
 
@@ -714,22 +714,22 @@ class EventLoop:
 
     def add_stop_hook(self, callback: Callable[[], None]) -> None:
         """
-        Ask to be called when the engine stops.
+        Ask to be called when the event loop stops.
 
-        A protocol server registers its socket teardown here, so that stopping the engine - which is
-        what `Thing.exit()` reaches - also stops whatever is sitting in front of it.
+        A protocol server registers its socket teardown here, so that stopping the event loop - which
+        is what `Thing.exit()` reaches - also stops whatever is sitting in front of it.
 
         Parameters
         ----------
         callback: Callable[[], None]
-            called from `stop()`, on whichever thread stopped the engine
+            called from `stop()`, on whichever thread stopped the event loop
         """
         if callback not in self._stop_hooks:
             self._stop_hooks.append(callback)
 
     def run(self, extra_coroutines: Sequence[Coroutine[Any, Any, Any]] = ()) -> None:
         """
-        Start & run the engine. This method is blocking.
+        Start & run the event loop. This method is blocking.
 
         Creates the shared scheduler for each `Thing`, gives each `Thing` a thread of its own, then
         runs the drain loops - along with whatever coroutines a protocol server hands over, which is
@@ -744,7 +744,7 @@ class EventLoop:
         self._run = True
         # recorded before anything can submit, since submissions from other threads land here
         self._loop = get_current_async_loop()
-        self.logger.info("starting execution engine")
+        self.logger.info("starting event loop")
         for thing in self.things:
             self.per_thing_schedulers[thing.id] = QueuedScheduler(thing, self)
         threads = dict()  # type: dict[int, threading.Thread]
@@ -753,9 +753,9 @@ class EventLoop:
             thread.start()
             threads[thread.ident] = thread
         try:
-            eventloop = self._loop
-            existing_tasks = asyncio.all_tasks(eventloop)
-            eventloop.run_until_complete(
+            loop = self._loop
+            existing_tasks = asyncio.all_tasks(loop)
+            loop.run_until_complete(
                 asyncio.gather(
                     # only the shared per-Thing schedulers exist at startup, the one-shot ones are
                     # created on demand and arrange their own drain loop
@@ -764,22 +764,22 @@ class EventLoop:
                     *existing_tasks,
                 )
             )
-            eventloop.close()
+            loop.close()
         finally:
             self._loop = None  # nothing may be scheduled onto a closed loop
             self.stop()
         for thread in threads.values():
             thread.join()
-        self.logger.info("execution engine stopped")
+        self.logger.info("event loop stopped")
 
     def stop(self) -> None:
-        """Stop the engine, and everything hooked onto it. This method is threadsafe."""
+        """Stop the event loop, and everything hooked onto it. This method is threadsafe."""
         self._run = False
         for hook in self._stop_hooks:
             try:
                 hook()
             except Exception as ex:
-                self.logger.warning(f"stop hook raised while stopping the engine - {ex!s}")
+                self.logger.warning(f"stop hook raised while stopping the event loop - {ex!s}")
         for scheduler in self.per_thing_schedulers.values():
             scheduler.cleanup()
 

@@ -167,7 +167,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from .logger import RemoteAccessHandler
 
         # Type definitions
-        self.engine = None  # type: EventLoop | None
+        self.eventloop = None  # type: EventLoop | None
         self.db_engine: BaseConfigurationRepository | None
         self._owners = None if not hasattr(self, "_owners") else self._owners  # type: list[Thing] | None
         self._remote_access_loghandler: RemoteAccessHandler | None
@@ -420,7 +420,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         This method usually needs to be called remotely.
         The servers are not stopped, just the object run loop is exited.
         """
-        if self.engine is None:
+        if self.eventloop is None:
             self.logger.debug("exit() called on a object that is not exposed yet.")
             return
         if self._owners:
@@ -428,7 +428,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 "call exit on the top-level object, composed objects cannot exit the loop. "
                 + f"This object belongs to {self._owners.__class__.__name__} with ID {self._owners.id}."
             )
-        self.engine.stop()
+        self.eventloop.stop()
 
     @action()
     def ping(self) -> None:

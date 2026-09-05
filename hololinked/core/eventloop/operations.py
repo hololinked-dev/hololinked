@@ -1,13 +1,14 @@
 """
-The transport-neutral unit of work that the execution engine schedules on a `Thing`.
+The transport-neutral unit of work that the event loop schedules on a `Thing`.
 
 A protocol receives a request in whatever shape its wire format defines - a ZMQ multipart frame, an
-HTTP request, an MQTT payload - and converts it, at its own border, into an `Operation`. The engine
+HTTP request, an MQTT payload - and converts it, at its own border, into an `Operation`. The
+event loop
 never sees the wire format. It answers with a `Reply`, which the protocol converts back.
 
 Keeping the two apart is what lets a wire format be a protocol's private business. It also gives one
 spelling for the execution parameters: the ZMQ header has historically declared them as
-`invokationTimeout` while the engine looked up `invokation_timeout`, and that only worked because
+`invokationTimeout` while the event loop looked up `invokation_timeout`, and that only worked because
 clients bypassed the typed header and sent a raw dict.
 """
 
@@ -72,12 +73,12 @@ class Operation:
     execution_timeout: float | None = None
     """seconds to wait for the operation to *finish*, `None` to wait indefinitely."""
     oneway: bool = False
-    """whether the caller wants no reply, in which case the engine's answer is discarded."""
+    """whether the caller wants no reply, in which case the event loop's answer is discarded."""
     fetch_execution_logs: bool = False
     """whether to collect the `Thing`'s log records during execution and return them with the reply."""
 
     id: str = ""
-    """identifier of the originating request. Correlation and logging only - the engine never routes on it."""
+    """identifier of the originating request. Correlation and logging only - never routed on."""
     sender_id: str = ""
     """identifier of whoever asked. Logging only."""
 
@@ -88,7 +89,7 @@ class Operation:
 
 
 class ReplyKind(StrEnum):
-    """How an operation finished, in engine terms rather than in any protocol's vocabulary."""
+    """How an operation finished, in event loop terms rather than in any protocol's vocabulary."""
 
     OK = "ok"
     """completed, `payload` carries the return value."""
@@ -104,7 +105,7 @@ class ReplyKind(StrEnum):
 
 @dataclass
 class Reply:
-    """The engine's answer to one `Operation`."""
+    """The event loop's answer to one `Operation`."""
 
     payload: SerializableData
     """the return value, encoded with whatever serializer the objekt is registered against."""
@@ -209,7 +210,7 @@ def as_execution_kwargs(context: Any) -> dict[str, Any]:
     Read the execution parameters out of whatever shape a protocol handed over.
 
     Accepts a mapping, an object with the attributes, or `None`, and tolerates both the snake_case
-    spelling the engine uses and the camelCase spelling the ZMQ header declares.
+    spelling the event loop uses and the camelCase spelling the ZMQ header declares.
 
     Parameters
     ----------
