@@ -1,15 +1,12 @@
 """
 The transport-neutral unit of work that the event loop schedules on a `Thing`.
 
-A protocol receives a request in whatever shape its wire format defines - a ZMQ multipart frame, an
+A protocol receives a request in a shape its own wire format defines - a ZMQ multipart frame, a
 HTTP request, an MQTT payload - and converts it, at its own border, into an `Operation`. The
-event loop
-never sees the wire format. It answers with a `Reply`, which the protocol converts back.
+event loop never sees the wire format. It answers with a `Reply`, which the protocol converts back.
 
 Keeping the two apart is what lets a wire format be a protocol's private business. It also gives one
-spelling for the execution parameters: the ZMQ header has historically declared them as
-`invokationTimeout` while the event loop looked up `invokation_timeout`, and that only worked because
-clients bypassed the typed header and sent a raw dict.
+spelling for the execution parameters.
 """
 
 from __future__ import annotations
@@ -24,35 +21,36 @@ from typing import Any
 import msgspec
 
 from hololinked.core.eventloop.payloads import PreserializedData, SerializableData
+from hololinked.core.interfaces import BaseSerializer
 from hololinked.core.utils import CrossLoopEvent
 
 
-# The execution context a caller asks for, in the camelCase the ZMQ header declares. It lives here
-# rather than with that header because it is what a caller wants, not how one protocol spells it -
-# `as_execution_kwargs()` reads both spellings onto the flat keywords `Operation.__init__` takes.
+class SchedulerExecutionContext(msgspec.Struct, rename="camel"):
+    """Additional context for the serving side while executing an operation."""
 
-
-class ServerExecutionContext(msgspec.Struct):
-    """Additional context for the server while executing an operation."""
-
-    invokationTimeout: float | None
-    """seconds to wait for the operation to *start*, `None` to wait indefinitely."""
-    executionTimeout: float | None
-    """seconds to wait for the operation to *finish*, `None` to wait indefinitely."""
+    invokation_timeout: float | None
+    """
+    Max seconds to wait for the operation to *start*, `None` to wait indefinitely. 
+    Please dont use `None` if unnecessary."""
+    execution_timeout: float | None
+    """
+    Max seconds to wait for the operation to *finish*, `None` to wait indefinitely. 
+    Please dont use `None` if unnecessary.
+    """
     oneway: bool
-    """whether the caller wants no reply, in which case the event loop's answer is discarded."""
+    """whether the caller wants no reply, if not, the event loop's answer is discarded."""
 
 
-class ThingExecutionContext(msgspec.Struct):
+class ThingExecutionContext(msgspec.Struct, rename="camel"):
     """Additional context for the thing while executing an operation."""
 
-    fetchExecutionLogs: bool
+    fetch_execution_logs: bool
     """whether to collect the `Thing`'s log records during execution and return them with the reply."""
 
 
-default_server_execution_context = ServerExecutionContext(invokationTimeout=5, executionTimeout=5, oneway=False)
+default_scheduler_execution_context = SchedulerExecutionContext(invokation_timeout=5, execution_timeout=5, oneway=False)
 
-default_thing_execution_context = ThingExecutionContext(fetchExecutionLogs=False)
+default_thing_execution_context = ThingExecutionContext(fetch_execution_logs=False)
 
 SerializableNone = SerializableData(None, content_type="application/json")
 PreserializedEmptyByte = PreserializedData(b"", content_type="text/plain")
@@ -61,13 +59,9 @@ PreserializedEmptyByte = PreserializedData(b"", content_type="text/plain")
 @dataclass(init=False)
 class Operation:
     """
-    One operation to perform on one interaction affordance of one `Thing`.
+    The eventloop's operation model - One operation to perform on one interaction affordance of one `Thing`.
 
-    The execution parameters live in the two contexts a caller actually asks for, which is also the
-    shape every wire format declares them in. `__init__` accepts them flat, as `invokation_timeout=`,
-    `oneway=` and the rest, because that is how a border has them to hand; reading them goes through
-    the context they belong to, so which parameter is the server's business and which is the
-    `Thing`'s stays visible at every use.
+    The transport-neutral unit of work.
     """
 
     thing_id: str
@@ -82,7 +76,7 @@ class Operation:
     preserialized_payload: PreserializedData
     """binary argument that bypasses serialization entirely."""
 
-    server_execution_context: ServerExecutionContext
+    scheduler_execution_context: SchedulerExecutionContext
     """the timeouts, and whether a reply is wanted at all."""
     thing_execution_context: ThingExecutionContext
     """what the `Thing` should do beside running the operation."""
@@ -107,7 +101,7 @@ class Operation:
         sender_id: str = "",
     ) -> None:
         """
-        Build an operation from flat parameters, gathering the execution ones into their contexts.
+        Initialize an operation with the given parameters.
 
         Parameters
         ----------
@@ -139,12 +133,12 @@ class Operation:
         self.operation = operation
         self.payload = SerializableData(None) if payload is None else payload
         self.preserialized_payload = PreserializedData(b"") if preserialized_payload is None else preserialized_payload
-        self.server_execution_context = ServerExecutionContext(
-            invokationTimeout=invokation_timeout,
-            executionTimeout=execution_timeout,
+        self.scheduler_execution_context = SchedulerExecutionContext(
+            invokation_timeout=invokation_timeout,
+            execution_timeout=execution_timeout,
             oneway=oneway,
         )
-        self.thing_execution_context = ThingExecutionContext(fetchExecutionLogs=fetch_execution_logs)
+        self.thing_execution_context = ThingExecutionContext(fetch_execution_logs=fetch_execution_logs)
         self.id = id
         self.sender_id = sender_id
 
@@ -162,7 +156,7 @@ class ReplyKind(StrEnum):
     ERROR = "error"
     """raised, `payload` carries the formatted exception."""
     EXIT = "exit"
-    """the `Thing` was asked to stop serving; there is no meaningful return value."""
+    """the `Thing` was asked to stop; there is no meaningful return value."""
     INVOKATION_TIMEOUT = "invokation_timeout"
     """never started - it was still queued when `invokation_timeout` elapsed."""
     EXECUTION_TIMEOUT = "execution_timeout"
@@ -204,40 +198,27 @@ TIMED_OUT_REPLY = {
 
 @dataclass
 class Job:
-    """
-    One submitted operation on its way to a `Thing`, with the promise that answers the caller.
-
-    Whoever called `submit()` holds the other end of `future` and neither knows nor cares which
-    scheduling policy the operation ended up under.
-    """
+    """The operation wrapped around its lifecycle within the event loop."""
 
     operation: Operation
     """what to do."""
     future: Future
-    """
-    Resolved with a `Reply`, the timeout kinds included, so the caller can tell them apart.
-
-    A `concurrent.futures.Future` rather than an `asyncio` one: it is created by whoever submitted
-    and resolved by whichever thread the `Thing` ran on, and only this kind is safe across that gap.
-    An async caller wraps it onto its own loop - see `EventLoop.execute()`.
-    """
+    """Resolved with a `Reply`"""
+    # A `concurrent.futures.Future` rather than an `asyncio` one: it is created by whoever submitted
+    # and resolved by whichever thread the `Thing` ran on, and only this kind is safe across that gap.
+    # An async caller wraps it onto its own loop - see `EventLoop.execute()`.
     started: CrossLoopEvent
-    """set when the operation leaves the queue. The invokation timeout races against this."""
+    """set when the operation started. The invokation timeout races against this."""
     completed: CrossLoopEvent
-    """set when the `Thing` has produced a reply. The execution timeout races against this."""
+    """set when the operation has completed. The execution timeout races against this."""
     invokation_timeout_task: Future | None = None
-    """
-    The racing timeout, if one was armed, as returned by `asyncio.run_coroutine_threadsafe`.
-
-    Awaited once `started` is set, to settle the race before deciding whether to run the operation.
-    """
+    """The timeout racing `started`. Awaited once `started` is set, to settle the race."""
+    execution_timeout_task: asyncio.Task | None = None
+    """The timeout racing `completed`. Awaited once `completed` is set, to settle the race."""
 
     def answer(self, reply: Reply) -> None:
         """
         Resolve the caller's future, unless a timeout already answered for us.
-
-        Safe to call from any thread, and safe to call twice - the loser is dropped rather than
-        raising, which is what lets a timeout and a real reply race without coordination.
 
         Parameters
         ----------
@@ -295,6 +276,56 @@ class Job:
             return True
 
 
+def format_return_value(
+    return_value: Any,
+    serializer: BaseSerializer,
+    content_type_if_no_serializer: str = "",
+) -> tuple[SerializableData, PreserializedData]:
+    """
+    Cast whatever a `Thing` returned into a multipart return value. Not ideal format. WIP.
+
+    Parameters
+    ----------
+    return_value: Any
+        what the `Thing` method returned
+    serializer: BaseSerializer
+        the serializer registered for the objekt, used for the serializable half
+    content_type_if_no_serializer: str
+        content type to stamp on the raw half, which no serializer touches
+
+    Returns
+    -------
+    tuple[SerializableData, PreserializedData]
+        the two payloads a `Reply` carries
+    """
+    if (
+        isinstance(return_value, tuple)
+        and len(return_value) == 2
+        and (isinstance(return_value[1], bytes) or isinstance(return_value[1], PreserializedData))
+    ):
+        payload = SerializableData(
+            return_value[0],
+            serializer=serializer,
+            content_type=serializer.content_type,
+        )
+        if isinstance(return_value[1], bytes):
+            preserialized_payload = PreserializedData(return_value[1], content_type=content_type_if_no_serializer)
+    elif isinstance(return_value, bytes):
+        payload = SerializableData(None, content_type="application/json")
+        preserialized_payload = PreserializedData(return_value, content_type=content_type_if_no_serializer)
+    elif isinstance(return_value, PreserializedData):
+        payload = SerializableData(None, content_type="application/json")
+        preserialized_payload = return_value
+    else:
+        payload = SerializableData(
+            return_value,
+            serializer=serializer,
+            content_type=serializer.content_type,
+        )
+        preserialized_payload = PreserializedData(b"", content_type="text/plain")
+    return payload, preserialized_payload
+
+
 def qualified_operation_key(thing_id: str, objekt: str, operation: str) -> str:
     """
     A unique string representing one operation on one interaction affordance of one `Thing`.
@@ -321,9 +352,6 @@ def qualified_operation_key(thing_id: str, objekt: str, operation: str) -> str:
 def as_execution_kwargs(context: Any) -> dict[str, Any]:
     """
     Read the execution parameters out of whatever shape a protocol handed over.
-
-    Accepts a mapping, an object with the attributes, or `None`, and tolerates both the snake_case
-    spelling the event loop uses and the camelCase spelling the ZMQ header declares.
 
     Parameters
     ----------
@@ -356,4 +384,11 @@ def as_execution_kwargs(context: Any) -> dict[str, Any]:
     return found
 
 
-__all__ = [Job.__name__, Operation.__name__, Reply.__name__, ReplyKind.__name__, qualified_operation_key.__name__]
+__all__ = [
+    Job.__name__,
+    Operation.__name__,
+    Reply.__name__,
+    ReplyKind.__name__,
+    format_return_value.__name__,
+    qualified_operation_key.__name__,
+]

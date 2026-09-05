@@ -187,7 +187,7 @@ class EventLoop:
             raise RuntimeError("the event loop is not running, call run() before submitting operations")
         thing = self.things[operation.thing_id]
         job = Job(operation=operation, future=Future(), started=CrossLoopEvent(), completed=CrossLoopEvent())
-        invokation_timeout = operation.server_execution_context.invokationTimeout
+        invokation_timeout = operation.scheduler_execution_context.invokation_timeout
         if invokation_timeout is not None:
             # races against the job leaving the queue - whichever gets there first answers the caller
             job.invokation_timeout_task = self.run_coro_threadsafe(job.answer_if_never_started(invokation_timeout))
@@ -262,17 +262,17 @@ class EventLoop:
             # schedule an execution timeout, which answers the caller early but would
             # still unable to interrupt the thing's execution
             execution_timed_out = False
-            overdue = None
-            execution_timeout = job.operation.server_execution_context.executionTimeout
+            execution_timeout = job.operation.scheduler_execution_context.execution_timeout
             if execution_timeout is not None:
-                overdue = loop.create_task(job.answer_if_overdue(execution_timeout))
+                job.execution_timeout_task = loop.create_task(job.answer_if_overdue(execution_timeout))
 
             # always drain the reply, even once a timeout has answered. Abandoning the wait leaves
             # the thing's answer sitting in the scheduler for the next job to pick up as its own.
             await scheduler.wait_for_reply()
             job.completed.set()  # releases the execution timeout
-            if overdue is not None:
-                execution_timed_out = await overdue
+            if job.execution_timeout_task is not None:
+                # conditional for the same reason as the invokation timeout above
+                execution_timed_out = await job.execution_timeout_task
 
             # check the reply is never undefined, Undefined is a sensible placeholder for the
             # NotImplemented singleton
@@ -333,7 +333,7 @@ class EventLoop:
                 instance.logger.debug(f"starting execution of operation {operation} on {objekt}")
 
                 # start activities related to thing execution context
-                fetch_execution_logs = request.thing_execution_context.fetchExecutionLogs
+                fetch_execution_logs = request.thing_execution_context.fetch_execution_logs
                 if fetch_execution_logs:
                     list_handler = LogHistoryHandler([])
                     list_handler.setLevel(logging.DEBUG)

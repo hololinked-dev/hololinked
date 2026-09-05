@@ -16,9 +16,9 @@ from hololinked.core.eventloop.operations import (  # noqa: F401
     Operation,
     Reply,
     ReplyKind,
-    ServerExecutionContext,
+    SchedulerExecutionContext,
     ThingExecutionContext,
-    default_server_execution_context,
+    default_scheduler_execution_context,
     default_thing_execution_context,
 )
 from hololinked.core.eventloop.pubsub import EventBus, EventSubscription, encode_event  # noqa: F401
@@ -39,7 +39,7 @@ __all__ = [
     "Operation",
     "QueuedScheduler",
     "Reply",
-    "ServerExecutionContext",
+    "SchedulerExecutionContext",
     "ThingExecutionContext",
     "ReplyKind",
     "Scheduler",
