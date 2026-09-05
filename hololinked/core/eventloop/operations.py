@@ -12,7 +12,9 @@ spelling for the execution parameters.
 from __future__ import annotations
 
 import asyncio
+import threading
 
+from collections import OrderedDict
 from concurrent.futures import Future, InvalidStateError
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -292,6 +294,91 @@ class Job:
             return True
 
 
+class PendingOperations:
+    """
+    Replies nobody has collected yet, kept apart per caller.
+
+    A caller that does not wait for its reply is handed a token instead, and comes back for the
+    reply later quoting it. Something has to hold the `Future` in between, and it is the event loop
+    that made it. Some callers never come back, so each caller's share is bounded and drops the
+    oldest rather than growing forever.
+
+    A token is only meaningful within the caller that was handed it, which is why the callers are
+    kept in separate dicts rather than in one namespace: two callers minting the same token cannot
+    collect each other's replies.
+    """
+
+    def __init__(self, maxsize: int = 1000) -> None:
+        self._maxsize = maxsize
+        """most replies to hold for any one caller before the oldest is dropped."""
+        self._futures = dict()  # type: dict[str, OrderedDict[str, Future]]
+        """per caller, then per token."""
+        # `submit()` is callable from any thread, so a caller can hand a reply over on one thread and
+        # come back for it on another. Held around the dicts and nothing else - never across a wait -
+        # so it can never be what delays a reply. One lock for both levels means a caller's first
+        # operation cannot race a second thread into building two stores, one of which is then
+        # orphaned along with every reply put in it.
+        self._lock = threading.Lock()
+
+    def add(self, caller_id: str, token: str, future: Future) -> None:
+        """
+        Remember one operation under the token handed to the caller.
+
+        Parameters
+        ----------
+        caller_id: str
+            names the caller, and nothing more - this is never interpreted
+        token: str
+            the token the caller will come back with
+        future: concurrent.futures.Future
+            the promise of the operation's reply
+        """
+        with self._lock:
+            futures = self._futures.setdefault(caller_id, OrderedDict())
+            futures[token] = future
+            while len(futures) > self._maxsize:
+                futures.popitem(last=False)
+
+    def take(self, caller_id: str, token: str) -> Future:
+        """
+        Hand back one operation's future, which can only be collected once.
+
+        Parameters
+        ----------
+        caller_id: str
+            the caller that was handed the token
+        token: str
+            the token handed to the caller
+
+        Returns
+        -------
+        concurrent.futures.Future
+            the promise of the operation's reply
+
+        Raises
+        ------
+        KeyError
+            if the token is unknown to this caller, or was already collected, or was evicted
+        """
+        with self._lock:
+            return self._futures[caller_id].pop(token)
+
+    def clear(self) -> None:
+        """
+        Cancel and drop every uncollected reply, for every caller.
+
+        Cancelling settles each future rather than leaving it pending forever, so a caller already
+        blocked on one is woken with a `CancelledError` instead of waiting for a reply that is never
+        coming. It does not stop the operation itself - nothing can, once it is on a `Thing`'s
+        thread - and its eventual answer lands on a cancelled future, which `Job.answer()` ignores.
+        """
+        with self._lock:
+            for futures in self._futures.values():
+                for future in futures.values():
+                    future.cancel()
+            self._futures.clear()
+
+
 def format_return_value(
     return_value: Any,
     serializer: BaseSerializer,
@@ -403,6 +490,7 @@ def as_execution_kwargs(context: Any) -> dict[str, Any]:
 __all__ = [
     Job.__name__,
     Operation.__name__,
+    PendingOperations.__name__,
     Reply.__name__,
     ReplyKind.__name__,
     format_return_value.__name__,

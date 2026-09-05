@@ -14,6 +14,7 @@ from hololinked.core.eventloop.eventloop import EventLoop  # noqa: F401
 from hololinked.core.eventloop.operations import (  # noqa: F401
     Job,
     Operation,
+    PendingOperations,
     Reply,
     ReplyKind,
     SchedulerExecutionContext,
@@ -37,6 +38,7 @@ __all__ = [
     "EventLoop",
     "Job",
     "Operation",
+    "PendingOperations",
     "QueuedScheduler",
     "Reply",
     "SchedulerExecutionContext",

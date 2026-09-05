@@ -494,7 +494,8 @@ class RPCHandler(BaseHandler):
             elif local_execution_context.noblock:
                 # the client collects this on a second request, quoting the token back to us
                 token = uuid_hex()
-                self.config.pending_operations.add(token, self.eventloop.submit(request))
+                pending = self.eventloop.pending_operations
+                pending.add(self.config.server_id, token, self.eventloop.submit(request))
                 self.set_status(204, "ok")
                 self.set_header("X-Message-ID", token)
             else:
@@ -525,7 +526,7 @@ class RPCHandler(BaseHandler):
             if message_id is None:
                 raise ValueError("no message id available to wait for a no-block response")
             self.logger.info("waiting for no-block response", message_id=message_id)
-            future = self.config.pending_operations.take(message_id)
+            future = self.eventloop.pending_operations.take(self.config.server_id, message_id)
             invokation = default_scheduler_execution_context.invokation_timeout
             execution = default_scheduler_execution_context.execution_timeout
             # either being None means wait indefinitely, so there is no bound to compute

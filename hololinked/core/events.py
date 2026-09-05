@@ -141,8 +141,6 @@ class EventDispatcher:
             self._publisher = value
         elif not isinstance(value, EventBus):
             raise AttributeError("Publisher must be of type EventBus. Given type: " + str(type(value)))
-        if self._publisher is not None:
-            self._publisher.register(self)
 
     def push(self, data: Any) -> None:
         """

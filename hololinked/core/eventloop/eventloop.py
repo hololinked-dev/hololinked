@@ -18,6 +18,7 @@ from hololinked.core.actions import BoundAction
 from hololinked.core.eventloop.operations import (
     Job,
     Operation,
+    PendingOperations,
     Reply,
     ReplyKind,
     format_return_value,
@@ -68,6 +69,9 @@ class EventLoop:
     `QueuedScheduler` usually lives here. Please only assign scheduler instances here, not types or classes.
     """
 
+    pending_operations: PendingOperations
+    """Replies still to be collected, kept apart per caller. Handles noblock operations."""
+
     def __init__(
         self,
         *,
@@ -91,6 +95,7 @@ class EventLoop:
         self.things = dict()
         self.per_job_scheduler_types = dict()
         self.per_thing_schedulers = dict()
+        self.pending_operations = PendingOperations()
         self.event_bus = EventBus()
         self._stop_hooks = []  # type: list[Callable[[], None]]
         self._loop = None  # type: asyncio.AbstractEventLoop | None
@@ -121,6 +126,8 @@ class EventLoop:
         for instance in all_things:
             instance.eventloop = self
             self.things[instance.id] = instance
+            for event in instance.events.descriptors.values():
+                self.event_bus.register(event.__get__(instance, type(instance)))
             for action in instance.actions.descriptors.values():
                 if action.synchronous:
                     continue  # QueuedScheduler, which is the default and is shared per Thing
@@ -570,6 +577,7 @@ class EventLoop:
                 self.logger.warning(f"stop hook raised while stopping the event loop - {ex!s}")
         for scheduler in self.per_thing_schedulers.values():
             scheduler.cleanup()
+        self.pending_operations.clear()
 
     def __str__(self):
         return f"EventLoop(things: {list(self.things)})"
