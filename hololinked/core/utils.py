@@ -1,9 +1,15 @@
-"""Concurrency primitives shared by the RPC server and its schedulers."""
+"""Helpers shared by the event loop and its schedulers - a cross-loop event, and thing composition."""
 
 from __future__ import annotations
 
 import asyncio
 import threading
+
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from .thing import Thing
 
 
 class CrossLoopEvent:
@@ -87,4 +93,19 @@ class CrossLoopEvent:
             future.set_result(None)
 
 
-__all__ = [CrossLoopEvent.__name__]
+def get_all_sub_things_recusively(thing: "Thing") -> list["Thing"]:
+    """
+    Get all sub things recursively from a thing.
+
+    Returns
+    -------
+    list[Thing]
+        the thing itself followed by all of its sub things
+    """
+    sub_things = [thing]
+    for sub_thing in thing.sub_things.values():
+        sub_things.extend(get_all_sub_things_recusively(sub_thing))
+    return sub_things
+
+
+__all__ = [CrossLoopEvent.__name__, get_all_sub_things_recusively.__name__]

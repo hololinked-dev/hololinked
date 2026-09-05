@@ -753,21 +753,6 @@ def forkable(func):
     return wrapper
 
 
-def get_all_sub_things_recusively(thing) -> list:
-    """
-    Get all sub things recursively from a thing.
-
-    Returns
-    -------
-    list
-        the thing itself followed by all of its sub things
-    """
-    sub_things = [thing]
-    for sub_thing in thing.sub_things.values():
-        sub_things.extend(get_all_sub_things_recusively(sub_thing))
-    return sub_things
-
-
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,

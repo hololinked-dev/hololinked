@@ -153,7 +153,7 @@ class Job:
 
     A `concurrent.futures.Future` rather than an `asyncio` one: it is created by whoever submitted
     and resolved by whichever thread the `Thing` ran on, and only this kind is safe across that gap.
-    An async caller wraps it onto its own loop - see `EventLoop.submit_and_wait()`.
+    An async caller wraps it onto its own loop - see `EventLoop.execute()`.
     """
     started: CrossLoopEvent
     """set when the operation leaves the queue. The invokation timeout races against this."""

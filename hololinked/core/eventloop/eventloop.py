@@ -26,17 +26,15 @@ from hololinked.constants import Operations
 from hololinked.core.interfaces import BaseSerializer
 from hololinked.utils import (
     format_exception_as_json,
-    get_all_sub_things_recusively,
     get_current_async_loop,
 )
 
 from ..actions import BoundAction
 from ..exceptions import BreakInnerLoop
 from ..logger import LogHistoryHandler
-from ..properties import TypedList
 from ..property import Property
 from ..thing import Thing
-from ..utils import CrossLoopEvent
+from ..utils import CrossLoopEvent, get_all_sub_things_recusively
 from .operations import TIMED_OUT_REPLY, Job, Operation, Reply, ReplyKind, qualified_operation_key
 from .payloads import PreserializedData, SerializableData
 from .pubsub import EventBus
@@ -51,29 +49,14 @@ from .scheduler import (
 
 class EventLoop:
     """
-    Runs operations on the `Thing` instances it serves, one scheduling policy at a time.
+    Runs operations on the `Thing` instances.
 
-    Every request, whichever protocol it arrived on, becomes an `Operation` and goes through
-    `submit()`, which returns the promise of a `Reply`. How that operation is scheduled - queued
-    behind everything else on that `Thing`, or started at once in its own thread or async task - is
-    decided here from the action descriptor and is invisible to the caller.
-
-    Each `Thing` runs on its own thread, and the loop that accepts requests is never the loop that
-    executes them. That separation is what keeps the server answering while an operation is busy,
-    and it is the reason a scheduler sits between the two.
-
-    Queued is the default, on the assumption that two physical operations on one instrument rarely
-    make sense at the same time.
+    Instantiate, use the `Operation` model and the submit() method in a protocol runtime to serve requests.
+    These create `Job`s that go through schedulers, complete them and return `Reply`s.
     """
 
-    things = TypedList(
-        item_type=(Thing,),
-        bounds=(0, 100),
-        allow_None=True,
-        default=None,
-        doc="list of Things which are being executed",
-        remote=False,
-    )  # type: list[Thing]
+    things: dict[str, Thing]
+    """Every served `Thing`, sub-things included, keyed by id. What `submit()` resolves against."""
 
     per_job_scheduler_types: dict[str, type[Scheduler]]
     """
@@ -90,9 +73,6 @@ class EventLoop:
     `QueuedScheduler` lives here: it owns the queue that serializes operations, so there can only
     be one of it per `Thing`.
     """
-
-    _things_by_id: dict[str, Thing]
-    """Every served `Thing`, sub-things included, keyed by id. What `submit()` resolves against."""
 
     def __init__(
         self,
@@ -121,12 +101,11 @@ class EventLoop:
         if not logger:
             logger = structlog.get_logger()
         self.logger = logger.bind(component="eventloop", impl=self.__class__.__name__, id=self.id)
-        self.things = []
         # all four must exist before add_things(): it writes to two of them, and a `Thing` reads the
         # bus as soon as one of its events is first accessed
+        self.things = dict()
         self.per_job_scheduler_types = dict()
         self.per_thing_schedulers = dict()
-        self._things_by_id = dict()
         self.event_bus = EventBus()
         self.protocol_servers = []  # type: list[Any]
         self._stop_hooks = []  # type: list[Callable[[], None]]
@@ -155,22 +134,19 @@ class EventLoop:
                 f"cannot add thing {thing.id} while the event loop is running - add every thing before run()"
             )
         # setup scheduling requirements
-        all_things = get_all_sub_things_recusively(thing)
+        all_things: list[Thing] = get_all_sub_things_recusively(thing)
         for instance in all_things:
             instance.eventloop = self
-            self._things_by_id[instance.id] = instance
+            self.things[instance.id] = instance
             for action in instance.actions.descriptors.values():
                 if action.synchronous:
                     continue  # QueuedScheduler, which is the default and is shared per Thing
                 key = qualified_operation_key(instance.id, action.name, Operations.invokeaction)
                 self.per_job_scheduler_types[key] = AsyncScheduler if action.iscoroutine else ThreadedScheduler
             # properties need not dealt yet, but may be in future)
-        if self.things is None:
-            self.things = []
-        self.things.append(thing)
 
     def add_things(self, *things: Thing) -> None:
-        """Adds multiple things to the list of things to serve."""
+        """Adds multiple things to serve."""
         for thing in things:
             self.add_thing(thing)
 
@@ -182,9 +158,6 @@ class EventLoop:
     def run_coro_threadsafe(self, coro: Coroutine[Any, Any, Any]) -> Future:
         """
         Run a coroutine on this `EventLoop`'s own asyncio loop, from whichever thread is asking.
-
-        Everything an `EventLoop` does internally has to happen on one asyncio loop, so that the drain
-        loops and the futures they resolve stay on speaking terms. Callers may be anywhere.
 
         Parameters
         ----------
@@ -210,12 +183,8 @@ class EventLoop:
         """
         Schedule an operation on its `Thing` and return the promise of its reply.
 
-        Non-blocking, and safe to call from any thread, with or without a running event loop of your
-        own. Which scheduling policy applies is decided here, from the action descriptor, and is
-        invisible to the caller. This is the only entry point into the event loop - nothing
-        below it knows which protocol the operation arrived on, or whether one did at all.
-
-        Coroutines should use `submit_and_wait()`, which parks the wait on their own loop.
+        Non-blocking, and safe to call from any thread, with or without a running asyncio event loop of your
+        own. To complete the operation, use `execute()` instead.
 
         Parameters
         ----------
@@ -235,10 +204,8 @@ class EventLoop:
             if the event loop is not running
         """
         if not self._run:
-            # otherwise this surfaces further down as a KeyError on a scheduler table that run()
-            # has not filled in yet, which says nothing about what went wrong
             raise RuntimeError("the event loop is not running, call run() before submitting operations")
-        thing = self._things_by_id[operation.thing_id]
+        thing = self.things[operation.thing_id]
         job = Job(operation=operation, future=Future(), started=CrossLoopEvent())
         if operation.invokation_timeout is not None:
             # races against the job leaving the queue - whichever gets there first answers the caller
@@ -256,7 +223,7 @@ class EventLoop:
         scheduler.dispatch_job(job)
         return job.future
 
-    async def submit_and_wait(self, operation: Operation) -> Reply:
+    async def execute(self, operation: Operation) -> Reply:
         """
         Schedule an operation and wait for its reply, on the calling coroutine's own loop.
 
@@ -303,7 +270,8 @@ class EventLoop:
         Answer the caller with an execution timeout once the operation has run out of time.
 
         The operation is not cancelled - it cannot be - and its eventual reply is still drained by
-        `tunnel_message_to_things()`, then discarded.
+        `tunnel_message_to_things()`, then dropped. Whether this ran at all is what that loop reads
+        back out of the task to decide, which is why it answers rather than returning an outcome.
         """
         await asyncio.sleep(timeout)
         job.answer(TIMED_OUT_REPLY[ReplyKind.EXECUTION_TIMEOUT])
@@ -329,17 +297,23 @@ class EventLoop:
                 # this means in next loop it wont be in this block as a job arrived
                 continue
 
+            invokation_timed_out = False
             job = scheduler.next_job
             job.started.set()  # releases the invokation timeout
-            if job.invokation_timeout_task is not None and await asyncio.wrap_future(job.invokation_timeout_task):
-                # the timeout already answered the caller, drop the call rather than run it
+            if job.invokation_timeout_task is not None:
+                # conditional because sometimes some operations dont ask for an invocation timeout
+                # and simply wait arbitrarily long
+                invokation_timed_out = await asyncio.wrap_future(job.invokation_timeout_task)
+            if invokation_timed_out:
+                # the timeout already answered the caller, drop operation
                 continue
 
             # hand the operation to the thing
             scheduler.last_operation_request = job.operation
 
-            # schedule an execution timeout, which answers the caller early but does not cancel
-            # anything - the thing cannot be interrupted
+            # schedule an execution timeout, which answers the caller early but would
+            # still unable to interrupt the thing's execution
+            execution_timed_out = False
             overdue = None
             if job.operation.execution_timeout is not None:
                 overdue = loop.create_task(self._answer_if_overdue(job, job.operation.execution_timeout))
@@ -348,7 +322,8 @@ class EventLoop:
             # the thing's answer sitting in the scheduler for the next job to pick up as its own.
             await scheduler.wait_for_reply()
             if overdue is not None:
-                overdue.cancel()
+                # cancel() refuses only when the task already ran, i.e. it answered a timeout
+                execution_timed_out = not overdue.cancel()
 
             # check the reply is never undefined, Undefined is a sensible placeholder for the
             # NotImplemented singleton
@@ -363,7 +338,10 @@ class EventLoop:
 
             reply = scheduler.last_operation_reply
             scheduler.reset_operation_reply()
-            job.answer(reply)  # a no-op if a timeout already answered
+            if execution_timed_out:
+                # drop the thing's late reply
+                continue
+            job.answer(reply)
 
         scheduler.cleanup()
         self.logger.info("stopped schedulers")
@@ -647,7 +625,7 @@ class EventLoop:
         KeyError
             if no `Thing` with that id is being served
         """
-        instance = self._things_by_id[thing_id]
+        instance = self.things[thing_id]
         return instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()
 
     def get_thing_description(
@@ -745,10 +723,13 @@ class EventLoop:
         # recorded before anything can submit, since submissions from other threads land here
         self._loop = get_current_async_loop()
         self.logger.info("starting event loop")
-        for thing in self.things:
+        # only the `Thing`s added directly get a scheduler and a thread; a sub-thing runs within
+        # its owner's, which is also why `Thing.exit()` refuses on a composed object
+        top_level_things = [thing for thing in self.things.values() if not thing._owners]
+        for thing in top_level_things:
             self.per_thing_schedulers[thing.id] = QueuedScheduler(thing, self)
         threads = dict()  # type: dict[int, threading.Thread]
-        for thing in self.things:
+        for thing in top_level_things:
             thread = threading.Thread(target=self.run_things, args=([thing],))
             thread.start()
             threads[thread.ident] = thread
@@ -792,7 +773,7 @@ class EventLoop:
         return self.id == other.id
 
     def __str__(self):
-        return f"EventLoop({self.id}, things: {[thing.id for thing in self.things]})"
+        return f"EventLoop({self.id}, things: {list(self.things)})"
 
 
 __all__ = [EventLoop.__name__]

@@ -548,7 +548,7 @@ class RPCHandler(BaseHandler):
                 self.set_status(204, "ok")
                 self.set_header("X-Message-ID", token)
             else:
-                reply = await self.eventloop.submit_and_wait(request)
+                reply = await self.eventloop.execute(request)
                 if reply.timed_out:
                     self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
                     return
@@ -929,9 +929,7 @@ class ReadinessProbeHandler(BaseHandler):
                 raise RuntimeError("the event loop is not running yet, retry later")
             replies = await asyncio.gather(
                 *[
-                    eventloop.submit_and_wait(
-                        Operation(thing_id=thing.id, objekt="ping", operation=Operations.invokeaction)
-                    )
+                    eventloop.execute(Operation(thing_id=thing.id, objekt="ping", operation=Operations.invokeaction))
                     for thing in things
                 ]
             )
