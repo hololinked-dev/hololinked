@@ -20,13 +20,13 @@ import threading
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
-from ..thing import Thing
-from ..utils import CrossLoopEvent
-from .operations import Job, Operation, Reply
+from hololinked.core.eventloop.operations import Job, Operation, Reply
+from hololinked.core.thing import Thing
+from hololinked.core.utils import CrossLoopEvent
 
 
 if TYPE_CHECKING:
-    from .eventloop import EventLoop
+    from hololinked.core.eventloop.eventloop import EventLoop
 
 
 Undefined = NotImplemented

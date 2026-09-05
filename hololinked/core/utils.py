@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from .thing import Thing
+    from hololinked.core.thing import Thing
 
 
 class CrossLoopEvent:

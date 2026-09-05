@@ -22,7 +22,7 @@ from hololinked import Serializers
 
 
 if TYPE_CHECKING:
-    from ..events import EventDispatcher
+    from hololinked.core.events import EventDispatcher
 
 
 class EventBus:

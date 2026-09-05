@@ -7,20 +7,20 @@ from collections.abc import KeysView
 from types import FunctionType
 from typing import TYPE_CHECKING, Any
 
-from ..constants import JSON, JSONSerializable
-from ..param.parameterized import EventDispatcher as ParamEventDispatcher
-from ..param.parameterized import EventResolver as ParamEventResolver
-from ..param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
-from ..param.parameterized import edit_constant as edit_constant_parameters
-from ..utils import getattr_without_descriptor_read
-from .actions import Action, BoundAction, action
-from .events import Event, EventDispatcher
-from .property import Property
+from hololinked.constants import JSON, JSONSerializable
+from hololinked.core.actions import Action, BoundAction, action
+from hololinked.core.events import Event, EventDispatcher
+from hololinked.core.property import Property
+from hololinked.param.parameterized import EventDispatcher as ParamEventDispatcher
+from hololinked.param.parameterized import EventResolver as ParamEventResolver
+from hololinked.param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
+from hololinked.param.parameterized import edit_constant as edit_constant_parameters
+from hololinked.utils import getattr_without_descriptor_read
 
 
 if TYPE_CHECKING:
-    from .eventloop import EventBus, EventLoop
-    from .thing import Thing
+    from hololinked.core.eventloop import EventBus, EventLoop
+    from hololinked.core.thing import Thing
 
 
 class ThingMeta(ParameterizedMetaclass):

@@ -7,13 +7,13 @@ from typing import overload
 
 import structlog
 
-from ..param import edit_constant
-from .actions import Action
-from .exceptions import StateMachineError
-from .meta import ThingMeta
-from .properties import Boolean, ClassSelector, TypedDict
-from .property import Property
-from .thing import Thing
+from hololinked.core.actions import Action
+from hololinked.core.exceptions import StateMachineError
+from hololinked.core.meta import ThingMeta
+from hololinked.core.properties import Boolean, ClassSelector, TypedDict
+from hololinked.core.property import Property
+from hololinked.core.thing import Thing
+from hololinked.param import edit_constant
 
 
 class StateMachine:

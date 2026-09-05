@@ -13,10 +13,10 @@ import structlog
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .actions import action as remote_method
-from .events import Event
-from .properties import Integer, List, Number
-from .thing import Thing as RemoteObject
+from hololinked.core.actions import action as remote_method
+from hololinked.core.events import Event
+from hololinked.core.properties import Integer, List, Number
+from hololinked.core.thing import Thing as RemoteObject
 
 
 class LogMessage(BaseModel):

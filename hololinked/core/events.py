@@ -135,7 +135,7 @@ class EventDispatcher:
 
     @publisher.setter
     def publisher(self, value: EventBus | None) -> None:
-        from .eventloop import EventBus
+        from hololinked.core.eventloop import EventBus
 
         if not hasattr(self, "_publisher"):
             self._publisher = value
