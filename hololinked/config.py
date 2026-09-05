@@ -66,7 +66,7 @@ class Configuration:
         "VALIDATE_SCHEMAS",
         # ZMQ
         "ZMQ_CONTEXT",
-        # execution context defaults, read by whichever protocol crafts a request
+        # execution context defaults
         "DEFAULT_INVOKATION_TIMEOUT",
         "DEFAULT_EXECUTION_TIMEOUT",
         "DEFAULT_ONEWAY",
@@ -201,9 +201,6 @@ class Configuration:
         """
         Returns the global ZMQ async context, creating it on first call.
 
-        Deliberately lazy: `pyzmq` is optional, and a context spins up an IO thread, so neither
-        should happen just because something imported this package.
-
         Returns
         -------
         zmq.asyncio.Context
@@ -212,7 +209,7 @@ class Configuration:
         Raises
         ------
         ImportError
-            if `pyzmq` is not installed - install `hololinked[zmq]` to use the ZMQ transports
+            if `pyzmq` is not installed - pip install pyzmq.
         """
         if self.ZMQ_CONTEXT is None:
             import zmq.asyncio
@@ -220,14 +217,14 @@ class Configuration:
             self.ZMQ_CONTEXT = zmq.asyncio.Context()  # ty: ignore[invalid-argument-type]
         return self.ZMQ_CONTEXT
 
-    def set_default_server_execution_context(
+    def set_default_eventloop_settings(
         self,
         invokation_timeout: int | None = None,
         execution_timeout: int | None = None,
         oneway: bool = False,
     ) -> None:
         """
-        Sets the default server execution context for the application.
+        Sets the default eventloop and scheduler settings.
 
         Parameters
         ----------
@@ -241,42 +238,28 @@ class Configuration:
         self.DEFAULT_INVOKATION_TIMEOUT = invokation_timeout or 5
         self.DEFAULT_EXECUTION_TIMEOUT = execution_timeout or 5
         self.DEFAULT_ONEWAY = oneway
-        self._push_execution_context_defaults()
 
-    def set_default_thing_execution_context(
-        self,
-        fetch_execution_logs: bool = False,
-    ) -> None:
-        """
-        Sets the default thing execution context for the application.
-
-        Parameters
-        ----------
-        fetch_execution_logs: bool
-            whether to collect a `Thing`'s log records during execution by default
-        """
-        self.DEFAULT_FETCH_EXECUTION_LOGS = fetch_execution_logs
-        self._push_execution_context_defaults()
-
-    def _push_execution_context_defaults(self) -> None:
-        """
-        Copy the execution context defaults into the ZMQ header structs, if ZMQ is even in play.
-
-        The structs are captured as default arguments all over the broker layer, so they have to be
-        mutated in place rather than rebuilt. They read these same values at import time, so a
-        protocol that has not been imported yet will pick the current ones up on its own.
-        """
         try:
-            from .server.zmq.message import (
-                default_server_execution_context,
-                default_thing_execution_context,
-            )
+            from .server.zmq.message import default_scheduler_execution_context
         except ImportError:
             return  # no pyzmq, so there are no ZMQ headers to keep in step
-        default_server_execution_context.invokationTimeout = self.DEFAULT_INVOKATION_TIMEOUT
-        default_server_execution_context.executionTimeout = self.DEFAULT_EXECUTION_TIMEOUT
-        default_server_execution_context.oneway = self.DEFAULT_ONEWAY
-        default_thing_execution_context.fetchExecutionLogs = self.DEFAULT_FETCH_EXECUTION_LOGS
+        default_scheduler_execution_context.invokation_timeout = self.DEFAULT_INVOKATION_TIMEOUT
+        default_scheduler_execution_context.execution_timeout = self.DEFAULT_EXECUTION_TIMEOUT
+        default_scheduler_execution_context.oneway = self.DEFAULT_ONEWAY
+
+    # def set_default_thing_execution_context(
+    #     self,
+    #     fetch_execution_logs: bool = False,
+    # ) -> None:
+    #     """
+    #     Sets the default thing execution context for the application.
+
+    #     Parameters
+    #     ----------
+    #     fetch_execution_logs: bool
+    #         whether to collect a `Thing`'s log records during execution by default
+    #     """
+    #     self.DEFAULT_FETCH_EXECUTION_LOGS = fetch_execution_logs
 
     @property
     def TEMP_DIR_SOCKETS(self) -> str:

@@ -12,19 +12,20 @@ from tornado.iostream import StreamClosedError
 from tornado.web import RequestHandler
 
 from hololinked import Serializers
+from hololinked.core.eventloop import EventLoop
 
 from ...config import global_config
 from ...constants import Operations
 from ...core.eventloop import (
     EventSubscription,
     Operation,
-    ServerExecutionContext,
+    SchedulerExecutionContext,
     ThingExecutionContext,
-    default_server_execution_context,
+    default_scheduler_execution_context,
     default_thing_execution_context,
     encode_event,
 )
-from ...core.eventloop.operations import SerializableNone
+from ...core.eventloop.operations import Reply, SerializableNone
 from ...core.eventloop.payloads import PreserializedData, SerializableData
 from ...metadata.td import (
     ActionAffordance,
@@ -48,9 +49,6 @@ class LocalExecutionContext(msgspec.Struct):
     messageID: Optional[str] = None
 
 
-# tornado declares `initialize` and the HTTP verb hooks as class attributes typed `Callable[..., ...]`
-# rather than as methods, so overriding them with a real `def` is always reported as an invariant
-# mismatch - its own ErrorHandler/RedirectHandler/StaticFileHandler override them the same way.
 class BaseHandler(RequestHandler):
     """Base request handler for running operations on the `Thing`."""
 
@@ -85,7 +83,7 @@ class BaseHandler(RequestHandler):
             layer="controller",
             impl=self.__class__.__name__,
         )
-        self.eventloop = self.config.eventloop  # type: EventLoop
+        self.eventloop: EventLoop = self.config.eventloop
         self.thing_id = self.resource.thing_id
         self.allowed_clients = self.config.allowed_clients
         self.security_schemes = self.config.security_schemes
@@ -250,7 +248,7 @@ class BaseHandler(RequestHandler):
     def get_execution_parameters(
         self,
     ) -> tuple[
-        ServerExecutionContext,
+        SchedulerExecutionContext,
         ThingExecutionContext,
         LocalExecutionContext,
         SerializableData,
@@ -267,24 +265,24 @@ class BaseHandler(RequestHandler):
         http://localhost:8080/property/temperature?oneway=true&invokationTimeout=5&some_arg=42
         ```
 
-        server execution context would have `oneway` set to true & `invokationTimeout` set to 5 seconds,
+        scheduler execution context would have `oneway` set to true & `invokationTimeout` set to 5 seconds,
         local execution context would be empty as no such arguments were passed,
         and additional payload would have `{"some_arg": 42}` as its value.
 
         Returns
         -------
         tuple[
-            ServerExecutionContext,
+            SchedulerExecutionContext,
             ThingExecutionContext,
             LocalExecutionContext,
             SerializableData,
         ]
-            server execution context, thing execution context, local execution context and payload (if any)
+            scheduler execution context, thing execution context, local execution context and payload (if any)
         """
         arguments = dict()
         if len(self.request.query_arguments) == 0:
             return (
-                default_server_execution_context,
+                default_scheduler_execution_context,
                 default_thing_execution_context,
                 LocalExecutionContext(),
                 SerializableNone,
@@ -306,19 +304,21 @@ class BaseHandler(RequestHandler):
         # if self.resource.request_as_argument:
         #     arguments['request'] = self.request # find some way to pass the request object to the thing
         thing_execution_context = ThingExecutionContext(
-            fetchExecutionLogs=bool(arguments.pop("fetchExecutionLogs", False))
+            fetch_execution_logs=bool(arguments.pop("fetchExecutionLogs", False))
         )
-        server_execution_context = ServerExecutionContext(
-            invokationTimeout=arguments.pop("invokationTimeout", default_server_execution_context.invokationTimeout),
-            executionTimeout=arguments.pop("executionTimeout", default_server_execution_context.executionTimeout),
-            oneway=arguments.pop("oneway", default_server_execution_context.oneway),
+        scheduler_execution_context = SchedulerExecutionContext(
+            invokation_timeout=arguments.pop(
+                "invokationTimeout", default_scheduler_execution_context.invokation_timeout
+            ),
+            execution_timeout=arguments.pop("executionTimeout", default_scheduler_execution_context.execution_timeout),
+            oneway=arguments.pop("oneway", default_scheduler_execution_context.oneway),
         )
         local_execution_context = LocalExecutionContext(
             noblock=arguments.pop("noblock", None),
             messageID=arguments.pop("messageID", None),
         )
         additional_payload = SerializableNone if not arguments else SerializableData(arguments)  # application/json
-        return server_execution_context, thing_execution_context, local_execution_context, additional_payload
+        return scheduler_execution_context, thing_execution_context, local_execution_context, additional_payload
 
     @property
     def message_id(self) -> str | None:
@@ -437,77 +437,23 @@ class RPCHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Methods", ", ".join(self.metadata.http_methods))
         self.finish()
 
-    def build_operation(
-        self,
-        operation: str,
-        payload: SerializableData,
-        preserialized_payload: PreserializedData,
-        server_execution_context: ServerExecutionContext,
-        thing_execution_context: ThingExecutionContext,
-    ) -> Operation:
-        """
-        Turn one HTTP request into the transport-neutral unit the event loop schedules.
-
-        This is the HTTP border, and the mirror of what `RequestMessage.to_operation()` does for ZMQ.
-
-        Parameters
-        ----------
-        operation: str
-            the operation to perform, like `readproperty` or `invokeaction`
-        payload: SerializableData
-            the request body, decoded
-        preserialized_payload: PreserializedData
-            the binary part of the body, if any
-        server_execution_context: ServerExecutionContext
-            timeouts and whether a reply is wanted
-        thing_execution_context: ThingExecutionContext
-            whether to collect the `Thing`'s logs
-
-        Returns
-        -------
-        Operation
-            what to do, on which `Thing`
-        """
-        return Operation(
-            thing_id=self.thing_id,
-            objekt=self.resource.name,
-            operation=operation,
-            payload=payload,
-            preserialized_payload=preserialized_payload,
-            invokation_timeout=server_execution_context.invokationTimeout,
-            execution_timeout=server_execution_context.executionTimeout,
-            oneway=server_execution_context.oneway,
-            fetch_execution_logs=thing_execution_context.fetchExecutionLogs,
-            id=uuid_hex(),
-            sender_id=self.request.remote_ip or "",
-        )
-
-    def write_reply(self, reply: Any) -> None:
-        """
-        Write one event loop `Reply` out as this HTTP response.
-
-        Only one payload reaches the client: an HTTP response carries a single body with a single
-        content type, so a reply that has both a value and a binary part sends the binary part.
-
-        Parameters
-        ----------
-        reply: Reply
-            what the event loop answered with
-        """
+    async def write(self, reply: Reply) -> None:
+        """Write the event loop's reply onto the wire."""
+        # only one payload reaches the client: a HTTP response carries a single body with a single
+        # content type, so a reply that has both a value and a binary part sends the binary part
         if reply.preserialized_payload.value:
             if reply.payload.value is not None:
                 self.logger.warning(
                     "multipart payloads are not supported over HTTP, only the preserialized payload is written",
                     content_type=reply.payload.content_type,
                 )
-            payload = reply.preserialized_payload
+            reply_payload = reply.preserialized_payload
         else:
-            payload = reply.payload
-        self.set_status(200, "ok")
-        self.set_header("Content-Type", payload.content_type or "application/json")
-        body = payload.serialize() if isinstance(payload, SerializableData) else payload.value
+            reply_payload = reply.payload
+        body = reply_payload.serialize() if isinstance(reply_payload, SerializableData) else reply_payload.value
+        self.set_header("Content-Type", reply_payload.content_type or "application/json")
         if body:
-            self.write(body)
+            super().write(body)
 
     async def handle_through_thing(self, operation: str) -> None:
         """
@@ -520,7 +466,7 @@ class RPCHandler(BaseHandler):
             `writeproperty`, `invokeaction`, `deleteproperty`
         """
         try:
-            server_execution_context, thing_execution_context, local_execution_context, additional_payload = (
+            scheduler_execution_context, thing_execution_context, local_execution_context, additional_payload = (
                 self.get_execution_parameters()
             )
             payload, preserialized_payload = self.get_request_payload()
@@ -530,14 +476,18 @@ class RPCHandler(BaseHandler):
             self.logger.error(f"error while decoding request - {str(ex)}")
             return
         try:
-            request = self.build_operation(
-                operation,
-                payload,
-                preserialized_payload,
-                server_execution_context,
-                thing_execution_context,
+            request = Operation(
+                thing_id=self.thing_id,
+                objekt=self.resource.name,
+                operation=operation,
+                payload=payload,
+                preserialized_payload=preserialized_payload,
+                scheduler_execution_context=scheduler_execution_context,
+                thing_execution_context=thing_execution_context,
+                id=uuid_hex(),
+                sender_id=self.request.remote_ip or "",
             )
-            if server_execution_context.oneway:
+            if scheduler_execution_context.oneway:
                 # no reply is wanted, so the future is dropped rather than awaited
                 self.eventloop.submit(request)
                 self.set_status(204, "ok")
@@ -552,7 +502,8 @@ class RPCHandler(BaseHandler):
                 if reply.timed_out:
                     self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
                     return
-                self.write_reply(reply)
+                self.set_status(200, "ok")
+                await self.write(reply)
         except ConnectionAbortedError as ex:
             self.set_status(503, f"lost connection to thing - {str(ex)}")
             # TODO handle reconnection
@@ -575,15 +526,16 @@ class RPCHandler(BaseHandler):
                 raise ValueError("no message id available to wait for a no-block response")
             self.logger.info("waiting for no-block response", message_id=message_id)
             future = self.config.pending_operations.take(message_id)
-            invokation = default_server_execution_context.invokationTimeout
-            execution = default_server_execution_context.executionTimeout
+            invokation = default_scheduler_execution_context.invokation_timeout
+            execution = default_scheduler_execution_context.execution_timeout
             # either being None means wait indefinitely, so there is no bound to compute
             bound = None if invokation is None or execution is None else invokation + execution
-            reply = await asyncio.wait_for(asyncio.wrap_future(future), timeout=bound)
+            reply: Reply = await asyncio.wait_for(asyncio.wrap_future(future), timeout=bound)
             if reply.timed_out:
                 self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
                 return
-            self.write_reply(reply)
+            self.set_status(200, "ok")
+            await self.write(reply)
         except KeyError as ex:
             # if the message id is not found, it means that the response was not received in time
             self.logger.error(f"message ID not found for no-block response - {str(ex)}")

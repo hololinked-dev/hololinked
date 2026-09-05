@@ -996,30 +996,9 @@ class EventSource:
         """
         The `EventBus` this object's events are published through.
 
-        Valid only after creating a server or calling `run()` on the `Thing` instance. Which
-        protocols the bus then fans out to is not this object's concern.
+        Valid only after starting the event loop object.
         """
         try:
             return self.eventloop.event_bus if self.eventloop else None
         except AttributeError:
             return None
-
-    @property
-    def event_publisher(self) -> "EventBus | None":
-        """
-        Deprecated alias of `event_bus`.
-
-        Events used to be published straight onto a ZMQ PUB socket, and this returned the object
-        owning it. It now returns the transport-neutral bus that took its place.
-        """
-        return self.event_bus
-
-    @property
-    def rpc_server(self) -> "EventLoop | None":
-        """
-        Deprecated alias of `eventloop`.
-
-        The event loop used to be an RPC server that owned ZMQ sockets. It is now transport-neutral,
-        and the sockets belong to whichever protocol servers sit in front of it.
-        """
-        return self.eventloop

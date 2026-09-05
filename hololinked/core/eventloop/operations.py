@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 
 from concurrent.futures import Future, InvalidStateError
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -56,7 +56,7 @@ SerializableNone = SerializableData(None, content_type="application/json")
 PreserializedEmptyByte = PreserializedData(b"", content_type="text/plain")
 
 
-@dataclass(init=False)
+@dataclass
 class Operation:
     """
     The eventloop's operation model - One operation to perform on one interaction affordance of one `Thing`.
@@ -71,23 +71,32 @@ class Operation:
     operation: str
     """what to do with it - an `Operations` member such as `readproperty` or `invokeaction`."""
 
-    payload: SerializableData
+    payload: SerializableData = field(default_factory=lambda: SerializableData(None))
     """the operation's argument, still encoded until the executing `Thing` deserializes it."""
-    preserialized_payload: PreserializedData
+    preserialized_payload: PreserializedData = field(default_factory=lambda: PreserializedData(b""))
     """binary argument that bypasses serialization entirely."""
 
-    scheduler_execution_context: SchedulerExecutionContext
+    scheduler_execution_context: SchedulerExecutionContext = field(
+        default_factory=lambda: SchedulerExecutionContext(
+            invokation_timeout=None,
+            execution_timeout=None,
+            oneway=False,
+        )
+    )
     """the timeouts, and whether a reply is wanted at all."""
-    thing_execution_context: ThingExecutionContext
+    thing_execution_context: ThingExecutionContext = field(
+        default_factory=lambda: ThingExecutionContext(fetch_execution_logs=False)
+    )
     """what the `Thing` should do beside running the operation."""
 
-    id: str
+    id: str = ""
     """identifier of the originating request. Correlation and logging only - never routed on."""
-    sender_id: str
+    sender_id: str = ""
     """identifier of whoever asked. Logging only."""
 
-    def __init__(
-        self,
+    @classmethod
+    def create(
+        cls,
         thing_id: str,
         objekt: str,
         operation: str,
@@ -99,9 +108,9 @@ class Operation:
         fetch_execution_logs: bool = False,
         id: str = "",
         sender_id: str = "",
-    ) -> None:
+    ) -> Operation:
         """
-        Initialize an operation with the given parameters.
+        Initialize an operation.
 
         Parameters
         ----------
@@ -127,20 +136,27 @@ class Operation:
             identifier of the originating request
         sender_id: str
             identifier of whoever asked
+
+        Returns
+        -------
+        Operation
+            the operation, with the parameters grouped into their contexts
         """
-        self.thing_id = thing_id
-        self.objekt = objekt
-        self.operation = operation
-        self.payload = SerializableData(None) if payload is None else payload
-        self.preserialized_payload = PreserializedData(b"") if preserialized_payload is None else preserialized_payload
-        self.scheduler_execution_context = SchedulerExecutionContext(
-            invokation_timeout=invokation_timeout,
-            execution_timeout=execution_timeout,
-            oneway=oneway,
+        return cls(
+            thing_id=thing_id,
+            objekt=objekt,
+            operation=operation,
+            payload=SerializableData(None) if payload is None else payload,
+            preserialized_payload=PreserializedData(b"") if preserialized_payload is None else preserialized_payload,
+            scheduler_execution_context=SchedulerExecutionContext(
+                invokation_timeout=invokation_timeout,
+                execution_timeout=execution_timeout,
+                oneway=oneway,
+            ),
+            thing_execution_context=ThingExecutionContext(fetch_execution_logs=fetch_execution_logs),
+            id=id,
+            sender_id=sender_id,
         )
-        self.thing_execution_context = ThingExecutionContext(fetch_execution_logs=fetch_execution_logs)
-        self.id = id
-        self.sender_id = sender_id
 
     @property
     def qualified_name(self) -> str:
