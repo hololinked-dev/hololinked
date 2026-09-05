@@ -368,11 +368,11 @@ class ThingDescriptionService:
         skip_names: list[str] = [],
     ) -> dict[str, JSONSerializable]:
         """
-        Fetch the served `Thing`'s Thing Model, which this service adds HTTP forms to.
+        Generate the served `Thing`'s Thing Model, which this service adds HTTP forms to.
 
         A Thing Model is the affordances without the forms, so there is nothing protocol-specific to
-        strip - the previous version fetched a ZMQ Thing Description over a socket and then threw
-        every one of its forms away.
+        strip. The `Thing` generates its own, and the event loop is consulted only to resolve the id
+        of the one this service serves.
 
         Parameters
         ----------
@@ -386,8 +386,5 @@ class ThingDescriptionService:
         dict[str, JSONSerializable]
             the Thing Model
         """
-        return self.eventloop.get_thing_model(
-            self.resource.thing_id,
-            ignore_errors=ignore_errors,
-            skip_names=skip_names,
-        )
+        thing = self.eventloop.things[self.resource.thing_id]
+        return thing.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()

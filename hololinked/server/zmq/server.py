@@ -20,10 +20,11 @@ from hololinked import Serializers
 
 from ...config import global_config
 from ...constants import ZMQ_TRANSPORTS, Operations
-from ...core.eventloop import EventLoop, ReplyKind
+from ...core.eventloop import EventLoop, Operation, Reply, ReplyKind
+from ...core.eventloop.operations import format_return_value
 from ...core.exceptions import BreakLoop
 from ...core.thing import Thing
-from ...utils import get_current_async_loop
+from ...utils import format_exception_as_json, get_current_async_loop
 from ..server import BaseProtocolServer
 from .brokers import AsyncZMQServer, EventPublisher
 from .message import ERROR, REPLY, RequestMessage
@@ -106,11 +107,7 @@ class ZMQServer(BaseProtocolServer):
         BaseProtocolServer.__init__(self, id=id, logger=logger)
         self.logger = logger
 
-        self.eventloop = eventloop or EventLoop(
-            logger=logger,
-            thing_description_provider=self.get_thing_description,
-        )
-        self.eventloop.attach(self)
+        self.eventloop = eventloop or EventLoop(logger=logger)
         self.eventloop.add_stop_hook(self.stop_polling)
         self.add_things(*(things or []))
 
@@ -265,7 +262,9 @@ class ZMQServer(BaseProtocolServer):
         """
         try:
             operation = request_message.to_operation()
-            reply = await self.eventloop.execute(operation)
+            reply = self._answer_at_the_border(operation)
+            if reply is None:
+                reply = await self.eventloop.execute(operation)
         except Exception as ex:
             self.logger.error(
                 f"exception occurred for message - {ex!s}",
@@ -291,6 +290,50 @@ class ZMQServer(BaseProtocolServer):
             payload=reply.payload,
             preserialized_payload=reply.preserialized_payload,
         )
+
+    def _answer_at_the_border(self, operation: Operation) -> Reply | None:
+        """
+        Answer an operation this server can serve itself, or `None` to hand it to the event loop.
+
+        A Thing Description is mostly forms, and a form is an address on this server's own sockets,
+        so only this server can build one. Submitting it would send it through a scheduler and the
+        `Thing`'s thread - queued behind whatever that `Thing` is busy with - only to come back here.
+
+        Parameters
+        ----------
+        operation: Operation
+            the operation the border has just decoded
+
+        Returns
+        -------
+        Reply | None
+            the answer, or `None` if the event loop should run the operation
+        """
+        if not (operation.operation == Operations.invokeaction and operation.objekt == "get_thing_description"):
+            return None
+        instance = self.eventloop.things[operation.thing_id]
+        try:
+            kwargs = dict(operation.payload.deserialize() or {})
+            args = kwargs.pop("__args__", ())
+            return_value = self.get_thing_description(instance, *args, **kwargs)
+            payload, preserialized_payload = format_return_value(
+                return_value,
+                serializer=Serializers.for_object(operation.thing_id, instance.__class__.__name__, operation.objekt),
+                content_type_if_no_serializer=Serializers.get_content_type_for_object(
+                    operation.thing_id, instance.__class__.__name__, operation.objekt
+                ),
+            )
+            payload.require_serialized()
+            return Reply(payload, preserialized_payload, ReplyKind.OK)
+        except Exception as ex:
+            # the same shape the event loop would have produced, so a bad `protocol=` argument still
+            # comes back as an error reply rather than as an invalid-message response
+            self.logger.error(f"error while generating the thing description - {ex!s}")
+            self.logger.exception(ex)
+            payload, preserialized_payload = format_return_value(
+                dict(exception=format_exception_as_json(ex)), Serializers.default
+            )
+            return Reply(payload, preserialized_payload, ReplyKind.ERROR)
 
     def get_thing_description(
         self,

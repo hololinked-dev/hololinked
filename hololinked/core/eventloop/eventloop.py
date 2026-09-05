@@ -15,8 +15,14 @@ import structlog
 from hololinked import Serializers
 from hololinked.constants import Operations
 from hololinked.core.actions import BoundAction
-from hololinked.core.eventloop.operations import Job, Operation, Reply, ReplyKind, qualified_operation_key
-from hololinked.core.eventloop.payloads import PreserializedData, SerializableData
+from hololinked.core.eventloop.operations import (
+    Job,
+    Operation,
+    Reply,
+    ReplyKind,
+    format_return_value,
+    qualified_operation_key,
+)
 from hololinked.core.eventloop.pubsub import EventBus
 from hololinked.core.eventloop.scheduler import (
     AsyncScheduler,
@@ -26,7 +32,6 @@ from hololinked.core.eventloop.scheduler import (
     Undefined,
 )
 from hololinked.core.exceptions import BreakInnerLoop
-from hololinked.core.interfaces import BaseSerializer
 from hololinked.core.logger import LogHistoryHandler
 from hololinked.core.property import Property
 from hololinked.core.thing import Thing
@@ -68,7 +73,6 @@ class EventLoop:
         *,
         things: list[Thing] | None = None,
         logger: structlog.stdlib.BoundLogger | None = None,
-        thing_description_provider: Callable[..., dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -80,8 +84,6 @@ class EventLoop:
             list of `Thing` instances to be served
         logger: structlog.stdlib.BoundLogger, optional
             logger instance to use. A default is created when none is given.
-        thing_description_provider: Callable, optional
-            the owning protocol server's TD generator - see `get_thing_description()`
         """
         if not logger:
             logger = structlog.get_logger()
@@ -90,10 +92,8 @@ class EventLoop:
         self.per_job_scheduler_types = dict()
         self.per_thing_schedulers = dict()
         self.event_bus = EventBus()
-        self.protocol_servers = []  # type: list[Any]
         self._stop_hooks = []  # type: list[Callable[[], None]]
         self._loop = None  # type: asyncio.AbstractEventLoop | None
-        self._thing_description_provider = thing_description_provider
         self._run = False  # flag to stop the event loop and everything hooked onto it
         self.add_things(*(things or []))
 
@@ -278,7 +278,7 @@ class EventLoop:
             # NotImplemented singleton
             if scheduler.last_operation_reply is Undefined:
                 # this is a logic error, as the reply should never be undefined
-                payload, preserialized_payload = self.format_return_value(
+                payload, preserialized_payload = format_return_value(
                     dict(exception=format_exception_as_json(RuntimeError("No reply from thing - logic error"))),
                     Serializers.default,
                 )
@@ -354,7 +354,7 @@ class EventLoop:
                     instance.__class__.__name__,
                     objekt,
                 )
-                rpayload, rpreserialized_payload = self.format_return_value(
+                rpayload, rpreserialized_payload = format_return_value(
                     return_value,
                     serializer=serializer,
                     content_type_if_no_serializer=content_type_if_no_serializer,
@@ -378,7 +378,7 @@ class EventLoop:
                 instance.logger.info("exiting event loop")
 
                 # send a reply with None return value
-                rpayload, rpreserialized_payload = self.format_return_value(None, Serializers.default)
+                rpayload, rpreserialized_payload = format_return_value(None, Serializers.default)
 
                 # complete thing execution context
                 if fetch_execution_logs:
@@ -399,7 +399,7 @@ class EventLoop:
                 instance.logger.exception(ex)
 
                 # send a reply with error
-                rpayload, rpreserialized_payload = self.format_return_value(
+                rpayload, rpreserialized_payload = format_return_value(
                     dict(exception=format_exception_as_json(ex)), Serializers.default
                 )
 
@@ -463,12 +463,6 @@ class EventLoop:
         elif operation == Operations.deleteproperty:
             prop = instance.properties[objekt]  # type: Property
             del prop  # raises NotImplementedError when deletion is not implemented which is mostly the case
-        elif operation == Operations.invokeaction and objekt == "get_thing_description":
-            # special case
-            if payload is None:
-                payload = dict()
-            args = payload.pop("__args__", tuple())
-            return self.get_thing_description(instance, *args, **payload)
         elif operation == Operations.invokeaction:
             if payload is None:
                 payload = dict()
@@ -489,138 +483,6 @@ class EventLoop:
         elif operation == Operations.writemultipleproperties or operation == Operations.writeallproperties:
             return instance.properties.set(**payload)
         raise NotImplementedError(f"Unimplemented execution path for Thing {instance.id} for operation {operation}")
-
-    def format_return_value(
-        self,
-        return_value: Any,
-        serializer: BaseSerializer,
-        content_type_if_no_serializer: str = "",
-    ) -> tuple[SerializableData, PreserializedData]:
-        if (
-            isinstance(return_value, tuple)
-            and len(return_value) == 2
-            and (isinstance(return_value[1], bytes) or isinstance(return_value[1], PreserializedData))
-        ):
-            payload = SerializableData(
-                return_value[0],
-                serializer=serializer,
-                content_type=serializer.content_type,
-            )
-            if isinstance(return_value[1], bytes):
-                preserialized_payload = PreserializedData(return_value[1], content_type=content_type_if_no_serializer)
-        elif isinstance(return_value, bytes):
-            payload = SerializableData(None, content_type="application/json")
-            preserialized_payload = PreserializedData(return_value, content_type=content_type_if_no_serializer)
-        elif isinstance(return_value, PreserializedData):
-            payload = SerializableData(None, content_type="application/json")
-            preserialized_payload = return_value
-        else:
-            payload = SerializableData(
-                return_value,
-                serializer=serializer,
-                content_type=serializer.content_type,
-            )
-            preserialized_payload = PreserializedData(b"", content_type="text/plain")
-        return payload, preserialized_payload
-
-    def get_thing_model(
-        self,
-        thing_id: str,
-        ignore_errors: bool = False,
-        skip_names: list[str] = [],
-    ) -> dict[str, Any]:
-        """
-        Describe one served `Thing` in the only terms the event loop has: affordances, and no forms.
-
-        A Thing Model is a Thing Description without the forms, and forms are the part that names a
-        protocol's wire. Every protocol server builds its own description on top of this.
-
-        Read-only introspection of descriptors, so it is answered directly rather than queued behind
-        whatever the `Thing` happens to be doing.
-
-        Parameters
-        ----------
-        thing_id: str
-            `id` of the `Thing` to describe
-        ignore_errors: bool
-            whether to skip affordances whose metadata cannot be generated
-        skip_names: list[str]
-            property, action or event names to leave out
-
-        Returns
-        -------
-        dict[str, Any]
-            the Thing Model
-
-        Raises
-        ------
-        KeyError
-            if no `Thing` with that id is being served
-        """
-        instance = self.things[thing_id]
-        return instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()
-
-    def get_thing_description(
-        self,
-        instance: Thing,
-        protocol: str,
-        ignore_errors: bool = False,
-        skip_names: list[str] = [],
-    ) -> dict[str, Any]:
-        """
-        Get the Thing Description for one served `Thing`.
-
-        An `EventLoop` cannot produce one on its own: a TD is largely forms, and a form is an address on
-        some protocol's wire. Whichever protocol server owns this event loop supplies the generator.
-
-        Parameters
-        ----------
-        instance: Thing
-            the `Thing` to describe
-        protocol: str
-            the protocol to generate forms for, as that protocol names its transports
-        ignore_errors: bool
-            whether to skip affordances whose forms cannot be generated
-        skip_names: list[str]
-            property, action or event names to leave out
-
-        Returns
-        -------
-        dict[str, Any]
-            the Thing Description
-
-        Raises
-        ------
-        NotImplementedError
-            if no protocol server is attached to generate the forms
-        """
-        if self._thing_description_provider is None:
-            raise NotImplementedError(
-                "this event loop has no protocol server attached, so it cannot generate forms. "
-                + "Use the thing model directly, or serve the Thing over a protocol."
-            )
-        return self._thing_description_provider(
-            instance,
-            protocol,
-            ignore_errors=ignore_errors,
-            skip_names=skip_names,
-        )
-
-    def attach(self, server: Any) -> None:
-        """
-        Note that a protocol server is serving this event loop.
-
-        The event loop never calls into a protocol server - it answers futures and leaves the rest alone.
-        The list is here so that a `Thing` can find out how it is reachable, which is a question only
-        the protocols in front can answer.
-
-        Parameters
-        ----------
-        server: Any
-            a protocol server, typically a `BaseProtocolServer`
-        """
-        if server not in self.protocol_servers:
-            self.protocol_servers.append(server)
 
     def add_stop_hook(self, callback: Callable[[], None]) -> None:
         """

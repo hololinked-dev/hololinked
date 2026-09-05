@@ -204,7 +204,7 @@ class HTTPServer(BaseProtocolServer):
                     "every Thing served over HTTP must be run by the same event loop, "
                     + f"but {thing.id} belongs to a different one"
                 )
-            self.config.thing_models[thing.id] = thing.eventloop.get_thing_model(thing.id, ignore_errors=True)
+            self.config.thing_models[thing.id] = thing.get_thing_model(ignore_errors=True).json()
         # 4. finally also get a reference of the same event loop from tornado
         self.tornado_event_loop = ioloop.IOLoop.current()
 

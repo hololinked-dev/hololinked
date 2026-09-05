@@ -136,7 +136,7 @@ class MQTTPublisher(BaseProtocolServer):
                 "every Thing published over MQTT must be run by the same event loop, "
                 + f"but {thing.id} belongs to a different one"
             )
-        TD = thing.eventloop.get_thing_model(thing.id, ignore_errors=True)
+        TD = thing.get_thing_model(ignore_errors=True).json()
 
         for event_name in TD.get("events", {}).keys():
             event_affordance = EventAffordance.from_TD(event_name, TD)
