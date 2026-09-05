@@ -1,18 +1,57 @@
-"""ZeroMQ server exposing `Thing`s over IPC and TCP in addition to the internal INPROC transport."""
+"""
+ZeroMQ: the sockets, the wire format border, and the protocol server that owns them.
+
+`ZMQServer` puts an `EventLoop` behind ZMQ. It owns every socket - `INPROC` for callers inside this
+process, `IPC` and `TCP` for callers outside it - and converts, at its own border, between the
+5-frame wire format and the transport-neutral `Operation`/`Reply` the event loop speaks.
+"""
+
+from __future__ import annotations
+
+import copy
+import socket
+
+from typing import Any
 
 import structlog
 import zmq.asyncio
 
-from ...constants import ZMQ_TRANSPORTS
+from hololinked import Serializers
+
+from ...config import global_config
+from ...constants import ZMQ_TRANSPORTS, Operations
+from ...core.eventloop import EventLoop, Operation, Reply, ReplyKind
+from ...core.eventloop.operations import format_return_value
+from ...core.exceptions import BreakLoop
 from ...core.thing import Thing
-from ...core.zmq.brokers import AsyncEventConsumer, AsyncZMQServer, EventPublisher
-from ...core.zmq.rpc_server import RPCServer
-from ...utils import get_current_async_loop
+from ...utils import format_exception_as_json, get_current_async_loop
 from ..server import BaseProtocolServer
+from .brokers import AsyncZMQServer, EventPublisher
+from .message import ERROR, REPLY, RequestMessage
 
 
-class ZMQServer(RPCServer, BaseProtocolServer):
-    """Server to expose `Thing` over `ZeroMQ` protocol. Extends `RPCServer` to support `IPC` & `TCP`."""
+_ZMQ_MESSAGE_TYPE_FOR_REPLY = {
+    ReplyKind.OK: REPLY,
+    ReplyKind.ERROR: ERROR,
+    ReplyKind.EXIT: None,  # let the broker decide, as it did before
+}
+"""How a `Reply` maps onto ZMQ's message-type vocabulary. The event loop does not know these."""
+
+
+class ZMQServer(BaseProtocolServer):
+    """
+    Serves `Thing`s over ZeroMQ, on any combination of the `INPROC`, `IPC` and `TCP` transports.
+
+    The server owns the sockets; an `EventLoop` behind it owns the `Thing`s and runs the operations.
+    Requests are polled off a socket, converted into an `Operation`, submitted, and the `Reply` that
+    comes back is converted into a response message. Nothing below the border knows the wire format.
+
+    `INPROC` is shared memory and is the fastest of the three, which is why other protocol servers in
+    the same process reach a `Thing` through it. `IPC` reaches other processes on this machine, and
+    `TCP` reaches the network. All three carry the same messaging contract.
+
+    [UML Diagram](http://docs.hololinked.dev/UML/PDF/RPCServer.pdf)
+    """
 
     context: zmq.asyncio.Context
 
@@ -21,8 +60,9 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         *,
         id: str,
         access_points: ZMQ_TRANSPORTS | str | list[ZMQ_TRANSPORTS | str] = ZMQ_TRANSPORTS.IPC,
-        things: list["Thing"] | None = None,
+        things: list[Thing] | None = None,
         context: zmq.asyncio.Context | None = None,
+        eventloop: EventLoop | None = None,
         **kwargs,
     ) -> None:
         """
@@ -31,14 +71,18 @@ class ZMQServer(RPCServer, BaseProtocolServer):
         Parameters
         ----------
         id: str
-            Unique identifier for the server instance.
-        things: list["Thing"]
-            List of `Thing` instances to be managed by the server.
+            Unique identifier for the server instance. The event loop shares it, so that a `Thing` can
+            report the address other protocols in this process should connect to.
+        access_points: ZMQ_TRANSPORTS or list[ZMQ_TRANSPORTS], default ZMQ_TRANSPORTS.IPC
+            Transport protocols for communication. Supported values are `ZMQ_TRANSPORTS.INPROC`,
+            `ZMQ_TRANSPORTS.IPC`, `ZMQ_TRANSPORTS.TCP` or a TCP socket address `tcp://*:<port>`.
+            Can be a single value or a list of values. `INPROC` is always served.
+        things: list[Thing]
+            List of `Thing` instances to be served.
         context: zmq.asyncio.Context, optional
             ZeroMQ context for socket management. If `None`, a global context is used.
-        access_points: ZMQ_TRANSPORTS or list[ZMQ_TRANSPORTS], default ZMQ_TRANSPORTS.IPC
-            Transport protocols for communication. Supported values are `ZMQ_TRANSPORTS.IPC`, `ZMQ_TRANSPORTS.TCP` or
-            a TCP socket address `tcp://*:<port>`. Can be a single value or a list of values.
+        eventloop: EventLoop, optional
+            An existing event loop to serve. A new one is created when none is given.
         **kwargs
             Additional keyword arguments for server configuration. Usually:
 
@@ -53,16 +97,21 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             if a TCP server or event publisher was created without a socket address
         """
         self.ipc_server = self.tcp_server = None
-        self.ipc_event_publisher = self.tcp_event_publisher = self.inproc_events_proxy = None
+        self.ipc_event_publisher = self.tcp_event_publisher = None
         tcp_socket_address = None
 
         logger = kwargs.get("logger", None)
         if not logger:
             logger = structlog.get_logger().bind(component="zmq-server")
             kwargs["logger"] = logger
-        super().__init__(id=id, things=things, context=context, **kwargs)
-        # note for later refactoring - we dont use add_things method here, be careful if that method becomes overloaded
-        # at any point in future
+        BaseProtocolServer.__init__(self, id=id, logger=logger)
+        self.logger = logger
+
+        self.eventloop = eventloop or EventLoop(logger=logger)
+        self.eventloop.add_stop_hook(self.stop_polling)
+        self.add_things(*(things or []))
+
+        self.context = context or global_config.zmq_context()
 
         if isinstance(access_points, str):
             requested_access_points = [access_points]
@@ -80,7 +129,25 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             else:
                 transports.append(transport)
 
-        # initialise every externally visible protocol
+        # INPROC is always served: it is how HTTP, MQTT and anything else in this process reach the
+        # event loop, and it is the transport the internal clients assume
+        self.req_rep_server = AsyncZMQServer(
+            id=self.id,
+            context=self.context,
+            access_point=ZMQ_TRANSPORTS.INPROC,
+            poll_timeout=1000,
+            **kwargs,
+        )
+        self.event_publisher = EventPublisher(
+            id=f"{self.id}{EventPublisher._standard_address_suffix}",
+            context=self.context,
+            access_point=ZMQ_TRANSPORTS.INPROC,
+            **kwargs,
+        )
+        # one of possibly several protocols listening to the bus - ZMQ has no special standing here
+        self.eventloop.event_bus.subscribe(self.event_publisher.publish)
+
+        # then every externally visible transport that was asked for
         if ZMQ_TRANSPORTS.TCP in transports or "TCP" in transports:
             self.tcp_server = AsyncZMQServer(
                 id=self.id,
@@ -100,6 +167,7 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 access_point=tcp_socket_address,
                 **kwargs,
             )
+            self.eventloop.event_bus.subscribe(self.tcp_event_publisher.publish)
         if ZMQ_TRANSPORTS.IPC in transports or "IPC" in transports:
             self.ipc_server = AsyncZMQServer(
                 id=self.id,
@@ -113,96 +181,389 @@ class ZMQServer(RPCServer, BaseProtocolServer):
                 access_point=ZMQ_TRANSPORTS.IPC,
                 **kwargs,
             )
-        if self.ipc_event_publisher is not None or self.tcp_event_publisher is not None:
-            if not self.event_publisher.socket_address:
-                raise RuntimeError("inproc event publisher was created without a socket address")
-            self.inproc_events_proxy = AsyncEventConsumer(
-                id=f"{self.id}/event-proxy",
-                event_unique_identifier="",
-                access_point=self.event_publisher.socket_address,
-                context=self.context,
-                **kwargs,
-            )
+            self.eventloop.event_bus.subscribe(self.ipc_event_publisher.publish)
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the event loop behind this server is running."""
+        return self.eventloop.is_running
+
+    @property
+    def _run(self) -> bool:
+        """The event loop's run flag, which the polling loops check."""
+        return self.eventloop._run
+
+    @property
+    def event_bus(self):
+        """The event loop's `EventBus`, which this server's publishers are subscribed to."""
+        return self.eventloop.event_bus
 
     def add_thing(self, thing: Thing) -> None:
         """Adds a thing to the list of things to serve."""
-        return RPCServer.add_thing(self, thing)
+        self.eventloop.add_thing(thing)
+        if self.things is None:
+            self.things = []
+        if thing not in self.things:
+            self.things.append(thing)
 
-    def run_zmq_request_listener(self) -> None:
-        """Listen for requests on the IPC and TCP servers, and start tunnelling INPROC events to their publishers."""
-        eventloop = get_current_async_loop()
-        if self.ipc_server is not None:
-            eventloop.create_task(self.recv_requests_and_dispatch_jobs(self.ipc_server))
-        if self.tcp_server is not None:
-            eventloop.create_task(self.recv_requests_and_dispatch_jobs(self.tcp_server))
-        if self.inproc_events_proxy is not None:
-            eventloop.create_task(self.tunnel_events_from_inproc())
-        super().run_zmq_request_listener()
+    def _request_servers(self) -> list[AsyncZMQServer]:
+        """
+        Every socket this server polls for requests.
 
-    async def tunnel_events_from_inproc(self) -> None:
-        """Forward every event published on the internal INPROC transport to the IPC and TCP publishers."""
-        if not self.inproc_events_proxy:
-            return
-        self.logger.info("starting to tunnel events from inproc to external publishers")
-        self.inproc_events_proxy.subscribe()
+        Returns
+        -------
+        list[AsyncZMQServer]
+            the INPROC server, plus IPC and TCP where those transports were asked for
+        """
+        return [server for server in (self.req_rep_server, self.ipc_server, self.tcp_server) if server is not None]
+
+    async def recv_requests_and_dispatch_jobs(self, server: AsyncZMQServer) -> None:
+        """
+        Poll a ZMQ socket, hand every request to the event loop and write each reply back.
+
+        This is the ZMQ border: `RequestMessage` in, `Operation` to the event loop, `Reply` back,
+        `ResponseMessage` out. Messages that need no job at all, like `HANDSHAKE` and `EXIT`, are
+        already dealt with by `poll_requests()`.
+
+        Parameters
+        ----------
+        server: AsyncZMQServer
+            the server instance to poll for requests
+        """
+        self.logger.debug(f"started polling at socket {server.socket_address}")
+        loop = get_current_async_loop()
         while self._run:
             try:
-                event = await self.inproc_events_proxy.receive(raise_interrupt_as_exception=True)
-                if not event:
-                    continue
-                if self.ipc_event_publisher is not None and self.ipc_event_publisher.socket is not None:
-                    self.ipc_event_publisher.socket.send_multipart(event.byte_array)
-                    # print(f"sent event to ipc publisher {event.byte_array}")
-                if self.tcp_event_publisher is not None and self.tcp_event_publisher.socket is not None:
-                    self.tcp_event_publisher.socket.send_multipart(event.byte_array)
-                    # print(f"sent event to tcp publisher {event.byte_array}")
-            except ConnectionAbortedError:
+                request_messages = await server.poll_requests()
+                # when stop poll is set, this will exit with an empty list
+            except BreakLoop:
                 break
-            except Exception as e:
-                self.logger.error(f"error in tunneling events from inproc: {e}")
-        self.logger.info("stopped tunneling events from inproc")
+            except Exception as ex:
+                self.logger.error(f"exception occurred while polling for server - {ex!s}")
+                self.logger.exception(str(ex))
+                continue
+
+            for request_message in request_messages:
+                # a task per request, so that waiting for one reply never stalls the poller
+                loop.create_task(self._serve_one_request(server, request_message))
+        self.stop()
+        self.logger.info(f"stopped polling at socket {server.socket_address.split(':')[0].upper()}")
+
+    async def _serve_one_request(self, server: AsyncZMQServer, request_message: RequestMessage) -> None:
+        """
+        Convert one ZMQ request, run it through the event loop and write the answer back.
+
+        Parameters
+        ----------
+        server: AsyncZMQServer
+            the server the request arrived on, and the one the response goes back out of
+        request_message: RequestMessage
+            the request, still in its wire format
+        """
+        try:
+            operation = request_message.to_operation()
+            reply = self._answer_at_the_border(operation)
+            if reply is None:
+                reply = await self.eventloop.execute(operation)
+        except Exception as ex:
+            self.logger.error(
+                f"exception occurred for message - {ex!s}",
+                sender_id=request_message.sender_id,
+                msg_id=request_message.id,
+            )
+            self.logger.exception(str(ex))
+            await server._handle_invalid_message(request_message=request_message, exception=ex)
+            return
+
+        if reply.timed_out:
+            # the client is told which of the two timeouts it was, as it always has been
+            await server._handle_timeout(
+                request_message,
+                "invokation" if reply.kind is ReplyKind.INVOKATION_TIMEOUT else "execution",
+            )
+            return
+        if operation.server_execution_context.oneway:
+            return
+        await server.async_send_response_with_message_type(
+            request_message=request_message,
+            message_type=_ZMQ_MESSAGE_TYPE_FOR_REPLY[reply.kind],  # ty: ignore[invalid-argument-type]
+            payload=reply.payload,
+            preserialized_payload=reply.preserialized_payload,
+        )
+
+    def _answer_at_the_border(self, operation: Operation) -> Reply | None:
+        """
+        Answer an operation this server can serve itself, or `None` to hand it to the event loop.
+
+        A Thing Description is mostly forms, and a form is an address on this server's own sockets,
+        so only this server can build one. Submitting it would send it through a scheduler and the
+        `Thing`'s thread - queued behind whatever that `Thing` is busy with - only to come back here.
+
+        Parameters
+        ----------
+        operation: Operation
+            the operation the border has just decoded
+
+        Returns
+        -------
+        Reply | None
+            the answer, or `None` if the event loop should run the operation
+        """
+        if not (operation.operation == Operations.invokeaction and operation.objekt == "get_thing_description"):
+            return None
+        instance = self.eventloop.things[operation.thing_id]
+        try:
+            kwargs = dict(operation.payload.deserialize() or {})
+            args = kwargs.pop("__args__", ())
+            return_value = self.get_thing_description(instance, *args, **kwargs)
+            payload, preserialized_payload = format_return_value(
+                return_value,
+                serializer=Serializers.for_object(operation.thing_id, instance.__class__.__name__, operation.objekt),
+                content_type_if_no_serializer=Serializers.get_content_type_for_object(
+                    operation.thing_id, instance.__class__.__name__, operation.objekt
+                ),
+            )
+            payload.require_serialized()
+            return Reply(payload, preserialized_payload, ReplyKind.OK)
+        except Exception as ex:
+            # the same shape the event loop would have produced, so a bad `protocol=` argument still
+            # comes back as an error reply rather than as an invalid-message response
+            self.logger.error(f"error while generating the thing description - {ex!s}")
+            self.logger.exception(ex)
+            payload, preserialized_payload = format_return_value(
+                dict(exception=format_exception_as_json(ex)), Serializers.default
+            )
+            return Reply(payload, preserialized_payload, ReplyKind.ERROR)
+
+    def get_thing_description(
+        self,
+        instance: Thing,
+        protocol: str,
+        ignore_errors: bool = False,
+        skip_names: list[str] = [],
+    ) -> dict[str, Any]:
+        """
+        Get the Thing Description (TD) for a specific Thing instance.
+
+        Parameters
+        ----------
+        instance: Thing
+            The Thing instance for which to retrieve the TD
+        protocol: str
+            The protocol for which to generate the TD - `INPROC`, `IPC` or `TCP`
+        ignore_errors: bool
+            Whether to ignore errors while generating the TD. Default is False.
+        skip_names: List[str]
+            List of property, action or event names to skip while generating the TD. Default is empty list.
+
+        Returns
+        -------
+        JSON
+            The Thing Description in JSON format.
+
+        Raises
+        ------
+        RuntimeError
+            if the server does not serve the requested protocol
+        ValueError
+            if the protocol is not one of `INPROC`, `IPC` or `TCP`
+        """
+        TM = instance.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()  # type: dict[str, Any]
+        TD = copy.deepcopy(TM)
+        from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+        from ...metadata.td.forms import Form
+
+        if protocol.lower() == "inproc":
+            req_rep_socket_address = self.req_rep_server.socket_address
+            pub_sub_socket_address = self.event_publisher.socket_address
+        elif protocol.lower() == "ipc":
+            if self.ipc_server is None or self.ipc_event_publisher is None:
+                raise RuntimeError(
+                    "This server cannot generate TD for IPC protocol, consider using thing model directly."
+                )
+            req_rep_socket_address = self.ipc_server.socket_address
+            pub_sub_socket_address = self.ipc_event_publisher.socket_address
+        elif protocol.lower() == "tcp":
+            if self.tcp_server is None or self.tcp_event_publisher is None:
+                raise RuntimeError(
+                    "This server cannot generate TD for TCP protocol, consider using thing model directly."
+                )
+            req_rep_socket_address = self.tcp_server.socket_address
+            req_rep_socket_address = req_rep_socket_address.replace(
+                "*", socket.gethostname()
+            ).replace(
+                "0.0.0.0", socket.gethostname()
+            )  # SAST(id='hololinked.server.zmq.server.ZMQServer.get_thing_description.req_rep_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
+            pub_sub_socket_address = self.tcp_event_publisher.socket_address
+            pub_sub_socket_address = pub_sub_socket_address.replace(
+                "*", socket.gethostname()
+            ).replace(
+                "0.0.0.0", socket.gethostname()
+            )  # SAST(id='hololinked.server.zmq.server.ZMQServer.get_thing_description.pub_sub_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')
+        else:
+            raise ValueError(f"Unsupported protocol '{protocol}' for ZMQ.")
+
+        for name in TM.get("properties", []):
+            try:
+                affordance = PropertyAffordance.from_TD(name, TM)
+                if not TD["properties"][name].get("forms", None):
+                    TD["properties"][name]["forms"] = []
+
+                form = Form()
+                form.href = req_rep_socket_address
+                form.op = Operations.readproperty
+
+                content_type = Serializers.get_content_type_for_object(instance.id, instance.__class__.__name__, name)
+                if not content_type:
+                    content_type = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+                form.contentType = content_type
+
+                TD["properties"][name]["forms"].append(form.json())
+
+                if not affordance.readOnly:
+                    form = Form()
+                    form.href = req_rep_socket_address
+                    form.op = Operations.writeproperty
+                    content_type = Serializers.get_content_type_for_object(
+                        instance.id,
+                        instance.__class__.__name__,
+                        name,
+                    )
+                    if not content_type:
+                        content_type = Serializers.for_object(
+                            instance.id,
+                            instance.__class__.__name__,
+                            name,
+                        ).content_type
+                    form.contentType = content_type
+                    TD["properties"][name]["forms"].append(form.json())
+
+                if affordance.observable:
+                    form = Form()
+                    form.href = pub_sub_socket_address
+                    form.op = Operations.observeproperty
+                    content_type = Serializers.get_content_type_for_object(
+                        instance.id, instance.__class__.__name__, name
+                    )
+                    if not content_type:
+                        content_type = Serializers.for_object(
+                            instance.id,
+                            instance.__class__.__name__,
+                            name,
+                        ).content_type
+                    form.contentType = content_type
+                    TD["properties"][name]["forms"].append(form.json())
+            except Exception as ex:
+                if not ignore_errors:
+                    raise ex from None
+                instance.logger.warning(
+                    "error while generating TD forms for property",
+                    name=name,
+                    error=str(ex),
+                )
+
+        for name in TM.get("actions", []):
+            try:
+                affordance = ActionAffordance.from_TD(name, TM)
+                if not TD["actions"][name].get("forms", None):
+                    TD["actions"][name]["forms"] = []
+
+                form = Form()
+                form.href = req_rep_socket_address
+                form.op = Operations.invokeaction
+                content_type = Serializers.get_content_type_for_object(instance.id, instance.__class__.__name__, name)
+                if not content_type:
+                    content_type = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+                form.contentType = content_type
+                TD["actions"][name]["forms"].append(form.json())
+            except Exception as ex:
+                if not ignore_errors:
+                    raise ex from None
+                instance.logger.warning(
+                    "error while generating TD forms for action",
+                    name=name,
+                    error=str(ex),
+                )
+
+        for name in TM.get("events", []):
+            try:
+                affordance = EventAffordance.from_TD(name, TM)
+                if not TD["events"][name].get("forms", None):
+                    TD["events"][name]["forms"] = []
+
+                form = Form()
+                form.href = pub_sub_socket_address
+                form.op = Operations.subscribeevent
+                content_type = Serializers.get_content_type_for_object(instance.id, instance.__class__.__name__, name)
+                if not content_type:
+                    content_type = Serializers.for_object(instance.id, instance.__class__.__name__, name).content_type
+                form.contentType = content_type
+                TD["events"][name]["forms"].append(form.json())
+            except Exception as ex:
+                if not ignore_errors:
+                    raise ex from None
+                instance.logger.warning(
+                    "error while generating TD forms for event",
+                    name=name,
+                    error=str(ex),
+                )
+
+        return TD
+
+    def run(self) -> None:
+        """
+        Start & run the server, and the event loop behind it. This method is blocking.
+
+        The request listeners are handed to the event loop so they run on the same async loop as the
+        drain loops that resolve their replies. Call `stop()` (threadsafe) to stop.
+        """
+        self.logger.info("starting ZMQ server")
+        try:
+            self.eventloop.run(
+                extra_coroutines=[self.recv_requests_and_dispatch_jobs(server) for server in self._request_servers()]
+            )
+        finally:
+            self.stop_polling()
+        self.logger.info("ZMQ server stopped")
+
+    def stop_polling(self) -> None:
+        """Stop every request listener. Registered with the event loop, so stopping it stops these too."""
+        for server in self._request_servers():
+            server.stop_polling()
 
     def stop(self) -> None:
-        """Stop polling the IPC and TCP servers and the INPROC event proxy."""
-        if self.ipc_server is not None:
-            self.ipc_server.stop_polling()
-        if self.tcp_server is not None:
-            self.tcp_server.stop_polling()
-        if self.inproc_events_proxy is not None:
-            self.inproc_events_proxy.stop()
-        super().stop()
+        """Stop the server and the event loop behind it. This method is threadsafe."""
+        self.eventloop.stop()
 
     def exit(self) -> None:
-        """Close the IPC and TCP servers, their event publishers and the INPROC event proxy."""
+        """Stop, then close every socket and event publisher."""
         try:
             self.stop()
-            if self.ipc_server is not None:
-                self.ipc_server.exit()
-            if self.ipc_event_publisher is not None:
-                self.ipc_event_publisher.exit()
-            if self.tcp_server is not None:
-                self.tcp_server.exit()
-            if self.tcp_event_publisher is not None:
-                self.tcp_event_publisher.exit()
-            if self.req_rep_server is not None:
-                self.req_rep_server.exit()
-            if self.event_publisher is not None:
-                self.event_publisher.exit()
-            if self.inproc_events_proxy is not None:
-                self.inproc_events_proxy.exit()
+            for server in self._request_servers():
+                server.exit()
+            for publisher in (self.event_publisher, self.ipc_event_publisher, self.tcp_event_publisher):
+                if publisher is not None:
+                    publisher.exit()
         except Exception as ex:
-            self.logger.warning(f"Exception occurred while exiting the server - {str(ex)}")
+            self.logger.warning(f"Exception occurred while exiting the server - {ex!s}")
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __eq__(self, other):
+        if not isinstance(other, ZMQServer):
+            return False
+        return self.id == other.id
 
     def __str__(self):
-        parts = [f"ZMQServer(\n\tid: {self.id}"]
+        parts = [f"{self.__class__.__name__}(\n\tid: {self.id}"]
         for name in [
+            "req_rep_server",
             "ipc_server",
             "tcp_server",
-            "req_rep_server",
+            "event_publisher",
             "ipc_event_publisher",
             "tcp_event_publisher",
-            "event_publisher",
-            "inproc_events_proxy",
         ]:
             obj = getattr(self, name, None)
             if obj is not None:
@@ -235,3 +596,47 @@ class ZMQServer(RPCServer, BaseProtocolServer):
             always, since `run()` sets the server up
         """
         raise NotImplementedError("Use the blocking run() method to start the ZMQServer, no need to setup separately.")
+
+
+class RPCServer(ZMQServer):
+    """
+    Deprecated. A `ZMQServer` serving `INPROC` only.
+
+    The event loop it used to be now lives in `hololinked.core.eventloop.EventLoop`, and this
+    is what is left: the ZMQ transport in front of one. Use `ZMQServer`, or `EventLoop` directly if
+    no ZMQ is wanted at all.
+    """
+
+    def __init__(
+        self,
+        *,
+        id: str,
+        access_points: ZMQ_TRANSPORTS | str | list[ZMQ_TRANSPORTS | str] = ZMQ_TRANSPORTS.INPROC,
+        **kwargs,
+    ) -> None:
+        """
+        Initialize an INPROC-only ZeroMQ server. Arguments are those of `ZMQServer`.
+
+        Parameters
+        ----------
+        id: str
+            Unique identifier for the server instance.
+        access_points: ZMQ_TRANSPORTS or list[ZMQ_TRANSPORTS], default ZMQ_TRANSPORTS.INPROC
+            Transports to serve.
+        """
+        super().__init__(id=id, access_points=access_points, **kwargs)
+
+
+def prepare_rpc_server(*args, **kwargs) -> None:
+    """
+    Removed.
+
+    Raises
+    ------
+    NotImplementedError
+        always
+    """
+    raise NotImplementedError("prepare_rpc_server function is deprecated, use ZMQServer class directly.")
+
+
+__all__ = [RPCServer.__name__, ZMQServer.__name__]

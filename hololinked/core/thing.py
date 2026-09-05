@@ -10,15 +10,14 @@ from typing import Any
 
 import structlog
 
+from hololinked.constants import ZMQ_TRANSPORTS
+from hololinked.core.actions import BoundAction, action
+from hololinked.core.events import EventDispatcher
 from hololinked.core.interfaces import BaseConfigurationRepository, Metadata
-
-from ..constants import ZMQ_TRANSPORTS
-from ..utils import forkable, getattr_without_descriptor_read
-from .actions import BoundAction, action
-from .events import EventDispatcher
-from .meta import EventSource, Propertized, RemoteInvokable, ThingMeta
-from .properties import ClassSelector, String
-from .property import Property
+from hololinked.core.meta import EventSource, Propertized, RemoteInvokable, ThingMeta
+from hololinked.core.properties import ClassSelector, String
+from hololinked.core.property import Property
+from hololinked.utils import forkable, getattr_without_descriptor_read
 
 
 class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
@@ -134,9 +133,8 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 is generated based on the instance name.
         """
         from hololinked import Serializers, prepare_object_storage
-
-        from .logger import prepare_object_logger
-        from .state_machine import prepare_object_FSM
+        from hololinked.core.logger import prepare_object_logger
+        from hololinked.core.state_machine import prepare_object_FSM
 
         Propertized.__init__(self, id=id, logger=logger, **kwargs)
         RemoteInvokable.__init__(self)
@@ -163,11 +161,11 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # thing._qualified_id = f'{self._qualified_id}/{thing.id}'
 
     def __post_init__(self):
-        from .logger import RemoteAccessHandler
-        from .zmq.rpc_server import RPCServer  # noqa: F401
+        from hololinked.core.eventloop import EventLoop  # noqa: F401
+        from hololinked.core.logger import RemoteAccessHandler
 
         # Type definitions
-        self.rpc_server = None  # type: RPCServer | None
+        self.eventloop = None  # type: EventLoop | None
         self.db_engine: BaseConfigurationRepository | None
         self._owners = None if not hasattr(self, "_owners") else self._owners  # type: list[Thing] | None
         self._remote_access_loghandler: RemoteAccessHandler | None
@@ -294,7 +292,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 ZMQ context object to be used for creating sockets. If not supplied, a global shared context is used.
                 For INPROC, either do not supply context or use the same context across all threads.
         """
-        from ..server.server import parse_params, run
+        from hololinked.server.server import parse_params, run
 
         servers = parse_params(
             self.id,
@@ -348,7 +346,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             - `event_handler`: `BaseHandler` | `EventHandler`,
                 custom event handler for handling events
         """
-        from ..server import HTTPServer, run
+        from hololinked.server import HTTPServer, run
 
         http_server = HTTPServer(
             port=port,
@@ -396,7 +394,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         ValueError
             if neither `access_points` nor `servers` is provided, or if both are provided.
         """
-        from ..server.server import BaseProtocolServer, parse_params, run  # noqa: F401
+        from hololinked.server.server import BaseProtocolServer, parse_params, run  # noqa: F401
 
         access_points = kwargs.get("access_points", None)  # type: list[tuple[str, str | int | dict | list[str]]] | None
         servers = kwargs.get("servers", [])  # type: list[BaseProtocolServer] | None
@@ -420,7 +418,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         This method usually needs to be called remotely.
         The servers are not stopped, just the object run loop is exited.
         """
-        if self.rpc_server is None:
+        if self.eventloop is None:
             self.logger.debug("exit() called on a object that is not exposed yet.")
             return
         if self._owners:
@@ -428,7 +426,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 "call exit on the top-level object, composed objects cannot exit the loop. "
                 + f"This object belongs to {self._owners.__class__.__name__} with ID {self._owners.id}."
             )
-        self.rpc_server.stop()
+        self.eventloop.stop()
 
     @action()
     def ping(self) -> None:
@@ -464,7 +462,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         pass
 
 
-from .state_machine import StateMachine  # noqa: F401, E402
+from hololinked.core.state_machine import StateMachine  # noqa: F401, E402
 
 
 __all__ = [Thing.__name__]

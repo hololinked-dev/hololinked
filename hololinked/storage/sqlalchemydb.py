@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import threading
 
+from collections.abc import Sequence
 from datetime import datetime
 from sqlite3 import DatabaseError
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import create_engine, select
 from sqlalchemy import inspect as inspect_database
@@ -249,7 +250,7 @@ class SQLAlchemyDB(BaseSyncDB):
         """
         with self.sync_session() as session:
             names = []
-            for obj in properties.keys():
+            for obj in properties:
                 names.append(obj if isinstance(obj, str) else obj.name)
             stmt = (
                 select(SerializedProperty)
@@ -294,7 +295,7 @@ class SQLAlchemyDB(BaseSyncDB):
             return
         with self.sync_session() as session:
             names = []
-            for obj in properties.keys():
+            for obj in properties:
                 names.append(obj if isinstance(obj, str) else obj.name)
             stmt = (
                 select(SerializedProperty)

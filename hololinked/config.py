@@ -34,8 +34,6 @@ import warnings
 
 from typing import Any  # noqa: F401
 
-import zmq.asyncio
-
 from .utils import generate_main_script_log_filename, set_global_event_loop_policy
 
 
@@ -68,6 +66,11 @@ class Configuration:
         "VALIDATE_SCHEMAS",
         # ZMQ
         "ZMQ_CONTEXT",
+        # execution context defaults, read by whichever protocol crafts a request
+        "DEFAULT_INVOKATION_TIMEOUT",
+        "DEFAULT_EXECUTION_TIMEOUT",
+        "DEFAULT_ONEWAY",
+        "DEFAULT_FETCH_EXECUTION_LOGS",
         # make debugging easier
         "DEBUG",
         # logging
@@ -109,7 +112,13 @@ class Configuration:
         self.TRACE_MALLOC = False
         # self.VALIDATE_SCHEMA_ON_CLIENT = False
         self.VALIDATE_SCHEMAS = False
-        self.ZMQ_CONTEXT = zmq.asyncio.Context()  # ty: ignore[invalid-argument-type]  # the async context is the one this package uses throughout
+        # created on first use by zmq_context(), so that importing this package does not require
+        # pyzmq, nor spin up an IO thread for callers who never touch ZMQ
+        self.ZMQ_CONTEXT = None
+        self.DEFAULT_INVOKATION_TIMEOUT = 5
+        self.DEFAULT_EXECUTION_TIMEOUT = 5
+        self.DEFAULT_ONEWAY = False
+        self.DEFAULT_FETCH_EXECUTION_LOGS = False
         self.DEBUG = False
         self.LOG_LEVEL = logging.DEBUG if self.DEBUG else logging.INFO
         # self.USE_STRUCTLOG = True
@@ -188,17 +197,27 @@ class Configuration:
         """
         return {item: getattr(self, item) for item in self.__slots__}
 
-    def zmq_context(self) -> zmq.asyncio.Context:
+    def zmq_context(self) -> "Any":
         """
-        Returns a global ZMQ async context.
+        Returns the global ZMQ async context, creating it on first call.
 
-        Use socket_class argument to retrieve a synchronous socket if necessary.
+        Deliberately lazy: `pyzmq` is optional, and a context spins up an IO thread, so neither
+        should happen just because something imported this package.
 
         Returns
         -------
         zmq.asyncio.Context
             the process-wide ZMQ async context
+
+        Raises
+        ------
+        ImportError
+            if `pyzmq` is not installed - install `hololinked[zmq]` to use the ZMQ transports
         """
+        if self.ZMQ_CONTEXT is None:
+            import zmq.asyncio
+
+            self.ZMQ_CONTEXT = zmq.asyncio.Context()  # ty: ignore[invalid-argument-type]
         return self.ZMQ_CONTEXT
 
     def set_default_server_execution_context(
@@ -207,21 +226,57 @@ class Configuration:
         execution_timeout: int | None = None,
         oneway: bool = False,
     ) -> None:
-        """Sets the default server execution context for the application."""
-        from .core.zmq.message import default_server_execution_context
+        """
+        Sets the default server execution context for the application.
 
-        default_server_execution_context.invokationTimeout = invokation_timeout or 5
-        default_server_execution_context.executionTimeout = execution_timeout or 5
-        default_server_execution_context.oneway = oneway
+        Parameters
+        ----------
+        invokation_timeout: int, optional
+            seconds to wait for an operation to start, 5 when not given
+        execution_timeout: int, optional
+            seconds to wait for an operation to finish, 5 when not given
+        oneway: bool
+            whether callers should expect no reply by default
+        """
+        self.DEFAULT_INVOKATION_TIMEOUT = invokation_timeout or 5
+        self.DEFAULT_EXECUTION_TIMEOUT = execution_timeout or 5
+        self.DEFAULT_ONEWAY = oneway
+        self._push_execution_context_defaults()
 
     def set_default_thing_execution_context(
         self,
         fetch_execution_logs: bool = False,
     ) -> None:
-        """Sets the default thing execution context for the application."""
-        from .core.zmq.message import default_thing_execution_context
+        """
+        Sets the default thing execution context for the application.
 
-        default_thing_execution_context.fetchExecutionLogs = fetch_execution_logs
+        Parameters
+        ----------
+        fetch_execution_logs: bool
+            whether to collect a `Thing`'s log records during execution by default
+        """
+        self.DEFAULT_FETCH_EXECUTION_LOGS = fetch_execution_logs
+        self._push_execution_context_defaults()
+
+    def _push_execution_context_defaults(self) -> None:
+        """
+        Copy the execution context defaults into the ZMQ header structs, if ZMQ is even in play.
+
+        The structs are captured as default arguments all over the broker layer, so they have to be
+        mutated in place rather than rebuilt. They read these same values at import time, so a
+        protocol that has not been imported yet will pick the current ones up on its own.
+        """
+        try:
+            from .server.zmq.message import (
+                default_server_execution_context,
+                default_thing_execution_context,
+            )
+        except ImportError:
+            return  # no pyzmq, so there are no ZMQ headers to keep in step
+        default_server_execution_context.invokationTimeout = self.DEFAULT_INVOKATION_TIMEOUT
+        default_server_execution_context.executionTimeout = self.DEFAULT_EXECUTION_TIMEOUT
+        default_server_execution_context.oneway = self.DEFAULT_ONEWAY
+        default_thing_execution_context.fetchExecutionLogs = self.DEFAULT_FETCH_EXECUTION_LOGS
 
     @property
     def TEMP_DIR_SOCKETS(self) -> str:
@@ -302,7 +357,8 @@ class Configuration:
                 warnings.warn(f"permission denied to cleanup directory {directory}", UserWarning)
 
     def __del__(self):
-        self.ZMQ_CONTEXT.term()
+        if self.ZMQ_CONTEXT is not None:
+            self.ZMQ_CONTEXT.term()
 
 
 global_config = Configuration()

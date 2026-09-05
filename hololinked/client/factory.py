@@ -134,6 +134,14 @@ class ClientFactory:
         -------
         ObjectProxy
             An `ObjectProxy` instance representing the remote `Thing` with ZMQ protocol.
+
+        Raises
+        ------
+        ImportError
+            if `pyzmq` is not installed - `pip install pyzmq`. Version should be less than 26.2 to support IPC in
+            windows machines.
+        ModuleNotFoundError
+            if some other dependency of the ZMQ client is missing
         """
         from hololinked.client.zmq.consumed_interactions import (
             ReadMultipleProperties,
@@ -142,7 +150,7 @@ class ClientFactory:
             ZMQEvent,
             ZMQProperty,
         )
-        from hololinked.core.zmq import AsyncZMQClient, SyncZMQClient
+        from hololinked.server.zmq import AsyncZMQClient, SyncZMQClient
 
         id = kwargs.get("id", f"{server_id}|{thing_id}|{access_point}|{uuid_hex()}")
 

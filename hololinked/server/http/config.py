@@ -1,10 +1,12 @@
 """Runtime configuration for the HTTP server and metadata for its request handlers."""
 
+from collections import OrderedDict
+from concurrent.futures import Future
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ..repository import BrokerThing  # noqa: F401
+from ...core.eventloop import EventLoop  # noqa: F401
 from ..security import Security
 from .controllers import (
     ActionHandler,
@@ -50,8 +52,14 @@ class RuntimeConfig(BaseModel):
     thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
     """service class to be used for generating thing description"""
 
-    thing_repository: Any = Field(default_factory=dict)  # type: dict[str, BrokerThing]
-    """repository layer thing model to be used by the HTTP server and handlers"""
+    eventloop: Any = Field(default=None)  # type: EventLoop | None
+    """the event loop that runs operations on the served `Thing`s"""
+
+    thing_models: Any = Field(default_factory=dict)  # type: dict[str, dict[str, Any]]
+    """Thing Model per served `Thing`, which this server's Thing Descriptions are built on"""
+
+    pending_operations: Any = Field(default_factory=dict)  # type: PendingOperations
+    """no-block operations still to be collected, keyed by the token handed to the client"""
 
     allowed_clients: list[str] | None = Field(default=None)
     """
@@ -67,6 +75,55 @@ class RuntimeConfig(BaseModel):
     it is sufficient that one scheme passes for a request to be authorized.
     Combo security schemes are not yet supported (but will be in future).
     """
+
+
+class PendingOperations:
+    """
+    No-block operations whose reply nobody has collected yet.
+
+    A no-block request is answered with a token and the client comes back for the reply on a second
+    request. Some never do, so this is bounded and drops the oldest rather than growing forever.
+    """
+
+    def __init__(self, maxsize: int = 1000) -> None:
+        self._maxsize = maxsize
+        self._futures = OrderedDict()  # type: OrderedDict[str, Future]
+
+    def add(self, token: str, future: Future) -> None:
+        """
+        Remember one operation under the token handed to the client.
+
+        Parameters
+        ----------
+        token: str
+            the token the client will come back with
+        future: concurrent.futures.Future
+            the promise of the operation's reply
+        """
+        self._futures[token] = future
+        while len(self._futures) > self._maxsize:
+            self._futures.popitem(last=False)
+
+    def take(self, token: str) -> Future:
+        """
+        Hand back one operation's future, which can only be collected once.
+
+        Parameters
+        ----------
+        token: str
+            the token handed to the client
+
+        Returns
+        -------
+        concurrent.futures.Future
+            the promise of the operation's reply
+
+        Raises
+        ------
+        KeyError
+            if the token is unknown, or was already collected, or was evicted
+        """
+        return self._futures.pop(token)
 
 
 class HandlerMetadata(BaseModel):

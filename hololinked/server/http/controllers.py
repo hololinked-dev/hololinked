@@ -1,5 +1,7 @@
 """HTTP request handlers that run operations on a `Thing`."""
 
+import asyncio
+
 from typing import Any, Optional
 
 import msgspec
@@ -13,23 +15,24 @@ from hololinked import Serializers
 
 from ...config import global_config
 from ...constants import Operations
-from ...core.zmq.brokers import EventConsumer
-from ...core.zmq.message import (
-    SerializableNone,
+from ...core.eventloop import (
+    EventSubscription,
+    Operation,
     ServerExecutionContext,
     ThingExecutionContext,
     default_server_execution_context,
     default_thing_execution_context,
+    encode_event,
 )
-from ...core.zmq.payloads import PreserializedData, SerializableData
+from ...core.eventloop.operations import SerializableNone
+from ...core.eventloop.payloads import PreserializedData, SerializableData
 from ...metadata.td import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,
     PropertyAffordance,
 )
-from ...utils import format_exception_as_json, get_current_async_loop
-from ..repository import BrokerThing  # noqa: F401
+from ...utils import format_exception_as_json, get_current_async_loop, uuid_hex
 from ..security import (
     APIKeySecurity,
     Argon2BasicSecurity,
@@ -82,7 +85,8 @@ class BaseHandler(RequestHandler):
             layer="controller",
             impl=self.__class__.__name__,
         )
-        self.thing = self.config.thing_repository[self.resource.thing_id]  # type: BrokerThing
+        self.eventloop = self.config.eventloop  # type: EventLoop
+        self.thing_id = self.resource.thing_id
         self.allowed_clients = self.config.allowed_clients
         self.security_schemes = self.config.security_schemes
         self.metadata = metadata or HandlerMetadata()  # type: HandlerMetadata
@@ -433,6 +437,78 @@ class RPCHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Methods", ", ".join(self.metadata.http_methods))
         self.finish()
 
+    def build_operation(
+        self,
+        operation: str,
+        payload: SerializableData,
+        preserialized_payload: PreserializedData,
+        server_execution_context: ServerExecutionContext,
+        thing_execution_context: ThingExecutionContext,
+    ) -> Operation:
+        """
+        Turn one HTTP request into the transport-neutral unit the event loop schedules.
+
+        This is the HTTP border, and the mirror of what `RequestMessage.to_operation()` does for ZMQ.
+
+        Parameters
+        ----------
+        operation: str
+            the operation to perform, like `readproperty` or `invokeaction`
+        payload: SerializableData
+            the request body, decoded
+        preserialized_payload: PreserializedData
+            the binary part of the body, if any
+        server_execution_context: ServerExecutionContext
+            timeouts and whether a reply is wanted
+        thing_execution_context: ThingExecutionContext
+            whether to collect the `Thing`'s logs
+
+        Returns
+        -------
+        Operation
+            what to do, on which `Thing`
+        """
+        return Operation(
+            thing_id=self.thing_id,
+            objekt=self.resource.name,
+            operation=operation,
+            payload=payload,
+            preserialized_payload=preserialized_payload,
+            invokation_timeout=server_execution_context.invokationTimeout,
+            execution_timeout=server_execution_context.executionTimeout,
+            oneway=server_execution_context.oneway,
+            fetch_execution_logs=thing_execution_context.fetchExecutionLogs,
+            id=uuid_hex(),
+            sender_id=self.request.remote_ip or "",
+        )
+
+    def write_reply(self, reply: Any) -> None:
+        """
+        Write one event loop `Reply` out as this HTTP response.
+
+        Only one payload reaches the client: an HTTP response carries a single body with a single
+        content type, so a reply that has both a value and a binary part sends the binary part.
+
+        Parameters
+        ----------
+        reply: Reply
+            what the event loop answered with
+        """
+        if reply.preserialized_payload.value:
+            if reply.payload.value is not None:
+                self.logger.warning(
+                    "multipart payloads are not supported over HTTP, only the preserialized payload is written",
+                    content_type=reply.payload.content_type,
+                )
+            payload = reply.preserialized_payload
+        else:
+            payload = reply.payload
+        self.set_status(200, "ok")
+        self.set_header("Content-Type", payload.content_type or "application/json")
+        body = payload.serialize() if isinstance(payload, SerializableData) else payload.value
+        if body:
+            self.write(body)
+
     async def handle_through_thing(self, operation: str) -> None:
         """
         Handles the `Thing` operations and writes the reply to the HTTP client.
@@ -454,42 +530,29 @@ class RPCHandler(BaseHandler):
             self.logger.error(f"error while decoding request - {str(ex)}")
             return
         try:
+            request = self.build_operation(
+                operation,
+                payload,
+                preserialized_payload,
+                server_execution_context,
+                thing_execution_context,
+            )
             if server_execution_context.oneway:
-                # if oneway, we do not expect a response, so we just return None
-                await self.thing.oneway(
-                    objekt=self.resource.name,
-                    operation=operation,
-                    payload=payload,
-                    preserialized_payload=preserialized_payload,
-                    server_execution_context=server_execution_context,
-                    thing_execution_context=thing_execution_context,
-                )
+                # no reply is wanted, so the future is dropped rather than awaited
+                self.eventloop.submit(request)
                 self.set_status(204, "ok")
             elif local_execution_context.noblock:
-                message_id = await self.thing.schedule(
-                    objekt=self.resource.name,
-                    operation=operation,
-                    payload=payload,
-                    preserialized_payload=preserialized_payload,
-                    server_execution_context=server_execution_context,
-                    thing_execution_context=thing_execution_context,
-                )
+                # the client collects this on a second request, quoting the token back to us
+                token = uuid_hex()
+                self.config.pending_operations.add(token, self.eventloop.submit(request))
                 self.set_status(204, "ok")
-                self.set_header("X-Message-ID", message_id)
+                self.set_header("X-Message-ID", token)
             else:
-                response_message = await self.thing.execute(
-                    objekt=self.resource.name,
-                    operation=operation,
-                    payload=payload,
-                    preserialized_payload=preserialized_payload,
-                    server_execution_context=server_execution_context,
-                    thing_execution_context=thing_execution_context,
-                )
-                response_payload = self.thing.get_response_payload(response_message)
-                self.set_status(200, "ok")
-                self.set_header("Content-Type", response_payload.content_type or "application/json")
-                if response_payload.value:
-                    self.write(response_payload.value)
+                reply = await self.eventloop.execute(request)
+                if reply.timed_out:
+                    self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
+                    return
+                self.write_reply(reply)
         except ConnectionAbortedError as ex:
             self.set_status(503, f"lost connection to thing - {str(ex)}")
             # TODO handle reconnection
@@ -511,16 +574,16 @@ class RPCHandler(BaseHandler):
             if message_id is None:
                 raise ValueError("no message id available to wait for a no-block response")
             self.logger.info("waiting for no-block response", message_id=message_id)
-            response_message = await self.thing.recv_response(
-                message_id=message_id,
-                timeout=default_server_execution_context.invokationTimeout
-                + default_server_execution_context.executionTimeout,
-            )
-            response_payload = self.thing.get_response_payload(response_message)
-            self.set_status(200, "ok")
-            self.set_header("Content-Type", response_payload.content_type or "application/json")
-            if response_payload.value:
-                self.write(response_payload.value)
+            future = self.config.pending_operations.take(message_id)
+            invokation = default_server_execution_context.invokationTimeout
+            execution = default_server_execution_context.executionTimeout
+            # either being None means wait indefinitely, so there is no bound to compute
+            bound = None if invokation is None or execution is None else invokation + execution
+            reply = await asyncio.wait_for(asyncio.wrap_future(future), timeout=bound)
+            if reply.timed_out:
+                self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
+                return
+            self.write_reply(reply)
         except KeyError as ex:
             # if the message id is not found, it means that the response was not received in time
             self.logger.error(f"message ID not found for no-block response - {str(ex)}")
@@ -707,21 +770,13 @@ class EventHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Methods", "GET")
         self.finish()
 
-    def receive_blocking_event(self, event_consumer: EventConsumer):
-        """
-        deprecated, but can make a blocking call in an async loop.
-
-        Returns
-        -------
-        EventMessage | None
-            the event received within the timeout, or `None` if none arrived
-        """
-        return event_consumer.receive(timeout=10000)
-
     async def handle_datastream(self) -> None:
         """Called by GET method and handles the event publishing."""
         try:
-            event_consumer = self.thing.subscribe_event(self.resource)
+            subscription = EventSubscription(
+                self.eventloop.event_bus,
+                f"{self.thing_id}/{self.resource.name}",
+            )
             self.set_status(200)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
@@ -729,21 +784,25 @@ class EventHandler(BaseHandler):
             self.write(Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
             return
 
-        while True:
-            try:
-                event_message = await event_consumer.receive(timeout=10000)
-                if event_message:
-                    payload = self.thing.get_response_payload(event_message)
-                    self.write(self.data_header % payload.value)
-                    self.logger.debug(f"new data scheduled to flush - {self.resource.name}")
-                else:
-                    self.logger.debug(f"found no new data - {self.resource.name}")
-                await self.flush()  # flushes and handles heartbeat - raises StreamClosedError if client disconnects
-            except StreamClosedError:
-                break
-            except Exception as ex:
-                self.logger.error(f"error while pushing event - {str(ex)}")
-                self.write(self.data_header % Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
+        try:
+            while True:
+                try:
+                    received = await subscription.receive(timeout=10)
+                    if received is not None:
+                        body, _ = encode_event(*received)
+                        self.write(self.data_header % body)
+                        self.logger.debug(f"new data scheduled to flush - {self.resource.name}")
+                    else:
+                        self.logger.debug(f"found no new data - {self.resource.name}")
+                    # flushes and handles heartbeat - raises StreamClosedError if the client left
+                    await self.flush()
+                except StreamClosedError:
+                    break
+                except Exception as ex:
+                    self.logger.error(f"error while pushing event - {str(ex)}")
+                    self.write(self.data_header % Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
+        finally:
+            subscription.unsubscribe()
 
 
 class JPEGImageEventHandler(EventHandler):
@@ -805,8 +864,8 @@ class StopHandler(BaseHandler):
             origin = self.request.headers.get("Origin")
             self.logger.info(f"stopping HTTP server as per client request from {origin}, scheduling a stop message...")
             # create a task in current loop
-            eventloop = get_current_async_loop()
-            eventloop.create_task(self.server.async_stop())
+            loop = get_current_async_loop()
+            loop.create_task(self.server.async_stop())
             # dont call it in sequence, its not clear whether its designed for that
             self.set_status(204, "ok")
         except Exception as ex:
@@ -860,17 +919,24 @@ class ReadinessProbeHandler(BaseHandler):
         """Report whether every served `Thing` is connected and answering a ping."""  # noqa: DOC501
         self.set_custom_default_headers()
         try:
-            if len(self.server._disconnected_things) > 0:
-                raise RuntimeError("some things are disconnected, retry later")
-            replies = await self.server.zmq_client_pool.async_execute_in_all_things(
-                objekt="ping",
-                operation="invokeaction",
+            things = self.server.things or []
+            if not things:
+                self.set_status(200, "ok")  # nothing served, so nothing to be ready for
+                self.finish()
+                return
+            eventloop = self.config.eventloop
+            if eventloop is None or not eventloop.is_running:
+                raise RuntimeError("the event loop is not running yet, retry later")
+            replies = await asyncio.gather(
+                *[
+                    eventloop.execute(Operation(thing_id=thing.id, objekt="ping", operation=Operations.invokeaction))
+                    for thing in things
+                ]
             )
-            if not all(reply.body[0].deserialize() is None for thing_id, reply in replies.items()):
+            if any(reply.is_error or reply.timed_out for reply in replies):
                 self.set_status(500, "not all things are ready")
             else:
                 self.set_status(200, "ok")
-                # self.write({id: "ready" for id in replies.keys()})
         except Exception as ex:
             self.logger.error(f"error while checking readiness - {str(ex)}")
             self.set_status(500, f"error while checking readiness - {str(ex)}")

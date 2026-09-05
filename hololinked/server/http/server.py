@@ -19,7 +19,6 @@ from ...core.actions import Action
 from ...core.events import Event
 from ...core.property import Property
 from ...core.thing import Thing, ThingMeta
-from ...core.zmq.brokers import MessageMappedZMQClientPool
 from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
@@ -32,7 +31,7 @@ from ...utils import (
 )
 from ..security import Security
 from ..server import BaseProtocolServer
-from .config import HandlerMetadata, RuntimeConfig
+from .config import HandlerMetadata, PendingOperations, RuntimeConfig
 from .controllers import (
     ActionHandler,
     BaseHandler,
@@ -129,7 +128,9 @@ class HTTPServer(BaseProtocolServer):
             readiness_probe_handler=kwargs.get("readiness_handler", ReadinessProbeHandler),
             stop_handler=kwargs.get("stop_handler", StopHandler),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            thing_repository=kwargs.get("thing_repository", dict()),
+            eventloop=kwargs.get("eventloop", None),
+            thing_models=dict(),
+            pending_operations=PendingOperations(),
             allowed_clients=allowed_clients,
             security_schemes=security_schemes,
         )
@@ -170,13 +171,6 @@ class HTTPServer(BaseProtocolServer):
         )
         self.router = ApplicationRouter(self.app, self)
 
-        self.zmq_client_pool = MessageMappedZMQClientPool(
-            id=self.id,
-            server_ids=[],
-            client_ids=[],
-            handshake=False,
-            poll_timeout=100,
-        )
         self.add_things(*(things or []))
 
     async def setup(self) -> None:
@@ -198,25 +192,20 @@ class HTTPServer(BaseProtocolServer):
         # event loop is buggy, so we remove it.
         ioloop.IOLoop.clear_current()
         # 2. sets async loop for a non-possessing thread as well
-        event_loop = get_current_async_loop()
-        # 3. schedule the ZMQ client pool polling
-        if self.zmq_client_pool is None:
-            raise RuntimeError("ZMQ client pool was not created, cannot poll for responses")
-        event_loop.create_task(self.zmq_client_pool.poll_responses())
-        # self.zmq_client_pool.handshake(), NOTE - handshake better done upfront as we already poll_responses here
-        # which will prevent handshake function to succeed (although handshake will be done)
-        # 4. Expose via broker
+        get_current_async_loop()
+        # 3. take hold of the event loop that runs the things, and of how each one describes itself
         for thing in self.things:
-            if not thing.rpc_server:
-                raise ValueError(f"You need to expose thing {thing.id} via a RPCServer before trying to serve it")
-            event_loop.create_task(
-                self._instantiate_broker(
-                    thing.rpc_server.id,
-                    thing.id,
-                    "INPROC",
+            if not thing.eventloop:
+                raise ValueError(f"You need to expose thing {thing.id} via an EventLoop before trying to serve it")
+            if self.config.eventloop is None:
+                self.config.eventloop = thing.eventloop
+            elif self.config.eventloop is not thing.eventloop:
+                raise ValueError(
+                    "every Thing served over HTTP must be run by the same event loop, "
+                    + f"but {thing.id} belongs to a different one"
                 )
-            )
-        # 5. finally also get a reference of the same event loop from tornado
+            self.config.thing_models[thing.id] = thing.get_thing_model(ignore_errors=True).json()
+        # 4. finally also get a reference of the same event loop from tornado
         self.tornado_event_loop = ioloop.IOLoop.current()
 
         self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)  # type: TornadoHTTP1Server
@@ -243,8 +232,6 @@ class HTTPServer(BaseProtocolServer):
         if attempt_async_stop:
             run_callable_somehow(self.async_stop())
             return
-        if self.zmq_client_pool is not None:
-            self.zmq_client_pool.stop_polling()
         if not self.tornado_instance:
             return
         self.tornado_instance.stop()
@@ -257,8 +244,6 @@ class HTTPServer(BaseProtocolServer):
         A stop handler at the path `/stop` with POST method is already implemented
         that invokes this method for the clients.
         """
-        if self.zmq_client_pool is not None:
-            self.zmq_client_pool.stop_polling()
         if not self.tornado_instance:
             return
         try:

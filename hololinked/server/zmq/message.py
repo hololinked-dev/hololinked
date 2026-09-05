@@ -1,6 +1,6 @@
 """Message types - requests, responses and events, with their headers and payloads."""
 
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 import msgspec
@@ -9,7 +9,18 @@ from hololinked import Serializers
 from hololinked.constants import byte_types
 from hololinked.param.parameters import Integer
 
-from .payloads import PreserializedData, SerializableData
+from ...core.eventloop.operations import (  # noqa: F401
+    Operation,
+    PreserializedEmptyByte,
+    SerializableNone,
+    ServerExecutionContext,
+    ThingExecutionContext,
+    as_execution_kwargs,
+    default_server_execution_context,
+    default_thing_execution_context,
+    qualified_operation_key,
+)
+from ...core.eventloop.payloads import PreserializedData, SerializableData
 
 
 # message types
@@ -51,28 +62,6 @@ INDEX_BODY = 3
 INDEX_PRESERIALIZED_BODY = 4
 
 
-class ServerExecutionContext(msgspec.Struct):
-    """Additional context for the server while executing an operation."""
-
-    invokationTimeout: float
-    executionTimeout: float
-    oneway: bool
-
-
-class ThingExecutionContext(msgspec.Struct):
-    """Additional context for the thing while executing an operation."""
-
-    fetchExecutionLogs: bool
-
-
-default_server_execution_context = ServerExecutionContext(invokationTimeout=5, executionTimeout=5, oneway=False)
-
-default_thing_execution_context = ThingExecutionContext(fetchExecutionLogs=False)
-
-SerializableNone = SerializableData(None, content_type="application/json")
-PreserializedEmptyByte = PreserializedData(EMPTY_BYTE, content_type="text/plain")
-
-
 class RequestHeader(msgspec.Struct):
     """Header of a request message."""
 
@@ -86,11 +75,11 @@ class RequestHeader(msgspec.Struct):
     thingExecutionContext: ThingExecutionContext = msgspec.field(
         default_factory=lambda: default_thing_execution_context
     )
-    thingID: Optional[str] = ""
-    objekt: Optional[str] = ""
-    operation: Optional[str] = ""
-    payloadContentType: Optional[str] = "application/json"
-    preencodedPayloadContentType: Optional[str] = "text/plain"
+    thingID: str | None = ""
+    objekt: str | None = ""
+    operation: str | None = ""
+    payloadContentType: str | None = "application/json"
+    preencodedPayloadContentType: str | None = "text/plain"
 
     def __getitem__(self, key: str) -> Any:
         try:
@@ -117,8 +106,8 @@ class ResponseHeader(msgspec.Struct):
     messageID: str
     receiverID: str
     senderID: str
-    payloadContentType: Optional[str] = "application/json"
-    preencodedPayloadContentType: Optional[str] = ""
+    payloadContentType: str | None = "application/json"
+    preencodedPayloadContentType: str | None = ""
 
     def __getitem__(self, key: str) -> Any:
         try:
@@ -145,8 +134,8 @@ class EventHeader(msgspec.Struct):
     messageID: str
     senderID: str
     eventID: str
-    payloadContentType: Optional[str] = "application/json"
-    preencodedPayloadContentType: Optional[str] = ""
+    payloadContentType: str | None = "application/json"
+    preencodedPayloadContentType: str | None = ""
 
     def __getitem__(self, key: str) -> Any:
         try:
@@ -176,7 +165,7 @@ class RequestMessage:
     |-------|---------|------------|--------|---------|-----------------------|
     | Desc  | address | empty byte | header | payload | preserialized payload |
 
-    For header's JSON schema, visit [here](https://github.com/hololinked-dev/hololinked/blob/main/hololinked/core/zmq/request_message_header_schema.json).
+    For header's JSON schema, visit [here](https://github.com/hololinked-dev/hololinked/blob/main/hololinked/server/zmq/request_message_header_schema.json).
     """
 
     length = Integer(default=5, readonly=True, class_member=True, doc="length of the message")  # type: int
@@ -253,9 +242,37 @@ class RequestMessage:
         return self.header["thingExecutionContext"]
 
     @property
-    def qualified_operation(self) -> str:
-        """Qualified objekt - a possibly unique string for the operation."""
-        return f"{self.header['thingID']}.{self.header['objekt']}.{self.header['operation']}"
+    def qualified_name(self) -> str:
+        """A key identifying this operation on this affordance of this `Thing`."""
+        return qualified_operation_key(
+            self.header["thingID"],
+            self.header["objekt"],
+            self.header["operation"],
+        )
+
+    def to_operation(self) -> Operation:
+        """
+        Convert this ZMQ message into the transport-neutral unit the event loop schedules.
+
+        This is the border. Everything above it - the 5-frame layout, the header structs, the
+        message types - is a ZMQ artifact and stops here.
+
+        Returns
+        -------
+        Operation
+            the operation this message is asking for
+        """
+        return Operation(
+            thing_id=self.header["thingID"],
+            objekt=self.header["objekt"],
+            operation=self.header["operation"],
+            payload=self.body[0],  # ty: ignore[invalid-argument-type]
+            preserialized_payload=self.body[1],  # ty: ignore[invalid-argument-type]
+            id=self.id,
+            sender_id=self.sender_id,
+            **as_execution_kwargs(self.header["serverExecutionContext"]),
+            **as_execution_kwargs(self.header["thingExecutionContext"]),
+        )
 
     def parse_header(self) -> None:
         """
@@ -345,7 +362,7 @@ class RequestMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(receiver_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -389,7 +406,7 @@ class RequestMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(receiver_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -412,7 +429,7 @@ class ResponseMessage:
     |-------|---------|--------|------|------------------|
     | Desc  | address | header | data | pre encoded data |
 
-    For header's JSON schema, visit [here](https://github.com/hololinked-dev/hololinked/blob/main/hololinked/core/zmq/response_message_header_schema.json).
+    For header's JSON schema, visit [here](https://github.com/hololinked-dev/hololinked/blob/main/hololinked/server/zmq/response_message_header_schema.json).
     """
 
     length = Integer(default=5, readonly=True, class_member=True, doc="length of the message")  # type: int
@@ -570,7 +587,7 @@ class ResponseMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(receiver_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -613,7 +630,7 @@ class ResponseMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(request_message.sender_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -659,7 +676,7 @@ class ResponseMessage:
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(request_message.sender_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,
@@ -726,7 +743,7 @@ class EventMessage(ResponseMessage):
         message._body = [payload, preserialized_payload]
         message._bytes = [
             bytes(event_id, encoding="utf-8"),
-            bytes(),
+            b"",
             Serializers.json.dumps(message._header.json()),
             payload.serialize(),
             preserialized_payload.value,

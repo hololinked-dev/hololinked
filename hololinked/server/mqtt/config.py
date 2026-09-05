@@ -4,6 +4,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
+from ...core.eventloop import EventLoop  # noqa: F401
 from .controllers import ThingDescriptionPublisher, TopicPublisher
 from .services import ThingDescriptionService
 
@@ -26,5 +27,5 @@ class RuntimeConfig(BaseModel):
     thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
     """Thing Description generation service, used by `ThingDescriptionPublisher` to generate the Thing Description"""
 
-    thing_repository: Any = Field(default_factory=dict)  # type: dict[str, BrokerThing]
-    """repository layer `Thing`s to be used by the MQTT publishers"""
+    eventloop: Any = Field(default=None)  # type: EventLoop | None
+    """the event loop that runs operations on the served `Thing`s"""

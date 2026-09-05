@@ -135,14 +135,14 @@ def run_coro_sync(coro: Coroutine) -> Any:
     RuntimeError
         if the event loop of the current thread is already running
     """
-    eventloop = get_current_async_loop()
-    if eventloop.is_running():
+    loop = get_current_async_loop()
+    if loop.is_running():
         raise RuntimeError(
             "asyncio event loop is already running, cannot setup coroutine "
             + f"{coro.__name__} to run sync, please await it."
         )
     else:
-        return eventloop.run_until_complete(coro)
+        return loop.run_until_complete(coro)
 
 
 def run_callable_somehow(method: Callable | Coroutine) -> Any:
@@ -169,13 +169,13 @@ def run_callable_somehow(method: Callable | Coroutine) -> Any:
             return result  # truly synchronous
     else:
         raise TypeError("method must be a callable or an awaitable")
-    eventloop = get_current_async_loop()
-    if eventloop.is_running():
+    loop = get_current_async_loop()
+    if loop.is_running():
         # task =  # check later if lambda is necessary
-        eventloop.create_task(coro)  # ty: ignore[invalid-argument-type]  # narrowed to an awaitable above
+        loop.create_task(coro)  # ty: ignore[invalid-argument-type]  # narrowed to an awaitable above
     else:
         # task = method
-        return eventloop.run_until_complete(coro)
+        return loop.run_until_complete(coro)
 
 
 def complete_pending_tasks_in_current_loop() -> None:
@@ -753,30 +753,6 @@ def forkable(func):
     return wrapper
 
 
-def get_all_sub_things_recusively(thing) -> list:
-    """
-    Get all sub things recursively from a thing.
-
-    Returns
-    -------
-    list
-        the thing itself followed by all of its sub things
-    """
-    sub_things = [thing]
-    for sub_thing in thing.sub_things.values():
-        sub_things.extend(get_all_sub_things_recusively(sub_thing))
-    return sub_things
-
-
-def get_socket_type_name(socket_type):
-    from .constants import ZMQSocketType
-
-    try:
-        return ZMQSocketType(socket_type).name
-    except ValueError:
-        return "UNKNOWN"
-
-
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
@@ -795,5 +771,4 @@ __all__ = [
     get_return_type_from_signature.__name__,
     getattr_without_descriptor_read.__name__,
     forkable.__name__,
-    get_socket_type_name.__name__,
 ]
