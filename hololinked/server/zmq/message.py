@@ -20,7 +20,7 @@ from ...core.eventloop.operations import (  # noqa: F401
     default_thing_execution_context,
     qualified_operation_key,
 )
-from ...core.payloads import PreserializedData, SerializableData
+from ...core.eventloop.payloads import PreserializedData, SerializableData
 
 
 # message types

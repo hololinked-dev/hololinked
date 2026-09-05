@@ -20,7 +20,7 @@ from hololinked.client.abstractions import (
 from hololinked.client.exceptions import ReplyNotArrivedError, raise_local_exception
 from hololinked.constants import Operations
 from hololinked.core import Action, Thing  # noqa: F401
-from hololinked.core.payloads import SerializableData
+from hololinked.core.eventloop.payloads import SerializableData
 from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
 from hololinked.metadata.td.forms import Form
 from hololinked.server.zmq.brokers import (

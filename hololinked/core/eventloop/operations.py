@@ -21,8 +21,8 @@ from typing import Any
 
 import msgspec
 
-from ..payloads import PreserializedData, SerializableData
 from ..utils import CrossLoopEvent
+from .payloads import PreserializedData, SerializableData
 
 
 # The execution context a caller asks for, in the camelCase the ZMQ header declares. It lives here

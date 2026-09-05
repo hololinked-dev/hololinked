@@ -25,7 +25,7 @@ from ...core.eventloop import (
     default_thing_execution_context,
     encode_event,
 )
-from ...core.payloads import PreserializedData, SerializableData
+from ...core.eventloop.payloads import PreserializedData, SerializableData
 from ...metadata.td import (
     ActionAffordance,
     EventAffordance,
