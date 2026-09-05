@@ -242,8 +242,8 @@ class RequestMessage:
         return self.header["thingExecutionContext"]
 
     @property
-    def qualified_operation(self) -> str:
-        """Qualified objekt - a possibly unique string for the operation."""
+    def qualified_name(self) -> str:
+        """A key identifying this operation on this affordance of this `Thing`."""
         return qualified_operation_key(
             self.header["thingID"],
             self.header["objekt"],

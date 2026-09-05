@@ -575,11 +575,11 @@ class RPCHandler(BaseHandler):
                 raise ValueError("no message id available to wait for a no-block response")
             self.logger.info("waiting for no-block response", message_id=message_id)
             future = self.config.pending_operations.take(message_id)
-            reply = await asyncio.wait_for(
-                asyncio.wrap_future(future),
-                timeout=default_server_execution_context.invokationTimeout
-                + default_server_execution_context.executionTimeout,
-            )
+            invokation = default_server_execution_context.invokationTimeout
+            execution = default_server_execution_context.executionTimeout
+            # either being None means wait indefinitely, so there is no bound to compute
+            bound = None if invokation is None or execution is None else invokation + execution
+            reply = await asyncio.wait_for(asyncio.wrap_future(future), timeout=bound)
             if reply.timed_out:
                 self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
                 return

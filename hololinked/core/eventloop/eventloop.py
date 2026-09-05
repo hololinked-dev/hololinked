@@ -35,7 +35,7 @@ from ..logger import LogHistoryHandler
 from ..property import Property
 from ..thing import Thing
 from ..utils import CrossLoopEvent, get_all_sub_things_recusively
-from .operations import TIMED_OUT_REPLY, Job, Operation, Reply, ReplyKind, qualified_operation_key
+from .operations import Job, Operation, Reply, ReplyKind, qualified_operation_key
 from .payloads import PreserializedData, SerializableData
 from .pubsub import EventBus
 from .scheduler import (
@@ -206,14 +206,13 @@ class EventLoop:
         if not self._run:
             raise RuntimeError("the event loop is not running, call run() before submitting operations")
         thing = self.things[operation.thing_id]
-        job = Job(operation=operation, future=Future(), started=CrossLoopEvent())
-        if operation.invokation_timeout is not None:
+        job = Job(operation=operation, future=Future(), started=CrossLoopEvent(), completed=CrossLoopEvent())
+        invokation_timeout = operation.server_execution_context.invokationTimeout
+        if invokation_timeout is not None:
             # races against the job leaving the queue - whichever gets there first answers the caller
-            job.invokation_timeout_task = self.run_coro_threadsafe(
-                self._answer_if_never_started(job, operation.invokation_timeout)
-            )
+            job.invokation_timeout_task = self.run_coro_threadsafe(job.answer_if_never_started(invokation_timeout))
 
-        scheduler_type = self.per_job_scheduler_types.get(operation.qualified_operation)
+        scheduler_type = self.per_job_scheduler_types.get(operation.qualified_name)
         if scheduler_type is not None:
             # async/threaded: a fresh scheduler per job, since they run concurrently
             scheduler = scheduler_type(thing, self)
@@ -248,33 +247,6 @@ class EventLoop:
             if the event loop is not running
         """
         return await asyncio.wrap_future(self.submit(operation))
-
-    async def _answer_if_never_started(self, job: Job, timeout: float) -> bool:
-        """
-        Answer the caller with an invokation timeout if the job has not left the queue in time.
-
-        Returns
-        -------
-        bool
-            `True` if it timed out and answered, `False` if the job started first
-        """
-        try:
-            await asyncio.wait_for(job.started.wait(), timeout)
-            return False
-        except TimeoutError:
-            job.answer(TIMED_OUT_REPLY[ReplyKind.INVOKATION_TIMEOUT])
-            return True
-
-    async def _answer_if_overdue(self, job: Job, timeout: float) -> None:
-        """
-        Answer the caller with an execution timeout once the operation has run out of time.
-
-        The operation is not cancelled - it cannot be - and its eventual reply is still drained by
-        `tunnel_message_to_things()`, then dropped. Whether this ran at all is what that loop reads
-        back out of the task to decide, which is why it answers rather than returning an outcome.
-        """
-        await asyncio.sleep(timeout)
-        job.answer(TIMED_OUT_REPLY[ReplyKind.EXECUTION_TIMEOUT])
 
     async def tunnel_message_to_things(self, scheduler: Scheduler) -> None:
         """
@@ -315,15 +287,16 @@ class EventLoop:
             # still unable to interrupt the thing's execution
             execution_timed_out = False
             overdue = None
-            if job.operation.execution_timeout is not None:
-                overdue = loop.create_task(self._answer_if_overdue(job, job.operation.execution_timeout))
+            execution_timeout = job.operation.server_execution_context.executionTimeout
+            if execution_timeout is not None:
+                overdue = loop.create_task(job.answer_if_overdue(execution_timeout))
 
             # always drain the reply, even once a timeout has answered. Abandoning the wait leaves
             # the thing's answer sitting in the scheduler for the next job to pick up as its own.
             await scheduler.wait_for_reply()
+            job.completed.set()  # releases the execution timeout
             if overdue is not None:
-                # cancel() refuses only when the task already ran, i.e. it answered a timeout
-                execution_timed_out = not overdue.cancel()
+                execution_timed_out = await overdue
 
             # check the reply is never undefined, Undefined is a sensible placeholder for the
             # NotImplemented singleton
@@ -384,7 +357,7 @@ class EventLoop:
                 instance.logger.debug(f"starting execution of operation {operation} on {objekt}")
 
                 # start activities related to thing execution context
-                fetch_execution_logs = request.fetch_execution_logs
+                fetch_execution_logs = request.thing_execution_context.fetchExecutionLogs
                 if fetch_execution_logs:
                     list_handler = LogHistoryHandler([])
                     list_handler.setLevel(logging.DEBUG)

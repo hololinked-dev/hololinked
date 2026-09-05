@@ -14,8 +14,10 @@ clients bypassed the typed header and sent a raw dict.
 
 from __future__ import annotations
 
+import asyncio
+
 from concurrent.futures import Future, InvalidStateError
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
@@ -27,21 +29,25 @@ from .payloads import PreserializedData, SerializableData
 
 # The execution context a caller asks for, in the camelCase the ZMQ header declares. It lives here
 # rather than with that header because it is what a caller wants, not how one protocol spells it -
-# `as_execution_kwargs()` reads both spellings onto the `Operation` fields below.
+# `as_execution_kwargs()` reads both spellings onto the flat keywords `Operation.__init__` takes.
 
 
 class ServerExecutionContext(msgspec.Struct):
     """Additional context for the server while executing an operation."""
 
-    invokationTimeout: float
-    executionTimeout: float
+    invokationTimeout: float | None
+    """seconds to wait for the operation to *start*, `None` to wait indefinitely."""
+    executionTimeout: float | None
+    """seconds to wait for the operation to *finish*, `None` to wait indefinitely."""
     oneway: bool
+    """whether the caller wants no reply, in which case the event loop's answer is discarded."""
 
 
 class ThingExecutionContext(msgspec.Struct):
     """Additional context for the thing while executing an operation."""
 
     fetchExecutionLogs: bool
+    """whether to collect the `Thing`'s log records during execution and return them with the reply."""
 
 
 default_server_execution_context = ServerExecutionContext(invokationTimeout=5, executionTimeout=5, oneway=False)
@@ -52,9 +58,17 @@ SerializableNone = SerializableData(None, content_type="application/json")
 PreserializedEmptyByte = PreserializedData(b"", content_type="text/plain")
 
 
-@dataclass
+@dataclass(init=False)
 class Operation:
-    """One operation to perform on one interaction affordance of one `Thing`."""
+    """
+    One operation to perform on one interaction affordance of one `Thing`.
+
+    The execution parameters live in the two contexts a caller actually asks for, which is also the
+    shape every wire format declares them in. `__init__` accepts them flat, as `invokation_timeout=`,
+    `oneway=` and the rest, because that is how a border has them to hand; reading them goes through
+    the context they belong to, so which parameter is the server's business and which is the
+    `Thing`'s stays visible at every use.
+    """
 
     thing_id: str
     """`id` of the `Thing` the operation is for."""
@@ -63,29 +77,81 @@ class Operation:
     operation: str
     """what to do with it - an `Operations` member such as `readproperty` or `invokeaction`."""
 
-    payload: SerializableData = field(default_factory=lambda: SerializableData(None))
+    payload: SerializableData
     """the operation's argument, still encoded until the executing `Thing` deserializes it."""
-    preserialized_payload: PreserializedData = field(default_factory=lambda: PreserializedData(b""))
+    preserialized_payload: PreserializedData
     """binary argument that bypasses serialization entirely."""
 
-    invokation_timeout: float | None = None
-    """seconds to wait for the operation to *start*, `None` to wait indefinitely."""
-    execution_timeout: float | None = None
-    """seconds to wait for the operation to *finish*, `None` to wait indefinitely."""
-    oneway: bool = False
-    """whether the caller wants no reply, in which case the event loop's answer is discarded."""
-    fetch_execution_logs: bool = False
-    """whether to collect the `Thing`'s log records during execution and return them with the reply."""
+    server_execution_context: ServerExecutionContext
+    """the timeouts, and whether a reply is wanted at all."""
+    thing_execution_context: ThingExecutionContext
+    """what the `Thing` should do beside running the operation."""
 
-    id: str = ""
+    id: str
     """identifier of the originating request. Correlation and logging only - never routed on."""
-    sender_id: str = ""
+    sender_id: str
     """identifier of whoever asked. Logging only."""
 
+    def __init__(
+        self,
+        thing_id: str,
+        objekt: str,
+        operation: str,
+        payload: SerializableData | None = None,
+        preserialized_payload: PreserializedData | None = None,
+        invokation_timeout: float | None = None,
+        execution_timeout: float | None = None,
+        oneway: bool = False,
+        fetch_execution_logs: bool = False,
+        id: str = "",
+        sender_id: str = "",
+    ) -> None:
+        """
+        Build an operation from flat parameters, gathering the execution ones into their contexts.
+
+        Parameters
+        ----------
+        thing_id: str
+            `id` of the `Thing` the operation is for
+        objekt: str
+            name of the property, action or event
+        operation: str
+            what to do with it, an `Operations` member
+        payload: SerializableData, optional
+            the operation's argument, still encoded
+        preserialized_payload: PreserializedData, optional
+            binary argument that bypasses serialization
+        invokation_timeout: float, optional
+            seconds to wait for the operation to start, `None` to wait indefinitely
+        execution_timeout: float, optional
+            seconds to wait for the operation to finish, `None` to wait indefinitely
+        oneway: bool
+            whether to discard the reply
+        fetch_execution_logs: bool
+            whether to return the `Thing`'s log records with the reply
+        id: str
+            identifier of the originating request
+        sender_id: str
+            identifier of whoever asked
+        """
+        self.thing_id = thing_id
+        self.objekt = objekt
+        self.operation = operation
+        self.payload = SerializableData(None) if payload is None else payload
+        self.preserialized_payload = PreserializedData(b"") if preserialized_payload is None else preserialized_payload
+        self.server_execution_context = ServerExecutionContext(
+            invokationTimeout=invokation_timeout,
+            executionTimeout=execution_timeout,
+            oneway=oneway,
+        )
+        self.thing_execution_context = ThingExecutionContext(fetchExecutionLogs=fetch_execution_logs)
+        self.id = id
+        self.sender_id = sender_id
+
     @property
-    def qualified_operation(self) -> str:
+    def qualified_name(self) -> str:
         """A key identifying this operation on this affordance of this `Thing`."""
-        return f"{self.thing_id}.{self.objekt}.{self.operation}"
+        return qualified_operation_key(self.thing_id, self.objekt, self.operation)
 
 
 class ReplyKind(StrEnum):
@@ -157,6 +223,8 @@ class Job:
     """
     started: CrossLoopEvent
     """set when the operation leaves the queue. The invokation timeout races against this."""
+    completed: CrossLoopEvent
+    """set when the `Thing` has produced a reply. The execution timeout races against this."""
     invokation_timeout_task: Future | None = None
     """
     The racing timeout, if one was armed, as returned by `asyncio.run_coroutine_threadsafe`.
@@ -180,6 +248,51 @@ class Job:
             self.future.set_result(reply)
         except InvalidStateError:
             pass  # somebody got there first: a timeout, or a second answer for the same job
+
+    async def answer_if_never_started(self, timeout: float) -> bool:
+        """
+        Answer the caller with an invokation timeout if this job has not left the queue in time.
+
+        Parameters
+        ----------
+        timeout: float
+            seconds to wait for `started`
+
+        Returns
+        -------
+        bool
+            `True` if it timed out and answered, `False` if the job started first
+        """
+        try:
+            await asyncio.wait_for(self.started.wait(), timeout)
+            return False
+        except TimeoutError:
+            self.answer(TIMED_OUT_REPLY[ReplyKind.INVOKATION_TIMEOUT])
+            return True
+
+    async def answer_if_overdue(self, timeout: float) -> bool:
+        """
+        Answer the caller with an execution timeout if the operation has not finished in time.
+
+        The operation is not cancelled - it cannot be - so its eventual reply is still drained by
+        `EventLoop.tunnel_message_to_things()`, then dropped.
+
+        Parameters
+        ----------
+        timeout: float
+            seconds to wait for `completed`
+
+        Returns
+        -------
+        bool
+            `True` if it timed out and answered, `False` if the operation finished first
+        """
+        try:
+            await asyncio.wait_for(self.completed.wait(), timeout)
+            return False
+        except TimeoutError:
+            self.answer(TIMED_OUT_REPLY[ReplyKind.EXECUTION_TIMEOUT])
+            return True
 
 
 def qualified_operation_key(thing_id: str, objekt: str, operation: str) -> str:

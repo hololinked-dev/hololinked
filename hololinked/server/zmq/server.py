@@ -286,7 +286,7 @@ class ZMQServer(BaseProtocolServer):
                 "invokation" if reply.kind is ReplyKind.INVOKATION_TIMEOUT else "execution",
             )
             return
-        if operation.oneway:
+        if operation.server_execution_context.oneway:
             return
         await server.async_send_response_with_message_type(
             request_message=request_message,
