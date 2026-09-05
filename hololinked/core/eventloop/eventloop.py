@@ -33,12 +33,12 @@ from hololinked.utils import (
 from ..actions import BoundAction
 from ..exceptions import BreakInnerLoop
 from ..logger import LogHistoryHandler
-from ..payloads import PreserializedData, SerializableData
 from ..properties import TypedList
 from ..property import Property
 from ..thing import Thing
 from ..utils import CrossLoopEvent
 from .operations import TIMED_OUT_REPLY, Job, Operation, Reply, ReplyKind, qualified_operation_key
+from .payloads import PreserializedData, SerializableData
 from .pubsub import EventBus
 from .scheduler import (
     AsyncScheduler,
@@ -329,7 +329,7 @@ class EventLoop:
                 # this means in next loop it wont be in this block as a job arrived
                 continue
 
-            job = scheduler.next_job  # type: Job
+            job = scheduler.next_job
             job.started.set()  # releases the invokation timeout
             if job.invokation_timeout_task is not None and await asyncio.wrap_future(job.invokation_timeout_task):
                 # the timeout already answered the caller, drop the call rather than run it
@@ -361,7 +361,7 @@ class EventLoop:
                 job.answer(Reply(payload, preserialized_payload, ReplyKind.ERROR))
                 continue
 
-            reply = scheduler.last_operation_reply  # type: Reply
+            reply = scheduler.last_operation_reply
             scheduler.reset_operation_reply()
             job.answer(reply)  # a no-op if a timeout already answered
 

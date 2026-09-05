@@ -40,9 +40,6 @@ class Scheduler:
     [UML Diagram subclasses](http://docs.hololinked.dev/UML/PDF/Scheduler.pdf)
     """
 
-    OperationRequest = Operation
-    OperationReply = Reply
-    JobInvokationType = Job
     _operation_execution_complete_event: CrossLoopEvent
     _operation_execution_ready_event: CrossLoopEvent
 
@@ -56,11 +53,11 @@ class Scheduler:
         self._job_queued_event = CrossLoopEvent()  # type: CrossLoopEvent
 
     @property
-    def last_operation_request(self) -> OperationRequest:
+    def last_operation_request(self) -> Operation:
         return self._last_operation_request
 
     @last_operation_request.setter
-    def last_operation_request(self, value: OperationRequest):
+    def last_operation_request(self, value: Operation):
         self._last_operation_request = value
         self._operation_execution_ready_event.set()
 
@@ -68,11 +65,11 @@ class Scheduler:
         self._last_operation_request = Undefined
 
     @property
-    def last_operation_reply(self) -> OperationReply:
+    def last_operation_reply(self) -> Reply:
         return self._last_operation_reply
 
     @last_operation_reply.setter
-    def last_operation_reply(self, value: OperationReply):
+    def last_operation_reply(self, value: Reply):
         self._last_operation_request = Undefined
         self._last_operation_reply = value
         self._operation_execution_complete_event.set()
@@ -101,10 +98,10 @@ class Scheduler:
         raise NotImplementedError("has_job method must be implemented in the subclass")
 
     @property
-    def next_job(self) -> JobInvokationType:
+    def next_job(self) -> Job:
         raise NotImplementedError("next_job method must be implemented in the subclass")
 
-    def dispatch_job(self, job: JobInvokationType) -> None:
+    def dispatch_job(self, job: Job) -> None:
         raise NotImplementedError("dispatch_job method must be implemented in the subclass")
 
     def cleanup(self):
@@ -114,7 +111,7 @@ class Scheduler:
         self._operation_execution_complete_event.set()
 
     @classmethod
-    def format_reply_tuple(self, return_value: Any) -> OperationReply:
+    def format_reply_tuple(self, return_value: Any) -> Reply:
         raise NotImplementedError("Implement format_reply_tuple in subclass")
 
 
@@ -133,10 +130,10 @@ class QueuedScheduler(Scheduler):
         return len(self.queue) > 0
 
     @property
-    def next_job(self) -> Scheduler.JobInvokationType:
+    def next_job(self) -> Job:
         return self.queue.popleft()
 
-    def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
+    def dispatch_job(self, job: Job) -> None:
         """
         Append a job to the queue, to be run once everything ahead of it has finished.
 
@@ -170,12 +167,12 @@ class AsyncScheduler(Scheduler):
         return self._job is not None
 
     @property
-    def next_job(self) -> Scheduler.JobInvokationType:
+    def next_job(self) -> Job:
         if self._job is None:
             raise RuntimeError("No job to execute")
         return self._job
 
-    def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
+    def dispatch_job(self, job: Job) -> None:
         """
         Store the job and start both halves of it as tasks on the `EventLoop`'s own asyncio loop.
 
@@ -209,12 +206,12 @@ class ThreadedScheduler(Scheduler):
         return self._job is not None
 
     @property
-    def next_job(self) -> Scheduler.JobInvokationType:
+    def next_job(self) -> Job:
         if self._job is None:
             raise RuntimeError("No job to execute")
         return self._job
 
-    def dispatch_job(self, job: Scheduler.JobInvokationType) -> None:
+    def dispatch_job(self, job: Job) -> None:
         """
         Store the job and start a thread to execute it on the `Thing` instance.
 
