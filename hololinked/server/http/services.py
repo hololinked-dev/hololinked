@@ -7,6 +7,7 @@ from typing import Any, cast
 import structlog
 
 from hololinked import Serializers
+from hololinked.core.thing import Thing
 
 from ...constants import JSONSerializable, Operations
 from ...metadata.td import (
@@ -33,6 +34,7 @@ class ThingDescriptionService:
         logger: structlog.stdlib.BoundLogger,
         config: Any,
         server: Any,
+        thing: Any = None,
     ) -> None:
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
@@ -40,7 +42,7 @@ class ThingDescriptionService:
         self.resource = resource  # type: InteractionAffordance
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
-        self.eventloop = self.config.eventloop
+        self.thing: Thing = thing
         self.server = server  # type: HTTPServer
 
     async def generate(
@@ -69,7 +71,7 @@ class ThingDescriptionService:
         dict[str, JSONSerializable]
             the Thing Description, with HTTP forms added to every affordance
         """
-        thing_model = self.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names)
+        thing_model = self.thing.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()
         TD = copy.deepcopy(thing_model)
 
         self.add_properties(
@@ -361,30 +363,3 @@ class ThingDescriptionService:
     def add_links(self, TD: dict[str, JSONSerializable]) -> None:
         """Adds custom links to the TD, override this in subclass."""
         pass
-
-    def get_thing_model(
-        self,
-        ignore_errors: bool = False,
-        skip_names: list[str] = [],
-    ) -> dict[str, JSONSerializable]:
-        """
-        Generate the served `Thing`'s Thing Model, which this service adds HTTP forms to.
-
-        A Thing Model is the affordances without the forms, so there is nothing protocol-specific to
-        strip. The `Thing` generates its own, and the event loop is consulted only to resolve the id
-        of the one this service serves.
-
-        Parameters
-        ----------
-        ignore_errors: bool, default `False`
-            if `True`, affordances whose metadata cannot be generated are skipped
-        skip_names: list[str], default `[]`
-            affordance names to leave out
-
-        Returns
-        -------
-        dict[str, JSONSerializable]
-            the Thing Model
-        """
-        thing = self.eventloop.things[self.resource.thing_id]
-        return thing.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()

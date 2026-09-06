@@ -127,7 +127,7 @@ class EventLoop:
             instance.eventloop = self
             self.things[instance.id] = instance
             for event in instance.events.descriptors.values():
-                self.event_bus.register(event.__get__(instance, type(instance)))
+                self.event_bus.register(event, instance)
             for action in instance.actions.descriptors.values():
                 if action.synchronous:
                     continue  # QueuedScheduler, which is the default and is shared per Thing

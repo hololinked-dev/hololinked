@@ -22,7 +22,12 @@ from hololinked.core.eventloop.operations import (  # noqa: F401
     default_scheduler_execution_context,
     default_thing_execution_context,
 )
-from hololinked.core.eventloop.pubsub import EventBus, EventSubscription, encode_event  # noqa: F401
+from hololinked.core.eventloop.pubsub import (  # noqa: F401
+    EventBus,
+    EventSubscription,
+    RegisteredEvent,
+    encode_event,
+)
 from hololinked.core.eventloop.scheduler import (  # noqa: F401
     AsyncScheduler,
     QueuedScheduler,
@@ -40,6 +45,7 @@ __all__ = [
     "Operation",
     "PendingOperations",
     "QueuedScheduler",
+    "RegisteredEvent",
     "Reply",
     "SchedulerExecutionContext",
     "ThingExecutionContext",

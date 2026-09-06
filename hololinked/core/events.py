@@ -78,7 +78,7 @@ class Event:
             if not obj:
                 return self
             return EventDispatcher(
-                unique_identifier=f"{obj._qualified_id}/{self.name}",
+                unique_identifier=self.get_unique_identifier(obj),
                 publisher=obj.eventloop.event_bus if obj.eventloop else None,
                 owner_inst=obj,
                 descriptor=self,
@@ -87,6 +87,22 @@ class Event:
             raise AttributeError(
                 "Event object not yet initialized, please dont access now." + " Access after Thing is running."
             )
+
+    def get_unique_identifier(self, owner_inst: Thing) -> str:
+        """
+        An instance bound unique identifier string of the event.
+
+        Parameters
+        ----------
+        owner_inst: Thing
+            the instance whose copy of this event is meant
+
+        Returns
+        -------
+        str
+            the identifier, as `<thing id>/<event name>`
+        """
+        return f"{owner_inst._qualified_id}/{self.name}"
 
     def to_metadata(self, owner_inst: Thing | None = None, format: str = "wot") -> EventMetadata:
         """
@@ -114,7 +130,7 @@ class EventDispatcher:
     The separation is necessary between `Event` and `EventDispatcher` to allow class level definitions of the `Event`
     """
 
-    __slots__ = ["_descriptor", "_owner_inst", "_publisher", "_unique_identifier"]
+    __slots__ = ["_descriptor", "_owner_inst", "_publisher", "unique_identifier"]
 
     def __init__(
         self,
@@ -123,7 +139,7 @@ class EventDispatcher:
         owner_inst: Thing,
         descriptor: Event,
     ) -> None:
-        self._unique_identifier = unique_identifier
+        self.unique_identifier = unique_identifier
         self._owner_inst = owner_inst
         self._descriptor = descriptor
         self.publisher = publisher
@@ -154,7 +170,7 @@ class EventDispatcher:
         data: Any
             payload of the event
         """
-        self.publisher.publish(self, data=data)
+        self.publisher.publish(self.unique_identifier, data)
 
     def receive_acknowledgement(self, timeout: float | None) -> bool:
         """
