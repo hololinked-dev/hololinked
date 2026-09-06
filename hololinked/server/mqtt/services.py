@@ -6,9 +6,11 @@ from typing import Any
 
 import structlog
 
+from hololinked import Serializers
 from hololinked.core.thing import Thing
 
 from ...constants import Operations
+from ...metadata.td.forms import Form
 from ...metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
 
 
@@ -110,7 +112,9 @@ class ThingDescriptionService:
                     TD["properties"].pop(name)
                     continue
                 TD["properties"][name]["forms"] = []
-                form = affordance.retrieve_form(Operations.observeproperty)
+                form = Form()
+                form.op = Operations.observeproperty
+                form.contentType = Serializers.for_object(TD["id"], self.thing.__class__.__name__, name).content_type
                 form.href = f"mqtt{'s' if self.ssl else ''}://{self.hostname}:{self.port}"
                 form.mqv_topic = f"{TD['id']}/{name}"
                 TD["properties"][name]["forms"].append(form.json())
@@ -147,9 +151,11 @@ class ThingDescriptionService:
             if name in skip_names:
                 continue
             try:
-                affordance = EventAffordance.from_TD(name, thing_model)
+                EventAffordance.from_TD(name, thing_model)
                 TD["events"][name]["forms"] = []
-                form = affordance.retrieve_form(Operations.subscribeevent)
+                form = Form()
+                form.op = Operations.subscribeevent
+                form.contentType = Serializers.for_object(TD["id"], self.thing.__class__.__name__, name).content_type
                 form.href = f"mqtt{'s' if self.ssl else ''}://{self.hostname}:{self.port}"
                 form.mqv_topic = f"{TD['id']}/{name}"
                 TD["events"][name]["forms"].append(form.json())

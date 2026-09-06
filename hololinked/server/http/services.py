@@ -142,20 +142,16 @@ class ThingDescriptionService:
                 if affordance.readOnly and http_method.upper() != "GET":
                     break
                 op = Operations.readproperty if http_method.upper() == "GET" else Operations.writeproperty
-                form = affordance.retrieve_form(op)
-                if not form:
-                    form = Form()
-                    form.op = op
-                    form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
+                form = Form()
+                form.op = op
+                form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
                 form.href = href
                 form.htv_methodName = http_method
                 forms.append(form.json())
             if affordance.observable:
-                form = affordance.retrieve_form(Operations.observeproperty)
-                if not form:
-                    form = Form()
-                    form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
-                    form.op = Operations.observeproperty
+                form = Form()
+                form.op = Operations.observeproperty
+                form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
                 form.href = f"{href}/change-event"
                 form.htv_methodName = "GET"
                 form.subprotocol = "sse"
@@ -212,11 +208,9 @@ class ThingDescriptionService:
                     continue
                 raise ex from None
             for http_method in http_methods:
-                form = affordance.retrieve_form(Operations.invokeaction)
-                if not form:
-                    form = Form()
-                    form.op = Operations.invokeaction
-                    form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
+                form = Form()
+                form.op = Operations.invokeaction
+                form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
                 form.href = href
                 form.htv_methodName = http_method
                 forms.append(form.json())
@@ -272,11 +266,9 @@ class ThingDescriptionService:
                     continue
                 raise ex from None
             for http_method in http_methods:
-                form = affordance.retrieve_form(Operations.subscribeevent)
-                if not form:
-                    form = Form()
-                    form.op = Operations.subscribeevent
-                    form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
+                form = Form()
+                form.op = Operations.subscribeevent
+                form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
                 form.href = href
                 form.htv_methodName = http_method
                 form.subprotocol = "sse"
