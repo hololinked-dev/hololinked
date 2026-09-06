@@ -1,5 +1,6 @@
 """HTTP(s) server exposing `Thing`s over HTTP 1.1, along with its application router."""
 
+import asyncio
 import socket
 import ssl
 import warnings
@@ -187,7 +188,7 @@ class HTTPServer(BaseProtocolServer):
         # event loop is buggy, so we remove it.
         ioloop.IOLoop.clear_current()
         # 2. sets async loop for a non-possessing thread as well
-        get_current_async_loop()
+        self.serving_loop = get_current_async_loop()  # type: asyncio.AbstractEventLoop
         # 3. every thing must already be bound to an eventloop
         for thing in self.things.values():
             if not thing.eventloop:
@@ -219,10 +220,7 @@ class HTTPServer(BaseProtocolServer):
         if attempt_async_stop:
             run_callable_somehow(self.async_stop())
             return
-        if not self.tornado_instance:
-            return
-        self.tornado_instance.stop()
-        run_callable_somehow(self.tornado_instance.close_all_connections())
+        run_callable_somehow(self.shutdown_tornado())
 
     async def async_stop(self) -> None:
         """
@@ -232,6 +230,15 @@ class HTTPServer(BaseProtocolServer):
         that invokes this method for the clients.
         """
         if not self.tornado_instance:
+            return
+        if self.serving_loop.is_running() and self.serving_loop is not asyncio.get_running_loop():
+            await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(self.shutdown_tornado(), self.serving_loop))
+            return
+        await self.shutdown_tornado()
+
+    async def shutdown_tornado(self) -> None:
+        """Stop listening and close every open connection."""
+        if not self.tornado_instance:  # type gaurd, not a real logic.
             return
         try:
             self.tornado_instance.stop()

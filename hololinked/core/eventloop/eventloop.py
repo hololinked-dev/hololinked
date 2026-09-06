@@ -529,7 +529,7 @@ class EventLoop:
             self.per_thing_schedulers[thing.id] = QueuedScheduler(thing, self)
         threads = dict()  # type: dict[int, threading.Thread]
         for thing in top_level_things:
-            thread = threading.Thread(target=self.run_things, args=([thing],))
+            thread = threading.Thread(target=self.run_things, args=([thing],), daemon=True)
             thread.start()
             threads[thread.ident] = thread
         try:
