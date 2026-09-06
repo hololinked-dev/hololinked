@@ -58,8 +58,8 @@ class BaseHandler(RequestHandler):
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
-        thing: Thing | None = None,
     ) -> None:
         """
         Set up the handler with the affordance it serves and the server's runtime configuration.
@@ -70,7 +70,7 @@ class BaseHandler(RequestHandler):
             dataclass representation of `Thing`'s exposed object that can quickly convert to a ZMQ Request object
         metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
-        thing: Thing | None
+        thing: Thing
             the `Thing` this handler serves
         """
         from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
@@ -85,7 +85,7 @@ class BaseHandler(RequestHandler):
             layer="controller",
             impl=self.__class__.__name__,
         )
-        self.thing = thing  # type: Thing | None
+        self.thing: Thing = thing
         self.thing_id = self.resource.thing_id
         self.allowed_clients = self.config.allowed_clients
         self.security_schemes = self.config.security_schemes
@@ -439,7 +439,7 @@ class RPCHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Methods", ", ".join(self.metadata.http_methods))
         self.finish()
 
-    async def write(self, reply: Reply) -> None:
+    async def write_reply(self, reply: Reply) -> None:
         """Write the event loop's reply onto the wire."""
         # only one payload reaches the client for now, no support for multipart # TODO
         if reply.preserialized_payload.value:
@@ -465,7 +465,14 @@ class RPCHandler(BaseHandler):
         operation: str
             operation to be performed on the Thing, like `readproperty`,
             `writeproperty`, `invokeaction`, `deleteproperty`
+
+        Raises
+        ------
+        RuntimeError
+            If the `Thing` is not served by an event loop
         """
+        if not self.thing.eventloop:  # type gaurd, not a real logic.
+            raise RuntimeError("Thing is not served by an event loop")
         try:
             scheduler_execution_context, thing_execution_context, local_execution_context, additional_payload = (
                 self.get_execution_parameters()
@@ -505,7 +512,7 @@ class RPCHandler(BaseHandler):
                     self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
                     return
                 self.set_status(200, "ok")
-                await self.write(reply)
+                await self.write_reply(reply)
         except ConnectionAbortedError as ex:
             self.set_status(503, f"lost connection to thing - {str(ex)}")
             # TODO handle reconnection
@@ -522,6 +529,8 @@ class RPCHandler(BaseHandler):
 
     async def handle_no_block_response(self) -> None:
         """Handles the no-block response for the noblock calls."""  # noqa: DOC501
+        if not self.thing.eventloop:  # type gaurd, not a real logic.
+            raise RuntimeError("Thing is not served by an event loop")
         future = None  # held only while this request owns the claim, so that `finally` can give it back
         message_id = None
         try:
@@ -540,7 +549,7 @@ class RPCHandler(BaseHandler):
                 self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
             else:
                 self.set_status(200, "ok")
-                await self.write(reply)
+                await self.write_reply(reply)
             future = None  # answered - the caller has no reason to come back with this message ID
         except KeyError as ex:
             # if the message id is not found, it means that the response was not received in time
@@ -560,7 +569,7 @@ class RPCHandler(BaseHandler):
             response_payload.serialize()
             self.write(response_payload.value)
         finally:
-            if future is not None:
+            if future is not None and message_id is not None:
                 # the operation is still running
                 self.thing.eventloop.pending_operations.add(self.config.server_id, message_id, future)
 
@@ -643,14 +652,14 @@ class RWMultiplePropertiesHandler(ActionHandler):
         resource: ActionAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
-        thing: Thing | None = None,
         **kwargs,
     ) -> None:
         """Set up the handler with the affordances that read and write multiple properties."""
         self.read_properties_resource = kwargs.get("read_properties_resource", None)
         self.write_properties_resource = kwargs.get("write_properties_resource", None)
-        return super().initialize(resource, config, logger, metadata, thing)
+        return super().initialize(resource, config, logger, thing, metadata)
 
     async def get(self) -> None:
         """Read multiple properties, or fetch the reply of an earlier no-block read."""
@@ -694,12 +703,21 @@ class EventHandler(BaseHandler):
         resource: InteractionAffordance | EventAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
-        thing: Thing | None = None,
     ) -> None:
-        """Set up the handler to stream events with a plain SSE data header."""
-        super().initialize(resource, config, logger, metadata, thing)
+        """
+        Set up the handler to stream events with a plain SSE data header.
+
+        Raises
+        ------
+        RuntimeError
+            If the `Thing` is not served by an event loop.
+        """
+        super().initialize(resource, config, logger, thing, metadata)
         self.data_header = b"data: %s\n\n"
+        if self.thing.eventloop is None:  # type gaurd, not a real logic
+            raise RuntimeError("Thing is not served by an event loop")
 
     def set_custom_default_headers(self) -> None:
         """
@@ -735,7 +753,9 @@ class EventHandler(BaseHandler):
         self.finish()
 
     async def handle_datastream(self) -> None:
-        """Called by GET method and handles the event publishing."""
+        """Called by GET method and handles the event publishing."""  # noqa: DOC501
+        if not self.thing.eventloop:  # type gaurd, not a real logic.
+            raise RuntimeError("Thing is not served by an event loop")
         try:
             subscription = EventSubscription(
                 self.thing.eventloop.event_bus,
@@ -777,11 +797,11 @@ class JPEGImageEventHandler(EventHandler):
         resource: InteractionAffordance | EventAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
-        thing: Thing | None = None,
     ) -> None:
         """Set up the handler to stream events with a base64 JPEG image SSE data header."""
-        super().initialize(resource, config, logger, metadata, thing)
+        super().initialize(resource, config, logger, thing, metadata)
         self.data_header = b"data:image/jpeg;base64,%s\n\n"
 
 
@@ -793,11 +813,11 @@ class PNGImageEventHandler(EventHandler):
         resource: InteractionAffordance | EventAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
-        thing: Thing | None = None,
     ) -> None:
         """Set up the handler to stream events with a base64 PNG image SSE data header."""
-        super().initialize(resource, config, logger, metadata, thing)
+        super().initialize(resource, config, logger, thing, metadata)
         self.data_header = b"data:image/png;base64,%s\n\n"
 
 
@@ -918,9 +938,9 @@ class ThingDescriptionHandler(BaseHandler):
         resource: InteractionAffordance | PropertyAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         owner_inst: Any = None,
         metadata: Any = None,
-        thing: Thing | None = None,
     ) -> None:
         """Set up the handler along with the service that generates the Thing Description."""
         super().initialize(

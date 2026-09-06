@@ -28,7 +28,7 @@ class TopicPublisher:
         resource: EventAffordance | PropertyAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
-        thing: Thing | None = None,
+        thing: Thing,
     ) -> None:
         """
         Initialize the publisher for one event or observable property.
@@ -43,7 +43,7 @@ class TopicPublisher:
             The runtime configuration for the `MQTTPublisher`
         logger: structlog.stdlib.BoundLogger
             The logger to use for logging messages
-        thing: Thing | None
+        thing: Thing
             the `Thing` whose event or property this publisher pushes
         """
         from .config import RuntimeConfig  # noqa: F401
@@ -53,7 +53,7 @@ class TopicPublisher:
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="controller", impl=self.__class__.__name__, topic=self.topic)
-        self.thing = thing  # type: Thing | None
+        self.thing: Thing = thing
         self.qos = self.config.qos
         self._stop_publishing = False
 
@@ -62,7 +62,9 @@ class TopicPublisher:
         self._stop_publishing = True
 
     async def publish(self):
-        """Publishes events to the MQTT broker in an infinite loop."""
+        """Publishes events to the MQTT broker in an infinite loop."""  # noqa: DOC501
+        if not self.thing.eventloop:  # type gaurd, not a real logic.
+            raise RuntimeError("Thing is not served by an event loop")
         subscription = EventSubscription(
             self.thing.eventloop.event_bus,
             f"{self.resource.thing_id}/{self.resource.name}",
