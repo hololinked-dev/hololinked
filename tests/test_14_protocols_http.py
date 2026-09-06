@@ -27,7 +27,6 @@ from hololinked.serializers import (
     MsgpackSerializer,
     PickleSerializer,
 )
-from hololinked.server import stop
 from hololinked.server.http import HTTPServer, RPCHandler
 from hololinked.server.security import (
     APIKeySecurity,
@@ -47,8 +46,10 @@ from hololinked.utils import uuid_hex
 
 
 try:
+    from .conftest import stop_all_runs
     from .things import OceanOpticsSpectrometer
 except ImportError:
+    from conftest import stop_all_runs
     from things import OceanOpticsSpectrometer
 
 
@@ -78,9 +79,11 @@ def port() -> int:
 def server(port) -> Generator[HTTPServer, None, None]:
     server = HTTPServer(address="127.0.0.1", port=port)
     server.run(forked=True, print_welcome_message=False)
-    wait_until_server_ready(port=port)
-    yield server
-    stop()
+    try:
+        wait_until_server_ready(port=port)
+        yield server
+    finally:
+        stop_all_runs()
 
 
 @pytest.fixture(scope="function")
@@ -94,9 +97,11 @@ def thing(port: int) -> Generator[OceanOpticsSpectrometer, None, None]:
         print_welcome_message=False,
         config=dict(cors=True),
     )
-    wait_until_server_ready(port=port)
-    yield thing
-    stop()
+    try:
+        wait_until_server_ready(port=port)
+        yield thing
+    finally:
+        stop_all_runs()
 
 
 @contextmanager
@@ -122,7 +127,7 @@ def running_thing(
     try:
         yield thing
     finally:
-        stop()
+        stop_all_runs()
 
 
 @pytest.fixture(scope="function")
@@ -194,20 +199,24 @@ def sse_stream(url: str, chunk_size: int = 2048, **kwargs):
 async def test_01_init_run_and_stop(port: int):
     server = HTTPServer(address="127.0.0.1", port=port)
     server.run(forked=True, print_welcome_message=False)
-    wait_until_server_ready(port=port)
-    await server.async_stop()
-    stop()
+    try:
+        wait_until_server_ready(port=port)
+        await server.async_stop()
+    finally:
+        stop_all_runs()
     time.sleep(2)
 
     # stop remotely
     server.run(forked=True, print_welcome_message=False)
-    wait_until_server_ready(port=port)
-    time.sleep(2)
-    response = requests.post(f"{hostname_prefix}:{port}{stop_endpoint}")
-    assert response.status_code in [200, 201, 202, 204]
-    time.sleep(2)
-    await server.async_stop()
-    stop()
+    try:
+        wait_until_server_ready(port=port)
+        time.sleep(2)
+        response = requests.post(f"{hostname_prefix}:{port}{stop_endpoint}")
+        assert response.status_code in [200, 201, 202, 204]
+        time.sleep(2)
+        await server.async_stop()
+    finally:
+        stop_all_runs()
 
 
 def test_02_add_interaction_affordance(server: HTTPServer):

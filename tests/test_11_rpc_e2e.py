@@ -11,9 +11,11 @@ from hololinked.utils import uuid_hex
 
 
 try:
+    from .conftest import stop_all_runs
     from .things import TestThing
     from .utils import fake
 except ImportError:
+    from conftest import stop_all_runs
     from things import TestThing
     from utils import fake
 
@@ -28,8 +30,10 @@ def thing(access_point) -> Generator[TestThing, None, None]:
     thing_id = f"test-thing-{uuid_hex()}"
     thing = TestThing(id=thing_id)
     thing.run_with_zmq_server(forked=True, access_points=[access_point])
-    yield thing
-    thing.eventloop.stop()
+    try:
+        yield thing
+    finally:
+        stop_all_runs()
 
 
 @pytest.fixture(scope="class")

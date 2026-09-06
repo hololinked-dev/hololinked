@@ -15,17 +15,19 @@ from hololinked.client import ClientFactory, ObjectProxy
 from hololinked.client.abstractions import SSE
 from hololinked.server.http.server import HTTPServer
 from hololinked.server.mqtt.server import MQTTPublisher
-from hololinked.server.server import run, stop
+from hololinked.server.server import run
 from hololinked.utils import uuid_hex
 
 
 try:
+    from tests.conftest import stop_all_runs
     from tests.test_14_protocols_http import (  # noqa: F401
         hostname_prefix,
         wait_until_server_ready,
     )
     from tests.things import TestThing
 except ImportError:
+    from conftest import stop_all_runs
     from test_14_protocols_http import (  # noqa: F401
         hostname_prefix,
         wait_until_server_ready,
@@ -128,9 +130,11 @@ def thing(
     http_server.add_thing(thing)
     mqtt_publisher.add_thing(thing)
     run(http_server, mqtt_publisher, forked=True, print_welcome_message=False)
-    wait_until_server_ready(port=http_port)
-    yield thing
-    stop()
+    try:
+        wait_until_server_ready(port=http_port)
+        yield thing
+    finally:
+        stop_all_runs()
 
 
 @pytest.fixture(scope="function")

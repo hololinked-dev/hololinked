@@ -12,6 +12,13 @@ import zmq.asyncio
 from hololinked import Serializers
 from hololinked.config import global_config
 from hololinked.server import stop
+from hololinked.server.server import _runs
+
+
+def stop_all_runs() -> None:
+    """Stop every run."""
+    for run_id in list(_runs):
+        stop(run_id)
 
 
 @dataclass
@@ -54,7 +61,7 @@ def setup_test_environment():
     global_config.LOG_LEVEL = logging.ERROR + 10
     global_config.setup()
     yield
-    stop()
+    stop_all_runs()
     # Reset serializers after each test
     Serializers().reset()
     global_config.ZMQ_CONTEXT.destroy(linger=0)
