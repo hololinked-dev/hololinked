@@ -36,7 +36,7 @@ from hololinked.core.exceptions import BreakInnerLoop
 from hololinked.core.logger import LogHistoryHandler
 from hololinked.core.property import Property
 from hololinked.core.thing import Thing
-from hololinked.core.utils import CrossLoopEvent, get_all_sub_things_recusively
+from hololinked.core.utils import CrossLoopEvent
 from hololinked.utils import (
     format_exception_as_json,
     get_current_async_loop,
@@ -109,7 +109,7 @@ class EventLoop:
         Parameters
         ----------
         thing: Thing
-            the `Thing` to serve, along with its sub-things
+            the `Thing` to serve
 
         Raises
         ------
@@ -122,18 +122,16 @@ class EventLoop:
                 f"cannot add thing {thing.id} while the event loop is running - add every thing before run()"
             )
         # setup scheduling requirements
-        all_things: list[Thing] = get_all_sub_things_recusively(thing)
-        for instance in all_things:
-            instance.eventloop = self
-            self.things[instance.id] = instance
-            for event in instance.events.descriptors.values():
-                self.event_bus.register(event, instance)
-            for action in instance.actions.descriptors.values():
-                if action.synchronous:
-                    continue  # QueuedScheduler, which is the default and is shared per Thing
-                key = qualified_operation_key(instance.id, action.name, Operations.invokeaction)
-                self.per_job_scheduler_types[key] = AsyncScheduler if action.iscoroutine else ThreadedScheduler
-            # properties need not dealt yet, but may be in future)
+        thing.eventloop = self
+        self.things[thing.id] = thing
+        for event in thing.events.descriptors.values():
+            self.event_bus.register(event, thing)
+        for action in thing.actions.descriptors.values():
+            if action.synchronous:
+                continue  # QueuedScheduler, which is the default and is shared per Thing
+            key = qualified_operation_key(thing.id, action.name, Operations.invokeaction)
+            self.per_job_scheduler_types[key] = AsyncScheduler if action.iscoroutine else ThreadedScheduler
+        # properties need not dealt yet, but may be in future)
 
     def add_things(self, *things: Thing) -> None:
         """Adds multiple things to serve."""
@@ -522,13 +520,10 @@ class EventLoop:
         self._run = True
         self._loop = get_current_async_loop()
         self.logger.info("starting event loop")
-        # only the `Thing`s added directly get a scheduler and a thread; a sub-thing runs within
-        # its owner's
-        top_level_things = [thing for thing in self.things.values() if not thing._owners]
-        for thing in top_level_things:
+        for thing in self.things.values():
             self.per_thing_schedulers[thing.id] = QueuedScheduler(thing, self)
         threads = dict()  # type: dict[int, threading.Thread]
-        for thing in top_level_things:
+        for thing in self.things.values():
             thread = threading.Thread(target=self.run_things, args=([thing],), daemon=True)
             thread.start()
             threads[thread.ident] = thread

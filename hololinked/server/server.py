@@ -24,7 +24,7 @@ from ..constants import ZMQ_TRANSPORTS
 from ..core import Thing
 from ..core.eventloop import EventLoop
 from ..core.properties import ClassSelector, Integer, TypedDict
-from ..core.utils import CrossLoopEvent, get_all_sub_things_recusively
+from ..core.utils import CrossLoopEvent
 from ..param import Parameterized
 from ..param.parameters import String
 
@@ -62,9 +62,13 @@ class BaseProtocolServer(Parameterized):
             self.things = dict()
 
     def add_thing(self, thing: Thing) -> None:
-        """Adds a thing to the things being served, along with its sub-things."""
-        for instance in get_all_sub_things_recusively(thing):
-            self.things[instance.id] = instance
+        """
+        Adds a thing to the things being served.
+
+        Sub-things are not served - see `EventLoop.add_thing`, which does not register them
+        either.
+        """
+        self.things[thing.id] = thing
 
     def add_things(self, *things: Thing) -> None:
         """Adds multiple things to be served."""
