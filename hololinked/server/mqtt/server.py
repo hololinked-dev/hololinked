@@ -160,11 +160,11 @@ class MQTTPublisher(BaseProtocolServer):
         td_publisher = self.config.thing_description_publisher(
             client=self.client,
             logger=self.logger,
-            thing_model=TD,
+            thing=thing,
             config=self.config,
         )
         self.publishers[td_publisher.topic] = td_publisher
-        loop.create_task(td_publisher.publish(TD))
+        loop.create_task(td_publisher.publish())
 
     async def setup(self) -> None:
         """Setup MQTT publishers per `Thing` post connection to broker."""

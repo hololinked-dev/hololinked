@@ -123,7 +123,7 @@ class ThingDescriptionPublisher:
         client: aiomqtt.Client,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
-        thing_model: dict[str, Any],
+        thing: Thing,
     ) -> None:
         """
         Initialize the Thing Description publisher.
@@ -136,25 +136,27 @@ class ThingDescriptionPublisher:
             The runtime configuration for the MQTT publisher
         logger: structlog.stdlib.BoundLogger
             The logger to use for logging messages
-        thing_model: dict[str, Any]
-            The Thing Model of the `Thing` whose description is being published
+        thing: Thing
+            The `Thing` whose description is being published
         """
         from .config import RuntimeConfig  # noqa: F401
 
         self.client = client
-        self.topic = f"{thing_model['id']}/thing-description"
+        self.thing = thing  # type: Thing
+        self.topic = f"{thing.id}/thing-description"
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
         self.thing_description = self.config.thing_description_service(
             hostname=self.client._hostname,
             port=self.client._port,
             logger=logger,
+            thing=thing,
             ssl=self.client._client._ssl_context is not None,
         )
 
-    async def publish(self, thing_model: dict[str, Any]) -> None:
+    async def publish(self) -> None:
         """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True."""
-        TD = await self.thing_description.generate(thing_model)
+        TD = await self.thing_description.generate(ignore_errors=True)
 
         properties = Properties(PacketTypes.PUBLISH)
         properties.ContentType = "application/json"
