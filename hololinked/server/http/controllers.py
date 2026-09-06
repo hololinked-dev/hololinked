@@ -290,7 +290,10 @@ class BaseHandler(RequestHandler):
                 SerializableNone,
             )
         for key, value in self.request.query_arguments.items():
-            if len(value) == 1:
+            if key == "messageID":
+                # not a JSON value - decoded, a hex ID like `1765e270` becomes a float
+                arguments[key] = value[0].decode("utf-8")
+            elif len(value) == 1:
                 try:
                     arguments[key] = Serializers.json.loads(value[0])
                 except MsgspecJSONDecodeError:
