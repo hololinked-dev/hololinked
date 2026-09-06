@@ -2,14 +2,16 @@
 
 from typing import TYPE_CHECKING
 
+from hololinked.utils import lazy_module_getattr
+
 
 try:
     import zmq  # noqa: F401
-except ImportError:
+except ImportError as ex:
     raise ImportError(
         "Please install pyzmq to use ZMQ server or client - `pip install pyzmq`."
         + "Version should be less than 26.2 to support IPC in windows machines."
-    )
+    ) from ex
 
 from .brokers import (  # noqa: F401
     AsyncEventConsumer,
@@ -23,18 +25,10 @@ from .brokers import (  # noqa: F401
 )
 
 
-_lazy = {"ZMQServer": (".server", "ZMQServer")}
+_lazy: dict[str, str] = {"ZMQServer": ".server"}
+"""Name of an export mapped to the module it is imported from, resolved lazily."""
 
-
-def __getattr__(name: str):
-    if name in _lazy:
-        import importlib
-
-        module_path, attr = _lazy[name]
-        value = getattr(importlib.import_module(module_path, package=__name__), attr)
-        globals()[name] = value  # cache so subsequent access skips __getattr__
-        return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__getattr__ = lazy_module_getattr(__name__, _lazy, globals())
 
 
 if TYPE_CHECKING:

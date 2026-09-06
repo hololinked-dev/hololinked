@@ -192,7 +192,7 @@ class HTTPServer(BaseProtocolServer):
         for thing in self.things:
             if not thing.eventloop:
                 raise ValueError(f"You need to expose thing {thing.id} via an EventLoop before trying to serve it")
-        # 4. finally also get a reference of the same event loop from tornado
+        # 4. finally also get a reference of the event loop from tornado
         self.tornado_event_loop = ioloop.IOLoop.current()
 
         self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)  # type: TornadoHTTP1Server

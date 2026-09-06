@@ -8,7 +8,6 @@ import threading
 import warnings
 
 from collections.abc import Sequence
-from functools import partial
 from io import StringIO
 from types import SimpleNamespace  # noqa: F401
 from typing import Any
@@ -128,20 +127,6 @@ class BaseProtocolServer(Parameterized):
         """
         raise NotImplementedError("Not implemented for this protocol")
 
-    def extra_coroutines(self) -> list[Any]:
-        """
-        Coroutines this protocol needs running on the event loop's own asyncio loop.
-
-        Collected before the loop starts, for a protocol whose listeners have to share the loop that
-        resolves their replies. Most protocols run on a loop of their own and need none.
-
-        Returns
-        -------
-        list[Coroutine]
-            empty unless the protocol overrides this
-        """
-        return []
-
     @forkable
     def run(self, forked: bool = False, print_welcome_message: bool = True) -> None:
         """
@@ -183,18 +168,26 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
         whether to run in a forked thread
     print_welcome_message: bool, default True
         whether to print a welcome message on startup, like the ports and access points
+
+    Raises
+    ------
+    RuntimeError
+        if a server cannot start - each protocol decides what it needs
     """
     loop = get_current_async_loop()  # initialize an event loop if it does not exist
 
     things = [thing for server in servers if server.things is not None for thing in server.things]
     things = list(set(things))  # remove duplicates
 
-    # one event loop runs every Thing, and each protocol is a border in front of it - none of them
-    # owns it. A protocol whose listeners have to share that loop hands them over here.
-    eventloop = EventLoop(things=things)
-    extra_coroutines = [coroutine for server in servers for coroutine in server.extra_coroutines()]
+    # a Thing brings the event loop it is already bound to, and each distinct one gets a thread of
+    # its own - no protocol runs one. Things not bound to any loop yet share a new one.
+    eventloops = list(dict.fromkeys(thing.eventloop for thing in things if thing.eventloop is not None))
+    unbound = [thing for thing in things if thing.eventloop is None]
+    if unbound or not eventloops:
+        eventloops.append(EventLoop(things=unbound))
 
-    threading.Thread(target=partial(eventloop.run, extra_coroutines=extra_coroutines)).start()
+    for eventloop in eventloops:
+        threading.Thread(target=eventloop.run).start()
 
     shutdown_event = asyncio.Event()
     run.shutdown_event = shutdown_event
@@ -211,7 +204,8 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
         _print_welcome_message(servers)
 
     loop.run_until_complete(shutdown())
-    eventloop.stop()
+    for eventloop in eventloops:
+        eventloop.stop()
     cancel_pending_tasks_in_current_loop()
 
 

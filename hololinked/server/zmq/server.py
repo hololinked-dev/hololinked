@@ -223,17 +223,6 @@ class ZMQServer(BaseProtocolServer):
         if thing not in self.things:
             self.things.append(thing)
 
-    def extra_coroutines(self) -> list[Any]:
-        """
-        The request listeners, to be run on the event loop's own asyncio loop.
-
-        Returns
-        -------
-        list[Coroutine]
-            one polling coroutine per served transport
-        """
-        return [self.recv_requests_and_dispatch_jobs(server) for server in self.transport_servers]
-
     async def recv_requests_and_dispatch_jobs(self, server: AsyncZMQServer) -> None:
         """
         Poll a ZMQ socket, hand every request to the event loop and write each reply back.
@@ -366,28 +355,6 @@ class ZMQServer(BaseProtocolServer):
             )
             return Reply(payload, preserialized_payload, ReplyKind.ERROR)
 
-    def run(self) -> None:
-        """
-        Start & run the server, and the event loop its `Thing`s belong to. This method is blocking.
-
-        The request listeners are handed to the event loop so they run on the same async loop as the
-        drain loops that resolve their replies. Call `stop()` (threadsafe) to stop.
-
-        Raises
-        ------
-        RuntimeError
-            if the served `Thing`s are not bound to an event loop
-        """
-        self.logger.info("starting ZMQ server")
-        # the loop this thread is given is the one `EventLoop.run()` picks up below, and setup has
-        # nothing to await - it is a coroutine only because the protocol lifecycle says so
-        get_current_async_loop().run_until_complete(self.setup())
-        try:
-            self.eventloop.run(extra_coroutines=self.extra_coroutines())
-        finally:
-            self.stop_polling()
-        self.logger.info("ZMQ server stopped")
-
     def stop_polling(self) -> None:
         """Stop every request listener. Registered with the event loop, so stopping it stops these too."""
         for server in self.transport_servers:
@@ -437,13 +404,11 @@ class ZMQServer(BaseProtocolServer):
         return paths
 
     async def start(self) -> None:
-        """
-        Bind to the event loop its `Thing`s run on, without blocking.
-
-        The request listeners are not started here - they are coroutines the event loop runs, handed
-        over through `extra_coroutines()` before the loop starts. Use `run()` to start both at once.
-        """
+        """Start polling every served transport for requests. Returns without blocking."""
         await self.setup()
+        loop = get_current_async_loop()
+        for server in self.transport_servers:
+            loop.create_task(self.recv_requests_and_dispatch_jobs(server))
 
     async def setup(self) -> None:
         """

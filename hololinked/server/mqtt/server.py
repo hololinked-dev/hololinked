@@ -100,21 +100,10 @@ class MQTTPublisher(BaseProtocolServer):
         All events are dispatched to their own async tasks. This method returns and
         creates side-effects only & does not block. Use the `run()` method instead for a blocking call.
         """
-        self.client = aiomqtt.Client(
-            hostname=self.hostname,
-            port=self.port,
-            username=self.username,
-            password=self.password,
-            tls_context=self.ssl_context,
-        )
-        try:
-            await self.client.__aenter__()
-            endpoint = f"{self.hostname}{f':{self.port}' if self.port else ''}"
-            self.logger.info(f"Connected to MQTT broker at {endpoint}")
-        except aiomqtt.MqttReentrantError:
-            pass
-        # better to do later
         await self.setup()
+        loop = get_current_async_loop()
+        for thing in self.things:
+            loop.create_task(self.start_publishers(thing))
 
     async def start_publishers(self, thing: CoreThing) -> None:
         """
@@ -168,9 +157,19 @@ class MQTTPublisher(BaseProtocolServer):
 
     async def setup(self) -> None:
         """Setup MQTT publishers per `Thing` post connection to broker."""
-        loop = get_current_async_loop()
-        for thing in self.things:
-            loop.create_task(self.start_publishers(thing))
+        self.client = aiomqtt.Client(
+            hostname=self.hostname,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+            tls_context=self.ssl_context,
+        )
+        try:
+            await self.client.__aenter__()
+            endpoint = f"{self.hostname}{f':{self.port}' if self.port else ''}"
+            self.logger.info(f"Connected to MQTT broker at {endpoint}")
+        except aiomqtt.MqttReentrantError:
+            pass
 
     def stop(self):
         """Stop publishing, the client is not closed automatically."""
