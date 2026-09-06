@@ -1,7 +1,7 @@
 import pytest
 
+from hololinked.core.eventloop.pubsub import EventBus
 from hololinked.core.events import Event, EventDispatcher
-from hololinked.core.zmq.brokers import EventPublisher
 from hololinked.metadata.td.interaction_affordance import EventAffordance
 from hololinked.utils import uuid_hex
 
@@ -17,12 +17,12 @@ def validate_event_dispatcher(descriptor: Event, dispatcher: EventDispatcher, th
     assert isinstance(dispatcher, EventDispatcher)
     # dispatcher has the owner instance
     assert dispatcher._owner_inst is thing
-    # event publisher and RPC server presence depends on whether the thing has been started or not
+    # event bus and RPC server presence depends on whether the thing has been started or not
     assert (
-        thing.rpc_server and thing.rpc_server.event_publisher and isinstance(dispatcher.publisher, EventPublisher)
+        thing.eventloop and thing.eventloop.event_bus and isinstance(dispatcher.publisher, EventBus)
     ) or dispatcher.publisher is None
     # unique identifier is correctly formed, qualified by the thing ID
-    assert dispatcher._unique_identifier == f"{thing._qualified_id}/{descriptor.name}"
+    assert dispatcher.unique_identifier == f"{thing._qualified_id}/{descriptor.name}"
 
 
 def test_01_pure_events():

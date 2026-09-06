@@ -22,13 +22,6 @@ from hololinked.client.security import APIKeySecurity as ClientAPIKeySecurity
 from hololinked.client.security import OAuthDirectAccessGrant
 from hololinked.config import global_config
 from hololinked.core.interfaces import BaseSerializer
-from hololinked.core.zmq.message import (
-    PreserializedData,
-    SerializableData,
-    ServerExecutionContext,
-    ThingExecutionContext,
-    default_server_execution_context,
-)
 from hololinked.serializers import (
     JSONSerializer,
     MsgpackSerializer,
@@ -42,6 +35,13 @@ from hololinked.server.security import (
     BcryptBasicSecurity,
     OIDCSecurity,
     Security,
+)
+from hololinked.server.zmq.message import (
+    PreserializedData,
+    SchedulerExecutionContext,
+    SerializableData,
+    ThingExecutionContext,
+    default_scheduler_execution_context,
 )
 from hololinked.utils import uuid_hex
 
@@ -237,7 +237,7 @@ class TestableRPCHandler(RPCHandler):
 
     @dataclass
     class LatestRequestInfo:
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
         thing_execution_context: ThingExecutionContext | dict[str, Any]
         payload: SerializableData
         preserialized_payload: PreserializedData
@@ -351,28 +351,28 @@ def test_05_handlers(
     # test ThingExecutionContext
     assert isinstance(TestableRPCHandler.latest_request_info.thing_execution_context, ThingExecutionContext)
     if "fetchExecutionLogs" in path:
-        assert TestableRPCHandler.latest_request_info.thing_execution_context.fetchExecutionLogs
+        assert TestableRPCHandler.latest_request_info.thing_execution_context.fetch_execution_logs
     else:
-        assert not TestableRPCHandler.latest_request_info.thing_execution_context.fetchExecutionLogs
-    # test ServerExecutionContext
-    assert isinstance(TestableRPCHandler.latest_request_info.server_execution_context, ServerExecutionContext)
+        assert not TestableRPCHandler.latest_request_info.thing_execution_context.fetch_execution_logs
+    # test SchedulerExecutionContext
+    assert isinstance(TestableRPCHandler.latest_request_info.server_execution_context, SchedulerExecutionContext)
     if "oneway" in path:
         assert TestableRPCHandler.latest_request_info.server_execution_context.oneway
     else:
         assert not TestableRPCHandler.latest_request_info.server_execution_context.oneway
     if "invokationTimeout" in path:
-        assert TestableRPCHandler.latest_request_info.server_execution_context.invokationTimeout == 100
+        assert TestableRPCHandler.latest_request_info.server_execution_context.invokation_timeout == 100
     else:
         assert (
-            TestableRPCHandler.latest_request_info.server_execution_context.invokationTimeout
-            == default_server_execution_context.invokationTimeout
+            TestableRPCHandler.latest_request_info.server_execution_context.invokation_timeout
+            == default_scheduler_execution_context.invokation_timeout
         )
     if "executionTimeout" in path:
-        assert TestableRPCHandler.latest_request_info.server_execution_context.executionTimeout == 120
+        assert TestableRPCHandler.latest_request_info.server_execution_context.execution_timeout == 120
     else:
         assert (
-            TestableRPCHandler.latest_request_info.server_execution_context.executionTimeout
-            == default_server_execution_context.executionTimeout
+            TestableRPCHandler.latest_request_info.server_execution_context.execution_timeout
+            == default_scheduler_execution_context.execution_timeout
         )
     assert TestableRPCHandler.latest_request_info.payload.deserialize() == body
 

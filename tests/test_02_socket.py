@@ -3,7 +3,7 @@ import zmq.asyncio
 
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
-from hololinked.core.zmq.brokers import BaseZMQ
+from hololinked.server.zmq.brokers import BaseZMQ
 
 
 def test_01_socket_creation_defaults():

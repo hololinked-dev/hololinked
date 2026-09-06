@@ -33,17 +33,6 @@ class TestThing(Thing):
     # ----------- Actions --------------
 
     @action()
-    def get_transports(self):
-        transports = []
-        if self.rpc_server.req_rep_server and self.rpc_server.req_rep_server.socket_address.startswith("inproc://"):
-            transports.append("INPROC")
-        if self.rpc_server.ipc_server and self.rpc_server.ipc_server.socket_address.startswith("ipc://"):
-            transports.append("IPC")
-        if self.rpc_server.tcp_server and self.rpc_server.tcp_server.socket_address.startswith("tcp://"):
-            transports.append("TCP")
-        return transports
-
-    @action()
     def action_echo(self, value):
         # print("action_echo called with value: ", value)
         return value
@@ -674,10 +663,6 @@ test_thing_TD = {
     "title": "TestThing",
     "id": "test-thing",
     "actions": {
-        "get_transports": {
-            "title": "get_transports",
-            "description": "returns available transports",
-        },
         "action_echo": {
             "title": "action_echo",
             "description": "returns value as it is to the client",

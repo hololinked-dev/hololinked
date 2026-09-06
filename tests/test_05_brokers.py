@@ -8,13 +8,13 @@ from typing import Generator
 import pytest
 
 from hololinked.core.exceptions import BreakLoop
-from hololinked.core.zmq.brokers import (
+from hololinked.server.zmq.brokers import (
     AsyncZMQClient,
     AsyncZMQServer,
     MessageMappedZMQClientPool,
     SyncZMQClient,
 )
-from hololinked.core.zmq.message import (
+from hololinked.server.zmq.message import (
     ERROR,
     EXIT,
     HANDSHAKE,

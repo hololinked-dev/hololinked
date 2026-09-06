@@ -29,7 +29,7 @@ def thing(access_point) -> Generator[TestThing, None, None]:
     thing = TestThing(id=thing_id)
     thing.run_with_zmq_server(forked=True, access_points=[access_point])
     yield thing
-    thing.rpc_server.stop()
+    thing.eventloop.stop()
 
 
 @pytest.fixture(scope="class")
