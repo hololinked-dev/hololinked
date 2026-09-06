@@ -43,11 +43,11 @@ from .message import (
     PreserializedEmptyByte,
     RequestMessage,
     ResponseMessage,
+    SchedulerExecutionContext,
     SerializableData,
     SerializableNone,
-    ServerExecutionContext,
     ThingExecutionContext,
-    default_server_execution_context,
+    default_scheduler_execution_context,
     default_thing_execution_context,
 )
 
@@ -1167,7 +1167,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
@@ -1185,7 +1185,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -1285,7 +1285,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> ResponseMessage:
         """
@@ -1303,7 +1303,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -1506,7 +1506,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
@@ -1524,7 +1524,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -1624,7 +1624,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> ResponseMessage:
         """
@@ -1642,7 +1642,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -2030,7 +2030,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
@@ -2048,7 +2048,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -2131,7 +2131,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> ResponseMessage:
         """
@@ -2149,7 +2149,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -2190,7 +2190,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
         thing_ids: list[str] | None = None,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> dict[str, ResponseMessage]:
         if not thing_ids:
@@ -2221,7 +2221,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> dict[str, ResponseMessage]:
         """
@@ -2317,13 +2317,7 @@ class AsyncioEventPool:
 
 
 class EventPublisher(BaseZMQServer, BaseSyncZMQ):
-    """
-    Puts events published on an `EventBus` onto a ZMQ PUB socket. Implements PUB-SUB pattern.
-
-    Subscribe `publish` to an `EventBus` and this becomes one of the protocols an event fans out to.
-    It keeps no registry of its own - the bus decides what may be published, and has already checked
-    by the time `publish` is called.
-    """
+    """Event publisher for broadcasting messages to all connected clients. Implements PUB-SUB pattern."""
 
     _standard_address_suffix = "/event-publisher"
     _standard_address_suffix_filename_replacement = "event-publisher"
@@ -2361,30 +2355,30 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
     def publish(self, event, data: Any) -> None:
         """
-        Encode one event and put it on the PUB socket. Meant to be subscribed to an `EventBus`.
+        Encode one event and put it on the PUB socket.
 
         Parameters
         ----------
-        event: `EventDispatcher`
-            the event being published
+        event: `RegisteredEvent`
+            the event being published, as the bus registered it
         data: Any
             its payload, unencoded. `bytes` bypass serialization and travel as the preserialized frame.
         """
         # uncomment for type definitions
-        # from ...core.events import EventDispatcher
-        # assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
+        # from ...core.eventloop import RegisteredEvent
+        # assert isinstance(event, RegisteredEvent), "event must be an instance of RegisteredEvent"
 
         try:
             self._send_lock.acquire()
             serializer = Serializers.for_object(
-                event._owner_inst.id,
-                event._owner_inst.__class__.__name__,
-                event._descriptor.name,
+                event.owner.id,
+                event.owner.__class__.__name__,
+                event.descriptor.name,
             )
             content_type_if_no_serializer = Serializers.get_content_type_for_object(
-                event._owner_inst.id,
-                event._owner_inst.__class__.__name__,
-                event._descriptor.name,
+                event.owner.id,
+                event.owner.__class__.__name__,
+                event.descriptor.name,
             )
             if not isinstance(data, bytes):
                 payload = SerializableData(data, serializer=serializer)
@@ -2394,13 +2388,13 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                 preserialized_payload = PreserializedData(data, content_type=content_type_if_no_serializer)
 
             event_message = EventMessage.craft_from_arguments(
-                event._unique_identifier,
+                event.unique_identifier,
                 self.id,
                 payload=payload,
                 preserialized_payload=preserialized_payload,
             )
             self.socket.send_multipart(event_message.byte_array)
-            self.logger.debug(f"published event with unique identifier {event._unique_identifier}")
+            self.logger.debug(f"published event with unique identifier {event.unique_identifier}")
         finally:
             try:
                 self._send_lock.release()

@@ -23,7 +23,7 @@ from .brokers import (  # noqa: F401
 )
 
 
-_lazy = {"RPCServer": (".server", "RPCServer"), "ZMQServer": (".server", "ZMQServer")}
+_lazy = {"ZMQServer": (".server", "ZMQServer")}
 
 
 def __getattr__(name: str):
@@ -38,5 +38,4 @@ def __getattr__(name: str):
 
 
 if TYPE_CHECKING:
-    from .server import RPCServer as RPCServer
     from .server import ZMQServer as ZMQServer

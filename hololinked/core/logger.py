@@ -312,7 +312,7 @@ class LogHistoryHandler(logging.Handler):
     Log history handler.
 
     Add and remove this handler at specific points to hold specific logs that are generated
-    between those points. Currently used by execution context within `RPCServer` where one can fetch the
+    between those points. Currently used by execution context within the event loop where one can fetch the
     execution logs that were collected during a specific operation.
     """
 

@@ -8,6 +8,7 @@ import threading
 import warnings
 
 from collections.abc import Sequence
+from functools import partial
 from io import StringIO
 from types import SimpleNamespace  # noqa: F401
 from typing import Any
@@ -127,6 +128,20 @@ class BaseProtocolServer(Parameterized):
         """
         raise NotImplementedError("Not implemented for this protocol")
 
+    def extra_coroutines(self) -> list[Any]:
+        """
+        Coroutines this protocol needs running on the event loop's own asyncio loop.
+
+        Collected before the loop starts, for a protocol whose listeners have to share the loop that
+        resolves their replies. Most protocols run on a loop of their own and need none.
+
+        Returns
+        -------
+        list[Coroutine]
+            empty unless the protocol overrides this
+        """
+        return []
+
     @forkable
     def run(self, forked: bool = False, print_welcome_message: bool = True) -> None:
         """
@@ -155,26 +170,6 @@ class BaseProtocolServer(Parameterized):
         raise NotImplementedError("Not implemented for this protocol")
 
 
-def _is_zmq_server(server: BaseProtocolServer) -> bool:
-    """
-    Whether a server is the ZMQ one, without importing ZMQ to find out.
-
-    `pyzmq` is optional, so asking `isinstance(server, ZMQServer)` would make every deployment pay
-    for a transport it may not have installed.
-
-    Parameters
-    ----------
-    server: BaseProtocolServer
-        the server to test
-
-    Returns
-    -------
-    bool
-        `True` if it is a `ZMQServer` or one of its subclasses
-    """
-    return any(cls.__module__ == "hololinked.server.zmq.server" for cls in type(server).__mro__)
-
-
 @forkable
 def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_message: bool = True) -> None:
     """
@@ -188,34 +183,18 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
         whether to run in a forked thread
     print_welcome_message: bool, default True
         whether to print a welcome message on startup, like the ports and access points
-
-    Raises
-    ------
-    ValueError
-        if more than one `ZMQServer` or `RPCServer` is given - add all your `Thing`s to one instance
     """
     loop = get_current_async_loop()  # initialize an event loop if it does not exist
 
     things = [thing for server in servers if server.things is not None for thing in server.things]
     things = list(set(things))  # remove duplicates
 
-    zmq_servers = [server for server in servers if _is_zmq_server(server)]
+    # one event loop runs every Thing, and each protocol is a border in front of it - none of them
+    # owns it. A protocol whose listeners have to share that loop hands them over here.
+    eventloop = EventLoop(things=things)
+    extra_coroutines = [coroutine for server in servers for coroutine in server.extra_coroutines()]
 
-    if len(zmq_servers) > 1:
-        raise ValueError(
-            "Only one ZMQServer or RPCServer instance to be run at a time, "
-            + "please add all your things to one instance"
-        )
-    elif len(zmq_servers) == 1:
-        # the ZMQ server owns an event loop of its own, and every other protocol shares it
-        eventloop_owner = zmq_servers[0]
-        eventloop = eventloop_owner.eventloop  # ty: ignore[unresolved-attribute]  # _is_zmq_server() decided this
-    else:
-        # nobody asked for ZMQ, so there is no reason to create any of it
-        eventloop_owner = None
-        eventloop = EventLoop(things=things)
-
-    threading.Thread(target=(eventloop_owner or eventloop).run).start()
+    threading.Thread(target=partial(eventloop.run, extra_coroutines=extra_coroutines)).start()
 
     shutdown_event = asyncio.Event()
     run.shutdown_event = shutdown_event
@@ -226,8 +205,6 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
 
     loop = get_current_async_loop()
     for server in servers:
-        if server is eventloop_owner:
-            continue
         loop.create_task(server.start())
 
     if print_welcome_message:
@@ -307,8 +284,6 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
                 zmq_access_points = [protocol_params["access_points"]]
             else:
                 zmq_access_points = list(zmq_access_points)
-            if not any(isinstance(ap, str) and ap.upper().startswith("INPROC") for ap in zmq_access_points):
-                zmq_access_points.append("INPROC")
             protocol_params["access_points"] = zmq_access_points
 
             servers.append(ZMQServer(id=id, **protocol_params))

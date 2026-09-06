@@ -176,10 +176,8 @@ class HTTPServer(BaseProtocolServer):
 
         Raises
         ------
-        RuntimeError
-            if the ZMQ client pool was not created
         ValueError
-            if a `Thing` to be served is not exposed through an `RPCServer`
+            if a `Thing` to be served is not bound to an event loop
         """
         # Add only those code here that needs to be redone always before restarting the server.
         # One time creation attributes/activities must be in init

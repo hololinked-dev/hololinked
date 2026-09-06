@@ -12,11 +12,11 @@ from hololinked.param.parameters import Integer
 from ...core.eventloop.operations import (  # noqa: F401
     Operation,
     PreserializedEmptyByte,
+    SchedulerExecutionContext,
     SerializableNone,
-    ServerExecutionContext,
     ThingExecutionContext,
     as_execution_kwargs,
-    default_server_execution_context,
+    default_scheduler_execution_context,
     default_thing_execution_context,
     qualified_operation_key,
 )
@@ -69,8 +69,8 @@ class RequestHeader(msgspec.Struct):
     messageID: str
     senderID: str
     receiverID: str
-    serverExecutionContext: ServerExecutionContext = msgspec.field(
-        default_factory=lambda: default_server_execution_context
+    serverExecutionContext: SchedulerExecutionContext = msgspec.field(
+        default_factory=lambda: default_scheduler_execution_context
     )
     thingExecutionContext: ThingExecutionContext = msgspec.field(
         default_factory=lambda: default_thing_execution_context
@@ -250,30 +250,6 @@ class RequestMessage:
             self.header["operation"],
         )
 
-    def to_operation(self) -> Operation:
-        """
-        Convert this ZMQ message into the transport-neutral unit the event loop schedules.
-
-        This is the border. Everything above it - the 5-frame layout, the header structs, the
-        message types - is a ZMQ artifact and stops here.
-
-        Returns
-        -------
-        Operation
-            the operation this message is asking for
-        """
-        return Operation(
-            thing_id=self.header["thingID"],
-            objekt=self.header["objekt"],
-            operation=self.header["operation"],
-            payload=self.body[0],  # ty: ignore[invalid-argument-type]
-            preserialized_payload=self.body[1],  # ty: ignore[invalid-argument-type]
-            id=self.id,
-            sender_id=self.sender_id,
-            **as_execution_kwargs(self.header["serverExecutionContext"]),
-            **as_execution_kwargs(self.header["thingExecutionContext"]),
-        )
-
     def parse_header(self) -> None:
         """
         Extract the header and deserialize it.
@@ -311,7 +287,7 @@ class RequestMessage:
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> "RequestMessage":
         """
@@ -399,7 +375,7 @@ class RequestMessage:
             messageType=message_type,
             senderID=sender_id,
             receiverID=receiver_id,
-            serverExecutionContext=default_server_execution_context,
+            serverExecutionContext=default_scheduler_execution_context,
         )
         payload = SerializableNone
         preserialized_payload = PreserializedEmptyByte

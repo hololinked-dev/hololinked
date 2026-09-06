@@ -123,7 +123,7 @@ class MQTTPublisher(BaseProtocolServer):
         Raises
         ------
         ValueError
-            if the `Thing` is not exposed through an `RPCServer`
+            if the `Thing` is not bound to an event loop
         """
         loop = get_current_async_loop()
         if not thing.eventloop:
