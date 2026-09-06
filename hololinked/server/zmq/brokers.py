@@ -2503,9 +2503,10 @@ class BaseEventConsumer(BaseZMQClient):
         #     self.poller.unregister(self.interruptor)
         self.poller.register(self.socket, zmq.POLLIN)
         self.poller.register(self.interruptor, zmq.POLLIN)
+        self._stop = False
 
     def stop_polling(self) -> None:
-        """Stop polling for events when `receive()` is called."""
+        """Stop polling for events ending the `receive()` method."""
         self._stop = True
 
     @property
@@ -2522,20 +2523,23 @@ class BaseEventConsumer(BaseZMQClient):
         )
 
     def exit(self):
-        try:
-            BaseZMQ.exit(self)
-            self.poller.unregister(self.socket)
-            self.poller.unregister(self.interruptor)
-        except Exception as ex:  # noqa
-            # TODO - log message and undo noqa
-            self.logger.warning(f"could not unregister sockets from poller for event consumer - {str(ex)}")
-        try:
-            self.socket.close(0)
-            self.interruptor.close(0)
-            self.interrupting_peer.close(0)
-            self.logger.info(f"terminated event consuming socket {self.socket_address}")
-        except Exception as ex:
-            self.logger.warning(f"could not terminate sockets. exception message - {str(ex)}")
+        self.stop_polling()
+        BaseZMQ.exit(self)
+        if self.socket.closed:
+            return  # __del__ reaching a consumer that its own listener already exited
+        for socket in (self.socket, self.interruptor):
+            try:
+                self.poller.unregister(socket)
+            except KeyError:
+                pass  # never registered - subscribe() was not called
+            except Exception as ex:  # noqa: BLE001
+                self.logger.warning(f"could not unregister socket from poller for event consumer - {str(ex)}")
+        for socket in (self.socket, self.interruptor, self.interrupting_peer):
+            try:
+                socket.close(0)
+            except Exception as ex:  # noqa: BLE001
+                self.logger.warning(f"could not terminate socket of event consumer - {str(ex)}")
+        self.logger.info(f"terminated event consuming socket {self.socket_address}")
 
 
 class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
@@ -2563,40 +2567,48 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         Raises
         ------
         BreakLoop
-            if polling was interrupted and `raise_interrupt_as_exception` is True
+            if polling was stopped or interrupted and `raise_interrupt_as_exception` is True
+        zmq.ZMQError
+            if the poll or the receive failed for a reason other than the sockets being closed
         """
-        self._stop = False
         while not self._stop:
+            if not self._poller_lock.acquire(timeout=timeout / 1000 if timeout else -1):
+                continue
             try:
-                if not self._poller_lock.acquire(timeout=timeout / 1000 if timeout else -1):
-                    continue
+                if self._stop or self.socket.closed:
+                    break
                 sockets = self.poller.poll(timeout)  # ty: ignore[invalid-argument-type]  # list[tuple[zmq.Socket, int]]
                 if len(sockets) > 1:
                     # if there is an interrupt message as well as an event,
                     # give preference to interrupt message.
-                    if sockets[0][0] == self.interrupting_peer:
+                    if sockets[0][0] == self.interruptor:
                         sockets = [sockets[0]]  # we still need the socket, poll event  tuple
-                    elif sockets[1][0] == self.interrupting_peer:
+                    elif sockets[1][0] == self.interruptor:
                         sockets = [sockets[1]]
                 for socket, _ in sockets:
                     try:
                         raw_message = socket.recv_multipart(zmq.NOBLOCK)
                         message = EventMessage(raw_message)
-                        if socket == self.interrupting_peer:
+                        if socket == self.interruptor:
                             if message.payload.deserialize() == "INTERRUPT":
                                 self.stop_polling()
-                                if raise_interrupt_as_exception:
-                                    raise BreakLoop("event consumer interrupted")
-                                return
+                                break
                         return message
                     except zmq.Again:
                         pass
                     # if not self.handled_default_message_types(event_message):
+            except zmq.ZMQError as ex:
+                # the sockets or the context were closed under us, which is a teardown elsewhere and not
+                # an error here - anything else is a real failure and belongs to the caller
+                if ex.errno not in (zmq.ETERM, zmq.ENOTSOCK):
+                    raise
+                self.stop_polling()
+                break
             finally:
-                try:
-                    self._poller_lock.release()
-                except Exception as ex:
-                    self.logger.warning(f"could not release poller lock for event receive - {str(ex)}")
+                self._poller_lock.release()
+        if raise_interrupt_as_exception:
+            raise BreakLoop("event consumer interrupted")
+        return None
 
     def interrupt(self):
         """
@@ -2606,6 +2618,21 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         Otherwise please use stop_polling().
         """
         self.interrupting_peer.send_multipart(self.interrupt_message.byte_array)
+
+    def exit(self) -> None:
+        """
+        Stop polling and close the sockets, waiting out a `receive()` already in flight.
+
+        The poller lock is what makes closing safe from a thread other than the polling one - without it,
+        `poll()` is left holding sockets that no longer exist.
+        """
+        self.stop_polling()
+        acquired = self._poller_lock.acquire(timeout=2 * self.poll_timeout / 1000)
+        try:
+            super().exit()
+        finally:
+            if acquired:
+                self._poller_lock.release()
 
 
 class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
@@ -2637,45 +2664,51 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         Raises
         ------
         BreakLoop
-            if polling was interrupted and `raise_interrupt_as_exception` is True
+            if polling was stopped or interrupted and `raise_interrupt_as_exception` is True
+        zmq.ZMQError
+            if the poll or the receive failed for a reason other than the sockets being closed
         """
-        # TODO - use raise_interrupt_as_exception
-        self._stop = False
         while not self._stop:
             try:
-                try:
-                    await asyncio.wait_for(
-                        self._poller_lock.acquire(),
-                        timeout=timeout / 1000 if timeout else None,
-                    )
-                except TimeoutError:
-                    continue
+                await asyncio.wait_for(
+                    self._poller_lock.acquire(),
+                    timeout=timeout / 1000 if timeout else None,
+                )
+            except TimeoutError:
+                continue
+            try:
+                if self._stop or self.socket.closed:
+                    break
                 sockets = await self.poller.poll(timeout)
                 if len(sockets) > 1:
                     # if there is an interrupt message as well as an event,
                     # give preference to interrupt message.
-                    if sockets[0][0] == self.interrupting_peer:
+                    if sockets[0][0] == self.interruptor:
                         sockets = [sockets[0]]
-                    elif sockets[1][0] == self.interrupting_peer:
+                    elif sockets[1][0] == self.interruptor:
                         sockets = [sockets[1]]
                 for socket, _ in sockets:
                     try:
                         raw_message = await socket.recv_multipart(zmq.NOBLOCK)
                         message = EventMessage(raw_message)
-                        if socket == self.interrupting_peer:
+                        if socket == self.interruptor:
                             if message.payload.deserialize() == "INTERRUPT":
                                 self.stop_polling()
-                                if raise_interrupt_as_exception:
-                                    raise BreakLoop("event consumer interrupted")
-                                return
+                                break
                         return message
                     except zmq.Again:
                         pass
+            except zmq.ZMQError as ex:
+                # see the note in the sync consumer - a closed socket or context is a teardown, not a failure
+                if ex.errno not in (zmq.ETERM, zmq.ENOTSOCK):
+                    raise
+                self.stop_polling()
+                break
             finally:
-                try:
-                    self._poller_lock.release()
-                except Exception as ex:
-                    self.logger.warning(f"could not release poller lock for event receive - {str(ex)}")
+                self._poller_lock.release()
+        if raise_interrupt_as_exception:
+            raise BreakLoop("event consumer interrupted")
+        return None
 
     async def interrupt(self):
         """

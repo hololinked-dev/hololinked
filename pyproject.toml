@@ -90,16 +90,18 @@ dev = [
     "ty>=0.0.24",
 ]
 test = [
+    # protocols
     "pyzmq>=25.1.0,<26.2",
+    # schema
     "jsonschema>=4.22.0,<5.0",
     "fastjsonschema==2.20.0",
+    # serializers
     "serpent>=1.41,<2.0",
-    "sqlalchemy>2.0.21",
-    "psycopg2-binary>=2.9.11",
-    "pymongo>=4.15.2",
+    # libraries
     "requests==2.32.3",
     "faker==37.5.0",
     "numpy>=2.0.0",
+    # pytest
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "pytest-order>=1.0.0",
@@ -108,6 +110,8 @@ test = [
     # storage backends, extras of the package - see [project.optional-dependencies]
     "sqlalchemy>2.0.21",
     "pymongo>=4.15.2",
+    "sqlalchemy>2.0.21",
+    "psycopg2-binary>=2.9.11",
 ]
 scanning = [
     "bandit>=1.9.1",

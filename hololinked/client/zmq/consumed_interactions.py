@@ -500,28 +500,29 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):  # noqa: D101
         sync_event_client.subscribe()
         task_id = threading.get_ident()
         self._subscribed[task_id] = (True, sync_event_client)
-        while True:
-            try:
-                if not self._subscribed.get(task_id, (False, None))[0]:
+        try:
+            while True:
+                try:
+                    if not self._subscribed.get(task_id, (False, None))[0]:
+                        break
+                    event_message = sync_event_client.receive(raise_interrupt_as_exception=True)
+                    if not event_message:
+                        continue
+                    self._last_zmq_response = event_message
+                    event_data = SSE()
+                    event_data.id = event_message.id
+                    event_data.data = self.get_last_return_value(event_message, raise_exception=True)
+                    self.schedule_callbacks(callbacks, event_data, concurrent)
+                except BreakLoop:
                     break
-                event_message = sync_event_client.receive(raise_interrupt_as_exception=True)
-                if not event_message:
-                    continue
-                self._last_zmq_response = event_message
-                event_data = SSE()
-                event_data.id = event_message.id
-                event_data.data = self.get_last_return_value(event_message, raise_exception=True)
-                self.schedule_callbacks(callbacks, event_data, concurrent)
-            except BreakLoop:
-                break
-            except Exception as ex:  # noqa: BLE001
-                # traceback.print_exc()
-                # TODO: some minor bug here within the zmq receive loop when the loop is interrupted
-                # uncomment the above line to see the traceback
-                warnings.warn(
-                    f"Uncaught exception from {self.resource.name} event - {ex!s}\n{traceback.print_exc()}",
-                    category=RuntimeWarning,
-                )
+                except Exception as ex:  # noqa: BLE001
+                    warnings.warn(
+                        f"Uncaught exception from {self.resource.name} event - {ex!s}\n{traceback.format_exc()}",
+                        category=RuntimeWarning,
+                    )
+        finally:
+            self._subscribed.pop(task_id, None)
+            sync_event_client.exit()
 
     async def async_listen(  # noqa: D102
         self,
@@ -539,34 +540,33 @@ class ZMQEvent(ConsumedThingEvent, ZMQConsumedAffordanceMixin):  # noqa: D101
         async_event_client.subscribe()
         task_id = asyncio.current_task().get_name()  # type: ignore
         self._subscribed[task_id] = (True, async_event_client)
-        while True:
-            try:
-                if not self._subscribed.get(task_id, (False, None))[0]:
+        try:
+            while True:
+                try:
+                    if not self._subscribed.get(task_id, (False, None))[0]:
+                        break
+                    event_message = await async_event_client.receive(raise_interrupt_as_exception=True)
+                    if not event_message:
+                        continue
+                    self._last_zmq_response = event_message
+                    event_data = SSE()
+                    event_data.id = event_message.id
+                    event_data.data = self.get_last_return_value(event_message, raise_exception=True)
+                    await self.async_schedule_callbacks(callbacks, event_data, concurrent)
+                except BreakLoop:
                     break
-                event_message = await async_event_client.receive(raise_interrupt_as_exception=True)
-                if not event_message:
-                    continue
-                self._last_zmq_response = event_message
-                event_data = SSE()
-                event_data.id = event_message.id
-                event_data.data = self.get_last_return_value(event_message, raise_exception=True)
-                await self.async_schedule_callbacks(callbacks, event_data, concurrent)
-            except BreakLoop:
-                break
-            except Exception as ex:  # noqa: BLE001
-                # traceback.print_exc()
-                # if "There is no current event loop in thread" and not self._subscribed:
-                #     # TODO: some minor bug here within the umq receive loop when the loop is interrupted
-                #     # uncomment the above line to see the traceback
-                #    pass
-                # else:
-                warnings.warn(
-                    f"Uncaught exception from {self.resource.name} event - {ex!s}\n{traceback.print_exc()}",
-                    category=RuntimeWarning,
-                )
+                except Exception as ex:  # noqa: BLE001
+                    warnings.warn(
+                        f"Uncaught exception from {self.resource.name} event - {ex!s}\n{traceback.format_exc()}",
+                        category=RuntimeWarning,
+                    )
+        finally:
+            # see the note in listen() - the loop that polls the sockets is the one that closes them
+            self._subscribed.pop(task_id, None)
+            async_event_client.exit()
 
     def unsubscribe(self) -> None:  # noqa: D102
-        for subscribed, client in self._subscribed.values():
+        for subscribed, client in list(self._subscribed.values()):
             if client:
                 client.stop_polling()
         return super().unsubscribe()
