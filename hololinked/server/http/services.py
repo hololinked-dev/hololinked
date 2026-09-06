@@ -101,7 +101,7 @@ class ThingDescriptionService:
         TD: dict[str, JSONSerializable]
             The Thing Description to which properties are to be added
         thing_model: dict[str, JSONSerializable]
-            The Thing Model from which properties are to be read
+            The Thing Model
         authority: str
             authority (protocol + host + port) to be used in the TD URLs
         ignore_errors: bool
@@ -177,7 +177,7 @@ class ThingDescriptionService:
         TD: dict[str, JSONSerializable]
             The Thing Description to which actions are to be added
         thing_model: dict[str, JSONSerializable]
-            The Thing Model from which actions are to be read
+            The Thing Model
         authority: str
             authority (protocol + host + port) to be used in the TD URLs
         ignore_errors: bool
@@ -237,7 +237,7 @@ class ThingDescriptionService:
         TD: dict[str, JSONSerializable]
             The Thing Description to which events are to be added
         thing_model: dict[str, JSONSerializable]
-            The Thing Model from which events are to be read
+            The Thing Model
         authority: str
             authority (protocol + host + port) to be used in the TD URLs
         ignore_errors: bool

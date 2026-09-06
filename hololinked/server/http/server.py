@@ -18,7 +18,7 @@ from ...constants import HTTP_METHODS
 from ...core.actions import Action
 from ...core.events import Event
 from ...core.property import Property
-from ...core.thing import Thing, ThingMeta
+from ...core.thing import Thing
 from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
@@ -128,7 +128,6 @@ class HTTPServer(BaseProtocolServer):
             readiness_probe_handler=kwargs.get("readiness_handler", ReadinessProbeHandler),
             stop_handler=kwargs.get("stop_handler", StopHandler),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            eventloop=kwargs.get("eventloop", None),
             allowed_clients=allowed_clients,
             security_schemes=security_schemes,
         )
@@ -191,17 +190,10 @@ class HTTPServer(BaseProtocolServer):
         ioloop.IOLoop.clear_current()
         # 2. sets async loop for a non-possessing thread as well
         get_current_async_loop()
-        # 3. take hold of the event loop that runs the things
+        # 3. every thing must already be bound to an eventloop
         for thing in self.things:
             if not thing.eventloop:
                 raise ValueError(f"You need to expose thing {thing.id} via an EventLoop before trying to serve it")
-            if self.config.eventloop is None:
-                self.config.eventloop = thing.eventloop
-            elif self.config.eventloop is not thing.eventloop:
-                raise ValueError(
-                    "every Thing served over HTTP must be run by the same event loop, "
-                    + f"but {thing.id} belongs to a different one"
-                )
         # 4. finally also get a reference of the same event loop from tornado
         self.tornado_event_loop = ioloop.IOLoop.current()
 
@@ -529,6 +521,7 @@ class ApplicationRouter:
         actions: Iterable[ActionAffordance],
         events: Iterable[EventAffordance],
         thing_id: str | None = None,
+        thing: Thing | None = None,
     ) -> None:
         """
         Can add multiple properties, actions and events at once to the application router.
@@ -547,6 +540,8 @@ class ApplicationRouter:
             thing id to be prefixed to the URL path of each property, action, and event.
             If the thing_id is not provided, then the rule will be in pending state and not exposed
             until a thing instance with the given thing_id is added to the server.
+        thing: Thing, optional
+            the Thing instance.
 
         Raises
         ------
@@ -565,12 +560,14 @@ class ApplicationRouter:
                 http_methods=("GET",) if property.readOnly else ("GET", "PUT"),
                 # if prop.fdel is None else ('GET', 'PUT', 'DELETE')
                 handler=self.server.config.property_handler,
+                thing=thing,
             )
             if property.observable:
                 self.server.add_event(
                     URL_path=f"{path}/change-event",
                     event=property,
                     handler=self.server.config.event_handler,
+                    thing=thing,
                 )
         for action in actions:
             if action in self:
@@ -580,14 +577,14 @@ class ApplicationRouter:
             route = self.adapt_route(action.name)
             if action.thing_id is not None:
                 path = f"/{action.thing_id}{route}"
-            self.server.add_action(URL_path=path, action=action, handler=self.server.config.action_handler)
+            self.server.add_action(URL_path=path, action=action, handler=self.server.config.action_handler, thing=thing)
         for event in events:
             if event in self:
                 continue
             route = self.adapt_route(event.name)
             if event.thing_id is not None:
                 path = f"/{event.thing_id}{route}"
-            self.server.add_event(URL_path=path, event=event, handler=self.server.config.event_handler)
+            self.server.add_event(URL_path=path, event=event, handler=self.server.config.event_handler, thing=thing)
 
         # thing model handler
         get_thing_model_action = next((action for action in actions if action.name == "get_thing_model"), None)
@@ -597,6 +594,7 @@ class ApplicationRouter:
             URL_path=f"/{thing_id}/resources/wot-tm" if thing_id else "/resources/wot-tm",
             action=get_thing_model_action,
             http_method=("GET",),
+            thing=thing,
         )
 
         # thing description handler
@@ -608,6 +606,7 @@ class ApplicationRouter:
             http_method=("GET",),
             handler=self.server.config.thing_description_handler,
             owner_inst=self.server,
+            thing=thing,
         )
 
         # RW multiple properties handler
@@ -622,6 +621,7 @@ class ApplicationRouter:
             handler=self.server.config.RW_multiple_properties_handler,
             read_properties_resource=read_properties,
             write_properties_resource=write_properties,
+            thing=thing,
         )
 
     # can add an entire thing instance at once
@@ -653,25 +653,23 @@ class ApplicationRouter:
             affordance = EventAffordance.from_TD(event, TM)
             affordance.override_defaults(thing_id=thing.id, thing_cls=thing.__class__, owner=thing)
             events.append(affordance)
-        self._resolve_rules(thing.id, thing.__class__)
+        self._resolve_rules(thing)
         self.add_interaction_affordances(
             properties,
             actions,
             events,
             thing_id=thing.id,
+            thing=thing,
         )
 
-    def _resolve_rules(
-        self,
-        thing_id: str,
-        thing_cls: ThingMeta,
-    ) -> None:
+    def _resolve_rules(self, thing: Thing) -> None:
         """
         Process the pending rules and add them to the application router.
 
         Rules become pending only when a property, action or event has a thing class associated
         but no thing instance.
         """
+        thing_id, thing_cls = thing.id, thing.__class__
         pending_rules = self._pending_rules
         self._pending_rules = []
         for rule in pending_rules:
@@ -682,6 +680,7 @@ class ApplicationRouter:
             affordance.override_defaults(thing_cls=thing_cls, thing_id=thing_id)
             URL_path, handler, kwargs = rule
             URL_path = f"/{thing_id}{URL_path}"
+            kwargs["thing"] = thing
             rule = (URL_path, handler, kwargs)
             self.add_rule(affordance=affordance, URL_path=URL_path, handler=handler, kwargs=kwargs)
 

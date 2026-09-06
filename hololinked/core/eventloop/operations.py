@@ -2,11 +2,11 @@
 The transport-neutral unit of work that the event loop schedules on a `Thing`.
 
 A protocol receives a request in a shape its own wire format defines - a ZMQ multipart frame, a
-HTTP request, an MQTT payload - and converts it, at its own border, into an `Operation`. The
-event loop never sees the wire format. It answers with a `Reply`, which the protocol converts back.
+HTTP request, an MQTT payload - and converts it into an `Operation`. The event loop never sees the wire format.
+It answers with a `Reply`, which the protocol converts back.
 
-Keeping the two apart is what lets a wire format be a protocol's private business. It also gives one
-spelling for the execution parameters.
+Keeping the two apart decouples a protocol's implementation from the standard operations that can be performed on
+a `Thing`.
 """
 
 from __future__ import annotations
@@ -296,29 +296,17 @@ class Job:
 
 class PendingOperations:
     """
-    Replies nobody has collected yet, kept apart per caller.
+    A dictionary of operations that were not yet collected by the caller.
 
-    A caller that does not wait for its reply is handed a token instead, and comes back for the
-    reply later quoting it. Something has to hold the `Future` in between, and it is the event loop
-    that made it. Some callers never come back, so each caller's share is bounded and drops the
-    oldest rather than growing forever.
-
-    A token is only meaningful within the caller that was handed it, which is why the callers are
-    kept in separate dicts rather than in one namespace: two callers minting the same token cannot
-    collect each other's replies.
+    Decoupled from EventLoop currently and only referenced. Benefits and tradeoffs of doing that not clear.
     """
 
     def __init__(self, maxsize: int = 1000) -> None:
-        self._maxsize = maxsize
-        """most replies to hold for any one caller before the oldest is dropped."""
-        self._futures = dict()  # type: dict[str, OrderedDict[str, Future]]
-        """per caller, then per token."""
-        # `submit()` is callable from any thread, so a caller can hand a reply over on one thread and
-        # come back for it on another. Held around the dicts and nothing else - never across a wait -
-        # so it can never be what delays a reply. One lock for both levels means a caller's first
-        # operation cannot race a second thread into building two stores, one of which is then
-        # orphaned along with every reply put in it.
+        self.maxsize = maxsize
+        self.futures = dict()  # type: dict[str, OrderedDict[str, Future]]
         self._lock = threading.Lock()
+        # `submit()` is callable from any thread, so a caller can hand a reply over on one thread and
+        # come back for it on another.
 
     def add(self, caller_id: str, token: str, future: Future) -> None:
         """
@@ -327,21 +315,21 @@ class PendingOperations:
         Parameters
         ----------
         caller_id: str
-            names the caller, and nothing more - this is never interpreted
+            an ID of the caller
         token: str
             the token the caller will come back with
         future: concurrent.futures.Future
             the promise of the operation's reply
         """
         with self._lock:
-            futures = self._futures.setdefault(caller_id, OrderedDict())
+            futures = self.futures.setdefault(caller_id, OrderedDict())
             futures[token] = future
-            while len(futures) > self._maxsize:
+            while len(futures) > self.maxsize:
                 futures.popitem(last=False)
 
-    def take(self, caller_id: str, token: str) -> Future:
+    def claim(self, caller_id: str, token: str) -> Future:
         """
-        Hand back one operation's future, which can only be collected once.
+        Take the operation's future out of the registry and hand it to the caller.
 
         Parameters
         ----------
@@ -358,25 +346,18 @@ class PendingOperations:
         Raises
         ------
         KeyError
-            if the token is unknown to this caller, or was already collected, or was evicted
+            if the token is unknown to this caller, or is already claimed, or was evicted
         """
         with self._lock:
-            return self._futures[caller_id].pop(token)
+            return self.futures[caller_id].pop(token)
 
     def clear(self) -> None:
-        """
-        Cancel and drop every uncollected reply, for every caller.
-
-        Cancelling settles each future rather than leaving it pending forever, so a caller already
-        blocked on one is woken with a `CancelledError` instead of waiting for a reply that is never
-        coming. It does not stop the operation itself - nothing can, once it is on a `Thing`'s
-        thread - and its eventual answer lands on a cancelled future, which `Job.answer()` ignores.
-        """
+        """Cancel and drop every uncollected reply, for every caller."""
         with self._lock:
-            for futures in self._futures.values():
+            for futures in self.futures.values():
                 for future in futures.values():
                     future.cancel()
-            self._futures.clear()
+            self.futures.clear()
 
 
 def format_return_value(

@@ -13,6 +13,7 @@ from tornado.web import RequestHandler
 
 from hololinked import Serializers
 from hololinked.core.eventloop import EventLoop
+from hololinked.core.thing import Thing
 
 from ...config import global_config
 from ...constants import Operations
@@ -23,7 +24,6 @@ from ...core.eventloop import (
     ThingExecutionContext,
     default_scheduler_execution_context,
     default_thing_execution_context,
-    encode_event,
 )
 from ...core.eventloop.operations import Reply, SerializableNone
 from ...core.eventloop.payloads import PreserializedData, SerializableData
@@ -60,6 +60,7 @@ class BaseHandler(RequestHandler):
         config: Any,
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
+        thing: Thing | None = None,
     ) -> None:
         """
         Set up the handler with the affordance it serves and the server's runtime configuration.
@@ -70,6 +71,8 @@ class BaseHandler(RequestHandler):
             dataclass representation of `Thing`'s exposed object that can quickly convert to a ZMQ Request object
         metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
+        thing: Thing | None
+            the `Thing` this handler serves
         """
         from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
 
@@ -83,12 +86,31 @@ class BaseHandler(RequestHandler):
             layer="controller",
             impl=self.__class__.__name__,
         )
-        self.eventloop: EventLoop = self.config.eventloop
+        self.thing = thing  # type: Thing | None
         self.thing_id = self.resource.thing_id
         self.allowed_clients = self.config.allowed_clients
         self.security_schemes = self.config.security_schemes
         self.metadata = metadata or HandlerMetadata()  # type: HandlerMetadata
         self.userinfo = None  # type: Optional[dict[str, Any]]
+
+    @property
+    def eventloop(self) -> EventLoop:
+        """
+        The event loop running this handler's `Thing`.
+
+        Returns
+        -------
+        EventLoop
+            the event loop to submit this handler's operations to
+
+        Raises
+        ------
+        RuntimeError
+            if the rule was registered without a `Thing`, or that `Thing` was never exposed
+        """
+        if self.thing is None or self.thing.eventloop is None:
+            raise RuntimeError(f"no event loop for {self.request.path} - its rule was registered without a Thing.")
+        return self.thing.eventloop
 
     async def has_access_control(self) -> bool:
         """
@@ -521,22 +543,26 @@ class RPCHandler(BaseHandler):
 
     async def handle_no_block_response(self) -> None:
         """Handles the no-block response for the noblock calls."""  # noqa: DOC501
+        future = None  # held only while this request owns the claim, so that `finally` can give it back
+        message_id = None
         try:
             message_id = self.message_id
             if message_id is None:
                 raise ValueError("no message id available to wait for a no-block response")
             self.logger.info("waiting for no-block response", message_id=message_id)
-            future = self.eventloop.pending_operations.take(self.config.server_id, message_id)
+            future = self.eventloop.pending_operations.claim(self.config.server_id, message_id)
             invokation = default_scheduler_execution_context.invokation_timeout
             execution = default_scheduler_execution_context.execution_timeout
             # either being None means wait indefinitely, so there is no bound to compute
             bound = None if invokation is None or execution is None else invokation + execution
-            reply: Reply = await asyncio.wait_for(asyncio.wrap_future(future), timeout=bound)
+            # shielded - a timeout here must not cancel the operation, it should continue running for later collection
+            reply: Reply = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), timeout=bound)
             if reply.timed_out:
                 self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
-                return
-            self.set_status(200, "ok")
-            await self.write(reply)
+            else:
+                self.set_status(200, "ok")
+                await self.write(reply)
+            future = None  # answered - the caller has no reason to come back with this token
         except KeyError as ex:
             # if the message id is not found, it means that the response was not received in time
             self.logger.error(f"message ID not found for no-block response - {str(ex)}")
@@ -554,6 +580,10 @@ class RPCHandler(BaseHandler):
             )
             response_payload.serialize()
             self.write(response_payload.value)
+        finally:
+            if future is not None:
+                # the operation is still running
+                self.eventloop.pending_operations.add(self.config.server_id, message_id, future)
 
 
 class PropertyHandler(RPCHandler):
@@ -635,12 +665,13 @@ class RWMultiplePropertiesHandler(ActionHandler):
         config: Any,
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
+        thing: Thing | None = None,
         **kwargs,
     ) -> None:
         """Set up the handler with the affordances that read and write multiple properties."""
         self.read_properties_resource = kwargs.get("read_properties_resource", None)
         self.write_properties_resource = kwargs.get("write_properties_resource", None)
-        return super().initialize(resource, config, logger, metadata)
+        return super().initialize(resource, config, logger, metadata, thing)
 
     async def get(self) -> None:
         """Read multiple properties, or fetch the reply of an earlier no-block read."""
@@ -685,9 +716,10 @@ class EventHandler(BaseHandler):
         config: Any,
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
+        thing: Thing | None = None,
     ) -> None:
         """Set up the handler to stream events with a plain SSE data header."""
-        super().initialize(resource, config, logger, metadata)
+        super().initialize(resource, config, logger, metadata, thing)
         self.data_header = b"data: %s\n\n"
 
     def set_custom_default_headers(self) -> None:
@@ -740,15 +772,15 @@ class EventHandler(BaseHandler):
         try:
             while True:
                 try:
-                    received = await subscription.receive(timeout=10)
-                    if received is not None:
-                        body, _ = encode_event(*received)
-                        self.write(self.data_header % body)
-                        self.logger.debug(f"new data scheduled to flush - {self.resource.name}")
-                    else:
-                        self.logger.debug(f"found no new data - {self.resource.name}")
+                    data = await subscription.receive(timeout=10)
+                    body, content_type = subscription.encode(data)
+                    # TODO use content_type and get rid of other event handlers
+                    self.write(self.data_header % body)
+                    self.logger.debug(f"new data scheduled to flush - {self.resource.name}")
                     # flushes and handles heartbeat - raises StreamClosedError if the client left
                     await self.flush()
+                except TimeoutError:
+                    self.logger.debug(f"found no new data - {self.resource.name}")
                 except StreamClosedError:
                     break
                 except Exception as ex:
@@ -767,9 +799,10 @@ class JPEGImageEventHandler(EventHandler):
         config: Any,
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
+        thing: Thing | None = None,
     ) -> None:
         """Set up the handler to stream events with a base64 JPEG image SSE data header."""
-        super().initialize(resource, config, logger, metadata)
+        super().initialize(resource, config, logger, metadata, thing)
         self.data_header = b"data:image/jpeg;base64,%s\n\n"
 
 
@@ -782,9 +815,10 @@ class PNGImageEventHandler(EventHandler):
         config: Any,
         logger: structlog.stdlib.BoundLogger,
         metadata: Any = None,
+        thing: Thing | None = None,
     ) -> None:
         """Set up the handler to stream events with a base64 PNG image SSE data header."""
-        super().initialize(resource, config, logger, metadata)
+        super().initialize(resource, config, logger, metadata, thing)
         self.data_header = b"data:image/png;base64,%s\n\n"
 
 
@@ -877,12 +911,13 @@ class ReadinessProbeHandler(BaseHandler):
                 self.set_status(200, "ok")  # nothing served, so nothing to be ready for
                 self.finish()
                 return
-            eventloop = self.config.eventloop
-            if eventloop is None or not eventloop.is_running:
+            if any(thing.eventloop is None or not thing.eventloop.is_running for thing in things):
                 raise RuntimeError("the event loop is not running yet, retry later")
             replies = await asyncio.gather(
                 *[
-                    eventloop.execute(Operation(thing_id=thing.id, objekt="ping", operation=Operations.invokeaction))
+                    thing.eventloop.execute(
+                        Operation(thing_id=thing.id, objekt="ping", operation=Operations.invokeaction)
+                    )
                     for thing in things
                 ]
             )
@@ -906,6 +941,7 @@ class ThingDescriptionHandler(BaseHandler):
         logger: structlog.stdlib.BoundLogger,
         owner_inst: Any = None,
         metadata: Any = None,
+        thing: Thing | None = None,
     ) -> None:
         """Set up the handler along with the service that generates the Thing Description."""
         super().initialize(
@@ -913,12 +949,14 @@ class ThingDescriptionHandler(BaseHandler):
             config=config,
             logger=logger,
             metadata=metadata,
+            thing=thing,
         )
         self.thing_description = self.config.thing_description_service(
             resource=resource,
             config=config,
             logger=logger,
             server=owner_inst,
+            thing=thing,
         )
 
     async def get(self):
