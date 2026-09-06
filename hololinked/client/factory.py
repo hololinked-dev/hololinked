@@ -353,7 +353,8 @@ class ClientFactory:
         )
         sse_timeout = httpx.Timeout(
             connect=connect_timeout,
-            read=3,
+            # no heartbeats, indefinite read timeout for now
+            read=None,
             write=request_timeout,
             pool=2,
         )

@@ -291,7 +291,7 @@ class BaseHandler(RequestHandler):
             )
         for key, value in self.request.query_arguments.items():
             if key == "messageID":
-                # not a JSON value - decoded, a hex ID like `1765e270` becomes a float
+                # not a JSON value, a hex ID like `1765e270` becomes a float
                 arguments[key] = value[0].decode("utf-8")
             elif len(value) == 1:
                 try:
@@ -773,6 +773,11 @@ class EventHandler(BaseHandler):
             self.set_status(500, f"could not subscribe to event source from thing - {str(ex)}")
             self.write(Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
             return
+
+        # Send the header right away. One needs to flush to even send headers.
+        # This confirms that a subscription happened. If clients end with too short timeout even without receiving
+        # headers, then they think that the subscription did not go through.
+        await self.flush()
 
         try:
             while True:

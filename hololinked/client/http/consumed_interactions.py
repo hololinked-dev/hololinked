@@ -539,6 +539,9 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):  # noqa: D101
                         self.logger.error(f"Error processing SSE event: {ex}")
         except (httpx.ReadError, httpcore.ReadError):
             pass
+        except (httpx.ReadTimeout, httpcore.ReadTimeout):
+            # the subscription never came up
+            self.logger.warning(f"event stream did not open before the read timeout elapsed - {self.resource.name}")
 
     async def async_listen(  # noqa: D102
         self,
@@ -581,6 +584,9 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):  # noqa: D101
                         self.logger.error(f"Error processing SSE event: {ex}")
         except (httpx.ReadError, httpcore.ReadError):
             pass
+        except (httpx.ReadTimeout, httpcore.ReadTimeout):
+            # the subscription never came up
+            self.logger.warning(f"event stream did not open before the read timeout elapsed - {self.resource.name}")
 
     async def aiter_lines_interruptible(self, resp: httpx.Response, stop: asyncio.Event) -> AsyncIterator[str]:
         """
@@ -619,7 +625,9 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):  # noqa: D101
                 yield next_line.result()
 
             except (httpx.ReadTimeout, httpcore.ReadTimeout):
-                continue
+                # the iterator is exhausted once it has raised, so there is nothing left to resume
+                self.logger.warning(f"event stream timed out while idle - {self.resource.name}")
+                break
 
             except StopAsyncIteration:
                 # remote closed the stream
@@ -647,7 +655,9 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):  # noqa: D101
             try:
                 next_line = next(it)
             except (httpx.ReadTimeout, httpcore.ReadTimeout):
-                continue
+                # the iterator is exhausted once it has raised, so there is nothing left to resume
+                self.logger.warning(f"event stream timed out while idle - {self.resource.name}")
+                break
             except StopIteration:
                 break
             yield next_line
@@ -685,6 +695,7 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):  # noqa: D101
         """Unsubscribe from the event."""
         for callback_id, (subscribed, obj, resp) in list(self._subscribed.items()):
             obj.set()
+            resp.close()
         return super().unsubscribe()
 
 
