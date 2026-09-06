@@ -1,5 +1,6 @@
 """HTTP(s) server exposing `Thing`s over HTTP 1.1, along with its application router."""
 
+import asyncio
 import socket
 import ssl
 import warnings
@@ -18,8 +19,7 @@ from ...constants import HTTP_METHODS
 from ...core.actions import Action
 from ...core.events import Event
 from ...core.property import Property
-from ...core.thing import Thing, ThingMeta
-from ...core.zmq.brokers import MessageMappedZMQClientPool
+from ...core.thing import Thing
 from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
@@ -129,7 +129,6 @@ class HTTPServer(BaseProtocolServer):
             readiness_probe_handler=kwargs.get("readiness_handler", ReadinessProbeHandler),
             stop_handler=kwargs.get("stop_handler", StopHandler),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            thing_repository=kwargs.get("thing_repository", dict()),
             allowed_clients=allowed_clients,
             security_schemes=security_schemes,
         )
@@ -144,7 +143,7 @@ class HTTPServer(BaseProtocolServer):
         )
 
         self._IP = f"{self.address}:{self.port}"  # TODO, remove this variable later?
-        self.id = self._IP
+        self.config.server_id = self._IP
         if self.logger is None:
             self.logger = structlog.get_logger().bind(component="http-server", host=f"{self.address}:{self.port}")
 
@@ -170,13 +169,6 @@ class HTTPServer(BaseProtocolServer):
         )
         self.router = ApplicationRouter(self.app, self)
 
-        self.zmq_client_pool = MessageMappedZMQClientPool(
-            id=self.id,
-            server_ids=[],
-            client_ids=[],
-            handshake=False,
-            poll_timeout=100,
-        )
         self.add_things(*(things or []))
 
     async def setup(self) -> None:
@@ -185,10 +177,8 @@ class HTTPServer(BaseProtocolServer):
 
         Raises
         ------
-        RuntimeError
-            if the ZMQ client pool was not created
         ValueError
-            if a `Thing` to be served is not exposed through an `RPCServer`
+            if a `Thing` to be served is not bound to an event loop
         """
         # Add only those code here that needs to be redone always before restarting the server.
         # One time creation attributes/activities must be in init
@@ -198,25 +188,12 @@ class HTTPServer(BaseProtocolServer):
         # event loop is buggy, so we remove it.
         ioloop.IOLoop.clear_current()
         # 2. sets async loop for a non-possessing thread as well
-        event_loop = get_current_async_loop()
-        # 3. schedule the ZMQ client pool polling
-        if self.zmq_client_pool is None:
-            raise RuntimeError("ZMQ client pool was not created, cannot poll for responses")
-        event_loop.create_task(self.zmq_client_pool.poll_responses())
-        # self.zmq_client_pool.handshake(), NOTE - handshake better done upfront as we already poll_responses here
-        # which will prevent handshake function to succeed (although handshake will be done)
-        # 4. Expose via broker
-        for thing in self.things:
-            if not thing.rpc_server:
-                raise ValueError(f"You need to expose thing {thing.id} via a RPCServer before trying to serve it")
-            event_loop.create_task(
-                self._instantiate_broker(
-                    thing.rpc_server.id,
-                    thing.id,
-                    "INPROC",
-                )
-            )
-        # 5. finally also get a reference of the same event loop from tornado
+        self.serving_loop = get_current_async_loop()  # type: asyncio.AbstractEventLoop
+        # 3. every thing must already be bound to an eventloop
+        for thing in self.things.values():
+            if not thing.eventloop:
+                raise ValueError(f"You need to expose thing {thing.id} via an EventLoop before trying to serve it")
+        # 4. finally also get a reference of the event loop from tornado
         self.tornado_event_loop = ioloop.IOLoop.current()
 
         self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)  # type: TornadoHTTP1Server
@@ -243,12 +220,7 @@ class HTTPServer(BaseProtocolServer):
         if attempt_async_stop:
             run_callable_somehow(self.async_stop())
             return
-        if self.zmq_client_pool is not None:
-            self.zmq_client_pool.stop_polling()
-        if not self.tornado_instance:
-            return
-        self.tornado_instance.stop()
-        run_callable_somehow(self.tornado_instance.close_all_connections())
+        run_callable_somehow(self.shutdown_tornado())
 
     async def async_stop(self) -> None:
         """
@@ -257,9 +229,16 @@ class HTTPServer(BaseProtocolServer):
         A stop handler at the path `/stop` with POST method is already implemented
         that invokes this method for the clients.
         """
-        if self.zmq_client_pool is not None:
-            self.zmq_client_pool.stop_polling()
         if not self.tornado_instance:
+            return
+        if self.serving_loop.is_running() and self.serving_loop is not asyncio.get_running_loop():
+            await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(self.shutdown_tornado(), self.serving_loop))
+            return
+        await self.shutdown_tornado()
+
+    async def shutdown_tornado(self) -> None:
+        """Stop listening and close every open connection."""
+        if not self.tornado_instance:  # type gaurd, not a real logic.
             return
         try:
             self.tornado_instance.stop()
@@ -418,7 +397,7 @@ class HTTPServer(BaseProtocolServer):
 
     def add_thing(self, thing: Thing) -> None:
         self.router.add_thing(thing)
-        self.things.append(thing)
+        super().add_thing(thing)
 
     def __hash__(self):
         return hash(self._IP)
@@ -547,6 +526,7 @@ class ApplicationRouter:
         actions: Iterable[ActionAffordance],
         events: Iterable[EventAffordance],
         thing_id: str | None = None,
+        thing: Thing | None = None,
     ) -> None:
         """
         Can add multiple properties, actions and events at once to the application router.
@@ -565,6 +545,8 @@ class ApplicationRouter:
             thing id to be prefixed to the URL path of each property, action, and event.
             If the thing_id is not provided, then the rule will be in pending state and not exposed
             until a thing instance with the given thing_id is added to the server.
+        thing: Thing, optional
+            the Thing instance.
 
         Raises
         ------
@@ -583,12 +565,14 @@ class ApplicationRouter:
                 http_methods=("GET",) if property.readOnly else ("GET", "PUT"),
                 # if prop.fdel is None else ('GET', 'PUT', 'DELETE')
                 handler=self.server.config.property_handler,
+                thing=thing,
             )
             if property.observable:
                 self.server.add_event(
                     URL_path=f"{path}/change-event",
                     event=property,
                     handler=self.server.config.event_handler,
+                    thing=thing,
                 )
         for action in actions:
             if action in self:
@@ -598,14 +582,14 @@ class ApplicationRouter:
             route = self.adapt_route(action.name)
             if action.thing_id is not None:
                 path = f"/{action.thing_id}{route}"
-            self.server.add_action(URL_path=path, action=action, handler=self.server.config.action_handler)
+            self.server.add_action(URL_path=path, action=action, handler=self.server.config.action_handler, thing=thing)
         for event in events:
             if event in self:
                 continue
             route = self.adapt_route(event.name)
             if event.thing_id is not None:
                 path = f"/{event.thing_id}{route}"
-            self.server.add_event(URL_path=path, event=event, handler=self.server.config.event_handler)
+            self.server.add_event(URL_path=path, event=event, handler=self.server.config.event_handler, thing=thing)
 
         # thing model handler
         get_thing_model_action = next((action for action in actions if action.name == "get_thing_model"), None)
@@ -615,6 +599,7 @@ class ApplicationRouter:
             URL_path=f"/{thing_id}/resources/wot-tm" if thing_id else "/resources/wot-tm",
             action=get_thing_model_action,
             http_method=("GET",),
+            thing=thing,
         )
 
         # thing description handler
@@ -626,6 +611,7 @@ class ApplicationRouter:
             http_method=("GET",),
             handler=self.server.config.thing_description_handler,
             owner_inst=self.server,
+            thing=thing,
         )
 
         # RW multiple properties handler
@@ -640,6 +626,7 @@ class ApplicationRouter:
             handler=self.server.config.RW_multiple_properties_handler,
             read_properties_resource=read_properties,
             write_properties_resource=write_properties,
+            thing=thing,
         )
 
     # can add an entire thing instance at once
@@ -671,25 +658,23 @@ class ApplicationRouter:
             affordance = EventAffordance.from_TD(event, TM)
             affordance.override_defaults(thing_id=thing.id, thing_cls=thing.__class__, owner=thing)
             events.append(affordance)
-        self._resolve_rules(thing.id, thing.__class__)
+        self._resolve_rules(thing)
         self.add_interaction_affordances(
             properties,
             actions,
             events,
             thing_id=thing.id,
+            thing=thing,
         )
 
-    def _resolve_rules(
-        self,
-        thing_id: str,
-        thing_cls: ThingMeta,
-    ) -> None:
+    def _resolve_rules(self, thing: Thing) -> None:
         """
         Process the pending rules and add them to the application router.
 
         Rules become pending only when a property, action or event has a thing class associated
         but no thing instance.
         """
+        thing_id, thing_cls = thing.id, thing.__class__
         pending_rules = self._pending_rules
         self._pending_rules = []
         for rule in pending_rules:
@@ -700,6 +685,7 @@ class ApplicationRouter:
             affordance.override_defaults(thing_cls=thing_cls, thing_id=thing_id)
             URL_path, handler, kwargs = rule
             URL_path = f"/{thing_id}{URL_path}"
+            kwargs["thing"] = thing
             rule = (URL_path, handler, kwargs)
             self.add_rule(affordance=affordance, URL_path=URL_path, handler=handler, kwargs=kwargs)
 

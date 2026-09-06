@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import threading
 import warnings
@@ -21,17 +20,13 @@ from hololinked.utils import (
     uuid_hex,
 )
 
-from ..config import global_config
+from ..constants import ZMQ_TRANSPORTS
 from ..core import Thing
-from ..core.properties import ClassSelector, Integer, TypedList
-from ..core.zmq.rpc_server import ZMQ_TRANSPORTS, RPCServer
+from ..core.eventloop import EventLoop
+from ..core.properties import ClassSelector, Integer, TypedDict
+from ..core.utils import CrossLoopEvent
 from ..param import Parameterized
 from ..param.parameters import String
-from .repository import (
-    BrokerThing,
-    consume_broker_pubsub,
-    consume_broker_queue,
-)
 
 
 class BaseProtocolServer(Parameterized):
@@ -57,23 +52,26 @@ class BaseProtocolServer(Parameterized):
     )  # type: logging.Logger | structlog.stdlib.BoundLogger
     """Logger instance"""
 
-    things = TypedList(default=None, allow_None=True, item_type=Thing)  # type: list[Thing] | None
-    """List of things to be served"""
+    things = TypedDict(default=None, allow_None=True, key_type=str, item_type=Thing)  # type: dict[str, Thing]
+    """Every served `Thing`, sub-things included."""
 
     def __init__(self, **kwargs) -> None:
-        self.zmq_client_pool = None
         self.config: Any = None
         super().__init__(**kwargs)
         if self.things is None:
-            self.things = []
-        self._disconnected_things = []  # type: list[BrokerThing]
+            self.things = dict()
 
     def add_thing(self, thing: Thing) -> None:
-        """Adds a thing to the list of things to serve."""
-        raise NotImplementedError("Not implemented for this protocol")
+        """
+        Adds a thing to the things being served.
+
+        Sub-things are not served - see `EventLoop.add_thing`, which does not register them
+        either.
+        """
+        self.things[thing.id] = thing
 
     def add_things(self, *things: Thing) -> None:
-        """Adds multiple things to the list of things to serve."""
+        """Adds multiple things to be served."""
         for thing in things:
             self.add_thing(thing)
 
@@ -109,54 +107,6 @@ class BaseProtocolServer(Parameterized):
             if the protocol does not support this operation
         """
         raise NotImplementedError("Not implemented for this protocol")
-
-    async def _instantiate_broker(
-        self,
-        server_id: str,
-        thing_id: str,
-        access_point: str = "INPROC",
-    ) -> None:
-        try:
-            broker_thing = BrokerThing(server_id=server_id, id=thing_id, access_point=access_point)
-
-            self._disconnected_things.append(broker_thing)
-
-            client, TD = await consume_broker_queue(
-                id=f"{self.id}|client|{thing_id}",
-                server_id=server_id,
-                thing_id=thing_id,
-                access_point=access_point,
-            )
-
-            event_consumer = consume_broker_pubsub(
-                id=f"{self.id}|event-consumer|{thing_id}",
-                access_point=f"{client.socket_address}/event-publisher",
-            )
-
-            self._disconnected_things.remove(broker_thing)
-
-            broker_thing.set_req_rep_client(client)
-            broker_thing.set_event_consumer(event_consumer)
-            broker_thing.TD = TD
-            broker_thing.logger = structlog.get_logger().bind(
-                layer="repository",
-                impl=broker_thing.__class__.__name__,
-                thing_id=thing_id,
-            )
-
-            if self.zmq_client_pool:
-                self.zmq_client_pool.register(client, thing_id)
-                broker_thing.req_rep_client = self.zmq_client_pool
-
-            self.config.thing_repository[thing_id] = broker_thing
-
-        except ConnectionError:
-            self.logger.warning(
-                f"could not connect to {thing_id} on server {server_id} with access_point {access_point}"
-            )
-        except Exception as ex:
-            self.logger.error(f"could not connect to {thing_id} on server {server_id} with access_point {access_point}")
-            self.logger.exception(ex)
 
     async def setup(self) -> None:
         # This method should not block, just create side-effects
@@ -211,8 +161,19 @@ class BaseProtocolServer(Parameterized):
         raise NotImplementedError("Not implemented for this protocol")
 
 
+_runs = dict()  # type: dict[str, CrossLoopEvent]
+"""Every run() currently serving, by id, so that stop() can name the one it means."""
+_runs_lock = threading.Lock()
+"""Guards `_runs` - a forked run() registers on its own thread while another may be stopping."""
+
+
 @forkable
-def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_message: bool = True) -> None:
+def run(
+    *servers: BaseProtocolServer,
+    forked: bool = False,
+    print_welcome_message: bool = True,
+    id: str | None = None,
+) -> None:
     """
     Run servers and serve your things.
 
@@ -224,68 +185,91 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
         whether to run in a forked thread
     print_welcome_message: bool, default True
         whether to print a welcome message on startup, like the ports and access points
+    id: str, optional
+        name this run, so that a `stop()` can be called `stop(id)`.
+
+    Raises
+    ------
+    RuntimeError
+        if a server cannot start - each protocol decides what it needs
+    ValueError
+        if the run ID is reused by another active run
+    """
+    loop = get_current_async_loop()  # initialize an event loop if it does not exist
+
+    things = [thing for server in servers if server.things is not None for thing in server.things.values()]
+    things = list(set(things))  # remove duplicates
+
+    eventloops = list(dict.fromkeys(thing.eventloop for thing in things if thing.eventloop is not None))
+    unbound = [thing for thing in things if thing.eventloop is None]
+    if unbound or not eventloops:
+        eventloops.append(EventLoop(things=unbound))
+
+    for eventloop in eventloops:
+        threading.Thread(target=eventloop.run, daemon=True).start()
+
+    shutdown_event = CrossLoopEvent()
+    run_id = id or f"run-{uuid_hex()}"
+    with _runs_lock:
+        if run_id in _runs:
+            raise ValueError(f"a run with id {run_id!r} is already serving, give this one another id")
+        _runs[run_id] = shutdown_event
+
+    async def shutdown():
+        await shutdown_event.wait()
+
+    try:
+        loop = get_current_async_loop()
+        for server in servers:
+            loop.create_task(server.start())
+
+        if print_welcome_message:
+            _print_welcome_message(servers)
+
+        loop.run_until_complete(shutdown())
+    finally:
+        with _runs_lock:
+            _runs.pop(run_id, None)
+        for server in servers:
+            try:
+                server.stop()
+            except Exception as ex:
+                warnings.warn(f"could not stop {server} while shutting down - {ex!s}", category=UserWarning)
+        for eventloop in eventloops:
+            eventloop.stop()
+        cancel_pending_tasks_in_current_loop()
+
+
+def stop(id: str | None = None) -> None:
+    """
+    Shutdown the servers started by `run()`.
+
+    Parameters
+    ----------
+    id: str, optional
+        the id given to `run()`. Omit if unspecified.
 
     Raises
     ------
     ValueError
-        if more than one `ZMQServer` or `RPCServer` is given - add all your `Thing`s to one instance
+        if no id is given while more than one run is serving
     """
-    from . import ZMQServer
-
-    loop = get_current_async_loop()  # initialize an event loop if it does not exist
-
-    things = [thing for server in servers if server.things is not None for thing in server.things]
-    things = list(set(things))  # remove duplicates
-
-    zmq_servers = [server for server in servers if isinstance(server, (ZMQServer, RPCServer))]
-    rpc_server = None
-
-    if len(zmq_servers) > 1:
-        raise ValueError(
-            "Only one ZMQServer or RPCServer instance to be run at a time, "
-            + "please add all your things to one instance"
-        )
-    elif len(zmq_servers) == 1:
-        rpc_server = zmq_servers[0]
-    else:
-        rpc_server = RPCServer(
-            id=f"rpc-broker-{uuid_hex()}",
-            things=things,
-            context=global_config.zmq_context(),
-        )
-
-    threading.Thread(target=rpc_server.run).start()
-
-    shutdown_event = asyncio.Event()
-    run.shutdown_event = shutdown_event
-
-    async def shutdown():
-        shutdown_event = run.shutdown_event
-        await shutdown_event.wait()
-
-    loop = get_current_async_loop()
-    for server in servers:
-        if server == rpc_server:
-            continue
-        loop.create_task(server.start())
-
-    if print_welcome_message:
-        _print_welcome_message(servers)
-
-    loop.run_until_complete(shutdown())
-    rpc_server.stop()
-    cancel_pending_tasks_in_current_loop()
-
-
-def stop():
-    """Shutdown all running servers started with run()."""
-    if hasattr(run, "shutdown_event"):
-        run.shutdown_event.set()
-        return
-    warnings.warn(
-        "No running servers found to shutdown or possibly no shutdown event available (cannot stop)",
-        category=UserWarning,
-    )
+    with _runs_lock:
+        if id is None:
+            if len(_runs) > 1:
+                raise ValueError(f"{len(_runs)} runs are serving - say which one to stop, one of {sorted(_runs)}")
+            if not _runs:
+                warnings.warn(
+                    "No running servers found to shutdown or possibly no shutdown event available (cannot stop)",
+                    category=UserWarning,
+                )
+                return
+            id = next(iter(_runs))
+        shutdown_event = _runs.pop(id, None)
+        if shutdown_event is None:
+            warnings.warn(f"no run with id {id!r} is serving (cannot stop)", category=UserWarning)
+            return
+    shutdown_event.set()
 
 
 def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list[str]]]) -> list[BaseProtocolServer]:
@@ -346,15 +330,9 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
                 zmq_access_points = [protocol_params["access_points"]]
             else:
                 zmq_access_points = list(zmq_access_points)
-            if not any(isinstance(ap, str) and ap.upper().startswith("INPROC") for ap in zmq_access_points):
-                zmq_access_points.append("INPROC")
             protocol_params["access_points"] = zmq_access_points
 
-            if len(zmq_access_points) == 1 and zmq_access_points[0] == "INPROC":
-                server = RPCServer(id=id, **protocol_params)
-            else:
-                server = ZMQServer(id=id, **protocol_params)
-            servers.append(server)
+            servers.append(ZMQServer(id=id, **protocol_params))
         elif protocol.upper() == "MQTT":
             if isinstance(params, str):
                 protocol_params = dict(hostname=params)
@@ -381,14 +359,14 @@ def _print_welcome_message(servers: Sequence[BaseProtocolServer]) -> None:
     for server in servers:
         if isinstance(server, HTTPServer):
             buffer.write("\n📡 HTTP:\n")
-            for thing in server.things:
+            for thing in server.things.values():
                 td_path = "/resources/wot-td?ignore_errors=true"
                 buffer.write(f"   ➜ Local:   {server.router.get_basepath(use_localhost=True)}/{thing.id}{td_path}\n")
                 buffer.write(f"   ➜ Network: {server.router.get_basepath()}/{thing.id}{td_path}\n")
         elif isinstance(server, MQTTPublisher):
             buffer.write("\n📡 MQTT:\n")
             buffer.write(f" • Broker:   {server.hostname}:{server.port}\n")
-            for thing in server.things:
+            for thing in server.things.values():
                 buffer.write(f"   ➜ Topic tree: {thing.id}/thing-description\n")
     buffer.write("\n" + "=" * 60 + "\n")
     print(buffer.getvalue())

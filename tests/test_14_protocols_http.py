@@ -22,19 +22,11 @@ from hololinked.client.security import APIKeySecurity as ClientAPIKeySecurity
 from hololinked.client.security import OAuthDirectAccessGrant
 from hololinked.config import global_config
 from hololinked.core.interfaces import BaseSerializer
-from hololinked.core.zmq.message import (
-    PreserializedData,
-    SerializableData,
-    ServerExecutionContext,
-    ThingExecutionContext,
-    default_server_execution_context,
-)
 from hololinked.serializers import (
     JSONSerializer,
     MsgpackSerializer,
     PickleSerializer,
 )
-from hololinked.server import stop
 from hololinked.server.http import HTTPServer, RPCHandler
 from hololinked.server.security import (
     APIKeySecurity,
@@ -43,12 +35,21 @@ from hololinked.server.security import (
     OIDCSecurity,
     Security,
 )
+from hololinked.server.zmq.message import (
+    PreserializedData,
+    SchedulerExecutionContext,
+    SerializableData,
+    ThingExecutionContext,
+    default_scheduler_execution_context,
+)
 from hololinked.utils import uuid_hex
 
 
 try:
+    from .conftest import stop_all_runs
     from .things import OceanOpticsSpectrometer
 except ImportError:
+    from conftest import stop_all_runs
     from things import OceanOpticsSpectrometer
 
 
@@ -78,9 +79,11 @@ def port() -> int:
 def server(port) -> Generator[HTTPServer, None, None]:
     server = HTTPServer(address="127.0.0.1", port=port)
     server.run(forked=True, print_welcome_message=False)
-    wait_until_server_ready(port=port)
-    yield server
-    stop()
+    try:
+        wait_until_server_ready(port=port)
+        yield server
+    finally:
+        stop_all_runs()
 
 
 @pytest.fixture(scope="function")
@@ -94,9 +97,11 @@ def thing(port: int) -> Generator[OceanOpticsSpectrometer, None, None]:
         print_welcome_message=False,
         config=dict(cors=True),
     )
-    wait_until_server_ready(port=port)
-    yield thing
-    stop()
+    try:
+        wait_until_server_ready(port=port)
+        yield thing
+    finally:
+        stop_all_runs()
 
 
 @contextmanager
@@ -122,7 +127,7 @@ def running_thing(
     try:
         yield thing
     finally:
-        stop()
+        stop_all_runs()
 
 
 @pytest.fixture(scope="function")
@@ -194,20 +199,24 @@ def sse_stream(url: str, chunk_size: int = 2048, **kwargs):
 async def test_01_init_run_and_stop(port: int):
     server = HTTPServer(address="127.0.0.1", port=port)
     server.run(forked=True, print_welcome_message=False)
-    wait_until_server_ready(port=port)
-    await server.async_stop()
-    stop()
+    try:
+        wait_until_server_ready(port=port)
+        await server.async_stop()
+    finally:
+        stop_all_runs()
     time.sleep(2)
 
     # stop remotely
     server.run(forked=True, print_welcome_message=False)
-    wait_until_server_ready(port=port)
-    time.sleep(2)
-    response = requests.post(f"{hostname_prefix}:{port}{stop_endpoint}")
-    assert response.status_code in [200, 201, 202, 204]
-    time.sleep(2)
-    await server.async_stop()
-    stop()
+    try:
+        wait_until_server_ready(port=port)
+        time.sleep(2)
+        response = requests.post(f"{hostname_prefix}:{port}{stop_endpoint}")
+        assert response.status_code in [200, 201, 202, 204]
+        time.sleep(2)
+        await server.async_stop()
+    finally:
+        stop_all_runs()
 
 
 def test_02_add_interaction_affordance(server: HTTPServer):
@@ -237,7 +246,7 @@ class TestableRPCHandler(RPCHandler):
 
     @dataclass
     class LatestRequestInfo:
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
         thing_execution_context: ThingExecutionContext | dict[str, Any]
         payload: SerializableData
         preserialized_payload: PreserializedData
@@ -351,28 +360,28 @@ def test_05_handlers(
     # test ThingExecutionContext
     assert isinstance(TestableRPCHandler.latest_request_info.thing_execution_context, ThingExecutionContext)
     if "fetchExecutionLogs" in path:
-        assert TestableRPCHandler.latest_request_info.thing_execution_context.fetchExecutionLogs
+        assert TestableRPCHandler.latest_request_info.thing_execution_context.fetch_execution_logs
     else:
-        assert not TestableRPCHandler.latest_request_info.thing_execution_context.fetchExecutionLogs
-    # test ServerExecutionContext
-    assert isinstance(TestableRPCHandler.latest_request_info.server_execution_context, ServerExecutionContext)
+        assert not TestableRPCHandler.latest_request_info.thing_execution_context.fetch_execution_logs
+    # test SchedulerExecutionContext
+    assert isinstance(TestableRPCHandler.latest_request_info.server_execution_context, SchedulerExecutionContext)
     if "oneway" in path:
         assert TestableRPCHandler.latest_request_info.server_execution_context.oneway
     else:
         assert not TestableRPCHandler.latest_request_info.server_execution_context.oneway
     if "invokationTimeout" in path:
-        assert TestableRPCHandler.latest_request_info.server_execution_context.invokationTimeout == 100
+        assert TestableRPCHandler.latest_request_info.server_execution_context.invokation_timeout == 100
     else:
         assert (
-            TestableRPCHandler.latest_request_info.server_execution_context.invokationTimeout
-            == default_server_execution_context.invokationTimeout
+            TestableRPCHandler.latest_request_info.server_execution_context.invokation_timeout
+            == default_scheduler_execution_context.invokation_timeout
         )
     if "executionTimeout" in path:
-        assert TestableRPCHandler.latest_request_info.server_execution_context.executionTimeout == 120
+        assert TestableRPCHandler.latest_request_info.server_execution_context.execution_timeout == 120
     else:
         assert (
-            TestableRPCHandler.latest_request_info.server_execution_context.executionTimeout
-            == default_server_execution_context.executionTimeout
+            TestableRPCHandler.latest_request_info.server_execution_context.execution_timeout
+            == default_scheduler_execution_context.execution_timeout
         )
     assert TestableRPCHandler.latest_request_info.payload.deserialize() == body
 

@@ -12,12 +12,13 @@ from testcontainers.mqtt import (
 from hololinked.client import ClientFactory, ObjectProxy
 from hololinked.server.http.server import HTTPServer
 from hololinked.server.mqtt.server import MQTTPublisher
-from hololinked.server.server import run, stop
+from hololinked.server.server import run
 from hololinked.server.zmq.server import ZMQServer
 from hololinked.utils import uuid_hex
 
 
 try:
+    from tests.conftest import stop_all_runs
     from tests.test_14_protocols_http import wait_until_server_ready
     from tests.test_16_protocols_mqtt import (
         mosquitto_container,
@@ -27,6 +28,7 @@ try:
     )
     from tests.things import TestThing
 except ImportError:
+    from conftest import stop_all_runs
     from test_14_protocols_http import wait_until_server_ready
     from test_16_protocols_mqtt import (  # noqa: F401
         mosquitto_container,
@@ -90,9 +92,11 @@ def things(
     zmq_server.add_thing(thing2)
 
     run(http_server, mqtt_publisher, zmq_server, forked=True, print_welcome_message=False)
-    wait_until_server_ready(port=http_port)
-    yield thing1, thing2
-    stop()
+    try:
+        wait_until_server_ready(port=http_port)
+        yield thing1, thing2
+    finally:
+        stop_all_runs()
 
 
 hostname_prefix = "http://127.0.0.1"

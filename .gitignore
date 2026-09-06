@@ -1,3 +1,9 @@
+# custom folders
+**/oidc-config*.json
+.claude/plans
+CLAUDE.md
+todo*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -7,15 +13,6 @@ test*.db
 
 # C extensions
 *.so
-# custom folders
-old/ 
-doc/build
-doc/source/generated
-extra-packages 
-tests/test-rpc-results.txt
-tests/run-unittest.bat
-**/oidc-config*.json
-# comment tests until good organisation comes about
 
 # vs-code 
 todo

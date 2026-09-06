@@ -8,9 +8,9 @@ is also included here.
 from typing import TYPE_CHECKING
 
 # Interfaces must be available to register adappters
-from .interfaces import BaseConfigurationRepository as BaseConfigurationRepository
-from .interfaces import BaseSchemaValidator as BaseSchemaValidator
-from .interfaces import BaseSerializer as BaseSerializer
+from hololinked.core.interfaces import BaseConfigurationRepository as BaseConfigurationRepository
+from hololinked.core.interfaces import BaseSchemaValidator as BaseSchemaValidator
+from hololinked.core.interfaces import BaseSerializer as BaseSerializer
 
 
 __all__ = [
@@ -50,10 +50,10 @@ def __getattr__(name: str):
 
 
 if TYPE_CHECKING:
-    from .actions import Action as Action
-    from .actions import action as action
-    from .events import Event as Event
-    from .meta import ThingMeta as ThingMeta
-    from .property import Property as Property
-    from .state_machine import StateMachine as StateMachine
-    from .thing import Thing as Thing
+    from hololinked.core.actions import Action as Action
+    from hololinked.core.actions import action as action
+    from hololinked.core.events import Event as Event
+    from hololinked.core.meta import ThingMeta as ThingMeta
+    from hololinked.core.property import Property as Property
+    from hololinked.core.state_machine import StateMachine as StateMachine
+    from hololinked.core.thing import Thing as Thing

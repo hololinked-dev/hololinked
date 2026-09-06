@@ -13,10 +13,10 @@ import structlog
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .actions import action as remote_method
-from .events import Event
-from .properties import Integer, List, Number
-from .thing import Thing as RemoteObject
+from hololinked.core.actions import action as remote_method
+from hololinked.core.events import Event
+from hololinked.core.properties import Integer, List, Number
+from hololinked.core.thing import Thing as RemoteObject
 
 
 class LogMessage(BaseModel):
@@ -275,7 +275,7 @@ def prepare_object_logger(instance: RemoteObject, remote_access: bool = False) -
         if True, a RemoteAccessHandler is attached to the logger.
     """
     if instance.logger is None:
-        instance.logger = structlog.get_logger().bind(
+        instance.logger = structlog.get_logger(instance.id).bind(
             component="thing",
             Thing=instance.__class__.__name__,
             thing_id=instance.id,
@@ -312,7 +312,7 @@ class LogHistoryHandler(logging.Handler):
     Log history handler.
 
     Add and remove this handler at specific points to hold specific logs that are generated
-    between those points. Currently used by execution context within `RPCServer` where one can fetch the
+    between those points. Currently used by execution context within the event loop where one can fetch the
     execution logs that were collected during a specific operation.
     """
 

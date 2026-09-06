@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from hololinked import Serializers
-from hololinked.core.zmq.message import (
+from hololinked.server.zmq.message import (
     ERROR,
     EXIT,
     HANDSHAKE,

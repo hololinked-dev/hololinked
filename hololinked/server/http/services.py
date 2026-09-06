@@ -7,10 +7,9 @@ from typing import Any, cast
 import structlog
 
 from hololinked import Serializers
+from hololinked.core.thing import Thing
 
 from ...constants import JSONSerializable, Operations
-from ...core.zmq.message import ERROR, INVALID_MESSAGE, TIMEOUT
-from ...core.zmq.payloads import SerializableData
 from ...metadata.td import (
     ActionAffordance,
     EventAffordance,
@@ -18,16 +17,12 @@ from ...metadata.td import (
     PropertyAffordance,
 )
 from ...metadata.td.forms import Form
-from ..repository import BrokerThing  # noqa: F401
 from ..security import (
     APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
     OIDCSecurity,
 )
-
-
-__error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
 
 
 class ThingDescriptionService:
@@ -39,6 +34,7 @@ class ThingDescriptionService:
         logger: structlog.stdlib.BoundLogger,
         config: Any,
         server: Any,
+        thing: Any = None,
     ) -> None:
         from . import HTTPServer  # noqa: F401
         from .config import RuntimeConfig  # noqa: F401
@@ -46,7 +42,7 @@ class ThingDescriptionService:
         self.resource = resource  # type: InteractionAffordance
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
-        self.thing = self.config.thing_repository[self.resource.thing_id]  # type: BrokerThing
+        self.thing: Thing = thing
         self.server = server  # type: HTTPServer
 
     async def generate(
@@ -75,12 +71,14 @@ class ThingDescriptionService:
         dict[str, JSONSerializable]
             the Thing Description, with HTTP forms added to every affordance
         """
-        ZMQ_TD = await self.get_ZMQ_TD(ignore_errors=ignore_errors, skip_names=skip_names)
-        TD = copy.deepcopy(ZMQ_TD)
+        thing_model = self.thing.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()
+        TD = copy.deepcopy(thing_model)
 
-        self.add_properties(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
-        self.add_actions(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
-        self.add_events(TD, ZMQ_TD, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
+        self.add_properties(
+            TD, thing_model, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost
+        )
+        self.add_actions(TD, thing_model, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
+        self.add_events(TD, thing_model, authority=authority, ignore_errors=ignore_errors, use_localhost=use_localhost)
         self.add_top_level_forms(TD, authority=authority, use_localhost=use_localhost)
         self.add_security_definitions(TD)
         self.add_links(TD)
@@ -90,7 +88,7 @@ class ThingDescriptionService:
     def add_properties(
         self,
         TD: dict[str, JSONSerializable],
-        ZMQ_TD: dict[str, JSONSerializable],
+        thing_model: dict[str, JSONSerializable],
         authority: str | None,
         ignore_errors: bool,
         use_localhost: bool,
@@ -102,8 +100,8 @@ class ThingDescriptionService:
         ----------
         TD: dict[str, JSONSerializable]
             The Thing Description to which properties are to be added
-        ZMQ_TD: dict[str, JSONSerializable]
-            The ZMQ Thing Description from which properties are to be read
+        thing_model: dict[str, JSONSerializable]
+            The Thing Model
         authority: str
             authority (protocol + host + port) to be used in the TD URLs
         ignore_errors: bool
@@ -117,8 +115,8 @@ class ThingDescriptionService:
         title = cast(str, TD["title"])
         properties = cast(dict[str, Any], TD["properties"])
 
-        for name in cast(dict[str, Any], ZMQ_TD.get("properties", {})):
-            affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
+        for name in cast(dict[str, Any], thing_model.get("properties", {})):
+            affordance = PropertyAffordance.from_TD(name, thing_model)
             forms = []  # type: list[JSONSerializable]
             properties[name]["forms"] = forms
             try:
@@ -144,20 +142,16 @@ class ThingDescriptionService:
                 if affordance.readOnly and http_method.upper() != "GET":
                     break
                 op = Operations.readproperty if http_method.upper() == "GET" else Operations.writeproperty
-                form = affordance.retrieve_form(op)
-                if not form:
-                    form = Form()
-                    form.op = op
-                    form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
+                form = Form()
+                form.op = op
+                form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
                 form.href = href
                 form.htv_methodName = http_method
                 forms.append(form.json())
             if affordance.observable:
-                form = affordance.retrieve_form(Operations.observeproperty)
-                if not form:
-                    form = Form()
-                    form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
-                    form.op = Operations.observeproperty
+                form = Form()
+                form.op = Operations.observeproperty
+                form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
                 form.href = f"{href}/change-event"
                 form.htv_methodName = "GET"
                 form.subprotocol = "sse"
@@ -166,7 +160,7 @@ class ThingDescriptionService:
     def add_actions(
         self,
         TD: dict[str, JSONSerializable],
-        ZMQ_TD: dict[str, JSONSerializable],
+        thing_model: dict[str, JSONSerializable],
         authority: str | None,
         ignore_errors: bool,
         use_localhost: bool,
@@ -178,8 +172,8 @@ class ThingDescriptionService:
         ----------
         TD: dict[str, JSONSerializable]
             The Thing Description to which actions are to be added
-        ZMQ_TD: dict[str, JSONSerializable]
-            The ZMQ Thing Description from which actions are to be read
+        thing_model: dict[str, JSONSerializable]
+            The Thing Model
         authority: str
             authority (protocol + host + port) to be used in the TD URLs
         ignore_errors: bool
@@ -193,8 +187,8 @@ class ThingDescriptionService:
         title = cast(str, TD["title"])
         actions = cast(dict[str, Any], TD["actions"])
 
-        for name in cast(dict[str, Any], ZMQ_TD.get("actions", {})):
-            affordance = ActionAffordance.from_TD(name, ZMQ_TD)
+        for name in cast(dict[str, Any], thing_model.get("actions", {})):
+            affordance = ActionAffordance.from_TD(name, thing_model)
             forms = []  # type: list[JSONSerializable]
             actions[name]["forms"] = forms
             try:
@@ -214,11 +208,9 @@ class ThingDescriptionService:
                     continue
                 raise ex from None
             for http_method in http_methods:
-                form = affordance.retrieve_form(Operations.invokeaction)
-                if not form:
-                    form = Form()
-                    form.op = Operations.invokeaction
-                    form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
+                form = Form()
+                form.op = Operations.invokeaction
+                form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
                 form.href = href
                 form.htv_methodName = http_method
                 forms.append(form.json())
@@ -226,7 +218,7 @@ class ThingDescriptionService:
     def add_events(
         self,
         TD: dict[str, JSONSerializable],
-        ZMQ_TD: dict[str, JSONSerializable],
+        thing_model: dict[str, JSONSerializable],
         authority: str | None,
         ignore_errors: bool,
         use_localhost: bool,
@@ -238,8 +230,8 @@ class ThingDescriptionService:
         ----------
         TD: dict[str, JSONSerializable]
             The Thing Description to which events are to be added
-        ZMQ_TD: dict[str, JSONSerializable]
-            The ZMQ Thing Description from which events are to be read
+        thing_model: dict[str, JSONSerializable]
+            The Thing Model
         authority: str
             authority (protocol + host + port) to be used in the TD URLs
         ignore_errors: bool
@@ -253,8 +245,8 @@ class ThingDescriptionService:
         title = cast(str, TD["title"])
         events = cast(dict[str, Any], TD["events"])
 
-        for name in cast(dict[str, Any], ZMQ_TD.get("events", {})):
-            affordance = EventAffordance.from_TD(name, ZMQ_TD)
+        for name in cast(dict[str, Any], thing_model.get("events", {})):
+            affordance = EventAffordance.from_TD(name, thing_model)
             forms = []  # type: list[JSONSerializable]
             events[name]["forms"] = forms
             try:
@@ -274,11 +266,9 @@ class ThingDescriptionService:
                     continue
                 raise ex from None
             for http_method in http_methods:
-                form = affordance.retrieve_form(Operations.subscribeevent)
-                if not form:
-                    form = Form()
-                    form.op = Operations.subscribeevent
-                    form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
+                form = Form()
+                form.op = Operations.subscribeevent
+                form.contentType = Serializers.for_object(thing_id, title, affordance.name).content_type
                 form.href = href
                 form.htv_methodName = http_method
                 form.subprotocol = "sse"
@@ -365,36 +355,3 @@ class ThingDescriptionService:
     def add_links(self, TD: dict[str, JSONSerializable]) -> None:
         """Adds custom links to the TD, override this in subclass."""
         pass
-
-    async def get_ZMQ_TD(self, ignore_errors: bool = False, skip_names: list[str] = []) -> dict[str, JSONSerializable]:
-        """
-        Fetch the TM or ZMQ in process queue TD.
-
-        Returns
-        -------
-        dict[str, JSONSerializable]
-            the Thing Description as served over the internal INPROC transport
-
-        Raises
-        ------
-        RuntimeError
-            if the `Thing` replies with an error, timeout or invalid-message response
-        ValueError
-            if the payload received from the `Thing` is not a Thing Description
-        """
-        response_message = await self.thing.execute(
-            objekt=self.resource.name,
-            operation=Operations.invokeaction,
-            payload=SerializableData(value=dict(ignore_errors=ignore_errors, skip_names=skip_names, protocol="INPROC")),
-        )
-        if response_message.type in __error_message_types__:
-            raise RuntimeError(f"error while fetching TD from thing - got {response_message.type} response")
-
-        payload = self.thing.get_response_payload(response_message)
-        if not isinstance(payload, SerializableData):
-            raise ValueError("invalid payload received from thing")
-
-        payload = payload.deserialize()
-        if not isinstance(payload, dict):
-            raise ValueError("invalid payload received from thing")
-        return payload

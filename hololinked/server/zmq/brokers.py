@@ -9,7 +9,7 @@ import time
 import warnings
 
 from collections.abc import Coroutine
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Any, Iterator
 
 import structlog
@@ -20,13 +20,12 @@ from zmq.utils.monitor import parse_monitor_message
 
 from hololinked import Serializers
 from hololinked.config import global_config
-from hololinked.constants import ZMQ_EVENT_MAP, ZMQ_TRANSPORTS
+from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.exceptions import BreakLoop
 from hololinked.utils import (
     format_exception_as_json,
     get_current_async_loop,
     get_sanitized_filename_from_random_string,
-    get_socket_type_name,
     run_callable_somehow,
     uuid_hex,
 )
@@ -44,13 +43,60 @@ from .message import (
     PreserializedEmptyByte,
     RequestMessage,
     ResponseMessage,
+    SchedulerExecutionContext,
     SerializableData,
     SerializableNone,
-    ServerExecutionContext,
     ThingExecutionContext,
-    default_server_execution_context,
+    default_scheduler_execution_context,
     default_thing_execution_context,
 )
+
+
+class ZMQSocketType(IntEnum):
+    """General ZMQ socket types."""
+
+    PAIR = zmq.PAIR
+    PUB = zmq.PUB
+    SUB = zmq.SUB
+    REQ = zmq.REQ
+    REP = zmq.REP
+    DEALER = zmq.DEALER
+    ROUTER = zmq.ROUTER
+    PULL = zmq.PULL
+    PUSH = zmq.PUSH
+    XPUB = zmq.XPUB
+    XSUB = zmq.XSUB
+    STREAM = zmq.STREAM
+    # Add more socket types as needed
+
+
+ZMQ_EVENT_MAP = {}
+"""Built-in ZMQ events."""
+
+for name in dir(zmq):
+    if name.startswith("EVENT_"):
+        value = getattr(zmq, name)
+        ZMQ_EVENT_MAP[value] = name
+
+
+def get_socket_type_name(socket_type) -> str:
+    """
+    Name of a ZMQ socket type, for logging.
+
+    Parameters
+    ----------
+    socket_type: int
+        a `zmq.SocketType` or its integer value
+
+    Returns
+    -------
+    str
+        the socket type's name, or `"UNKNOWN"` if it is not one
+    """
+    try:
+        return ZMQSocketType(socket_type).name
+    except ValueError:
+        return "UNKNOWN"
 
 
 class BaseZMQ:
@@ -1121,7 +1167,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
@@ -1139,7 +1185,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -1239,7 +1285,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> ResponseMessage:
         """
@@ -1257,7 +1303,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -1460,7 +1506,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
@@ -1478,7 +1524,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -1578,7 +1624,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> ResponseMessage:
         """
@@ -1596,7 +1642,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -1984,7 +2030,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> str:
         """
@@ -2002,7 +2048,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -2085,7 +2131,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> ResponseMessage:
         """
@@ -2103,7 +2149,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             serializable data to be sent as payload
         preserialized_payload: PreserializedData
             pre-encoded data to be sent as payload, generally used for large or custom data that is already serialized
-        server_execution_context: ServerExecutionContext | dict[str, Any]
+        server_execution_context: SchedulerExecutionContext | dict[str, Any]
             Specify server level execution context like `invokationTimeout`, `executionTimeout`, `oneway` operation etc.
         thing_execution_context: ThingExecutionContext | dict[str, Any]
             Specify thing level execution context like `fetchExecutionLogs` etc.
@@ -2144,7 +2190,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
         thing_ids: list[str] | None = None,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> dict[str, ResponseMessage]:
         if not thing_ids:
@@ -2175,7 +2221,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         operation: str,
         payload: SerializableData = SerializableNone,
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
-        server_execution_context: ServerExecutionContext | dict[str, Any] = default_server_execution_context,
+        server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
     ) -> dict[str, ResponseMessage]:
         """
@@ -2305,99 +2351,50 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             socket_type=zmq.SocketType.PUB,
             **kwargs,
         )
-        self.events = set()  # type is set[EventDispatcher]
-        self.event_ids = set()  # type: set[str]
         self._send_lock = threading.Lock()
-
-    def register(self, event: "EventDispatcher") -> None:
-        """
-        Register event with a specific (unique) name.
-
-        Parameters
-        ----------
-        event: `EventDispatcher`
-            `Event` object that needs to be registered. Events created at `__init__()` of `Thing` are
-            automatically registered.
-
-        Raises
-        ------
-        AttributeError
-            if an event with the same unique identifier is already registered
-        """
-        if event._unique_identifier in self.events and event not in self.events:
-            raise AttributeError(f"event {event._unique_identifier} already registered, please use another name.")
-        self.event_ids.add(event._unique_identifier)
-        self.events.add(event)
-
-    def unregister(self, event: "EventDispatcher") -> None:
-        """
-        Unregister event with a specific (unique) name.
-
-        Parameters
-        ----------
-        event: `EventDispatcher`
-            `Event` object that needs to be unregistered.
-        """
-        if event in self.events:
-            self.events.remove(event)
-            self.event_ids.remove(event._unique_identifier)
-        else:
-            warnings.warn(
-                f"event {event._unique_identifier} not found, did you mean to unregister another event?",
-                UserWarning,
-            )
 
     def publish(self, event, data: Any) -> None:
         """
-        Publish an event with given unique name.
+        Encode one event and put it on the PUB socket.
 
         Parameters
         ----------
-        event: `EventDispatcher`
-            `Event` object that needs to be published.
+        event: `RegisteredEvent`
+            the event being published, as the bus registered it
         data: Any
-            data to be sent as payload of the event
-
-        Raises
-        ------
-        AttributeError
-            if the event is not registered with this publisher
+            its payload, unencoded. `bytes` bypass serialization and travel as the preserialized frame.
         """
         # uncomment for type definitions
-        # from ...core.events import EventDispatcher
-        # assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
+        # from ...core.eventloop import RegisteredEvent
+        # assert isinstance(event, RegisteredEvent), "event must be an instance of RegisteredEvent"
 
         try:
             self._send_lock.acquire()
-            if event._unique_identifier in self.event_ids:
-                serializer = Serializers.for_object(
-                    event._owner_inst.id,
-                    event._owner_inst.__class__.__name__,
-                    event._descriptor.name,
-                )
-                content_type_if_no_serializer = Serializers.get_content_type_for_object(
-                    event._owner_inst.id,
-                    event._owner_inst.__class__.__name__,
-                    event._descriptor.name,
-                )
-                if not isinstance(data, bytes):
-                    payload = SerializableData(data, serializer=serializer)
-                    preserialized_payload = PreserializedEmptyByte
-                else:
-                    payload = SerializableNone
-                    preserialized_payload = PreserializedData(data, content_type=content_type_if_no_serializer)
+            serializer = Serializers.for_object(
+                event.owner.id,
+                event.owner.__class__.__name__,
+                event.descriptor.name,
+            )
+            content_type_if_no_serializer = Serializers.get_content_type_for_object(
+                event.owner.id,
+                event.owner.__class__.__name__,
+                event.descriptor.name,
+            )
+            if not isinstance(data, bytes):
+                payload = SerializableData(data, serializer=serializer)
+                preserialized_payload = PreserializedEmptyByte
+            else:
+                payload = SerializableNone
+                preserialized_payload = PreserializedData(data, content_type=content_type_if_no_serializer)
 
-                event_message = EventMessage.craft_from_arguments(
-                    event._unique_identifier,
-                    self.id,
-                    payload=payload,
-                    preserialized_payload=preserialized_payload,
-                )
-                self.socket.send_multipart(event_message.byte_array)
-                self.logger.debug(f"published event with unique identifier {event._unique_identifier}")
-                # print("published event with unique identifier {}".format(event._unique_identifier))
-                return
-            raise AttributeError(f"event name {event._unique_identifier} not registered")
+            event_message = EventMessage.craft_from_arguments(
+                event.unique_identifier,
+                self.id,
+                payload=payload,
+                preserialized_payload=preserialized_payload,
+            )
+            self.socket.send_multipart(event_message.byte_array)
+            self.logger.debug(f"published event with unique identifier {event.unique_identifier}")
         finally:
             try:
                 self._send_lock.release()
@@ -2405,6 +2402,8 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                 self.logger.warning(f"could not release publish lock for event publisher - {str(ex)}")
 
     def exit(self):
+        # the send lock is what keeps the close off a socket that another thread is publishing on
+        acquired = self._send_lock.acquire(timeout=5)
         try:
             BaseZMQ.exit(self)
             self.socket.close(0)
@@ -2414,6 +2413,9 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                 "could not properly terminate context or attempted to terminate an already terminated context."
                 + f" Exception message: {str(ex)}"
             )
+        finally:
+            if acquired:
+                self._send_lock.release()
 
 
 class BaseEventConsumer(BaseZMQClient):
@@ -2488,9 +2490,9 @@ class BaseEventConsumer(BaseZMQClient):
         )
         self.event_unique_identifier = bytes(event_unique_identifier, encoding="utf-8")
         short_uuid = uuid_hex()
-        self.interruptor = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]
+        self.interruptor = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)
         self.interruptor.setsockopt_string(zmq.IDENTITY, f"interrupting-server-{short_uuid}")
-        self.interrupting_peer = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)  # ty: ignore[invalid-argument-type]
+        self.interrupting_peer = self.context.socket(zmq.SocketType.PAIR, socket_class=socket_class)
         self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f"interrupting-client-{short_uuid}")
         self.interruptor.bind(f"inproc://{self.id}-{short_uuid}/interruption")
         self.interrupting_peer.connect(f"inproc://{self.id}-{short_uuid}/interruption")
@@ -2506,9 +2508,10 @@ class BaseEventConsumer(BaseZMQClient):
         #     self.poller.unregister(self.interruptor)
         self.poller.register(self.socket, zmq.POLLIN)
         self.poller.register(self.interruptor, zmq.POLLIN)
+        self._stop = False
 
     def stop_polling(self) -> None:
-        """Stop polling for events when `receive()` is called."""
+        """Stop polling for events ending the `receive()` method."""
         self._stop = True
 
     @property
@@ -2525,20 +2528,23 @@ class BaseEventConsumer(BaseZMQClient):
         )
 
     def exit(self):
-        try:
-            BaseZMQ.exit(self)
-            self.poller.unregister(self.socket)
-            self.poller.unregister(self.interruptor)
-        except Exception as ex:  # noqa
-            # TODO - log message and undo noqa
-            self.logger.warning(f"could not unregister sockets from poller for event consumer - {str(ex)}")
-        try:
-            self.socket.close(0)
-            self.interruptor.close(0)
-            self.interrupting_peer.close(0)
-            self.logger.info(f"terminated event consuming socket {self.socket_address}")
-        except Exception as ex:
-            self.logger.warning(f"could not terminate sockets. exception message - {str(ex)}")
+        self.stop_polling()
+        BaseZMQ.exit(self)
+        if self.socket.closed:
+            return  # __del__ reaching a consumer that its own listener already exited
+        for socket in (self.socket, self.interruptor):
+            try:
+                self.poller.unregister(socket)
+            except KeyError:
+                pass  # never registered - subscribe() was not called
+            except Exception as ex:  # noqa: BLE001
+                self.logger.warning(f"could not unregister socket from poller for event consumer - {str(ex)}")
+        for socket in (self.socket, self.interruptor, self.interrupting_peer):
+            try:
+                socket.close(0)
+            except Exception as ex:  # noqa: BLE001
+                self.logger.warning(f"could not terminate socket of event consumer - {str(ex)}")
+        self.logger.info(f"terminated event consuming socket {self.socket_address}")
 
 
 class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
@@ -2566,40 +2572,48 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         Raises
         ------
         BreakLoop
-            if polling was interrupted and `raise_interrupt_as_exception` is True
+            if polling was stopped or interrupted and `raise_interrupt_as_exception` is True
+        zmq.ZMQError
+            if the poll or the receive failed for a reason other than the sockets being closed
         """
-        self._stop = False
         while not self._stop:
+            if not self._poller_lock.acquire(timeout=timeout / 1000 if timeout else -1):
+                continue
             try:
-                if not self._poller_lock.acquire(timeout=timeout / 1000 if timeout else -1):
-                    continue
+                if self._stop or self.socket.closed:
+                    break
                 sockets = self.poller.poll(timeout)  # ty: ignore[invalid-argument-type]  # list[tuple[zmq.Socket, int]]
                 if len(sockets) > 1:
                     # if there is an interrupt message as well as an event,
                     # give preference to interrupt message.
-                    if sockets[0][0] == self.interrupting_peer:
+                    if sockets[0][0] == self.interruptor:
                         sockets = [sockets[0]]  # we still need the socket, poll event  tuple
-                    elif sockets[1][0] == self.interrupting_peer:
+                    elif sockets[1][0] == self.interruptor:
                         sockets = [sockets[1]]
                 for socket, _ in sockets:
                     try:
                         raw_message = socket.recv_multipart(zmq.NOBLOCK)
                         message = EventMessage(raw_message)
-                        if socket == self.interrupting_peer:
+                        if socket == self.interruptor:
                             if message.payload.deserialize() == "INTERRUPT":
                                 self.stop_polling()
-                                if raise_interrupt_as_exception:
-                                    raise BreakLoop("event consumer interrupted")
-                                return
+                                break
                         return message
                     except zmq.Again:
                         pass
                     # if not self.handled_default_message_types(event_message):
+            except zmq.ZMQError as ex:
+                # the sockets or the context were closed under us, which is a teardown elsewhere and not
+                # an error here - anything else is a real failure and belongs to the caller
+                if ex.errno not in (zmq.ETERM, zmq.ENOTSOCK):
+                    raise
+                self.stop_polling()
+                break
             finally:
-                try:
-                    self._poller_lock.release()
-                except Exception as ex:
-                    self.logger.warning(f"could not release poller lock for event receive - {str(ex)}")
+                self._poller_lock.release()
+        if raise_interrupt_as_exception:
+            raise BreakLoop("event consumer interrupted")
+        return None
 
     def interrupt(self):
         """
@@ -2609,6 +2623,21 @@ class EventConsumer(BaseEventConsumer, BaseSyncZMQ):
         Otherwise please use stop_polling().
         """
         self.interrupting_peer.send_multipart(self.interrupt_message.byte_array)
+
+    def exit(self) -> None:
+        """
+        Stop polling and close the sockets, waiting out a `receive()` already in flight.
+
+        The poller lock is what makes closing safe from a thread other than the polling one - without it,
+        `poll()` is left holding sockets that no longer exist.
+        """
+        self.stop_polling()
+        acquired = self._poller_lock.acquire(timeout=2 * self.poll_timeout / 1000)
+        try:
+            super().exit()
+        finally:
+            if acquired:
+                self._poller_lock.release()
 
 
 class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
@@ -2640,45 +2669,51 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         Raises
         ------
         BreakLoop
-            if polling was interrupted and `raise_interrupt_as_exception` is True
+            if polling was stopped or interrupted and `raise_interrupt_as_exception` is True
+        zmq.ZMQError
+            if the poll or the receive failed for a reason other than the sockets being closed
         """
-        # TODO - use raise_interrupt_as_exception
-        self._stop = False
         while not self._stop:
             try:
-                try:
-                    await asyncio.wait_for(
-                        self._poller_lock.acquire(),
-                        timeout=timeout / 1000 if timeout else None,
-                    )
-                except TimeoutError:
-                    continue
+                await asyncio.wait_for(
+                    self._poller_lock.acquire(),
+                    timeout=timeout / 1000 if timeout else None,
+                )
+            except TimeoutError:
+                continue
+            try:
+                if self._stop or self.socket.closed:
+                    break
                 sockets = await self.poller.poll(timeout)
                 if len(sockets) > 1:
                     # if there is an interrupt message as well as an event,
                     # give preference to interrupt message.
-                    if sockets[0][0] == self.interrupting_peer:
+                    if sockets[0][0] == self.interruptor:
                         sockets = [sockets[0]]
-                    elif sockets[1][0] == self.interrupting_peer:
+                    elif sockets[1][0] == self.interruptor:
                         sockets = [sockets[1]]
                 for socket, _ in sockets:
                     try:
                         raw_message = await socket.recv_multipart(zmq.NOBLOCK)
                         message = EventMessage(raw_message)
-                        if socket == self.interrupting_peer:
+                        if socket == self.interruptor:
                             if message.payload.deserialize() == "INTERRUPT":
                                 self.stop_polling()
-                                if raise_interrupt_as_exception:
-                                    raise BreakLoop("event consumer interrupted")
-                                return
+                                break
                         return message
                     except zmq.Again:
                         pass
+            except zmq.ZMQError as ex:
+                # see the note in the sync consumer - a closed socket or context is a teardown, not a failure
+                if ex.errno not in (zmq.ETERM, zmq.ENOTSOCK):
+                    raise
+                self.stop_polling()
+                break
             finally:
-                try:
-                    self._poller_lock.release()
-                except Exception as ex:
-                    self.logger.warning(f"could not release poller lock for event receive - {str(ex)}")
+                self._poller_lock.release()
+        if raise_interrupt_as_exception:
+            raise BreakLoop("event consumer interrupted")
+        return None
 
     async def interrupt(self):
         """

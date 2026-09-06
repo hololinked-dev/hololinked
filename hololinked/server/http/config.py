@@ -4,7 +4,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ..repository import BrokerThing  # noqa: F401
 from ..security import Security
 from .controllers import (
     ActionHandler,
@@ -50,8 +49,8 @@ class RuntimeConfig(BaseModel):
     thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
     """service class to be used for generating thing description"""
 
-    thing_repository: Any = Field(default_factory=dict)  # type: dict[str, BrokerThing]
-    """repository layer thing model to be used by the HTTP server and handlers"""
+    server_id: str = ""
+    """identity of the server."""
 
     allowed_clients: list[str] | None = Field(default=None)
     """

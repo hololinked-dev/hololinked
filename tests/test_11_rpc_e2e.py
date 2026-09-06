@@ -11,9 +11,11 @@ from hololinked.utils import uuid_hex
 
 
 try:
+    from .conftest import stop_all_runs
     from .things import TestThing
     from .utils import fake
 except ImportError:
+    from conftest import stop_all_runs
     from things import TestThing
     from utils import fake
 
@@ -28,8 +30,10 @@ def thing(access_point) -> Generator[TestThing, None, None]:
     thing_id = f"test-thing-{uuid_hex()}"
     thing = TestThing(id=thing_id)
     thing.run_with_zmq_server(forked=True, access_points=[access_point])
-    yield thing
-    thing.rpc_server.stop()
+    try:
+        yield thing
+    finally:
+        stop_all_runs()
 
 
 @pytest.fixture(scope="class")
@@ -213,15 +217,6 @@ class TestRPC_E2E:
         client.subscribe_event("test_event", cb)
         time.sleep(3)
 
-        for i in range(10):
-            client.push_events(total_number_of_events=1)
-            time.sleep(1)
-            if len(results) > 0:
-                results.clear()
-                break
-        else:
-            pytest.skip("No events received from server, probably due to OS level issues")
-
         client.push_events()
         time.sleep(3)
         assert len(results) > 0, "No events received"
@@ -271,6 +266,7 @@ class TestRPC_E2E:
                 break
             time.sleep(0.1)
         client.unobserve_property(prop)
+        assert len(result) == len(prospective_values), f"expected {len(prospective_values)}, got {len(result)}"
         for index, res in enumerate(result):
             assert res.data == prospective_values[index]
 

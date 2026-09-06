@@ -7,6 +7,8 @@ from things import OceanOpticsSpectrometer
 
 from hololinked.core import Action, Event, Property, Thing, ThingMeta
 from hololinked.core.actions import BoundAction
+from hololinked.core.eventloop import EventLoop
+from hololinked.core.eventloop.pubsub import EventBus
 from hololinked.core.events import EventDispatcher
 from hololinked.core.logger import RemoteAccessHandler
 from hololinked.core.meta import (
@@ -17,8 +19,7 @@ from hololinked.core.meta import (
 )
 from hololinked.core.properties import Parameter  # noqa: F401
 from hololinked.core.state_machine import BoundFSM
-from hololinked.core.zmq.brokers import EventPublisher
-from hololinked.core.zmq.rpc_server import RPCServer
+from hololinked.server.zmq import ZMQServer
 
 
 """
@@ -153,17 +154,24 @@ def test_05_subthings(thing_cls: ThingMeta):
 @pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
 def test_06_servers_init(thing_cls: ThingMeta):
     """Test if servers can be initialized/instantiated"""
-    # req. 1. rpc_server and event_publisher must be None when not run()
+    # req. 1. eventloop and event_bus must be None when not run()
     thing = thing_cls(id="test_servers_init")  # type: Thing
-    assert thing.rpc_server is None
-    assert thing.event_publisher is None
-    # req. 2. rpc_server and event_publisher must be instances of their respective classes when run()
-    RPCServer(id="test-rpc-server-init", things=[thing], logger=thing.logger)  # prepare server class
-    assert isinstance(thing.rpc_server, RPCServer)
-    assert isinstance(thing.event_publisher, EventPublisher)
+    assert thing.eventloop is None
+    assert thing.event_bus is None
+    # req. 2. eventloop and event_bus must be instances of their respective classes when run()
+    EventLoop(things=[thing])
+    server = ZMQServer(
+        id="test-rpc-server-init",
+        things=[thing],
+        access_points="INPROC",
+        logger=thing.logger,
+    )  # prepare server class
+    assert isinstance(thing.eventloop, EventLoop)
+    assert isinstance(thing.event_bus, EventBus)
+    # req. 3. the server does not own the loop, it serves things that already run on one
+    assert server.things[thing.id] is thing
     # exit to quit nicely
-    thing.rpc_server.exit()
-    thing.event_publisher.exit()
+    server.exit()
 
 
 """

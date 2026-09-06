@@ -1,5 +1,7 @@
 """HTTP request handlers that run operations on a `Thing`."""
 
+import asyncio
+
 from typing import Any, Optional
 
 import msgspec
@@ -10,26 +12,27 @@ from tornado.iostream import StreamClosedError
 from tornado.web import RequestHandler
 
 from hololinked import Serializers
+from hololinked.core.thing import Thing
 
 from ...config import global_config
 from ...constants import Operations
-from ...core.zmq.brokers import EventConsumer
-from ...core.zmq.message import (
-    SerializableNone,
-    ServerExecutionContext,
+from ...core.eventloop import (
+    EventSubscription,
+    Operation,
+    SchedulerExecutionContext,
     ThingExecutionContext,
-    default_server_execution_context,
+    default_scheduler_execution_context,
     default_thing_execution_context,
 )
-from ...core.zmq.payloads import PreserializedData, SerializableData
+from ...core.eventloop.operations import Reply, SerializableNone
+from ...core.eventloop.payloads import PreserializedData, SerializableData
 from ...metadata.td import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,
     PropertyAffordance,
 )
-from ...utils import format_exception_as_json, get_current_async_loop
-from ..repository import BrokerThing  # noqa: F401
+from ...utils import format_exception_as_json, get_current_async_loop, uuid_hex
 from ..security import (
     APIKeySecurity,
     Argon2BasicSecurity,
@@ -45,9 +48,6 @@ class LocalExecutionContext(msgspec.Struct):
     messageID: Optional[str] = None
 
 
-# tornado declares `initialize` and the HTTP verb hooks as class attributes typed `Callable[..., ...]`
-# rather than as methods, so overriding them with a real `def` is always reported as an invariant
-# mismatch - its own ErrorHandler/RedirectHandler/StaticFileHandler override them the same way.
 class BaseHandler(RequestHandler):
     """Base request handler for running operations on the `Thing`."""
 
@@ -58,6 +58,7 @@ class BaseHandler(RequestHandler):
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
     ) -> None:
         """
@@ -69,6 +70,8 @@ class BaseHandler(RequestHandler):
             dataclass representation of `Thing`'s exposed object that can quickly convert to a ZMQ Request object
         metadata: HandlerMetadata | None,
             additional metadata about the resource, like allowed HTTP methods
+        thing: Thing
+            the `Thing` this handler serves
         """
         from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
 
@@ -82,7 +85,8 @@ class BaseHandler(RequestHandler):
             layer="controller",
             impl=self.__class__.__name__,
         )
-        self.thing = self.config.thing_repository[self.resource.thing_id]  # type: BrokerThing
+        self.thing: Thing = thing
+        self.thing_id = self.resource.thing_id
         self.allowed_clients = self.config.allowed_clients
         self.security_schemes = self.config.security_schemes
         self.metadata = metadata or HandlerMetadata()  # type: HandlerMetadata
@@ -246,7 +250,7 @@ class BaseHandler(RequestHandler):
     def get_execution_parameters(
         self,
     ) -> tuple[
-        ServerExecutionContext,
+        SchedulerExecutionContext,
         ThingExecutionContext,
         LocalExecutionContext,
         SerializableData,
@@ -263,30 +267,33 @@ class BaseHandler(RequestHandler):
         http://localhost:8080/property/temperature?oneway=true&invokationTimeout=5&some_arg=42
         ```
 
-        server execution context would have `oneway` set to true & `invokationTimeout` set to 5 seconds,
+        scheduler execution context would have `oneway` set to true & `invokationTimeout` set to 5 seconds,
         local execution context would be empty as no such arguments were passed,
         and additional payload would have `{"some_arg": 42}` as its value.
 
         Returns
         -------
         tuple[
-            ServerExecutionContext,
+            SchedulerExecutionContext,
             ThingExecutionContext,
             LocalExecutionContext,
             SerializableData,
         ]
-            server execution context, thing execution context, local execution context and payload (if any)
+            scheduler execution context, thing execution context, local execution context and payload (if any)
         """
         arguments = dict()
         if len(self.request.query_arguments) == 0:
             return (
-                default_server_execution_context,
+                default_scheduler_execution_context,
                 default_thing_execution_context,
                 LocalExecutionContext(),
                 SerializableNone,
             )
         for key, value in self.request.query_arguments.items():
-            if len(value) == 1:
+            if key == "messageID":
+                # not a JSON value, a hex ID like `1765e270` becomes a float
+                arguments[key] = value[0].decode("utf-8")
+            elif len(value) == 1:
                 try:
                     arguments[key] = Serializers.json.loads(value[0])
                 except MsgspecJSONDecodeError:
@@ -302,19 +309,21 @@ class BaseHandler(RequestHandler):
         # if self.resource.request_as_argument:
         #     arguments['request'] = self.request # find some way to pass the request object to the thing
         thing_execution_context = ThingExecutionContext(
-            fetchExecutionLogs=bool(arguments.pop("fetchExecutionLogs", False))
+            fetch_execution_logs=bool(arguments.pop("fetchExecutionLogs", False))
         )
-        server_execution_context = ServerExecutionContext(
-            invokationTimeout=arguments.pop("invokationTimeout", default_server_execution_context.invokationTimeout),
-            executionTimeout=arguments.pop("executionTimeout", default_server_execution_context.executionTimeout),
-            oneway=arguments.pop("oneway", default_server_execution_context.oneway),
+        scheduler_execution_context = SchedulerExecutionContext(
+            invokation_timeout=arguments.pop(
+                "invokationTimeout", default_scheduler_execution_context.invokation_timeout
+            ),
+            execution_timeout=arguments.pop("executionTimeout", default_scheduler_execution_context.execution_timeout),
+            oneway=arguments.pop("oneway", default_scheduler_execution_context.oneway),
         )
         local_execution_context = LocalExecutionContext(
             noblock=arguments.pop("noblock", None),
             messageID=arguments.pop("messageID", None),
         )
         additional_payload = SerializableNone if not arguments else SerializableData(arguments)  # application/json
-        return server_execution_context, thing_execution_context, local_execution_context, additional_payload
+        return scheduler_execution_context, thing_execution_context, local_execution_context, additional_payload
 
     @property
     def message_id(self) -> str | None:
@@ -433,6 +442,23 @@ class RPCHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Methods", ", ".join(self.metadata.http_methods))
         self.finish()
 
+    async def write_reply(self, reply: Reply) -> None:
+        """Write the event loop's reply onto the wire."""
+        # only one payload reaches the client for now, no support for multipart # TODO
+        if reply.preserialized_payload.value:
+            if reply.payload.value is not None:
+                self.logger.warning(
+                    "multipart payloads are not supported over HTTP, only the preserialized payload is written",
+                    content_type=reply.payload.content_type,
+                )
+            reply_payload = reply.preserialized_payload
+        else:
+            reply_payload = reply.payload
+        body = reply_payload.serialize() if isinstance(reply_payload, SerializableData) else reply_payload.value
+        self.set_header("Content-Type", reply_payload.content_type or "application/json")
+        if body:
+            super().write(body)
+
     async def handle_through_thing(self, operation: str) -> None:
         """
         Handles the `Thing` operations and writes the reply to the HTTP client.
@@ -442,9 +468,16 @@ class RPCHandler(BaseHandler):
         operation: str
             operation to be performed on the Thing, like `readproperty`,
             `writeproperty`, `invokeaction`, `deleteproperty`
+
+        Raises
+        ------
+        RuntimeError
+            If the `Thing` is not served by an event loop
         """
+        if not self.thing.eventloop:  # type gaurd, not a real logic.
+            raise RuntimeError("Thing is not served by an event loop")
         try:
-            server_execution_context, thing_execution_context, local_execution_context, additional_payload = (
+            scheduler_execution_context, thing_execution_context, local_execution_context, additional_payload = (
                 self.get_execution_parameters()
             )
             payload, preserialized_payload = self.get_request_payload()
@@ -454,42 +487,35 @@ class RPCHandler(BaseHandler):
             self.logger.error(f"error while decoding request - {str(ex)}")
             return
         try:
-            if server_execution_context.oneway:
-                # if oneway, we do not expect a response, so we just return None
-                await self.thing.oneway(
-                    objekt=self.resource.name,
-                    operation=operation,
-                    payload=payload,
-                    preserialized_payload=preserialized_payload,
-                    server_execution_context=server_execution_context,
-                    thing_execution_context=thing_execution_context,
-                )
+            request = Operation(
+                thing_id=self.thing_id,
+                objekt=self.resource.name,
+                operation=operation,
+                payload=payload,
+                preserialized_payload=preserialized_payload,
+                scheduler_execution_context=scheduler_execution_context,
+                thing_execution_context=thing_execution_context,
+                id=uuid_hex(),
+                sender_id=self.request.remote_ip or "",
+            )
+            if scheduler_execution_context.oneway:
+                # no reply is wanted, so the future is dropped rather than awaited
+                self.thing.eventloop.submit(request)
                 self.set_status(204, "ok")
             elif local_execution_context.noblock:
-                message_id = await self.thing.schedule(
-                    objekt=self.resource.name,
-                    operation=operation,
-                    payload=payload,
-                    preserialized_payload=preserialized_payload,
-                    server_execution_context=server_execution_context,
-                    thing_execution_context=thing_execution_context,
-                )
+                # the client collects this on a second request, quoting the message ID back to us
+                message_id = uuid_hex()
+                pending = self.thing.eventloop.pending_operations
+                pending.add(self.config.server_id, message_id, self.thing.eventloop.submit(request))
                 self.set_status(204, "ok")
                 self.set_header("X-Message-ID", message_id)
             else:
-                response_message = await self.thing.execute(
-                    objekt=self.resource.name,
-                    operation=operation,
-                    payload=payload,
-                    preserialized_payload=preserialized_payload,
-                    server_execution_context=server_execution_context,
-                    thing_execution_context=thing_execution_context,
-                )
-                response_payload = self.thing.get_response_payload(response_message)
+                reply = await self.thing.eventloop.execute(request)
+                if reply.timed_out:
+                    self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
+                    return
                 self.set_status(200, "ok")
-                self.set_header("Content-Type", response_payload.content_type or "application/json")
-                if response_payload.value:
-                    self.write(response_payload.value)
+                await self.write_reply(reply)
         except ConnectionAbortedError as ex:
             self.set_status(503, f"lost connection to thing - {str(ex)}")
             # TODO handle reconnection
@@ -506,21 +532,28 @@ class RPCHandler(BaseHandler):
 
     async def handle_no_block_response(self) -> None:
         """Handles the no-block response for the noblock calls."""  # noqa: DOC501
+        if not self.thing.eventloop:  # type gaurd, not a real logic.
+            raise RuntimeError("Thing is not served by an event loop")
+        future = None  # held only while this request owns the claim, so that `finally` can give it back
+        message_id = None
         try:
             message_id = self.message_id
             if message_id is None:
                 raise ValueError("no message id available to wait for a no-block response")
             self.logger.info("waiting for no-block response", message_id=message_id)
-            response_message = await self.thing.recv_response(
-                message_id=message_id,
-                timeout=default_server_execution_context.invokationTimeout
-                + default_server_execution_context.executionTimeout,
-            )
-            response_payload = self.thing.get_response_payload(response_message)
-            self.set_status(200, "ok")
-            self.set_header("Content-Type", response_payload.content_type or "application/json")
-            if response_payload.value:
-                self.write(response_payload.value)
+            future = self.thing.eventloop.pending_operations.claim(self.config.server_id, message_id)
+            invokation = default_scheduler_execution_context.invokation_timeout
+            execution = default_scheduler_execution_context.execution_timeout
+            # either being None means wait indefinitely, so there is no bound to compute
+            bound = None if invokation is None or execution is None else invokation + execution
+            # shielded - a timeout here must not cancel the operation, it should continue running for later collection
+            reply: Reply = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), timeout=bound)
+            if reply.timed_out:
+                self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
+            else:
+                self.set_status(200, "ok")
+                await self.write_reply(reply)
+            future = None  # answered - the caller has no reason to come back with this message ID
         except KeyError as ex:
             # if the message id is not found, it means that the response was not received in time
             self.logger.error(f"message ID not found for no-block response - {str(ex)}")
@@ -538,6 +571,10 @@ class RPCHandler(BaseHandler):
             )
             response_payload.serialize()
             self.write(response_payload.value)
+        finally:
+            if future is not None and message_id is not None:
+                # the operation is still running
+                self.thing.eventloop.pending_operations.add(self.config.server_id, message_id, future)
 
 
 class PropertyHandler(RPCHandler):
@@ -618,13 +655,14 @@ class RWMultiplePropertiesHandler(ActionHandler):
         resource: ActionAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
         **kwargs,
     ) -> None:
         """Set up the handler with the affordances that read and write multiple properties."""
         self.read_properties_resource = kwargs.get("read_properties_resource", None)
         self.write_properties_resource = kwargs.get("write_properties_resource", None)
-        return super().initialize(resource, config, logger, metadata)
+        return super().initialize(resource, config, logger, thing, metadata)
 
     async def get(self) -> None:
         """Read multiple properties, or fetch the reply of an earlier no-block read."""
@@ -663,16 +701,29 @@ class RWMultiplePropertiesHandler(ActionHandler):
 class EventHandler(BaseHandler):
     """handles events emitted by `Thing` and tunnels them as HTTP SSE."""
 
+    resource: EventAffordance | PropertyAffordance
+    """an event, or the observable property whose change event is streamed - both name an event to subscribe to"""
+
     def initialize(
         self,
         resource: InteractionAffordance | EventAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
     ) -> None:
-        """Set up the handler to stream events with a plain SSE data header."""
-        super().initialize(resource, config, logger, metadata)
+        """
+        Set up the handler to stream events with a plain SSE data header.
+
+        Raises
+        ------
+        RuntimeError
+            If the `Thing` is not served by an event loop.
+        """
+        super().initialize(resource, config, logger, thing, metadata)
         self.data_header = b"data: %s\n\n"
+        if self.thing.eventloop is None:  # type gaurd, not a real logic
+            raise RuntimeError("Thing is not served by an event loop")
 
     def set_custom_default_headers(self) -> None:
         """
@@ -707,21 +758,15 @@ class EventHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Methods", "GET")
         self.finish()
 
-    def receive_blocking_event(self, event_consumer: EventConsumer):
-        """
-        deprecated, but can make a blocking call in an async loop.
-
-        Returns
-        -------
-        EventMessage | None
-            the event received within the timeout, or `None` if none arrived
-        """
-        return event_consumer.receive(timeout=10000)
-
     async def handle_datastream(self) -> None:
-        """Called by GET method and handles the event publishing."""
+        """Called by GET method and handles the event publishing."""  # noqa: DOC501
+        if not self.thing.eventloop:  # type gaurd, not a real logic.
+            raise RuntimeError("Thing is not served by an event loop")
         try:
-            event_consumer = self.thing.subscribe_event(self.resource)
+            subscription = EventSubscription(
+                self.thing.eventloop.event_bus,
+                self.resource.event_unique_identifier,
+            )
             self.set_status(200)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
@@ -729,21 +774,30 @@ class EventHandler(BaseHandler):
             self.write(Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
             return
 
-        while True:
-            try:
-                event_message = await event_consumer.receive(timeout=10000)
-                if event_message:
-                    payload = self.thing.get_response_payload(event_message)
-                    self.write(self.data_header % payload.value)
+        # Send the header right away. One needs to flush to even send headers.
+        # This confirms that a subscription happened. If clients end with too short timeout even without receiving
+        # headers, then they think that the subscription did not go through.
+        await self.flush()
+
+        try:
+            while True:
+                try:
+                    data = await subscription.receive(timeout=10)
+                    body, content_type = subscription.encode(data)
+                    # TODO use content_type and get rid of other event handlers
+                    self.write(self.data_header % body)
                     self.logger.debug(f"new data scheduled to flush - {self.resource.name}")
-                else:
+                    # flushes and handles heartbeat - raises StreamClosedError if the client left
+                    await self.flush()
+                except TimeoutError:
                     self.logger.debug(f"found no new data - {self.resource.name}")
-                await self.flush()  # flushes and handles heartbeat - raises StreamClosedError if client disconnects
-            except StreamClosedError:
-                break
-            except Exception as ex:
-                self.logger.error(f"error while pushing event - {str(ex)}")
-                self.write(self.data_header % Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
+                except StreamClosedError:
+                    break
+                except Exception as ex:
+                    self.logger.error(f"error while pushing event - {str(ex)}")
+                    self.write(self.data_header % Serializers.json.dumps({"exception": format_exception_as_json(ex)}))
+        finally:
+            subscription.unsubscribe()
 
 
 class JPEGImageEventHandler(EventHandler):
@@ -754,10 +808,11 @@ class JPEGImageEventHandler(EventHandler):
         resource: InteractionAffordance | EventAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
     ) -> None:
         """Set up the handler to stream events with a base64 JPEG image SSE data header."""
-        super().initialize(resource, config, logger, metadata)
+        super().initialize(resource, config, logger, thing, metadata)
         self.data_header = b"data:image/jpeg;base64,%s\n\n"
 
 
@@ -769,10 +824,11 @@ class PNGImageEventHandler(EventHandler):
         resource: InteractionAffordance | EventAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         metadata: Any = None,
     ) -> None:
         """Set up the handler to stream events with a base64 PNG image SSE data header."""
-        super().initialize(resource, config, logger, metadata)
+        super().initialize(resource, config, logger, thing, metadata)
         self.data_header = b"data:image/png;base64,%s\n\n"
 
 
@@ -805,8 +861,8 @@ class StopHandler(BaseHandler):
             origin = self.request.headers.get("Origin")
             self.logger.info(f"stopping HTTP server as per client request from {origin}, scheduling a stop message...")
             # create a task in current loop
-            eventloop = get_current_async_loop()
-            eventloop.create_task(self.server.async_stop())
+            loop = get_current_async_loop()
+            loop.create_task(self.server.async_stop())
             # dont call it in sequence, its not clear whether its designed for that
             self.set_status(204, "ok")
         except Exception as ex:
@@ -860,17 +916,25 @@ class ReadinessProbeHandler(BaseHandler):
         """Report whether every served `Thing` is connected and answering a ping."""  # noqa: DOC501
         self.set_custom_default_headers()
         try:
-            if len(self.server._disconnected_things) > 0:
-                raise RuntimeError("some things are disconnected, retry later")
-            replies = await self.server.zmq_client_pool.async_execute_in_all_things(
-                objekt="ping",
-                operation="invokeaction",
+            things = (self.server.things or {}).values()
+            if not things:
+                self.set_status(200, "ok")  # nothing served, so nothing to be ready for
+                self.finish()
+                return
+            if any(thing.eventloop is None or not thing.eventloop.is_running for thing in things):
+                raise RuntimeError("the event loop is not running yet, retry later")
+            replies = await asyncio.gather(
+                *[
+                    thing.eventloop.execute(
+                        Operation(thing_id=thing.id, objekt="ping", operation=Operations.invokeaction)
+                    )
+                    for thing in things
+                ]
             )
-            if not all(reply.body[0].deserialize() is None for thing_id, reply in replies.items()):
+            if any(reply.is_error or reply.timed_out for reply in replies):
                 self.set_status(500, "not all things are ready")
             else:
                 self.set_status(200, "ok")
-                # self.write({id: "ready" for id in replies.keys()})
         except Exception as ex:
             self.logger.error(f"error while checking readiness - {str(ex)}")
             self.set_status(500, f"error while checking readiness - {str(ex)}")
@@ -885,6 +949,7 @@ class ThingDescriptionHandler(BaseHandler):
         resource: InteractionAffordance | PropertyAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         owner_inst: Any = None,
         metadata: Any = None,
     ) -> None:
@@ -894,12 +959,14 @@ class ThingDescriptionHandler(BaseHandler):
             config=config,
             logger=logger,
             metadata=metadata,
+            thing=thing,
         )
         self.thing_description = self.config.thing_description_service(
             resource=resource,
             config=config,
             logger=logger,
             server=owner_inst,
+            thing=thing,
         )
 
     async def get(self):

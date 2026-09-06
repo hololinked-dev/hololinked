@@ -3,16 +3,17 @@ from typing import Any, Generator
 import pytest
 
 from hololinked.client import ClientFactory, ObjectProxy
-from hololinked.server import stop
 from hololinked.utils import uuid_hex
 
 
 try:
+    from .conftest import stop_all_runs
     from .test_11_rpc_e2e import TestRPC_E2E as BaseRPC_E2E  # noqa: F401
     from .test_11_rpc_e2e import client, thing, thing_model  # noqa: F401
     from .test_14_protocols_http import hostname_prefix, wait_until_server_ready
     from .things import TestThing
 except ImportError:
+    from conftest import stop_all_runs
     from test_11_rpc_e2e import TestRPC_E2E as BaseRPC_E2E  # noqa: F401
     from test_11_rpc_e2e import client, thing, thing_model  # noqa: F401
     from test_14_protocols_http import hostname_prefix, wait_until_server_ready
@@ -35,9 +36,11 @@ def thing(port: int) -> Generator[TestThing, None, None]:
         print_welcome_message=False,
         config=dict(cors=True),
     )
-    wait_until_server_ready(port=port)
-    yield thing
-    stop()
+    try:
+        wait_until_server_ready(port=port)
+        yield thing
+    finally:
+        stop_all_runs()
 
 
 @pytest.fixture(scope="class")

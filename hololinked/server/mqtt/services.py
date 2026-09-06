@@ -6,7 +6,11 @@ from typing import Any
 
 import structlog
 
+from hololinked import Serializers
+from hololinked.core.thing import Thing
+
 from ...constants import Operations
+from ...metadata.td.forms import Form
 from ...metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
 
 
@@ -22,6 +26,7 @@ class ThingDescriptionService:
         hostname: str,
         port: int,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
         ssl: bool = True,
     ) -> None:
         """
@@ -35,17 +40,19 @@ class ThingDescriptionService:
             The MQTT broker port, to fill in the TD forms
         logger: structlog.stdlib.BoundLogger
             The logger to use for logging messages
+        thing: Thing
+            The `Thing` whose description is generated
         ssl: bool
             Whether the broker is using SSL or not
         """
         self.hostname = hostname
         self.port = port
         self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
+        self.thing = thing  # type: Thing
         self.ssl = ssl
 
     async def generate(
         self,
-        ZMQ_TD: dict[str, Any],
         ignore_errors: bool = False,
         skip_names: list[str] = [],
     ) -> dict[str, Any]:
@@ -54,10 +61,8 @@ class ThingDescriptionService:
 
         Parameters
         ----------
-        ZMQ_TD: dict[str, Any]
-            The ZMQ Thing Description message received from ZMQ broker
         ignore_errors: bool
-            Whether to ignore errors when adding properties/events to the TD
+            Whether to ignore errors when generating the model and when adding properties/events to the TD
         skip_names: list[str]
             List of property/event names to skip when adding to the TD
 
@@ -66,19 +71,20 @@ class ThingDescriptionService:
         dict[str, Any]
             The generated MQTT Thing Description
         """
-        TD = copy.deepcopy(ZMQ_TD)
+        thing_model = self.thing.get_thing_model(ignore_errors=ignore_errors, skip_names=skip_names).json()
+        TD = copy.deepcopy(thing_model)
         # remove actions as they dont push events
         TD.pop("actions", None)
 
-        self.add_properties(TD, ZMQ_TD, ignore_errors, skip_names)
-        self.add_events(TD, ZMQ_TD, ignore_errors, skip_names)
+        self.add_properties(TD, thing_model, ignore_errors, skip_names)
+        self.add_events(TD, thing_model, ignore_errors, skip_names)
 
         return TD
 
     def add_properties(
         self,
         TD: dict[str, Any],
-        ZMQ_TD: dict[str, Any],
+        thing_model: dict[str, Any],
         ignore_errors: bool = False,
         skip_names: list[str] = [],
     ) -> None:
@@ -90,23 +96,25 @@ class ThingDescriptionService:
         TD: dict[str, Any]
             The seed Thing Description to modify in place. This method does not have a return value, therefore
             just supply the TD dict and it will be modified. Non-observable properties will be removed.
-        ZMQ_TD: dict[str, Any]
-            The ZMQ Thing Description message received from ZMQ broker
+        thing_model: dict[str, Any]
+            The Thing Model the description is built from
         ignore_errors: bool
             Whether to ignore errors when adding properties to the TD
         skip_names: list[str]
             List of property names to skip when adding to the TD
         """
-        for name in ZMQ_TD.get("properties", {}).keys():
+        for name in thing_model.get("properties", {}).keys():
             if name in skip_names:
                 continue
             try:
-                affordance = PropertyAffordance.from_TD(name, ZMQ_TD)
+                affordance = PropertyAffordance.from_TD(name, thing_model)
                 if not affordance.observable:
                     TD["properties"].pop(name)
                     continue
                 TD["properties"][name]["forms"] = []
-                form = affordance.retrieve_form(Operations.observeproperty)
+                form = Form()
+                form.op = Operations.observeproperty
+                form.contentType = Serializers.for_object(TD["id"], self.thing.__class__.__name__, name).content_type
                 form.href = f"mqtt{'s' if self.ssl else ''}://{self.hostname}:{self.port}"
                 form.mqv_topic = f"{TD['id']}/{name}"
                 TD["properties"][name]["forms"].append(form.json())
@@ -119,7 +127,7 @@ class ThingDescriptionService:
     def add_events(
         self,
         TD: dict[str, Any],
-        ZMQ_TD: dict[str, Any],
+        thing_model: dict[str, Any],
         ignore_errors: bool = False,
         skip_names: list[str] = [],
     ) -> None:
@@ -131,21 +139,23 @@ class ThingDescriptionService:
         TD: dict[str, Any]
             The seed Thing Description to modify in place. This method does not have a return value, therefore
             just supply the TD dict and it will be modified.
-        ZMQ_TD: dict[str, Any]
-            The ZMQ Thing Description message received from ZMQ broker
+        thing_model: dict[str, Any]
+            The Thing Model the description is built from
         ignore_errors: bool
             Whether to ignore errors when adding events to the TD
         skip_names: list[str]
             List of event names to skip when adding to the TD
         """
         # repurpose event
-        for name in ZMQ_TD.get("events", {}).keys():
+        for name in thing_model.get("events", {}).keys():
             if name in skip_names:
                 continue
             try:
-                affordance = EventAffordance.from_TD(name, ZMQ_TD)
+                EventAffordance.from_TD(name, thing_model)
                 TD["events"][name]["forms"] = []
-                form = affordance.retrieve_form(Operations.subscribeevent)
+                form = Form()
+                form.op = Operations.subscribeevent
+                form.contentType = Serializers.for_object(TD["id"], self.thing.__class__.__name__, name).content_type
                 form.href = f"mqtt{'s' if self.ssl else ''}://{self.hostname}:{self.port}"
                 form.mqv_topic = f"{TD['id']}/{name}"
                 TD["events"][name]["forms"].append(form.json())

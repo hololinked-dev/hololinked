@@ -15,15 +15,17 @@ from hololinked.client.abstractions import SSE
 from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty
 from hololinked.core import Thing
 from hololinked.core.actions import BoundAction
-from hololinked.core.zmq.brokers import (  # noqa: F401
+from hololinked.core.eventloop import EventLoop
+from hololinked.core.utils import get_all_sub_things_recusively
+from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.td.forms import Form
+from hololinked.server.zmq import ZMQServer
+from hololinked.server.zmq.brokers import (  # noqa: F401
     AsyncZMQClient,
     EventDispatcher,
     SyncZMQClient,
 )
-from hololinked.core.zmq.rpc_server import RPCServer
-from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
-from hololinked.metadata.td.forms import Form
-from hololinked.utils import get_all_sub_things_recusively, uuid_hex
+from hololinked.utils import get_current_async_loop, uuid_hex
 
 
 try:
@@ -87,11 +89,26 @@ def thing(thing_id: str) -> TestThing:
     return cls(id=thing_id)
 
 
-@pytest.fixture(scope="class")
-def server(server_id, thing) -> Generator[RPCServer, None, None]:
-    _server = RPCServer(id=server_id, things=[thing])
-    thread = threading.Thread(target=_server.run, daemon=False)
+def serve(server: ZMQServer, eventloop: EventLoop) -> threading.Thread:
+    threading.Thread(target=eventloop.run, daemon=True).start()
+    while not eventloop.is_running:
+        time.sleep(0.01)  # a request submitted before the loop runs is refused, so wait for it
+
+    def poll() -> None:
+        loop = get_current_async_loop()
+        loop.run_until_complete(server.start())
+        loop.run_forever()  # the listeners are tasks on this loop, keep it alive for them
+
+    thread = threading.Thread(target=poll, daemon=True)
     thread.start()
+    return thread
+
+
+@pytest.fixture(scope="class")
+def server(server_id, thing) -> Generator[ZMQServer, None, None]:
+    eventloop = EventLoop(things=[thing])
+    _server = ZMQServer(id=server_id, things=[thing], access_points="INPROC")
+    serve(_server, eventloop)
     yield _server
     _server.stop()
 
@@ -222,11 +239,11 @@ def test_event(test_thing_TD, owner_inst):
 
 @pytest.mark.asyncio(loop_scope="class")
 class TestRPCBroker:
-    def test_01_creation_defaults(self, server: RPCServer, thing: TestThing):
-        assert server.req_rep_server.socket_address.startswith("inproc://")
-        assert server.event_publisher.socket_address.startswith("inproc://")
-        assert thing.rpc_server == server
-        assert thing.event_publisher == server.event_publisher
+    def test_01_creation_defaults(self, server: ZMQServer, thing: TestThing):
+        assert server.inproc_server.socket_address.startswith("inproc://")
+        assert server.inproc_event_publisher.socket_address.startswith("inproc://")
+        assert server.things[thing.id] is thing
+        assert thing.event_bus == thing.eventloop.event_bus
 
     def test_02_handshake(self, sync_client: SyncZMQClient):
         sync_client.handshake()
@@ -587,15 +604,15 @@ class TestRPCBroker:
             pydantic_simple_prop.set("5str")
         assert "validation error for 'int'" in str(ex.value)
 
-    def test_17_creation_defaults(self, thing: TestThing, server: RPCServer):
+    def test_17_creation_defaults(self, thing: TestThing, server: ZMQServer):
         """Test server configuration defaults"""
         all_things = get_all_sub_things_recusively(thing)
         # assert len(all_things) > 1  # run the test only if there are sub things
         for thing in all_things:
             assert isinstance(thing, Thing)
             for name, event in thing.events.values.items():
-                assert event.publisher == server.event_publisher
-                assert isinstance(event._unique_identifier, str)
+                assert event.publisher == thing.eventloop.event_bus
+                assert isinstance(event.unique_identifier, str)
                 assert event._owner_inst == thing
 
     @pytest.mark.parametrize(
@@ -613,7 +630,7 @@ class TestRPCBroker:
     def test_18_sync_client_event_stream(
         self,
         thing: TestThing,
-        server: RPCServer,
+        server: ZMQServer,
         action_push_events: ZMQAction,
         event_name: str,
         expected_data: Any,
@@ -622,7 +639,7 @@ class TestRPCBroker:
         resource = getattr(TestThing, event_name).to_metadata(thing)  # type: EventAffordance
 
         form = Form()
-        form.href = server.event_publisher.socket_address
+        form.href = server.inproc_event_publisher.socket_address
         form.contentType = "application/json"
         form.op = "subscribeevent"
         form.subprotocol = "sse"
@@ -634,7 +651,7 @@ class TestRPCBroker:
         )
 
         event_dispatcher = getattr(thing, event_name)  # type: EventDispatcher
-        assert f"{resource.thing_id}/{resource.name}" == event_dispatcher._unique_identifier
+        assert f"{resource.thing_id}/{resource.name}" == event_dispatcher.unique_identifier
 
         attempts = 100
         results = []
@@ -671,6 +688,7 @@ class TestRPCBroker:
     async def test_19_async_client_event_stream(
         self,
         thing: TestThing,
+        server: ZMQServer,
         action_push_events: ZMQAction,
         event_name: str,
         expected_data: Any,
@@ -679,7 +697,7 @@ class TestRPCBroker:
         resource = getattr(TestThing, event_name).to_metadata(thing)  # type: EventAffordance
 
         form = Form()
-        form.href = thing.rpc_server.event_publisher.socket_address
+        form.href = server.inproc_event_publisher.socket_address
         form.contentType = "application/json"
         form.op = "subscribeevent"
         form.subprotocol = "sse"
@@ -692,7 +710,7 @@ class TestRPCBroker:
         )
 
         event_dispatcher = getattr(thing, event_name)  # type: EventDispatcher
-        assert f"{resource.thing_id}/{resource.name}" == event_dispatcher._unique_identifier
+        assert f"{resource.thing_id}/{resource.name}" == event_dispatcher.unique_identifier
 
         attempts = 100
         results = []

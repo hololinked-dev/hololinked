@@ -8,10 +8,10 @@ import collections.abc
 from enum import Enum
 from collections import OrderedDict
 
-from ..param.utils import *
-from ..param.exceptions import *
-from ..param.parameterized import Parameterized, dt_types, Parameter
-from ..param.parameters import (
+from hololinked.param.utils import *
+from hololinked.param.exceptions import *
+from hololinked.param.parameterized import Parameterized, dt_types, Parameter
+from hololinked.param.parameters import (
     TypeConstrainedList,
     TypeConstrainedDict,
     abbreviate_paths,
@@ -20,7 +20,7 @@ from ..param.parameters import (
     concrete_descendents,
     named_objs,
 )
-from .property import Property
+from hololinked.core.property import Property
 
 
 class String(Property):

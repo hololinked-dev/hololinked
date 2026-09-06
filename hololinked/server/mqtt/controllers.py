@@ -9,10 +9,10 @@ from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 
 from hololinked import Serializers
+from hololinked.core.thing import Thing
 
-from ...core.zmq.message import EventMessage  # noqa: F401
+from ...core.eventloop import EventSubscription
 from ...metadata.td import EventAffordance, PropertyAffordance
-from ..repository import BrokerThing  # noqa: F401
 
 
 class TopicPublisher:
@@ -28,6 +28,7 @@ class TopicPublisher:
         resource: EventAffordance | PropertyAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing,
     ) -> None:
         """
         Initialize the publisher for one event or observable property.
@@ -42,6 +43,8 @@ class TopicPublisher:
             The runtime configuration for the `MQTTPublisher`
         logger: structlog.stdlib.BoundLogger
             The logger to use for logging messages
+        thing: Thing
+            the `Thing` whose event or property this publisher pushes
         """
         from .config import RuntimeConfig  # noqa: F401
 
@@ -50,7 +53,7 @@ class TopicPublisher:
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="controller", impl=self.__class__.__name__, topic=self.topic)
-        self.thing = self.config.thing_repository[resource.thing_id]  # type: BrokerThing
+        self.thing: Thing = thing
         self.qos = self.config.qos
         self._stop_publishing = False
 
@@ -59,26 +62,34 @@ class TopicPublisher:
         self._stop_publishing = True
 
     async def publish(self):
-        """Publishes events to the MQTT broker in an infinite loop."""
-        consumer = self.thing.subscribe_event(self.resource)
+        """Publishes events to the MQTT broker in an infinite loop."""  # noqa: DOC501
+        if not self.thing.eventloop:  # type gaurd, not a real logic.
+            raise RuntimeError("Thing is not served by an event loop")
+        subscription = EventSubscription(
+            self.thing.eventloop.event_bus,
+            self.resource.event_unique_identifier,
+        )
         self.logger.info(f"Starting to publish events for {self.resource.name} to MQTT broker on topic {self.topic}")
-        while not self._stop_publishing:
-            try:
-                message = await consumer.receive()  # type: EventMessage | None
-                if message is None:
-                    continue
-                payload = self.thing.get_response_payload(message)
-                properties = Properties(PacketTypes.PUBLISH)
-                properties.ContentType = payload.content_type
-                await self.client.publish(
-                    topic=self.topic,
-                    payload=payload.value,
-                    qos=self.qos,
-                    properties=properties,
-                )
-                self.logger.debug(f"Published MQTT message for {self.resource.name} on topic {self.topic}")
-            except Exception as ex:
-                self.logger.error(f"Error publishing MQTT message for {self.resource.name}: {ex}")
+        try:
+            while not self._stop_publishing:
+                try:
+                    data = await subscription.receive(timeout=10)
+                    body, content_type = subscription.encode(data)
+                    properties = Properties(PacketTypes.PUBLISH)
+                    properties.ContentType = content_type
+                    await self.client.publish(
+                        topic=self.topic,
+                        payload=body,
+                        qos=self.qos,
+                        properties=properties,
+                    )
+                    self.logger.debug(f"Published MQTT message for {self.resource.name} on topic {self.topic}")
+                except TimeoutError:
+                    continue  # nothing was pushed in that window, go round and check for a stop
+                except Exception as ex:
+                    self.logger.error(f"Error publishing MQTT message for {self.resource.name}: {ex}")
+        finally:
+            subscription.unsubscribe()
         self.logger.info(f"Stopped publishing events for {self.resource.name} to MQTT broker on topic {self.topic}")
 
 
@@ -94,7 +105,7 @@ class ThingDescriptionPublisher:
         client: aiomqtt.Client,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
-        ZMQ_TD: dict[str, Any],
+        thing: Thing,
     ) -> None:
         """
         Initialize the Thing Description publisher.
@@ -107,26 +118,27 @@ class ThingDescriptionPublisher:
             The runtime configuration for the MQTT publisher
         logger: structlog.stdlib.BoundLogger
             The logger to use for logging messages
-        ZMQ_TD: dict[str, Any]
-            The ZMQ Thing Description message received from ZMQ broker
+        thing: Thing
+            The `Thing` whose description is being published
         """
         from .config import RuntimeConfig  # noqa: F401
 
         self.client = client
-        self.topic = f"{ZMQ_TD['id']}/thing-description"
+        self.thing = thing  # type: Thing
+        self.topic = f"{thing.id}/thing-description"
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
-        self.thing = self.config.thing_repository[ZMQ_TD["id"]]
         self.thing_description = self.config.thing_description_service(
             hostname=self.client._hostname,
             port=self.client._port,
             logger=logger,
+            thing=thing,
             ssl=self.client._client._ssl_context is not None,
         )
 
-    async def publish(self, ZMQ_TD: dict[str, Any]) -> None:
+    async def publish(self) -> None:
         """Publishes Thing Description to the MQTT broker, one-time at startup, with qos=2 and retain=True."""
-        TD = await self.thing_description.generate(ZMQ_TD)
+        TD = await self.thing_description.generate(ignore_errors=True)
 
         properties = Properties(PacketTypes.PUBLISH)
         properties.ContentType = "application/json"

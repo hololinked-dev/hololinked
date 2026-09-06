@@ -7,13 +7,13 @@ from typing import overload
 
 import structlog
 
-from ..param import edit_constant
-from .actions import Action
-from .exceptions import StateMachineError
-from .meta import ThingMeta
-from .properties import Boolean, ClassSelector, TypedDict
-from .property import Property
-from .thing import Thing
+from hololinked.core.actions import Action
+from hololinked.core.exceptions import StateMachineError
+from hololinked.core.meta import ThingMeta
+from hololinked.core.properties import Boolean, ClassSelector, TypedDict
+from hololinked.core.property import Property
+from hololinked.core.thing import Thing
+from hololinked.param import edit_constant
 
 
 class StateMachine:
@@ -357,7 +357,7 @@ class BoundFSM:
             next_state = self.descriptor._get_machine_compliant_state(value)
             self.owner._state_machine_state = next_state
             self.logger.info(f"state changed from {previous_state} to {next_state}")
-            if push_event and self.push_state_change_event and hasattr(self.owner, "event_publisher"):
+            if push_event and self.push_state_change_event and hasattr(self.owner, "event_bus"):
                 self.owner.state  # just acces to trigger the observable event
             if skip_callbacks:
                 return
