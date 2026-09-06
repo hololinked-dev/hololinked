@@ -275,7 +275,7 @@ def prepare_object_logger(instance: RemoteObject, remote_access: bool = False) -
         if True, a RemoteAccessHandler is attached to the logger.
     """
     if instance.logger is None:
-        instance.logger = structlog.get_logger().bind(
+        instance.logger = structlog.get_logger(instance.id).bind(
             component="thing",
             Thing=instance.__class__.__name__,
             thing_id=instance.id,

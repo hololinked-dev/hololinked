@@ -346,7 +346,11 @@ class EventLoop:
                         stdlib_logger = instance.logger._logger
                     else:
                         stdlib_logger = instance.logger
-                    list_handler.setFormatter(stdlib_logger.handlers[0].formatter)
+                    # a Thing's own logger carries no handler of its own, they are configured
+                    # on the root, which is where its records are emitted
+                    handlers = stdlib_logger.handlers or logging.getLogger().handlers
+                    if handlers:
+                        list_handler.setFormatter(handlers[0].formatter)
                     stdlib_logger.addHandler(list_handler)
 
                 # execute the operation

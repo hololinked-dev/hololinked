@@ -186,7 +186,7 @@ def run(
     print_welcome_message: bool, default True
         whether to print a welcome message on startup, like the ports and access points
     id: str, optional
-        name this run, so that `stop(id)` can address it.
+        name this run, so that a `stop()` can be called `stop(id)`.
 
     Raises
     ------
