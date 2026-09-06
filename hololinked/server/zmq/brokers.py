@@ -2403,7 +2403,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
     def exit(self):
         # the send lock is what keeps the close off a socket that another thread is publishing on
-        acquired = self._send_lock.acquire(timeout=2 * self.poll_timeout / 1000)
+        acquired = self._send_lock.acquire(timeout=5)
         try:
             BaseZMQ.exit(self)
             self.socket.close(0)
