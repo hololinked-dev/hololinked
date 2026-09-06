@@ -461,8 +461,7 @@ class RPCHandler(BaseHandler):
 
     async def write(self, reply: Reply) -> None:
         """Write the event loop's reply onto the wire."""
-        # only one payload reaches the client: a HTTP response carries a single body with a single
-        # content type, so a reply that has both a value and a binary part sends the binary part
+        # only one payload reaches the client for now, no support for multipart # TODO
         if reply.preserialized_payload.value:
             if reply.payload.value is not None:
                 self.logger.warning(
@@ -514,12 +513,12 @@ class RPCHandler(BaseHandler):
                 self.eventloop.submit(request)
                 self.set_status(204, "ok")
             elif local_execution_context.noblock:
-                # the client collects this on a second request, quoting the token back to us
-                token = uuid_hex()
+                # the client collects this on a second request, quoting the message ID back to us
+                message_id = uuid_hex()
                 pending = self.eventloop.pending_operations
-                pending.add(self.config.server_id, token, self.eventloop.submit(request))
+                pending.add(self.config.server_id, message_id, self.eventloop.submit(request))
                 self.set_status(204, "ok")
-                self.set_header("X-Message-ID", token)
+                self.set_header("X-Message-ID", message_id)
             else:
                 reply = await self.eventloop.execute(request)
                 if reply.timed_out:
@@ -562,7 +561,7 @@ class RPCHandler(BaseHandler):
             else:
                 self.set_status(200, "ok")
                 await self.write(reply)
-            future = None  # answered - the caller has no reason to come back with this token
+            future = None  # answered - the caller has no reason to come back with this message ID
         except KeyError as ex:
             # if the message id is not found, it means that the response was not received in time
             self.logger.error(f"message ID not found for no-block response - {str(ex)}")

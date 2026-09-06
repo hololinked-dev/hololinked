@@ -75,7 +75,6 @@ class MQTTPublisher(BaseProtocolServer):
             topic_publisher=kwargs.get("topic_publisher", TopicPublisher),
             thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
-            eventloop=kwargs.get("eventloop", None),
             qos=qos,
         )
         default_config.update(config or dict())
@@ -129,13 +128,6 @@ class MQTTPublisher(BaseProtocolServer):
         loop = get_current_async_loop()
         if not thing.eventloop:
             raise ValueError(f"Thing {thing.id} is not associated with any event loop")
-        if self.config.eventloop is None:
-            self.config.eventloop = thing.eventloop
-        elif self.config.eventloop is not thing.eventloop:
-            raise ValueError(
-                "every Thing published over MQTT must be run by the same event loop, "
-                + f"but {thing.id} belongs to a different one"
-            )
         TD = thing.get_thing_model(ignore_errors=True).json()
 
         for event_name in TD.get("events", {}).keys():
@@ -145,6 +137,7 @@ class MQTTPublisher(BaseProtocolServer):
                 resource=event_affordance,
                 logger=self.logger,
                 config=self.config,
+                thing=thing,
             )
             self.publishers[topic_publisher.topic] = topic_publisher
             loop.create_task(topic_publisher.publish())
@@ -158,6 +151,7 @@ class MQTTPublisher(BaseProtocolServer):
                 resource=property_affordance,
                 logger=self.logger,
                 config=self.config,
+                thing=thing,
             )
             self.publishers[topic_publisher.topic] = topic_publisher
             loop.create_task(topic_publisher.publish())

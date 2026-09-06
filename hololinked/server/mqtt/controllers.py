@@ -9,8 +9,10 @@ from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 
 from hololinked import Serializers
+from hololinked.core.eventloop import EventLoop
+from hololinked.core.thing import Thing
 
-from ...core.eventloop import EventSubscription, encode_event
+from ...core.eventloop import EventSubscription
 from ...metadata.td import EventAffordance, PropertyAffordance
 
 
@@ -27,6 +29,7 @@ class TopicPublisher:
         resource: EventAffordance | PropertyAffordance,
         config: Any,
         logger: structlog.stdlib.BoundLogger,
+        thing: Thing | None = None,
     ) -> None:
         """
         Initialize the publisher for one event or observable property.
@@ -41,6 +44,8 @@ class TopicPublisher:
             The runtime configuration for the `MQTTPublisher`
         logger: structlog.stdlib.BoundLogger
             The logger to use for logging messages
+        thing: Thing | None
+            the `Thing` whose event or property this publisher pushes
         """
         from .config import RuntimeConfig  # noqa: F401
 
@@ -49,9 +54,28 @@ class TopicPublisher:
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(layer="controller", impl=self.__class__.__name__, topic=self.topic)
-        self.eventloop = self.config.eventloop
+        self.thing = thing  # type: Thing | None
         self.qos = self.config.qos
         self._stop_publishing = False
+
+    @property
+    def eventloop(self) -> EventLoop:
+        """
+        The event loop running this publisher's `Thing`.
+
+        Returns
+        -------
+        EventLoop
+            the event loop whose bus carries the payloads this publisher pushes
+
+        Raises
+        ------
+        RuntimeError
+            if the publisher was created without a `Thing`, or that `Thing` was never exposed
+        """
+        if self.thing is None or self.thing.eventloop is None:
+            raise RuntimeError(f"no event loop for {self.topic} - its publisher was created without a Thing.")
+        return self.thing.eventloop
 
     def stop(self):
         """Stop publishing, the client is not closed automatically."""
@@ -67,10 +91,8 @@ class TopicPublisher:
         try:
             while not self._stop_publishing:
                 try:
-                    received = await subscription.receive(timeout=10)
-                    if received is None:
-                        continue
-                    body, content_type = encode_event(*received)
+                    data = await subscription.receive(timeout=10)
+                    body, content_type = subscription.encode(data)
                     properties = Properties(PacketTypes.PUBLISH)
                     properties.ContentType = content_type
                     await self.client.publish(
@@ -80,6 +102,8 @@ class TopicPublisher:
                         properties=properties,
                     )
                     self.logger.debug(f"Published MQTT message for {self.resource.name} on topic {self.topic}")
+                except TimeoutError:
+                    continue  # nothing was pushed in that window, go round and check for a stop
                 except Exception as ex:
                     self.logger.error(f"Error publishing MQTT message for {self.resource.name}: {ex}")
         finally:
