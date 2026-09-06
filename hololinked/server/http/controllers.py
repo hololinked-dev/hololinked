@@ -12,7 +12,6 @@ from tornado.iostream import StreamClosedError
 from tornado.web import RequestHandler
 
 from hololinked import Serializers
-from hololinked.core.eventloop import EventLoop
 from hololinked.core.thing import Thing
 
 from ...config import global_config
@@ -92,25 +91,6 @@ class BaseHandler(RequestHandler):
         self.security_schemes = self.config.security_schemes
         self.metadata = metadata or HandlerMetadata()  # type: HandlerMetadata
         self.userinfo = None  # type: Optional[dict[str, Any]]
-
-    @property
-    def eventloop(self) -> EventLoop:
-        """
-        The event loop running this handler's `Thing`.
-
-        Returns
-        -------
-        EventLoop
-            the event loop to submit this handler's operations to
-
-        Raises
-        ------
-        RuntimeError
-            if the rule was registered without a `Thing`, or that `Thing` was never exposed
-        """
-        if self.thing is None or self.thing.eventloop is None:
-            raise RuntimeError(f"no event loop for {self.request.path} - its rule was registered without a Thing.")
-        return self.thing.eventloop
 
     async def has_access_control(self) -> bool:
         """
@@ -510,17 +490,17 @@ class RPCHandler(BaseHandler):
             )
             if scheduler_execution_context.oneway:
                 # no reply is wanted, so the future is dropped rather than awaited
-                self.eventloop.submit(request)
+                self.thing.eventloop.submit(request)
                 self.set_status(204, "ok")
             elif local_execution_context.noblock:
                 # the client collects this on a second request, quoting the message ID back to us
                 message_id = uuid_hex()
-                pending = self.eventloop.pending_operations
-                pending.add(self.config.server_id, message_id, self.eventloop.submit(request))
+                pending = self.thing.eventloop.pending_operations
+                pending.add(self.config.server_id, message_id, self.thing.eventloop.submit(request))
                 self.set_status(204, "ok")
                 self.set_header("X-Message-ID", message_id)
             else:
-                reply = await self.eventloop.execute(request)
+                reply = await self.thing.eventloop.execute(request)
                 if reply.timed_out:
                     self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
                     return
@@ -549,7 +529,7 @@ class RPCHandler(BaseHandler):
             if message_id is None:
                 raise ValueError("no message id available to wait for a no-block response")
             self.logger.info("waiting for no-block response", message_id=message_id)
-            future = self.eventloop.pending_operations.claim(self.config.server_id, message_id)
+            future = self.thing.eventloop.pending_operations.claim(self.config.server_id, message_id)
             invokation = default_scheduler_execution_context.invokation_timeout
             execution = default_scheduler_execution_context.execution_timeout
             # either being None means wait indefinitely, so there is no bound to compute
@@ -582,7 +562,7 @@ class RPCHandler(BaseHandler):
         finally:
             if future is not None:
                 # the operation is still running
-                self.eventloop.pending_operations.add(self.config.server_id, message_id, future)
+                self.thing.eventloop.pending_operations.add(self.config.server_id, message_id, future)
 
 
 class PropertyHandler(RPCHandler):
@@ -758,7 +738,7 @@ class EventHandler(BaseHandler):
         """Called by GET method and handles the event publishing."""
         try:
             subscription = EventSubscription(
-                self.eventloop.event_bus,
+                self.thing.eventloop.event_bus,
                 f"{self.thing_id}/{self.resource.name}",
             )
             self.set_status(200)
@@ -905,7 +885,7 @@ class ReadinessProbeHandler(BaseHandler):
         """Report whether every served `Thing` is connected and answering a ping."""  # noqa: DOC501
         self.set_custom_default_headers()
         try:
-            things = self.server.things or []
+            things = (self.server.things or {}).values()
             if not things:
                 self.set_status(200, "ok")  # nothing served, so nothing to be ready for
                 self.finish()

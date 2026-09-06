@@ -102,7 +102,7 @@ class MQTTPublisher(BaseProtocolServer):
         """
         await self.setup()
         loop = get_current_async_loop()
-        for thing in self.things:
+        for thing in self.things.values():
             loop.create_task(self.start_publishers(thing))
 
     async def start_publishers(self, thing: CoreThing) -> None:
@@ -175,9 +175,3 @@ class MQTTPublisher(BaseProtocolServer):
         """Stop publishing, the client is not closed automatically."""
         for publisher in self.publishers.values():
             publisher.stop()
-
-    def add_thing(self, thing: CoreThing):
-        """Add a `Thing` to the MQTT publisher and start publishing its events/observable properties."""
-        if self.things is None:
-            self.things = list()
-        self.things.append(thing)

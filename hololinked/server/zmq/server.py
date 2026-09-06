@@ -12,7 +12,7 @@ from hololinked import Serializers
 
 from ...config import global_config
 from ...constants import ZMQ_TRANSPORTS, Operations
-from ...core.eventloop import EventLoop, Operation, Reply, ReplyKind
+from ...core.eventloop import Operation, Reply, ReplyKind
 from ...core.eventloop.operations import as_execution_kwargs, format_return_value
 from ...core.exceptions import BreakLoop
 from ...core.properties import ClassSelector
@@ -104,6 +104,7 @@ class ZMQServer(BaseProtocolServer):
         self.logger = logger
 
         self._published_event_ids = set()  # type: set[str]
+        self.polling = False
 
         self.context = context or global_config.zmq_context()
 
@@ -185,45 +186,7 @@ class ZMQServer(BaseProtocolServer):
 
         self.add_things(*(things or []))
 
-    @property
-    def eventloop(self) -> EventLoop:
-        """
-        The event loop running the `Thing`s this server serves.
-
-        Resolved from the `Thing`s rather than owned, as HTTP and MQTT do it - this server is one
-        protocol in front of an event loop, not the thing that creates one.
-
-        Returns
-        -------
-        EventLoop
-            the event loop to submit this server's operations to
-
-        Raises
-        ------
-        RuntimeError
-            if no `Thing` was added, or the ones that were are not bound to an event loop
-        """
-        for thing in self.things or []:
-            if thing.eventloop is not None:
-                return thing.eventloop
-        raise RuntimeError(
-            f"no event loop for ZMQ server {self.id} - add a Thing that is already served by one, "
-            + "with EventLoop(things=[...]) or run()"
-        )
-
-    def add_thing(self, thing: Thing) -> None:
-        """
-        Adds a thing to the list of things to serve.
-
-        The `Thing` need not be bound to an event loop yet - `run()` is what requires that, so that a
-        server can be built before the loop that will run it, which is what `parse_params()` does.
-        """
-        if self.things is None:
-            self.things = []
-        if thing not in self.things:
-            self.things.append(thing)
-
-    async def recv_requests_and_dispatch_jobs(self, server: AsyncZMQServer) -> None:
+    async def recv_requests(self, server: AsyncZMQServer) -> None:
         """
         Poll a ZMQ socket, hand every request to the event loop and write each reply back.
 
@@ -238,8 +201,7 @@ class ZMQServer(BaseProtocolServer):
         """
         self.logger.debug(f"started polling at socket {server.socket_address}")
         loop = get_current_async_loop()
-        eventloop = self.eventloop
-        while eventloop.is_running:
+        while self.polling:
             try:
                 request_messages = await server.poll_requests()
                 # when stop poll is set, this will exit with an empty list
@@ -252,11 +214,11 @@ class ZMQServer(BaseProtocolServer):
 
             for request_message in request_messages:
                 # a task per request, so that waiting for one reply never stalls the poller
-                loop.create_task(self.serve_one_request(server, request_message))
+                loop.create_task(self.process_request(server, request_message))
         self.stop()
         self.logger.info(f"stopped polling at socket {server.socket_address.split(':')[0].upper()}")
 
-    async def serve_one_request(self, server: AsyncZMQServer, request_message: RequestMessage) -> None:
+    async def process_request(self, server: AsyncZMQServer, request_message: RequestMessage) -> None:
         """
         Convert one ZMQ request, run it through the event loop and write the answer back.
 
@@ -285,7 +247,7 @@ class ZMQServer(BaseProtocolServer):
             if operation.operation == Operations.invokeaction and operation.objekt == "get_thing_description":
                 reply = await self.get_thing_description(operation)
             else:
-                reply = await self.eventloop.execute(operation)
+                reply = await self.things[operation.thing_id].eventloop.execute(operation)
         except Exception as ex:
             self.logger.error(
                 f"exception occurred for message - {ex!s}",
@@ -314,11 +276,7 @@ class ZMQServer(BaseProtocolServer):
 
     async def get_thing_description(self, operation: Operation) -> Reply:
         """
-        Answer a Thing Description request here, rather than through the event loop.
-
-        A Thing Description is mostly forms, and a form is an address on this server's own sockets,
-        so only this server can build one. Submitting it would send it through a scheduler and the
-        `Thing`'s thread - queued behind whatever that `Thing` is busy with - only to come back here.
+        Create a Thing Description.
 
         Parameters
         ----------
@@ -330,7 +288,8 @@ class ZMQServer(BaseProtocolServer):
         Reply
             the description, or the error that generating it raised
         """
-        instance = self.eventloop.things[operation.thing_id]
+        # TODO this method needs a signature update. Does not make sense to input operation and get a reply.
+        instance = self.things[operation.thing_id]
         try:
             kwargs = dict(operation.payload.deserialize() or {})
             args = kwargs.pop("__args__", ())
@@ -346,8 +305,6 @@ class ZMQServer(BaseProtocolServer):
             payload.require_serialized()
             return Reply(payload, preserialized_payload, ReplyKind.OK)
         except Exception as ex:
-            # the same shape the event loop would have produced, so a bad `protocol=` argument still
-            # comes back as an error reply rather than as an invalid-message response
             self.logger.error(f"error while generating the thing description - {ex!s}")
             self.logger.exception(ex)
             payload, preserialized_payload = format_return_value(
@@ -356,13 +313,14 @@ class ZMQServer(BaseProtocolServer):
             return Reply(payload, preserialized_payload, ReplyKind.ERROR)
 
     def stop_polling(self) -> None:
-        """Stop every request listener. Registered with the event loop, so stopping it stops these too."""
+        """Stop every request listener. The sockets stay open, use `exit()` to close them."""
+        self.polling = False
         for server in self.transport_servers:
             server.stop_polling()
 
     def stop(self) -> None:
-        """Stop the server and the event loop behind it. This method is threadsafe."""
-        self.eventloop.stop()
+        """Stop serving."""
+        self.stop_polling()
 
     def exit(self) -> None:
         """Stop, then close every socket and event publisher."""
@@ -406,38 +364,34 @@ class ZMQServer(BaseProtocolServer):
     async def start(self) -> None:
         """Start polling every served transport for requests. Returns without blocking."""
         await self.setup()
+        self.polling = True
         loop = get_current_async_loop()
         for server in self.transport_servers:
-            loop.create_task(self.recv_requests_and_dispatch_jobs(server))
+            loop.create_task(self.recv_requests(server))
 
     async def setup(self) -> None:
         """
-        Bind this server to the event loop its `Thing`s run on.
+        Setup the server.
 
         Raises
         ------
-        RuntimeError
-            if the served `Thing`s are not bound to an event loop
         ValueError
-            if they are not all bound to the same one - this server polls one set of sockets and
-            hands every request to one loop, so it cannot straddle two
+            if a served `Thing` is not bound to an event loop
         """
-        eventloop = self.eventloop
-        for thing in self.things or []:
-            if thing.eventloop is not eventloop:
-                raise ValueError(
-                    "every Thing served over ZMQ must be run by the same event loop, "
-                    + f"but {thing.id} belongs to a different one"
-                )
-        eventloop.add_stop_hook(self.stop_polling)
+        for thing in self.things.values():
+            if not thing.eventloop:
+                raise ValueError(f"You need to expose thing {thing.id} via an EventLoop before trying to serve it")
 
-        # Subscribes every publisher to every event
-        event_bus = eventloop.event_bus
-        for event_id in event_bus.event_ids - self._published_event_ids:
-            event = event_bus.event_for(event_id)
-            for publisher in self.event_publishers:
-                event_bus.subscribe(partial(publisher.publish, event), event_id)
-            self._published_event_ids.add(event_id)
+        for thing in self.things.values():
+            event_bus = thing.eventloop.event_bus
+            for event in thing.events.descriptors.values():
+                event_id = event.get_unique_identifier(thing)
+                if event_id in self._published_event_ids:
+                    continue  # a second setup() must not subscribe a second time
+                registered = event_bus.event_for(event_id)
+                for publisher in self.event_publishers:
+                    event_bus.subscribe(partial(publisher.publish, registered), event_id)
+                self._published_event_ids.add(event_id)
 
 
 __all__ = [ZMQServer.__name__]

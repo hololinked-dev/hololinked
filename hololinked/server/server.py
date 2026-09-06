@@ -23,7 +23,8 @@ from hololinked.utils import (
 from ..constants import ZMQ_TRANSPORTS
 from ..core import Thing
 from ..core.eventloop import EventLoop
-from ..core.properties import ClassSelector, Integer, TypedList
+from ..core.properties import ClassSelector, Integer, TypedDict
+from ..core.utils import get_all_sub_things_recusively
 from ..param import Parameterized
 from ..param.parameters import String
 
@@ -51,21 +52,22 @@ class BaseProtocolServer(Parameterized):
     )  # type: logging.Logger | structlog.stdlib.BoundLogger
     """Logger instance"""
 
-    things = TypedList(default=None, allow_None=True, item_type=Thing)  # type: list[Thing] | None
-    """List of things to be served"""
+    things = TypedDict(default=None, allow_None=True, key_type=str, item_type=Thing)  # type: dict[str, Thing]
+    """Every served `Thing`, sub-things included."""
 
     def __init__(self, **kwargs) -> None:
         self.config: Any = None
         super().__init__(**kwargs)
         if self.things is None:
-            self.things = []
+            self.things = dict()
 
     def add_thing(self, thing: Thing) -> None:
-        """Adds a thing to the list of things to serve."""
-        raise NotImplementedError("Not implemented for this protocol")
+        """Adds a thing to the things being served, along with its sub-things."""
+        for instance in get_all_sub_things_recusively(thing):
+            self.things[instance.id] = instance
 
     def add_things(self, *things: Thing) -> None:
-        """Adds multiple things to the list of things to serve."""
+        """Adds multiple things to be served."""
         for thing in things:
             self.add_thing(thing)
 
@@ -176,7 +178,7 @@ def run(*servers: BaseProtocolServer, forked: bool = False, print_welcome_messag
     """
     loop = get_current_async_loop()  # initialize an event loop if it does not exist
 
-    things = [thing for server in servers if server.things is not None for thing in server.things]
+    things = [thing for server in servers if server.things is not None for thing in server.things.values()]
     things = list(set(things))  # remove duplicates
 
     # a Thing brings the event loop it is already bound to, and each distinct one gets a thread of
@@ -307,14 +309,14 @@ def _print_welcome_message(servers: Sequence[BaseProtocolServer]) -> None:
     for server in servers:
         if isinstance(server, HTTPServer):
             buffer.write("\n📡 HTTP:\n")
-            for thing in server.things:
+            for thing in server.things.values():
                 td_path = "/resources/wot-td?ignore_errors=true"
                 buffer.write(f"   ➜ Local:   {server.router.get_basepath(use_localhost=True)}/{thing.id}{td_path}\n")
                 buffer.write(f"   ➜ Network: {server.router.get_basepath()}/{thing.id}{td_path}\n")
         elif isinstance(server, MQTTPublisher):
             buffer.write("\n📡 MQTT:\n")
             buffer.write(f" • Broker:   {server.hostname}:{server.port}\n")
-            for thing in server.things:
+            for thing in server.things.values():
                 buffer.write(f"   ➜ Topic tree: {thing.id}/thing-description\n")
     buffer.write("\n" + "=" * 60 + "\n")
     print(buffer.getvalue())

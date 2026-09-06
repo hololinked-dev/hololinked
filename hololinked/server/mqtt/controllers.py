@@ -9,7 +9,6 @@ from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 
 from hololinked import Serializers
-from hololinked.core.eventloop import EventLoop
 from hololinked.core.thing import Thing
 
 from ...core.eventloop import EventSubscription
@@ -58,25 +57,6 @@ class TopicPublisher:
         self.qos = self.config.qos
         self._stop_publishing = False
 
-    @property
-    def eventloop(self) -> EventLoop:
-        """
-        The event loop running this publisher's `Thing`.
-
-        Returns
-        -------
-        EventLoop
-            the event loop whose bus carries the payloads this publisher pushes
-
-        Raises
-        ------
-        RuntimeError
-            if the publisher was created without a `Thing`, or that `Thing` was never exposed
-        """
-        if self.thing is None or self.thing.eventloop is None:
-            raise RuntimeError(f"no event loop for {self.topic} - its publisher was created without a Thing.")
-        return self.thing.eventloop
-
     def stop(self):
         """Stop publishing, the client is not closed automatically."""
         self._stop_publishing = True
@@ -84,7 +64,7 @@ class TopicPublisher:
     async def publish(self):
         """Publishes events to the MQTT broker in an infinite loop."""
         subscription = EventSubscription(
-            self.eventloop.event_bus,
+            self.thing.eventloop.event_bus,
             f"{self.resource.thing_id}/{self.resource.name}",
         )
         self.logger.info(f"Starting to publish events for {self.resource.name} to MQTT broker on topic {self.topic}")

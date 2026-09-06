@@ -189,7 +189,7 @@ class HTTPServer(BaseProtocolServer):
         # 2. sets async loop for a non-possessing thread as well
         get_current_async_loop()
         # 3. every thing must already be bound to an eventloop
-        for thing in self.things:
+        for thing in self.things.values():
             if not thing.eventloop:
                 raise ValueError(f"You need to expose thing {thing.id} via an EventLoop before trying to serve it")
         # 4. finally also get a reference of the event loop from tornado
@@ -390,7 +390,7 @@ class HTTPServer(BaseProtocolServer):
 
     def add_thing(self, thing: Thing) -> None:
         self.router.add_thing(thing)
-        self.things.append(thing)
+        super().add_thing(thing)
 
     def __hash__(self):
         return hash(self._IP)
