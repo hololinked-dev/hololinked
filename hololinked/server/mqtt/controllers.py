@@ -67,7 +67,7 @@ class TopicPublisher:
             raise RuntimeError("Thing is not served by an event loop")
         subscription = EventSubscription(
             self.thing.eventloop.event_bus,
-            f"{self.resource.thing_id}/{self.resource.name}",
+            self.resource.event_unique_identifier,
         )
         self.logger.info(f"Starting to publish events for {self.resource.name} to MQTT broker on topic {self.topic}")
         try:

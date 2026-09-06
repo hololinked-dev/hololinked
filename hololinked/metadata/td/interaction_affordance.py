@@ -316,6 +316,11 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
     def what(self) -> Enum:  # noqa: D102
         return ResourceTypes.PROPERTY
 
+    @property
+    def event_unique_identifier(self) -> str:
+        """Unique identifier for the change event of an observable property."""
+        return f"{self.thing_id}/{self.name}_change_event"
+
     def build(self) -> None:  # noqa: D102
         property = cast(Property, self.objekt)
         self.ds_build_from_property(property)
@@ -428,6 +433,11 @@ class EventAffordance(InteractionAffordance, EventMetadata):
     @property
     def what(self):  # noqa: D102
         return ResourceTypes.EVENT
+
+    @property
+    def event_unique_identifier(self) -> str:
+        """Identifier this event is published under, as `<thing id>/<name>`."""
+        return f"{self.thing_id}/{self.name}"
 
     def build(self) -> None:  # noqa: D102
         event = cast(Event, self.objekt)

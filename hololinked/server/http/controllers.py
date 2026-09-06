@@ -698,6 +698,9 @@ class RWMultiplePropertiesHandler(ActionHandler):
 class EventHandler(BaseHandler):
     """handles events emitted by `Thing` and tunnels them as HTTP SSE."""
 
+    resource: EventAffordance | PropertyAffordance
+    """an event, or the observable property whose change event is streamed - both name an event to subscribe to"""
+
     def initialize(
         self,
         resource: InteractionAffordance | EventAffordance,
@@ -759,7 +762,7 @@ class EventHandler(BaseHandler):
         try:
             subscription = EventSubscription(
                 self.thing.eventloop.event_bus,
-                f"{self.thing_id}/{self.resource.name}",
+                self.resource.event_unique_identifier,
             )
             self.set_status(200)
         except Exception as ex:
