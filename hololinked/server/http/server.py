@@ -26,7 +26,7 @@ from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAf
 # from tornado_http2.server import Server as TornadoHTTP2Server
 from hololinked.param.parameters import ClassSelector, IPAddress
 from hololinked.server.http.config import HandlerMetadata, RuntimeConfig
-from hololinked.server.http.controllers import (
+from hololinked.server.http.handlers import (
     ActionHandler,
     BaseHandler,
     EventHandler,

@@ -12,7 +12,7 @@ from hololinked.core.interfaces import BaseProtocolServer
 from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
 from hololinked.param.parameters import ClassSelector, String
 from hololinked.server.mqtt.config import RuntimeConfig
-from hololinked.server.mqtt.controllers import ThingDescriptionPublisher, TopicPublisher
+from hololinked.server.mqtt.handlers import ThingDescriptionPublisher, TopicPublisher
 from hololinked.server.mqtt.services import ThingDescriptionService
 from hololinked.utils import get_current_async_loop
 

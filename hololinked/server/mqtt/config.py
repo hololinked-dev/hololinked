@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
-from hololinked.server.mqtt.controllers import ThingDescriptionPublisher, TopicPublisher
+from hololinked.server.mqtt.handlers import ThingDescriptionPublisher, TopicPublisher
 from hololinked.server.mqtt.services import ThingDescriptionService
 
 

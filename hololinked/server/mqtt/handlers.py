@@ -21,11 +21,9 @@ if TYPE_CHECKING:
 
 
 class TopicPublisher:
-    """
-    Publishes an event to an MQTT topic. Supply a different class in `MQTTPublisher` to use a different one.
+    """Publishes an event to an MQTT topic. Supply a different class in `MQTTPublisher` to use a different one."""
 
-    This object would be a controller in layered architecture.
-    """
+    # This object would be a controller in layered architecture.
 
     def __init__(
         self,
@@ -55,7 +53,7 @@ class TopicPublisher:
         self.resource = resource
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config
-        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__, topic=self.topic)
+        self.logger = logger.bind(impl=self.__class__.__name__, topic=self.topic)
         self.thing: Thing = thing
         self.qos = self.config.qos
         self._stop_publishing = False
@@ -97,11 +95,9 @@ class TopicPublisher:
 
 
 class ThingDescriptionPublisher:
-    """
-    Publishes Thing Description to an MQTT Topic. Supply a different class in `MQTTPublisher` to use a different one.
+    """Publishes Thing Description to an MQTT Topic. Supply a different class in `MQTTPublisher` to use a different one."""
 
-    This object would be a controller in layered architecture.
-    """
+    # This object would be a controller in layered architecture.
 
     def __init__(
         self,
@@ -128,7 +124,7 @@ class ThingDescriptionPublisher:
         self.thing = thing  # type: Thing
         self.topic = f"{thing.id}/thing-description"
         self.config = config
-        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
+        self.logger = logger.bind(impl=self.__class__.__name__)
         self.thing_description = self.config.thing_description_service(
             hostname=self.client._hostname,
             port=self.client._port,

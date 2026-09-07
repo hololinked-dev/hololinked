@@ -1,4 +1,4 @@
-"""Service layer that generates the Thing Description served over HTTP."""
+"""Add logic here that would be invoked by the handlers that dont have to go through a Thing directly, or has HTTP specific business logic."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 class ThingDescriptionService:
-    """Service layer to generate HTTP TD."""
+    """Generate a HTTP TD from a Thing Model."""
 
     def __init__(
         self,
@@ -44,7 +44,7 @@ class ThingDescriptionService:
     ) -> None:
         self.resource = resource
         self.config = config
-        self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
+        self.logger = logger.bind(impl=self.__class__.__name__)
         self.thing = thing
         self.server = server
 

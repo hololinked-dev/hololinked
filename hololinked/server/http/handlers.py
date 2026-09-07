@@ -88,7 +88,6 @@ class BaseHandler(RequestHandler):
             what=resource.what,
             thing_id=resource.thing_id,
             path=self.request.path,
-            layer="controller",
             impl=self.__class__.__name__,
         )
         self.thing: Thing = thing
@@ -404,14 +403,7 @@ class BaseHandler(RequestHandler):
 
 
 class RPCHandler(BaseHandler):
-    """
-    Handler for property read-write and method calls.
-
-    Subclassed from controller for reducing boilerplate code as the service layer is too thin when implemented separately.
-    Uses Repository layer directly.
-    """
-
-    # Merges both Controller and Service layer in layered architecture. Repository layer is used directly.
+    """Handler for property read-write and method calls."""
 
     async def is_method_allowed(self, method: str) -> bool:
         """

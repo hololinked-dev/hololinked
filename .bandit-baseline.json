@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "generated_at": "2026-09-07T18:23:34Z",
+  "generated_at": "2026-09-07T19:05:38Z",
   "metrics": {
     "_totals": {
       "CONFIDENCE.HIGH": 3,
@@ -11,7 +11,7 @@
       "SEVERITY.LOW": 2,
       "SEVERITY.MEDIUM": 7,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 28200,
+      "loc": 28186,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -977,7 +977,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/server/http/controllers.py": {
+    "hololinked/server/http/handlers.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -986,7 +986,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 851,
+      "loc": 846,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1042,7 +1042,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/server/mqtt/controllers.py": {
+    "hololinked/server/mqtt/handlers.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1051,7 +1051,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 132,
+      "loc": 126,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1077,7 +1077,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 145,
+      "loc": 142,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1454,7 +1454,7 @@
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "89             ).replace(\n90                 \"0.0.0.0\",\n91                 hostname,\n92             )  # SAST(id='hololinked.server.zmq.services.ThingDescriptionService.socket_addresses_for.req_rep_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n93             pub_sub_socket_address = server.tcp_event_publisher.socket_address.replace(\n94                 \"*\", hostname\n95             ).replace(\n96                 \"0.0.0.0\",\n",
+      "code": "88             ).replace(\n89                 \"0.0.0.0\",\n90                 hostname,\n91             )  # SAST(id='hololinked.server.zmq.services.ThingDescriptionService.socket_addresses_for.req_rep_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n92             pub_sub_socket_address = server.tcp_event_publisher.socket_address.replace(\n93                 \"*\", hostname\n94             ).replace(\n95                 \"0.0.0.0\",\n",
       "col_offset": 16,
       "end_col_offset": 25,
       "filename": "hololinked/server/zmq/services.py",
@@ -1465,21 +1465,21 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 90,
+      "line_number": 89,
       "line_range": [
+        86,
         87,
         88,
         89,
         90,
-        91,
-        92
+        91
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",
       "test_name": "hardcoded_bind_all_interfaces"
     },
     {
-      "code": "95             ).replace(\n96                 \"0.0.0.0\",\n97                 hostname,\n98             )  # SAST(id='hololinked.server.zmq.services.ThingDescriptionService.socket_addresses_for.pub_sub_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n99             return req_rep_socket_address, pub_sub_socket_address\n100         raise ValueError(f\"Unsupported protocol '{protocol}' for ZMQ.\")\n101 \n102     async def generate(\n",
+      "code": "94             ).replace(\n95                 \"0.0.0.0\",\n96                 hostname,\n97             )  # SAST(id='hololinked.server.zmq.services.ThingDescriptionService.socket_addresses_for.pub_sub_socket_address', description='B104:hardcoded_bind_all_interfaces', tool='bandit')\n98             return req_rep_socket_address, pub_sub_socket_address\n99         raise ValueError(f\"Unsupported protocol '{protocol}' for ZMQ.\")\n100 \n101     async def generate(\n",
       "col_offset": 16,
       "end_col_offset": 25,
       "filename": "hololinked/server/zmq/services.py",
@@ -1490,14 +1490,14 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible binding to all interfaces.",
-      "line_number": 96,
+      "line_number": 95,
       "line_range": [
+        92,
         93,
         94,
         95,
         96,
-        97,
-        98
+        97
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.9.1/plugins/b104_hardcoded_bind_all_interfaces.html",
       "test_id": "B104",

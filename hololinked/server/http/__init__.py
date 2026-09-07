@@ -1,6 +1,6 @@
 """HTTP protocol server, its request handlers and their runtime configuration."""
 
-from hololinked.server.http.controllers import (  # noqa: F401
+from hololinked.server.http.handlers import (  # noqa: F401
     ActionHandler,
     BaseHandler,
     EventHandler,

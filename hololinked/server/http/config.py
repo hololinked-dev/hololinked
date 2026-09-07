@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from hololinked.server.http.controllers import (
+from hololinked.server.http.handlers import (
     ActionHandler,
     EventHandler,
     LivenessProbeHandler,
