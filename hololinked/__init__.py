@@ -6,6 +6,7 @@ from .config import global_config  # noqa
 from .core.schema import JSONSchema as JSONSchema
 from .injection import (
     MetadataFormats as MetadataFormats,
+    ProtocolServers as ProtocolServers,
     SchemaValidators as SchemaValidators,
     Serializers as Serializers,
     StorageBackends as StorageBackends,
