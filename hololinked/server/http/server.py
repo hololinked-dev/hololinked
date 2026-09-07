@@ -842,7 +842,7 @@ class ApplicationRouter:
             return "/resources/wot-tm"
         return f"/{pep8_to_dashed_name(interaction_affordance_name)}"
 
-    def adapt_http_methods(self, http_methods: Any):
+    def adapt_http_methods(self, http_methods: str | tuple[str, ...] | None) -> tuple[str, ...]:
         """
         Comply the supplied HTTP method to the router to a tuple and check if the method is supported.
 

@@ -1,8 +1,10 @@
 """Service layer that generates the Thing Description served over HTTP."""
 
+from __future__ import annotations
+
 import copy
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 
@@ -24,6 +26,11 @@ from hololinked.server.security import (
 )
 
 
+if TYPE_CHECKING:
+    from hololinked.server.http.config import RuntimeConfig
+    from hololinked.server.http.server import HTTPServer
+
+
 class ThingDescriptionService:
     """Service layer to generate HTTP TD."""
 
@@ -31,18 +38,15 @@ class ThingDescriptionService:
         self,
         resource: InteractionAffordance,
         logger: structlog.stdlib.BoundLogger,
-        config: Any,
-        server: Any,
-        thing: Any = None,
+        config: RuntimeConfig,
+        server: HTTPServer,
+        thing: Thing,
     ) -> None:
-        from hololinked.server.http import HTTPServer  # noqa: F401
-        from hololinked.server.http.config import RuntimeConfig  # noqa: F401
-
-        self.resource = resource  # type: InteractionAffordance
-        self.config = config  # type: RuntimeConfig
+        self.resource = resource
+        self.config = config
         self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
-        self.thing: Thing = thing
-        self.server = server  # type: HTTPServer
+        self.thing = thing
+        self.server = server
 
     async def generate(
         self,

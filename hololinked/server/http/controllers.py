@@ -1,8 +1,10 @@
 """HTTP request handlers that run operations on a `Thing`."""
 
+from __future__ import annotations
+
 import asyncio
 
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import msgspec
 import structlog
@@ -40,6 +42,11 @@ from hololinked.server.security import (
 from hololinked.utils import format_exception_as_json, get_current_async_loop, uuid_hex
 
 
+if TYPE_CHECKING:
+    from hololinked.server.http.config import HandlerMetadata, RuntimeConfig
+    from hololinked.server.http.server import HTTPServer
+
+
 class LocalExecutionContext(msgspec.Struct):
     """Execution options that apply to a single HTTP request, parsed from its query arguments."""
 
@@ -55,10 +62,10 @@ class BaseHandler(RequestHandler):
     def initialize(  # ty: ignore[invalid-method-override]
         self,
         resource: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
-        metadata: Any = None,
+        metadata: HandlerMetadata | None = None,
     ) -> None:
         """
         Set up the handler with the affordance it serves and the server's runtime configuration.
@@ -72,10 +79,10 @@ class BaseHandler(RequestHandler):
         thing: Thing
             the `Thing` this handler serves
         """
-        from hololinked.server.http.config import HandlerMetadata, RuntimeConfig  # noqa: F401
+        from hololinked.server.http.config import HandlerMetadata
 
         self.resource = resource  # type: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
-        self.config = config  # type: RuntimeConfig
+        self.config = config
         self.logger = logger.bind(
             resource=resource.name,
             what=resource.what,
@@ -88,8 +95,8 @@ class BaseHandler(RequestHandler):
         self.thing_id = self.resource.thing_id
         self.allowed_clients = self.config.allowed_clients
         self.security_schemes = self.config.security_schemes
-        self.metadata = metadata or HandlerMetadata()  # type: HandlerMetadata
-        self.userinfo = None  # type: Optional[dict[str, Any]]
+        self.metadata = metadata or HandlerMetadata()
+        self.userinfo: dict[str, Any] | None = None
 
     async def has_access_control(self) -> bool:
         """
@@ -145,7 +152,7 @@ class BaseHandler(RequestHandler):
         # 1. Basic Authentication
         authorization_header = self.request.headers.get("Authorization", None)  # type: str
         if authorization_header and "basic " in authorization_header[:10].lower():  # basic <base64-encoded>
-            for security_scheme in self.security_schemes:
+            for security_scheme in self.security_schemes or []:
                 if isinstance(security_scheme, (BcryptBasicSecurity, Argon2BasicSecurity)):
                     try:
                         self.logger.info(
@@ -153,10 +160,12 @@ class BaseHandler(RequestHandler):
                             origin=self.request.headers.get("Origin"),
                             security_scheme=security_scheme.__class__.__name__,
                         )
-                        if security_scheme.expect_base64:
-                            authenticated = security_scheme.validate_base64(authorization_header.split()[1])
+                        if security_scheme.expect_base64:  # ty: ignore[unresolved-attribute]
+                            authenticated = security_scheme.validate_base64(  # ty: ignore[unresolved-attribute]
+                                authorization_header.split()[1]
+                            )
                         else:
-                            authenticated = security_scheme.validate_input(
+                            authenticated = security_scheme.validate_input(  # ty: ignore[unresolved-attribute]
                                 username=authorization_header.split()[1].split(":", 1)[0],
                                 password=authorization_header.split()[1].split(":", 1)[1],
                             )
@@ -167,7 +176,7 @@ class BaseHandler(RequestHandler):
         # 2. API Key Authentication
         apikey = self.request.headers.get("X-API-Key", None)  # type: str
         if apikey:
-            for security_scheme in self.security_schemes:
+            for security_scheme in self.security_schemes or []:
                 if isinstance(security_scheme, APIKeySecurity):
                     try:
                         self.logger.info(
@@ -175,14 +184,14 @@ class BaseHandler(RequestHandler):
                             origin=self.request.headers.get("Origin"),
                             security_scheme=security_scheme.__class__.__name__,
                         )
-                        authenticated = security_scheme.validate_input(apikey)
+                        authenticated = security_scheme.validate_input(apikey)  # ty: ignore[unresolved-attribute]
                     except Exception as ex:
                         self.logger.error(f"error while authenticating client with API key - {str(ex)}")
                     if authenticated:
                         return True
         # 3. JWT from OIDC
         if authorization_header and "bearer " in authorization_header[:10].lower():  # bearer <bla-bla>
-            for security_scheme in self.security_schemes:
+            for security_scheme in self.security_schemes or []:
                 if isinstance(security_scheme, OIDCSecurity):
                     try:
                         self.logger.info(
@@ -191,8 +200,7 @@ class BaseHandler(RequestHandler):
                             security_scheme=security_scheme.__class__.__name__,
                         )
                         jwt = authorization_header.split(maxsplit=1)[1]
-                        self.userinfo = security_scheme.validate_input(jwt)
-                        # local validation of JWT, no await
+                        self.userinfo = security_scheme.userinfo(jwt)  # ty: ignore[unresolved-attribute]
                         if not self.userinfo:
                             continue
                         authenticated = True
@@ -215,9 +223,9 @@ class BaseHandler(RequestHandler):
         """
         if not self.userinfo:
             return True
-        for security_scheme in self.security_schemes:
+        for security_scheme in self.security_schemes or []:
             if isinstance(security_scheme, OIDCSecurity):
-                return security_scheme.user_has_role(self.userinfo)
+                return security_scheme.user_has_role(self.userinfo)  # ty: ignore[unresolved-attribute]
         return False
 
     def set_access_control_allow_headers(self) -> None:
@@ -652,10 +660,10 @@ class RWMultiplePropertiesHandler(ActionHandler):
     def initialize(  # ty: ignore[invalid-method-override]
         self,
         resource: ActionAffordance,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
-        metadata: Any = None,
+        metadata: HandlerMetadata | None = None,
         **kwargs,
     ) -> None:
         """Set up the handler with the affordances that read and write multiple properties."""
@@ -706,10 +714,10 @@ class EventHandler(BaseHandler):
     def initialize(
         self,
         resource: InteractionAffordance | EventAffordance,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
-        metadata: Any = None,
+        metadata: HandlerMetadata | None = None,
     ) -> None:
         """
         Set up the handler to stream events with a plain SSE data header.
@@ -805,10 +813,10 @@ class JPEGImageEventHandler(EventHandler):
     def initialize(
         self,
         resource: InteractionAffordance | EventAffordance,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
-        metadata: Any = None,
+        metadata: HandlerMetadata | None = None,
     ) -> None:
         """Set up the handler to stream events with a base64 JPEG image SSE data header."""
         super().initialize(resource, config, logger, thing, metadata)
@@ -821,10 +829,10 @@ class PNGImageEventHandler(EventHandler):
     def initialize(
         self,
         resource: InteractionAffordance | EventAffordance,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
-        metadata: Any = None,
+        metadata: HandlerMetadata | None = None,
     ) -> None:
         """Set up the handler to stream events with a base64 PNG image SSE data header."""
         super().initialize(resource, config, logger, thing, metadata)
@@ -836,19 +844,16 @@ class StopHandler(BaseHandler):
 
     def initialize(  # ty: ignore[invalid-method-override]
         self,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
-        owner_inst: Any,
+        owner_inst: HTTPServer,
     ) -> None:
         """Set up the handler with the HTTP server it stops."""
-        from hololinked.server.http import HTTPServer  # noqa: F401
-        from hololinked.server.http.config import RuntimeConfig  # noqa: F401
-
-        self.config = config  # type: RuntimeConfig
+        self.config = config
         self.logger = logger.bind(path=self.request.path)
         self.allowed_clients = self.config.allowed_clients
         self.security_schemes = self.config.security_schemes
-        self.server = owner_inst  # type: HTTPServer
+        self.server = owner_inst
 
     async def post(self):
         """Schedule a graceful shutdown of the HTTP server."""
@@ -875,17 +880,14 @@ class LivenessProbeHandler(BaseHandler):
 
     def initialize(  # ty: ignore[invalid-method-override]
         self,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
-        owner_inst: Any = None,
+        owner_inst: HTTPServer | None = None,
     ) -> None:
         """Set up the handler with the HTTP server it probes."""
-        from hololinked.server.http import HTTPServer  # noqa: F401
-        from hololinked.server.http.config import RuntimeConfig  # noqa: F401
-
-        self.config = config  # type: RuntimeConfig
+        self.config = config
         self.logger = logger.bind(path=self.request.path)
-        self.server = owner_inst  # type: HTTPServer
+        self.server = owner_inst
 
     async def get(self):
         """Report that the server is alive and accepting requests."""
@@ -899,35 +901,32 @@ class ReadinessProbeHandler(BaseHandler):
 
     def initialize(  # ty: ignore[invalid-method-override]
         self,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
-        owner_inst: Any = None,
+        owner_inst: HTTPServer | None = None,
     ) -> None:
         """Set up the handler with the HTTP server it probes."""
-        from hololinked.server.http import HTTPServer  # noqa: F401
-        from hololinked.server.http.config import RuntimeConfig  # noqa: F401
-
-        self.config = config  # type: RuntimeConfig
+        self.config = config
         self.logger = logger.bind(path=self.request.path)
-        self.server = owner_inst  # type: HTTPServer
+        self.server = owner_inst
 
     async def get(self):
         """Report whether every served `Thing` is connected and answering a ping."""  # noqa: DOC501
         self.set_custom_default_headers()
         try:
-            things = (self.server.things or {}).values()
+            things = list(self.server.things.values()) if self.server else []
             if not things:
                 self.set_status(200, "ok")  # nothing served, so nothing to be ready for
                 self.finish()
                 return
-            if any(thing.eventloop is None or not thing.eventloop.is_running for thing in things):
+            eventloops = [thing.eventloop for thing in things]
+            if any(eventloop is None or not eventloop.is_running for eventloop in eventloops):
                 raise RuntimeError("the event loop is not running yet, retry later")
             replies = await asyncio.gather(
                 *[
-                    thing.eventloop.execute(
-                        Operation(thing_id=thing.id, objekt="ping", operation=Operations.invokeaction)
-                    )
-                    for thing in things
+                    eventloop.execute(Operation(thing_id=thing.id, objekt="ping", operation=Operations.invokeaction))
+                    for thing, eventloop in zip(things, eventloops, strict=True)
+                    if eventloop is not None
                 ]
             )
             if any(reply.is_error or reply.timed_out for reply in replies):
@@ -946,11 +945,11 @@ class ThingDescriptionHandler(BaseHandler):
     def initialize(  # ty: ignore[invalid-method-override]
         self,
         resource: InteractionAffordance | PropertyAffordance,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
-        owner_inst: Any = None,
-        metadata: Any = None,
+        owner_inst: HTTPServer,
+        metadata: HandlerMetadata | None = None,
     ) -> None:
         """Set up the handler along with the service that generates the Thing Description."""
         super().initialize(

@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 
 from collections.abc import MutableMapping
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Self
 
 import structlog
+
+from pydantic import BaseModel
 
 from hololinked.param import Parameterized
 from hololinked.param.parameters import ClassSelector, Integer, String, TypeConstrainedDict
@@ -44,7 +46,7 @@ class BaseProtocolServer(Parameterized):
     def __init__(self, things: list[Thing] | dict[str, Thing] | None = None, **kwargs) -> None:
         from hololinked.core.thing import Thing
 
-        self.config: Any = None
+        self.config: BaseModel | None = None
         self.things = TypeConstrainedDict({}, key_type=str, item_type=Thing)
         super().__init__(**kwargs)
         self.add_things(*(things.values() if isinstance(things, dict) else things or []))
