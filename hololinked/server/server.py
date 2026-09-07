@@ -1,8 +1,7 @@
-"""Base class for protocol servers, along with the entry points to run and stop them."""
+"""Entry points to run and stop protocol servers."""
 
 from __future__ import annotations
 
-import logging
 import threading
 import warnings
 
@@ -10,8 +9,6 @@ from collections.abc import Sequence
 from io import StringIO
 from types import SimpleNamespace  # noqa: F401
 from typing import Any
-
-import structlog
 
 from hololinked.utils import (
     cancel_pending_tasks_in_current_loop,
@@ -21,144 +18,9 @@ from hololinked.utils import (
 )
 
 from ..constants import ZMQ_TRANSPORTS
-from ..core import Thing
 from ..core.eventloop import EventLoop
-from ..core.properties import ClassSelector, Integer, TypedDict
+from ..core.interfaces import BaseProtocolServer
 from ..core.utils import CrossLoopEvent
-from ..param import Parameterized
-from ..param.parameters import String
-
-
-class BaseProtocolServer(Parameterized):
-    """
-    Base class for protocol specific servers.
-
-    Protocol implementations follow a layered approach where each protocol server is split into their
-    message handlers (controllers), services (important logic), and repository (for example, `Thing` repository allows
-    execution of operations over the `Thing` class). This class (& its children) represent the protocol server itself
-    and is responsible for starting and stopping the protocol, deciding which `Thing`s to serve etc.
-    """
-
-    id = String(default=None, allow_None=True)
-    """Unique identifier for the server"""
-
-    port = Integer(default=9000, bounds=(1, 65535))
-    """The protocol port"""
-
-    logger = ClassSelector(
-        class_=(logging.Logger, structlog.stdlib.BoundLoggerBase),
-        default=None,
-        allow_None=True,
-    )  # type: logging.Logger | structlog.stdlib.BoundLogger
-    """Logger instance"""
-
-    things = TypedDict(default=None, allow_None=True, key_type=str, item_type=Thing)  # type: dict[str, Thing]
-    """Every served `Thing`, sub-things included."""
-
-    def __init__(self, **kwargs) -> None:
-        self.config: Any = None
-        super().__init__(**kwargs)
-        if self.things is None:
-            self.things = dict()
-
-    def add_thing(self, thing: Thing) -> None:
-        """
-        Adds a thing to the things being served.
-
-        Sub-things are not served - see `EventLoop.add_thing`, which does not register them
-        either.
-        """
-        self.things[thing.id] = thing
-
-    def add_things(self, *things: Thing) -> None:
-        """Adds multiple things to be served."""
-        for thing in things:
-            self.add_thing(thing)
-
-    def add_property(self, *args, **kwargs) -> None:
-        """
-        Add a property to be served, the arguments being specific to the protocol.
-
-        Raises
-        ------
-        NotImplementedError
-            if the protocol does not support this operation
-        """
-        raise NotImplementedError("Not implemented for this protocol")
-
-    def add_action(self, *args, **kwargs) -> None:
-        """
-        Add an action to be served, the arguments being specific to the protocol.
-
-        Raises
-        ------
-        NotImplementedError
-            if the protocol does not support this operation
-        """
-        raise NotImplementedError("Not implemented for this protocol")
-
-    def add_event(self, *args, **kwargs) -> None:
-        """
-        Add an event to be served, the arguments being specific to the protocol.
-
-        Raises
-        ------
-        NotImplementedError
-            if the protocol does not support this operation
-        """
-        raise NotImplementedError("Not implemented for this protocol")
-
-    async def setup(self) -> None:
-        # This method should not block, just create side-effects
-        """
-        Prepare the protocol before it starts serving, creating side effects only without blocking.
-
-        Raises
-        ------
-        NotImplementedError
-            if the protocol does not implement a setup step
-        """
-        raise NotImplementedError("Not implemented for this protocol")
-
-    async def start(self) -> None:
-        # This method should not block, just create side-effects
-        # await self.setup()  # call setup() here, this is only an example
-        """
-        Start serving the protocol, creating side effects only without blocking.
-
-        Raises
-        ------
-        NotImplementedError
-            if the protocol cannot be started this way
-        """
-        raise NotImplementedError("Not implemented for this protocol")
-
-    @forkable
-    def run(self, forked: bool = False, print_welcome_message: bool = True) -> None:
-        """
-        Run the server and serve your things.
-
-        Parameters
-        ----------
-        forked: bool, default False
-            whether to run in a forked thread
-        print_welcome_message: bool, default True
-            whether to print a welcome message on startup, like the ports and access points
-        """
-        from . import run
-
-        run(self, print_welcome_message=print_welcome_message)
-
-    def stop(self):
-        """
-        Stop serving the protocol.
-
-        Raises
-        ------
-        NotImplementedError
-            if the protocol does not implement a stop step
-        """
-        raise NotImplementedError("Not implemented for this protocol")
 
 
 _runs = dict()  # type: dict[str, CrossLoopEvent]
