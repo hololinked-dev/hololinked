@@ -1,4 +1,4 @@
-"""Entry points to run and stop protocol servers."""
+"""Entry points to run and stop protocol servers, knowing no protocol in particular."""
 
 from __future__ import annotations
 
@@ -6,21 +6,17 @@ import threading
 import warnings
 
 from collections.abc import Sequence
-from io import StringIO
-from types import SimpleNamespace  # noqa: F401
-from typing import Any
 
+from hololinked.core.eventloop import EventLoop
+from hololinked.core.interfaces import BaseProtocolServer
+from hololinked.core.utils import CrossLoopEvent
+from hololinked.injection import ProtocolServers
 from hololinked.utils import (
     cancel_pending_tasks_in_current_loop,
     forkable,
     get_current_async_loop,
     uuid_hex,
 )
-
-from ..constants import ZMQ_TRANSPORTS
-from ..core.eventloop import EventLoop
-from ..core.interfaces import BaseProtocolServer
-from ..core.utils import CrossLoopEvent
 
 
 _runs = dict()  # type: dict[str, CrossLoopEvent]
@@ -141,10 +137,11 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
     Parameters
     ----------
     id: str
-        identifier given to the ZMQ server, when one is created
+        identifier given to the servers that need one for routing, currently only ZMQ
     access_points: list[tuple[str, str | int | dict | list[str]]]
-        one tuple per protocol - `"HTTP"`, `"ZMQ"` or `"MQTT"` - paired with its parameters. The parameters may
-        be the port, the broker hostname, the ZMQ access points, or a dict of keyword arguments for that server.
+        one tuple per protocol - `"HTTP"`, `"ZMQ"` or `"MQTT"` by default - paired with its parameters. The
+        parameters may be the port, the broker hostname, the ZMQ access points, or a dict of keyword arguments
+        for that server. Each protocol normalizes its own, see `BaseProtocolServer.from_params()`.
 
     Returns
     -------
@@ -158,77 +155,24 @@ def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list
     ValueError
         if the parameters given for a protocol are not of a supported type
     """
-    from .http import HTTPServer
-    from .mqtt import MQTTPublisher
-    from .zmq import ZMQServer
-
     if access_points is not None and not isinstance(access_points, list):
         raise TypeError("access_points must be provided as a list of tuples.")
 
     servers = []
-
     for protocol, params in access_points:
-        protocol_params: dict[str, Any] = {}
-        if protocol.upper() == "HTTP":
-            if isinstance(params, int):
-                protocol_params = dict(port=params)
-            elif isinstance(params, dict):
-                protocol_params = params
-            else:
-                raise ValueError("HTTP server parameters must be supplied as a dict or just the port as an integer.")
-            http_server = HTTPServer(**protocol_params)
-            servers.append(http_server)
-        elif protocol.upper() == "ZMQ":
-            if isinstance(params, int):
-                protocol_params = dict(access_points=[f"tcp://*:{params}"])
-            elif isinstance(params, (str, ZMQ_TRANSPORTS)):
-                protocol_params = dict(access_points=[params])
-            elif isinstance(params, list):
-                protocol_params = dict(access_points=params)
-            else:
-                protocol_params = dict(params)
-            zmq_access_points = protocol_params.get("access_points", None)
-            if not isinstance(zmq_access_points, list):
-                zmq_access_points = [protocol_params["access_points"]]
-            else:
-                zmq_access_points = list(zmq_access_points)
-            protocol_params["access_points"] = zmq_access_points
-
-            servers.append(ZMQServer(id=id, **protocol_params))
-        elif protocol.upper() == "MQTT":
-            if isinstance(params, str):
-                protocol_params = dict(hostname=params)
-            elif isinstance(params, dict):
-                protocol_params = params
-            else:
-                raise ValueError("MQTT parameters must be supplied as a dictionary or the broker hostname as a string.")
-            mqtt_publisher = MQTTPublisher(**protocol_params)
-            servers.append(mqtt_publisher)
-        else:
+        server = ProtocolServers.for_protocol(protocol)
+        if server is None:
             warnings.warn(f"Unsupported protocol: {protocol}", category=UserWarning)
+            continue
+        servers.append(server.from_params(id, params))
 
     return servers
 
 
 def _print_welcome_message(servers: Sequence[BaseProtocolServer]) -> None:
     """Prints a welcome message to the console/log."""
-    from . import HTTPServer, MQTTPublisher
-
-    buffer = StringIO()
-    buffer.write("\n" + "=" * 60 + "\n")
-    buffer.write("🚀 Server Started!\n")
-    buffer.write("=" * 60 + "\n")
+    lines = ["", "=" * 60, "🚀 Server Started!", "=" * 60]
     for server in servers:
-        if isinstance(server, HTTPServer):
-            buffer.write("\n📡 HTTP:\n")
-            for thing in server.things.values():
-                td_path = "/resources/wot-td?ignore_errors=true"
-                buffer.write(f"   ➜ Local:   {server.router.get_basepath(use_localhost=True)}/{thing.id}{td_path}\n")
-                buffer.write(f"   ➜ Network: {server.router.get_basepath()}/{thing.id}{td_path}\n")
-        elif isinstance(server, MQTTPublisher):
-            buffer.write("\n📡 MQTT:\n")
-            buffer.write(f" • Broker:   {server.hostname}:{server.port}\n")
-            for thing in server.things.values():
-                buffer.write(f"   ➜ Topic tree: {thing.id}/thing-description\n")
-    buffer.write("\n" + "=" * 60 + "\n")
-    print(buffer.getvalue())
+        lines.extend(server.welcome_lines())
+    lines += ["", "=" * 60, ""]
+    print("\n".join(lines))

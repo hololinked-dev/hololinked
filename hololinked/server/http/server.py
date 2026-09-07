@@ -6,7 +6,7 @@ import ssl
 import warnings
 
 from copy import deepcopy
-from typing import Any, Iterable, Type, cast
+from typing import Any, Iterable, Self, Type, cast
 
 import structlog
 
@@ -18,6 +18,7 @@ from ...config import global_config
 from ...constants import HTTP_METHODS
 from ...core.actions import Action
 from ...core.events import Event
+from ...core.interfaces import BaseProtocolServer
 from ...core.property import Property
 from ...core.thing import Thing
 from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
@@ -31,7 +32,6 @@ from ...utils import (
     run_callable_somehow,
 )
 from ..security import Security
-from ..server import BaseProtocolServer
 from .config import HandlerMetadata, RuntimeConfig
 from .controllers import (
     ActionHandler,
@@ -170,6 +170,24 @@ class HTTPServer(BaseProtocolServer):
         self.router = ApplicationRouter(self.app, self)
 
         self.add_things(*(things or []))
+
+    @classmethod
+    def from_params(cls, id: str, params: str | int | dict | list[str] | None) -> Self:
+        # docstring already there in base
+        if isinstance(params, int):
+            params = dict(port=params)
+        elif not isinstance(params, dict):
+            raise ValueError("HTTP server parameters must be supplied as a dict or just the port as an integer.")
+        return cls(**params)
+
+    def welcome_lines(self) -> list[str]:
+        # docstring already there in base
+        td_path = "/resources/wot-td?ignore_errors=true"
+        lines = ["", "📡 HTTP:"]
+        for thing in self.things.values():
+            lines.append(f"   ➜ Local:   {self.router.get_basepath(use_localhost=True)}/{thing.id}{td_path}")
+            lines.append(f"   ➜ Network: {self.router.get_basepath()}/{thing.id}{td_path}")
+        return lines
 
     async def setup(self) -> None:
         """
