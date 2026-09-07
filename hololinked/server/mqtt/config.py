@@ -4,8 +4,8 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
-from .controllers import ThingDescriptionPublisher, TopicPublisher
-from .services import ThingDescriptionService
+from hololinked.server.mqtt.controllers import ThingDescriptionPublisher, TopicPublisher
+from hololinked.server.mqtt.services import ThingDescriptionService
 
 
 class RuntimeConfig(BaseModel):

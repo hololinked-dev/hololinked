@@ -10,11 +10,10 @@ from typing import Any
 import structlog
 
 from hololinked import Serializers
-
-from ...constants import Operations
-from ...core.thing import Thing
-from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
-from ...metadata.td.forms import Form
+from hololinked.constants import Operations
+from hololinked.core.thing import Thing
+from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.td.forms import Form
 
 
 class ThingDescriptionService:
@@ -36,7 +35,7 @@ class ThingDescriptionService:
         logger: structlog.stdlib.BoundLogger
             The logger to use for logging messages
         """
-        from .server import ZMQServer  # noqa: F401
+        from hololinked.server.zmq.server import ZMQServer  # noqa: F401
 
         self.server = server  # type: ZMQServer
         self.logger = logger.bind(layer="service", impl=self.__class__.__name__)

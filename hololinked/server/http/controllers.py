@@ -12,11 +12,9 @@ from tornado.iostream import StreamClosedError
 from tornado.web import RequestHandler
 
 from hololinked import Serializers
-from hololinked.core.thing import Thing
-
-from ...config import global_config
-from ...constants import Operations
-from ...core.eventloop import (
+from hololinked.config import global_config
+from hololinked.constants import Operations
+from hololinked.core.eventloop import (
     EventSubscription,
     Operation,
     SchedulerExecutionContext,
@@ -24,21 +22,22 @@ from ...core.eventloop import (
     default_scheduler_execution_context,
     default_thing_execution_context,
 )
-from ...core.eventloop.operations import Reply, SerializableNone
-from ...core.eventloop.payloads import PreserializedData, SerializableData
-from ...metadata.td import (
+from hololinked.core.eventloop.operations import Reply, SerializableNone
+from hololinked.core.eventloop.payloads import PreserializedData, SerializableData
+from hololinked.core.thing import Thing
+from hololinked.metadata.td import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,
     PropertyAffordance,
 )
-from ...utils import format_exception_as_json, get_current_async_loop, uuid_hex
-from ..security import (
+from hololinked.server.security import (
     APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
     OIDCSecurity,
 )
+from hololinked.utils import format_exception_as_json, get_current_async_loop, uuid_hex
 
 
 class LocalExecutionContext(msgspec.Struct):
@@ -73,7 +72,7 @@ class BaseHandler(RequestHandler):
         thing: Thing
             the `Thing` this handler serves
         """
-        from .config import HandlerMetadata, RuntimeConfig  # noqa: F401
+        from hololinked.server.http.config import HandlerMetadata, RuntimeConfig  # noqa: F401
 
         self.resource = resource  # type: InteractionAffordance | PropertyAffordance | ActionAffordance | EventAffordance
         self.config = config  # type: RuntimeConfig
@@ -842,8 +841,8 @@ class StopHandler(BaseHandler):
         owner_inst: Any,
     ) -> None:
         """Set up the handler with the HTTP server it stops."""
-        from . import HTTPServer  # noqa: F401
-        from .config import RuntimeConfig  # noqa: F401
+        from hololinked.server.http import HTTPServer  # noqa: F401
+        from hololinked.server.http.config import RuntimeConfig  # noqa: F401
 
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(path=self.request.path)
@@ -881,8 +880,8 @@ class LivenessProbeHandler(BaseHandler):
         owner_inst: Any = None,
     ) -> None:
         """Set up the handler with the HTTP server it probes."""
-        from . import HTTPServer  # noqa: F401
-        from .config import RuntimeConfig  # noqa: F401
+        from hololinked.server.http import HTTPServer  # noqa: F401
+        from hololinked.server.http.config import RuntimeConfig  # noqa: F401
 
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(path=self.request.path)
@@ -905,8 +904,8 @@ class ReadinessProbeHandler(BaseHandler):
         owner_inst: Any = None,
     ) -> None:
         """Set up the handler with the HTTP server it probes."""
-        from . import HTTPServer  # noqa: F401
-        from .config import RuntimeConfig  # noqa: F401
+        from hololinked.server.http import HTTPServer  # noqa: F401
+        from hololinked.server.http.config import RuntimeConfig  # noqa: F401
 
         self.config = config  # type: RuntimeConfig
         self.logger = logger.bind(path=self.request.path)

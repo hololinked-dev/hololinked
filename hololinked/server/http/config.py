@@ -4,8 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ..security import Security
-from .controllers import (
+from hololinked.server.http.controllers import (
     ActionHandler,
     EventHandler,
     LivenessProbeHandler,
@@ -16,7 +15,8 @@ from .controllers import (
     StopHandler,
     ThingDescriptionHandler,
 )
-from .services import ThingDescriptionService
+from hololinked.server.http.services import ThingDescriptionService
+from hololinked.server.security import Security
 
 
 class RuntimeConfig(BaseModel):

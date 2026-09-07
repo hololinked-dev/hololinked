@@ -14,26 +14,19 @@ from tornado import ioloop
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.web import Application
 
-from ...config import global_config
-from ...constants import HTTP_METHODS
-from ...core.actions import Action
-from ...core.events import Event
-from ...core.interfaces import BaseProtocolServer
-from ...core.property import Property
-from ...core.thing import Thing
-from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.config import global_config
+from hololinked.constants import HTTP_METHODS
+from hololinked.core.actions import Action
+from hololinked.core.events import Event
+from hololinked.core.interfaces import BaseProtocolServer
+from hololinked.core.property import Property
+from hololinked.core.thing import Thing
+from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
-from ...param.parameters import ClassSelector, IPAddress
-from ...utils import (
-    get_current_async_loop,
-    issubklass,
-    pep8_to_dashed_name,
-    run_callable_somehow,
-)
-from ..security import Security
-from .config import HandlerMetadata, RuntimeConfig
-from .controllers import (
+from hololinked.param.parameters import ClassSelector, IPAddress
+from hololinked.server.http.config import HandlerMetadata, RuntimeConfig
+from hololinked.server.http.controllers import (
     ActionHandler,
     BaseHandler,
     EventHandler,
@@ -44,7 +37,14 @@ from .controllers import (
     StopHandler,
     ThingDescriptionHandler,
 )
-from .services import ThingDescriptionService
+from hololinked.server.http.services import ThingDescriptionService
+from hololinked.server.security import Security
+from hololinked.utils import (
+    get_current_async_loop,
+    issubklass,
+    pep8_to_dashed_name,
+    run_callable_somehow,
+)
 
 
 class HTTPServer(BaseProtocolServer):

@@ -7,14 +7,14 @@ from typing import Any, Optional, Self, Type  # noqa: F401
 import aiomqtt
 import structlog
 
-from ...core import Thing as CoreThing
-from ...core.interfaces import BaseProtocolServer
-from ...metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
-from ...param.parameters import ClassSelector, String
-from ...utils import get_current_async_loop
-from .config import RuntimeConfig
-from .controllers import ThingDescriptionPublisher, TopicPublisher
-from .services import ThingDescriptionService
+from hololinked.core import Thing as CoreThing
+from hololinked.core.interfaces import BaseProtocolServer
+from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
+from hololinked.param.parameters import ClassSelector, String
+from hololinked.server.mqtt.config import RuntimeConfig
+from hololinked.server.mqtt.controllers import ThingDescriptionPublisher, TopicPublisher
+from hololinked.server.mqtt.services import ThingDescriptionService
+from hololinked.utils import get_current_async_loop
 
 
 class MQTTPublisher(BaseProtocolServer):

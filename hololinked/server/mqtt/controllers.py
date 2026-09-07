@@ -9,10 +9,9 @@ from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 
 from hololinked import Serializers
+from hololinked.core.eventloop import EventSubscription
 from hololinked.core.thing import Thing
-
-from ...core.eventloop import EventSubscription
-from ...metadata.td import EventAffordance, PropertyAffordance
+from hololinked.metadata.td import EventAffordance, PropertyAffordance
 
 
 class TopicPublisher:
@@ -46,7 +45,7 @@ class TopicPublisher:
         thing: Thing
             the `Thing` whose event or property this publisher pushes
         """
-        from .config import RuntimeConfig  # noqa: F401
+        from hololinked.server.mqtt.config import RuntimeConfig  # noqa: F401
 
         self.client = client
         self.resource = resource
@@ -121,7 +120,7 @@ class ThingDescriptionPublisher:
         thing: Thing
             The `Thing` whose description is being published
         """
-        from .config import RuntimeConfig  # noqa: F401
+        from hololinked.server.mqtt.config import RuntimeConfig  # noqa: F401
 
         self.client = client
         self.thing = thing  # type: Thing

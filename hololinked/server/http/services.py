@@ -7,17 +7,16 @@ from typing import Any, cast
 import structlog
 
 from hololinked import Serializers
+from hololinked.constants import JSONSerializable, Operations
 from hololinked.core.thing import Thing
-
-from ...constants import JSONSerializable, Operations
-from ...metadata.td import (
+from hololinked.metadata.td import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,
     PropertyAffordance,
 )
-from ...metadata.td.forms import Form
-from ..security import (
+from hololinked.metadata.td.forms import Form
+from hololinked.server.security import (
     APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
@@ -36,8 +35,8 @@ class ThingDescriptionService:
         server: Any,
         thing: Any = None,
     ) -> None:
-        from . import HTTPServer  # noqa: F401
-        from .config import RuntimeConfig  # noqa: F401
+        from hololinked.server.http import HTTPServer  # noqa: F401
+        from hololinked.server.http.config import RuntimeConfig  # noqa: F401
 
         self.resource = resource  # type: InteractionAffordance
         self.config = config  # type: RuntimeConfig
@@ -109,7 +108,7 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
-        from .config import HandlerMetadata
+        from hololinked.server.http.config import HandlerMetadata
 
         thing_id = cast(str, TD["id"])
         title = cast(str, TD["title"])
@@ -181,7 +180,7 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
-        from .config import HandlerMetadata
+        from hololinked.server.http.config import HandlerMetadata
 
         thing_id = cast(str, TD["id"])
         title = cast(str, TD["title"])
@@ -239,7 +238,7 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
-        from .config import HandlerMetadata
+        from hololinked.server.http.config import HandlerMetadata
 
         thing_id = cast(str, TD["id"])
         title = cast(str, TD["title"])
@@ -317,7 +316,7 @@ class ThingDescriptionService:
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
         """Adds security definitions to the TD."""
-        from ...metadata.td.security_definitions import (
+        from hololinked.metadata.td.security_definitions import (
             APIKeySecurityScheme,
             BasicSecurityScheme,
             NoSecurityScheme,
