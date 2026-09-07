@@ -1,17 +1,15 @@
 """Implementation of the ClientFactory class for creating clients to interact with Things over different protocols."""
 
+from __future__ import annotations
+
 import ssl
 import threading
 import warnings
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-import aiomqtt
 import httpx
 import structlog
-
-from paho.mqtt.client import CallbackAPIVersion, MQTTMessage, MQTTProtocolVersion
-from paho.mqtt.client import Client as PahoMQTTClient
 
 from hololinked import Serializers
 from hololinked.client.abstractions import (
@@ -33,6 +31,12 @@ from hololinked.metadata.td.interaction_affordance import (
     PropertyAffordance,
 )
 from hololinked.utils import uuid_hex
+
+
+if TYPE_CHECKING:
+    # aiomqtt is the `mqtt` extra, so only `ClientFactory.mqtt()` may import it - and it does, locally
+    from paho.mqtt.client import Client as PahoMQTTClient
+    from paho.mqtt.client import MQTTMessage, MQTTProtocolVersion
 
 
 class ClientFactory:
@@ -458,7 +462,7 @@ class ClientFactory:
         hostname: str,
         port: int,
         thing_id: str,
-        protocol_version: MQTTProtocolVersion = MQTTProtocolVersion.MQTTv5,
+        protocol_version: MQTTProtocolVersion | None = None,
         qos: int = 1,
         username: str | None = None,
         password: str | None = None,
@@ -478,8 +482,8 @@ class ClientFactory:
             The port of the MQTT broker.
         thing_id: str
             The ID of the thing to consume events from.
-        protocol_version: paho.mqtt.client.MQTTProtocolVersion
-            The MQTT protocol version (e.g., MQTTv5).
+        protocol_version: paho.mqtt.client.MQTTProtocolVersion, optional
+            The MQTT protocol version, MQTTv5 when not given.
         qos: int
             The Quality of Service level for MQTT messages (0, 1, or 2).
         username: str, optional
@@ -504,7 +508,15 @@ class ClientFactory:
         TimeoutError
             If the Thing Description (TD) could not be fetched within the timeout period.
         """
+        import aiomqtt
+
+        from paho.mqtt.client import CallbackAPIVersion, MQTTProtocolVersion
+        from paho.mqtt.client import Client as PahoMQTTClient
+
         from hololinked.client.mqtt.consumed_interactions import MQTTConsumer
+
+        if protocol_version is None:
+            protocol_version = MQTTProtocolVersion.MQTTv5
 
         id = kwargs.get("id", f"mqtt-client|{hostname}:{port}|{uuid_hex()}")
         logger = kwargs.get("logger", structlog.get_logger()).bind(
