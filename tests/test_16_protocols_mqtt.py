@@ -13,9 +13,9 @@ from testcontainers.mqtt import (
 
 from hololinked.client import ClientFactory, ObjectProxy
 from hololinked.client.abstractions import SSE
+from hololinked.server import run
 from hololinked.server.http.server import HTTPServer
 from hololinked.server.mqtt.server import MQTTPublisher
-from hololinked.server.server import run
 from hololinked.utils import uuid_hex
 
 
