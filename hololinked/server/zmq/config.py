@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from .services import ThingDescriptionService
+from hololinked.server.zmq.services import ThingDescriptionService
 
 
 class RuntimeConfig(BaseModel):

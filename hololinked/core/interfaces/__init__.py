@@ -4,8 +4,8 @@ Interface classes for dependencies or features that are not part of the main log
 Follows Hexagonal Architecture.
 """
 
-# TODO once all items have base classes, dont use relative imports.
 from hololinked.core.interfaces.configuration import BaseConfigurationRepository as BaseConfigurationRepository
+from hololinked.core.interfaces.protocol_server import BaseProtocolServer as BaseProtocolServer
 from hololinked.core.interfaces.schema_validators import BaseSchemaValidator as BaseSchemaValidator
 from hololinked.core.interfaces.serializer import BaseSerializer as BaseSerializer
 

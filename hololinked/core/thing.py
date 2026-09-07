@@ -292,7 +292,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
                 ZMQ context object to be used for creating sockets. If not supplied, a global shared context is used.
                 For INPROC, either do not supply context or use the same context across all threads.
         """
-        from hololinked.server.server import parse_params, run
+        from hololinked.server import parse_params, run
 
         servers = parse_params(
             self.id,
@@ -394,7 +394,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         ValueError
             if neither `access_points` nor `servers` is provided, or if both are provided.
         """
-        from hololinked.server.server import BaseProtocolServer, parse_params, run  # noqa: F401
+        from hololinked.server import parse_params, run
 
         access_points = kwargs.get("access_points", None)  # type: list[tuple[str, str | int | dict | list[str]]] | None
         servers = kwargs.get("servers", [])  # type: list[BaseProtocolServer] | None

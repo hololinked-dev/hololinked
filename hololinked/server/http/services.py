@@ -1,23 +1,24 @@
-"""Service layer that generates the Thing Description served over HTTP."""
+"""Add logic here that would be invoked by the handlers that dont have to go through a Thing directly, or has HTTP specific business logic."""
+
+from __future__ import annotations
 
 import copy
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 
 from hololinked import Serializers
+from hololinked.constants import JSONSerializable, Operations
 from hololinked.core.thing import Thing
-
-from ...constants import JSONSerializable, Operations
-from ...metadata.td import (
+from hololinked.metadata.td import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,
     PropertyAffordance,
 )
-from ...metadata.td.forms import Form
-from ..security import (
+from hololinked.metadata.td.forms import Form
+from hololinked.server.security import (
     APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
@@ -25,25 +26,27 @@ from ..security import (
 )
 
 
+if TYPE_CHECKING:
+    from hololinked.server.http.config import RuntimeConfig
+    from hololinked.server.http.server import HTTPServer
+
+
 class ThingDescriptionService:
-    """Service layer to generate HTTP TD."""
+    """Generate a HTTP TD from a Thing Model."""
 
     def __init__(
         self,
         resource: InteractionAffordance,
         logger: structlog.stdlib.BoundLogger,
-        config: Any,
-        server: Any,
-        thing: Any = None,
+        config: RuntimeConfig,
+        server: HTTPServer,
+        thing: Thing,
     ) -> None:
-        from . import HTTPServer  # noqa: F401
-        from .config import RuntimeConfig  # noqa: F401
-
-        self.resource = resource  # type: InteractionAffordance
-        self.config = config  # type: RuntimeConfig
-        self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
-        self.thing: Thing = thing
-        self.server = server  # type: HTTPServer
+        self.resource = resource
+        self.config = config
+        self.logger = logger.bind(impl=self.__class__.__name__)
+        self.thing = thing
+        self.server = server
 
     async def generate(
         self,
@@ -109,7 +112,7 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
-        from .config import HandlerMetadata
+        from hololinked.server.http.config import HandlerMetadata
 
         thing_id = cast(str, TD["id"])
         title = cast(str, TD["title"])
@@ -181,7 +184,7 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
-        from .config import HandlerMetadata
+        from hololinked.server.http.config import HandlerMetadata
 
         thing_id = cast(str, TD["id"])
         title = cast(str, TD["title"])
@@ -239,7 +242,7 @@ class ThingDescriptionService:
         use_localhost: bool
             if `True`, localhost is used in the TD URLs instead of the server's hostname
         """
-        from .config import HandlerMetadata
+        from hololinked.server.http.config import HandlerMetadata
 
         thing_id = cast(str, TD["id"])
         title = cast(str, TD["title"])
@@ -317,7 +320,7 @@ class ThingDescriptionService:
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
         """Adds security definitions to the TD."""
-        from ...metadata.td.security_definitions import (
+        from hololinked.metadata.td.security_definitions import (
             APIKeySecurityScheme,
             BasicSecurityScheme,
             NoSecurityScheme,

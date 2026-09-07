@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from hololinked.config import global_config
 from hololinked.core.interfaces import (
     BaseConfigurationRepository,
+    BaseProtocolServer,
     BaseSchemaValidator,
     BaseSerializer,
     MetadataFormat,
@@ -976,3 +977,99 @@ def prepare_object_storage(thing: Thing, **kwargs: Any) -> None:
         return
     thing.db_engine = backend.from_thing(thing, **kwargs)
     thing.logger.info(f"using {backend.__name__} for configuration storage")
+
+
+class ProtocolServers(Registry):
+    """
+    A singleton registry of the protocol servers a `Thing` can be exposed with.
+
+    All members are class attributes and settings are applied process-wide (python process).
+
+    ```python
+    from hololinked import ProtocolServers
+
+    ProtocolServers.register(WebsocketServerWithMyCustomProtocol, "websockets", protocol="websockets")
+
+    thing.run(access_points=[("websockets", 5683)])
+
+    # OR
+
+    WebsocketServerWithMyCustomProtocol.add_thing(thing)
+    WebsocketServerWithMyCustomProtocol.run()
+    ```
+    """
+
+    adapter_kind: ClassVar[str] = "protocol server"
+    package: ClassVar[str] = "hololinked.server"
+    tables: ClassVar[tuple[str, ...]] = ("modules", "protocols")
+
+    modules: ClassVar[dict[str, str | tuple[str, str]]] = {
+        "http": "HTTPServer",
+        "mqtt": "MQTTPublisher",
+        "zmq": "ZMQServer",
+    }
+
+    http: type[BaseProtocolServer]
+    """HTTP(s) server exposing `Thing`s over HTTP 1.1."""
+    mqtt: type[BaseProtocolServer]
+    """MQTT publisher pushing events and observable properties to a broker's topic tree."""
+    zmq: type[BaseProtocolServer]
+    """ZeroMQ server exposing `Thing`s over IPC, TCP and INPROC transport."""
+
+    protocols: ClassVar[dict[str, str]] = {
+        "HTTP": "http",
+        "MQTT": "mqtt",
+        "ZMQ": "zmq",
+    }
+    """
+    Protocol name, as given in an access point, mapped to the server that serves it.
+
+    Answerable without importing the server, which is what lets an access point select one lazily.
+    """
+
+    @classmethod
+    def register(cls, server: type[BaseProtocolServer], name: str, protocol: str) -> None:
+        """
+        Register a protocol server under a given name.
+
+        Parameters
+        ----------
+        server: type[BaseProtocolServer]
+            the server class to register, must be a subclass of `BaseProtocolServer`
+        name: str
+            the name to register the server under, for example 'http' or 'zmq'
+        protocol: str
+            the protocol name that selects this server in an access point, for example 'HTTP'. Case insensitive.
+
+        Raises
+        ------
+        TypeError
+            if the server is not a subclass of `BaseProtocolServer`
+        """
+        if not issubklass(server, BaseProtocolServer):
+            raise TypeError(f"server must be a subclass of BaseProtocolServer, given : {server}")
+        cls.install(name, server)
+        cls.protocols[protocol.upper()] = name
+
+    @classmethod
+    def for_protocol(cls, protocol: str) -> type[BaseProtocolServer] | None:
+        """
+        Get the server class that serves a given protocol, importing it if necessary.
+
+        Parameters
+        ----------
+        protocol: str
+            the protocol name as given in an access point, for example 'HTTP'. Case insensitive.
+
+        Returns
+        -------
+        type[BaseProtocolServer] | None
+            the server class, to be created with its `from_params()`, None if no server serves this protocol
+        """
+        name = cls.protocols.get(protocol.upper())
+        return None if name is None else getattr(cls, name)
+
+    @classmethod
+    def reset(cls) -> None:
+        """Reset the protocol server registry."""
+        cls.forget_adapters()

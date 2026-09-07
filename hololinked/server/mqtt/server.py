@@ -2,19 +2,19 @@
 
 import ssl
 
-from typing import Any, Optional, Type  # noqa: F401
+from typing import Any, Optional, Self, Type  # noqa: F401
 
 import aiomqtt
 import structlog
 
-from ...core import Thing as CoreThing
-from ...metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
-from ...param.parameters import ClassSelector, String
-from ...utils import get_current_async_loop
-from ..server import BaseProtocolServer
-from .config import RuntimeConfig
-from .controllers import ThingDescriptionPublisher, TopicPublisher
-from .services import ThingDescriptionService
+from hololinked.core import Thing as CoreThing
+from hololinked.core.interfaces import BaseProtocolServer
+from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
+from hololinked.param.parameters import ClassSelector, String
+from hololinked.server.mqtt.config import RuntimeConfig
+from hololinked.server.mqtt.handlers import ThingDescriptionPublisher, TopicPublisher
+from hololinked.server.mqtt.services import ThingDescriptionService
+from hololinked.utils import get_current_async_loop
 
 
 class MQTTPublisher(BaseProtocolServer):
@@ -92,6 +92,22 @@ class MQTTPublisher(BaseProtocolServer):
         self.ssl_context = kwargs.get("ssl_context", None)
         self.id = endpoint
         self.add_things(*(things or []))
+
+    @classmethod
+    def from_params(cls, id: str, params: str | int | dict | list[str] | None) -> Self:  # noqa: D102
+        # doc already provided in the base class
+        if isinstance(params, str):
+            params = dict(hostname=params)
+        elif not isinstance(params, dict):
+            raise ValueError("MQTT parameters must be supplied as a dictionary or the broker hostname as a string.")
+        return cls(**params)
+
+    def welcome_lines(self) -> list[str]:  # noqa: D102
+        # doc already provided in the base class
+        lines = ["", "📡 MQTT:", f" • Broker:   {self.hostname}:{self.port}"]
+        for thing in self.things.values():
+            lines.append(f"   ➜ Topic tree: {thing.id}/thing-description")
+        return lines
 
     async def start(self):
         """

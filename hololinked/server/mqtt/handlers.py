@@ -1,6 +1,8 @@
 """Publishers that push events, observable properties and Thing Descriptions to MQTT topics."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import aiomqtt
 import structlog
@@ -9,24 +11,25 @@ from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 
 from hololinked import Serializers
+from hololinked.core.eventloop import EventSubscription
 from hololinked.core.thing import Thing
+from hololinked.metadata.td import EventAffordance, PropertyAffordance
 
-from ...core.eventloop import EventSubscription
-from ...metadata.td import EventAffordance, PropertyAffordance
+
+if TYPE_CHECKING:
+    from hololinked.server.mqtt.config import RuntimeConfig
 
 
 class TopicPublisher:
-    """
-    Publishes an event to an MQTT topic. Supply a different class in `MQTTPublisher` to use a different one.
+    """Publishes an event to an MQTT topic. Supply a different class in `MQTTPublisher` to use a different one."""
 
-    This object would be a controller in layered architecture.
-    """
+    # This object would be a controller in layered architecture.
 
     def __init__(
         self,
         client: aiomqtt.Client,
         resource: EventAffordance | PropertyAffordance,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
     ) -> None:
@@ -46,13 +49,11 @@ class TopicPublisher:
         thing: Thing
             the `Thing` whose event or property this publisher pushes
         """
-        from .config import RuntimeConfig  # noqa: F401
-
         self.client = client
         self.resource = resource
         self.topic = f"{self.resource.thing_id}/{self.resource.name}"
-        self.config = config  # type: RuntimeConfig
-        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__, topic=self.topic)
+        self.config = config
+        self.logger = logger.bind(impl=self.__class__.__name__, topic=self.topic)
         self.thing: Thing = thing
         self.qos = self.config.qos
         self._stop_publishing = False
@@ -94,16 +95,14 @@ class TopicPublisher:
 
 
 class ThingDescriptionPublisher:
-    """
-    Publishes Thing Description to an MQTT Topic. Supply a different class in `MQTTPublisher` to use a different one.
+    """Publishes Thing Description to an MQTT Topic. Supply a different class in `MQTTPublisher` to use a different one."""
 
-    This object would be a controller in layered architecture.
-    """
+    # This object would be a controller in layered architecture.
 
     def __init__(
         self,
         client: aiomqtt.Client,
-        config: Any,
+        config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
     ) -> None:
@@ -121,13 +120,11 @@ class ThingDescriptionPublisher:
         thing: Thing
             The `Thing` whose description is being published
         """
-        from .config import RuntimeConfig  # noqa: F401
-
         self.client = client
         self.thing = thing  # type: Thing
         self.topic = f"{thing.id}/thing-description"
-        self.config = config  # type: RuntimeConfig
-        self.logger = logger.bind(layer="controller", impl=self.__class__.__name__)
+        self.config = config
+        self.logger = logger.bind(impl=self.__class__.__name__)
         self.thing_description = self.config.thing_description_service(
             hostname=self.client._hostname,
             port=self.client._port,

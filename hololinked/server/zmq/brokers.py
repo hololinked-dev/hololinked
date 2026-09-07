@@ -22,15 +22,7 @@ from hololinked import Serializers
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.exceptions import BreakLoop
-from hololinked.utils import (
-    format_exception_as_json,
-    get_current_async_loop,
-    get_sanitized_filename_from_random_string,
-    run_callable_somehow,
-    uuid_hex,
-)
-
-from .message import (
+from hololinked.server.zmq.message import (
     ERROR,
     EXIT,
     HANDSHAKE,
@@ -49,6 +41,13 @@ from .message import (
     ThingExecutionContext,
     default_scheduler_execution_context,
     default_thing_execution_context,
+)
+from hololinked.utils import (
+    format_exception_as_json,
+    get_current_async_loop,
+    get_sanitized_filename_from_random_string,
+    run_callable_somehow,
+    uuid_hex,
 )
 
 
@@ -2365,7 +2364,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             its payload, unencoded. `bytes` bypass serialization and travel as the preserialized frame.
         """
         # uncomment for type definitions
-        # from ...core.eventloop import RegisteredEvent
+        # from hololinked.core.eventloop import RegisteredEvent
         # assert isinstance(event, RegisteredEvent), "event must be an instance of RegisteredEvent"
 
         try:
@@ -2725,7 +2724,7 @@ class AsyncEventConsumer(BaseEventConsumer, BaseAsyncZMQ):
         await self.interrupting_peer.send_multipart(self.interrupt_message.byte_array)
 
 
-from ...core.events import EventDispatcher  # noqa
+from hololinked.core.events import EventDispatcher  # noqa
 
 __all__ = [
     AsyncZMQServer.__name__,

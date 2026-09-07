@@ -5,16 +5,19 @@ from __future__ import annotations
 import copy
 import socket
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from hololinked import Serializers
+from hololinked.constants import Operations
+from hololinked.core.thing import Thing
+from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.td.forms import Form
 
-from ...constants import Operations
-from ...core.thing import Thing
-from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
-from ...metadata.td.forms import Form
+
+if TYPE_CHECKING:
+    from hololinked.server.zmq.server import ZMQServer
 
 
 class ThingDescriptionService:
@@ -24,7 +27,7 @@ class ThingDescriptionService:
     This object would be a service in layered architecture.
     """
 
-    def __init__(self, server: Any, logger: structlog.stdlib.BoundLogger) -> None:
+    def __init__(self, server: ZMQServer, logger: structlog.stdlib.BoundLogger) -> None:
         """
         Initialize the Thing Description service.
 
@@ -36,9 +39,7 @@ class ThingDescriptionService:
         logger: structlog.stdlib.BoundLogger
             The logger to use for logging messages
         """
-        from .server import ZMQServer  # noqa: F401
-
-        self.server = server  # type: ZMQServer
+        self.server = server
         self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
 
     def socket_addresses_for(self, protocol: str) -> tuple[str, str]:

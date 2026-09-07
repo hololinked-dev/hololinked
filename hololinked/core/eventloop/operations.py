@@ -60,11 +60,7 @@ PreserializedEmptyByte = PreserializedData(b"", content_type="text/plain")
 
 @dataclass
 class Operation:
-    """
-    The eventloop's operation model - One operation to perform on one interaction affordance of one `Thing`.
-
-    The transport-neutral unit of work.
-    """
+    """The transport-neutral unit of work that the event loop schedules/runs on a `Thing`."""
 
     thing_id: str
     """`id` of the `Thing` the operation is for."""
@@ -183,7 +179,7 @@ class ReplyKind(StrEnum):
 
 @dataclass
 class Reply:
-    """The event loop's answer to one `Operation`."""
+    """The reply of one `Operation`."""
 
     payload: SerializableData
     """the return value, encoded with whatever serializer the objekt is registered against."""
@@ -298,7 +294,8 @@ class PendingOperations:
     """
     A dictionary of operations that were not yet collected by the caller.
 
-    Decoupled from EventLoop currently and only referenced. Benefits and tradeoffs of doing that not clear.
+    Helper class that allows a client collect a reply later. Decoupled from EventLoop currently
+    and only referenced. Benefits and tradeoffs of doing that not clear.
     """
 
     def __init__(self, maxsize: int = 1000) -> None:

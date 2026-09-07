@@ -2,33 +2,44 @@
 
 from typing import TYPE_CHECKING
 
-
-from .server import BaseProtocolServer, run, stop  # noqa: F401, isort: skip
-from .http import HTTPServer  # noqa: F401
-from .mqtt import MQTTPublisher  # noqa: F401
+from hololinked.core.interfaces import BaseProtocolServer  # noqa: F401
+from hololinked.utils import lazy_module_getattr
 
 
-from .security import (  # noqa: F401, isort: skip
+from hololinked.server.security import (  # noqa: F401, isort: skip
     APIKeySecurity,
     Argon2BasicSecurity,
     BcryptBasicSecurity,
     OIDCSecurity,
 )
-
-# currently only ZMQ is optional
-_lazy = {"ZMQServer": (".zmq", "ZMQServer")}
+from hololinked.server.server import parse_params, run, stop  # noqa: F401, isort: skip
 
 
-def __getattr__(name: str):
-    if name in _lazy:
-        import importlib
+__all__ = [
+    "APIKeySecurity",
+    "Argon2BasicSecurity",
+    "BaseProtocolServer",
+    "BcryptBasicSecurity",
+    "HTTPServer",
+    "MQTTPublisher",
+    "ZMQServer",
+    "OIDCSecurity",
+    "parse_params",
+    "run",
+    "stop",
+]
 
-        module_path, attr = _lazy[name]
-        value = getattr(importlib.import_module(module_path, package=__name__), attr)
-        globals()[name] = value  # cache so subsequent access skips __getattr__
-        return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+_lazy: dict[str, str] = {
+    "HTTPServer": ".http",
+    "MQTTPublisher": ".mqtt",
+    "ZMQServer": ".zmq",
+}
+"""Name of a protocol server mapped to the module it is imported from, resolved lazily."""
+
+__getattr__ = lazy_module_getattr(__name__, _lazy, globals())
 
 
 if TYPE_CHECKING:
-    from .zmq import ZMQServer as ZMQServer
+    from hololinked.server.http import HTTPServer as HTTPServer
+    from hololinked.server.mqtt import MQTTPublisher as MQTTPublisher
+    from hololinked.server.zmq import ZMQServer as ZMQServer

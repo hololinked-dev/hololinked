@@ -3,26 +3,25 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Any
+from typing import Any, Self
 
 import structlog
 import zmq.asyncio
 
 from hololinked import Serializers
-
-from ...config import global_config
-from ...constants import ZMQ_TRANSPORTS, Operations
-from ...core.eventloop import Operation, Reply, ReplyKind
-from ...core.eventloop.operations import as_execution_kwargs, format_return_value
-from ...core.exceptions import BreakLoop
-from ...core.properties import ClassSelector
-from ...core.thing import Thing
-from ...utils import format_exception_as_json, get_current_async_loop
-from ..server import BaseProtocolServer
-from .brokers import AsyncZMQServer, EventPublisher
-from .config import RuntimeConfig
-from .message import ERROR, REPLY, RequestMessage
-from .services import ThingDescriptionService
+from hololinked.config import global_config
+from hololinked.constants import ZMQ_TRANSPORTS, Operations
+from hololinked.core.eventloop import Operation, Reply, ReplyKind
+from hololinked.core.eventloop.operations import as_execution_kwargs, format_return_value
+from hololinked.core.exceptions import BreakLoop
+from hololinked.core.interfaces import BaseProtocolServer
+from hololinked.core.properties import ClassSelector
+from hololinked.core.thing import Thing
+from hololinked.server.zmq.brokers import AsyncZMQServer, EventPublisher
+from hololinked.server.zmq.config import RuntimeConfig
+from hololinked.server.zmq.message import ERROR, REPLY, RequestMessage
+from hololinked.server.zmq.services import ThingDescriptionService
+from hololinked.utils import format_exception_as_json, get_current_async_loop
 
 
 _ZMQ_MESSAGE_TYPE_FOR_REPLY = {
@@ -247,7 +246,9 @@ class ZMQServer(BaseProtocolServer):
             if operation.operation == Operations.invokeaction and operation.objekt == "get_thing_description":
                 reply = await self.get_thing_description(operation)
             else:
-                reply = await self.things[operation.thing_id].eventloop.execute(operation)
+                # setup() rejects any thing not bound to an event loop, so eventloop is never None here
+                eventloop = self.things[operation.thing_id].eventloop
+                reply = await eventloop.execute(operation)  # ty: ignore[unresolved-attribute]
         except Exception as ex:
             self.logger.error(
                 f"exception occurred for message - {ex!s}",
@@ -361,6 +362,26 @@ class ZMQServer(BaseProtocolServer):
         paths += "\n)"
         return paths
 
+    @classmethod
+    def from_params(cls, id: str, params: str | int | dict | list[str] | None) -> Self:
+        # docstring already there in base
+        protocol_params: dict[str, Any]
+        if isinstance(params, int):
+            protocol_params = dict(access_points=[f"tcp://*:{params}"])
+        elif isinstance(params, (str, ZMQ_TRANSPORTS)):
+            protocol_params = dict(access_points=[params])
+        elif isinstance(params, list):
+            protocol_params = dict(access_points=params)
+        elif isinstance(params, dict):
+            protocol_params = dict(params)
+        else:
+            raise ValueError(
+                "ZMQ parameters must be supplied as a dict, a port, an access point or a list of access points."
+            )
+        access_points = protocol_params["access_points"]
+        protocol_params["access_points"] = list(access_points) if isinstance(access_points, list) else [access_points]
+        return cls(id=id, **protocol_params)
+
     async def start(self) -> None:
         """Start polling every served transport for requests. Returns without blocking."""
         await self.setup()
@@ -378,12 +399,14 @@ class ZMQServer(BaseProtocolServer):
         ValueError
             if a served `Thing` is not bound to an event loop
         """
+        event_buses = {}
         for thing in self.things.values():
             if not thing.eventloop:
                 raise ValueError(f"You need to expose thing {thing.id} via an EventLoop before trying to serve it")
+            event_buses[thing.id] = thing.eventloop.event_bus
 
         for thing in self.things.values():
-            event_bus = thing.eventloop.event_bus
+            event_bus = event_buses[thing.id]
             for event in thing.events.descriptors.values():
                 event_id = event.get_unique_identifier(thing)
                 if event_id in self._published_event_ids:

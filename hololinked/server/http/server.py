@@ -6,7 +6,7 @@ import ssl
 import warnings
 
 from copy import deepcopy
-from typing import Any, Iterable, Type, cast
+from typing import Any, Iterable, Self, Type, cast
 
 import structlog
 
@@ -14,26 +14,19 @@ from tornado import ioloop
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.web import Application
 
-from ...config import global_config
-from ...constants import HTTP_METHODS
-from ...core.actions import Action
-from ...core.events import Event
-from ...core.property import Property
-from ...core.thing import Thing
-from ...metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.config import global_config
+from hololinked.constants import HTTP_METHODS
+from hololinked.core.actions import Action
+from hololinked.core.events import Event
+from hololinked.core.interfaces import BaseProtocolServer
+from hololinked.core.property import Property
+from hololinked.core.thing import Thing
+from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
-from ...param.parameters import ClassSelector, IPAddress
-from ...utils import (
-    get_current_async_loop,
-    issubklass,
-    pep8_to_dashed_name,
-    run_callable_somehow,
-)
-from ..security import Security
-from ..server import BaseProtocolServer
-from .config import HandlerMetadata, RuntimeConfig
-from .controllers import (
+from hololinked.param.parameters import ClassSelector, IPAddress
+from hololinked.server.http.config import HandlerMetadata, RuntimeConfig
+from hololinked.server.http.handlers import (
     ActionHandler,
     BaseHandler,
     EventHandler,
@@ -44,7 +37,14 @@ from .controllers import (
     StopHandler,
     ThingDescriptionHandler,
 )
-from .services import ThingDescriptionService
+from hololinked.server.http.services import ThingDescriptionService
+from hololinked.server.security import Security
+from hololinked.utils import (
+    get_current_async_loop,
+    issubklass,
+    pep8_to_dashed_name,
+    run_callable_somehow,
+)
 
 
 class HTTPServer(BaseProtocolServer):
@@ -170,6 +170,24 @@ class HTTPServer(BaseProtocolServer):
         self.router = ApplicationRouter(self.app, self)
 
         self.add_things(*(things or []))
+
+    @classmethod
+    def from_params(cls, id: str, params: str | int | dict | list[str] | None) -> Self:
+        # docstring already there in base
+        if isinstance(params, int):
+            params = dict(port=params)
+        elif not isinstance(params, dict):
+            raise ValueError("HTTP server parameters must be supplied as a dict or just the port as an integer.")
+        return cls(**params)
+
+    def welcome_lines(self) -> list[str]:
+        # docstring already there in base
+        td_path = "/resources/wot-td?ignore_errors=true"
+        lines = ["", "📡 HTTP:"]
+        for thing in self.things.values():
+            lines.append(f"   ➜ Local:   {self.router.get_basepath(use_localhost=True)}/{thing.id}{td_path}")
+            lines.append(f"   ➜ Network: {self.router.get_basepath()}/{thing.id}{td_path}")
+        return lines
 
     async def setup(self) -> None:
         """
@@ -824,7 +842,7 @@ class ApplicationRouter:
             return "/resources/wot-tm"
         return f"/{pep8_to_dashed_name(interaction_affordance_name)}"
 
-    def adapt_http_methods(self, http_methods: Any):
+    def adapt_http_methods(self, http_methods: str | tuple[str, ...] | None) -> tuple[str, ...]:
         """
         Comply the supplied HTTP method to the router to a tuple and check if the method is supported.
 

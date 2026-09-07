@@ -1,4 +1,4 @@
-"""Service layer that generates the Thing Description published over MQTT."""
+"""Add logic here that would be invoked by the handlers that dont have to go through a Thing directly, or has MQTT specific business logic."""
 
 import copy
 
@@ -7,19 +7,14 @@ from typing import Any
 import structlog
 
 from hololinked import Serializers
+from hololinked.constants import Operations
 from hololinked.core.thing import Thing
-
-from ...constants import Operations
-from ...metadata.td.forms import Form
-from ...metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
+from hololinked.metadata.td.forms import Form
+from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
 
 
 class ThingDescriptionService:
-    """
-    Generates Thing Descriptions for `Thing`s.
-
-    This object would be a service in layered architecture.
-    """
+    """Generates MQTT Thing Descriptions for `Thing`s from Thing Models."""
 
     def __init__(
         self,
@@ -47,7 +42,7 @@ class ThingDescriptionService:
         """
         self.hostname = hostname
         self.port = port
-        self.logger = logger.bind(layer="service", impl=self.__class__.__name__)
+        self.logger = logger.bind(impl=self.__class__.__name__)
         self.thing = thing  # type: Thing
         self.ssl = ssl
 
