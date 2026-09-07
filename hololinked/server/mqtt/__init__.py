@@ -1,4 +1,4 @@
 """MQTT publisher, its topic publishers and their runtime configuration."""
 
-from .controllers import ThingDescriptionPublisher, TopicPublisher  # noqa: F401
-from .server import MQTTPublisher  # noqa: F401
+from hololinked.server.mqtt.controllers import ThingDescriptionPublisher, TopicPublisher  # noqa: F401
+from hololinked.server.mqtt.server import MQTTPublisher  # noqa: F401

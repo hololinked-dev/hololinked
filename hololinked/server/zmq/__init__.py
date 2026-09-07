@@ -1,10 +1,5 @@
 """ZeroMQ: the sockets, the wire format, and the protocol server for INPROC, IPC and TCP."""
 
-from typing import TYPE_CHECKING
-
-from hololinked.utils import lazy_module_getattr
-
-
 try:
     import zmq  # noqa: F401
 except ImportError as ex:
@@ -13,7 +8,7 @@ except ImportError as ex:
         + "Version should be less than 26.2 to support IPC in windows machines."
     ) from ex
 
-from .brokers import (  # noqa: F401
+from hololinked.server.zmq.brokers import (  # noqa: F401
     AsyncEventConsumer,
     AsyncZMQClient,
     AsyncZMQServer,
@@ -23,13 +18,4 @@ from .brokers import (  # noqa: F401
     SyncZMQClient,
     ZMQServerPool,
 )
-
-
-_lazy: dict[str, str] = {"ZMQServer": ".server"}
-"""Name of an export mapped to the module it is imported from, resolved lazily."""
-
-__getattr__ = lazy_module_getattr(__name__, _lazy, globals())
-
-
-if TYPE_CHECKING:
-    from .server import ZMQServer as ZMQServer
+from hololinked.server.zmq.server import ZMQServer  # noqa: F401
