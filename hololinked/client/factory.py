@@ -8,7 +8,6 @@ import warnings
 
 from typing import TYPE_CHECKING, Any, cast
 
-import httpx
 import structlog
 
 from hololinked import Serializers
@@ -320,12 +319,21 @@ class ClientFactory:
                 The username for HTTP Basic Authentication, shortcut for creating a `BasicSecurity` instance
             - `password`: `str`, optional.
                 The password for HTTP Basic Authentication, shortcut for creating a `BasicSecurity` instance
+            - `verify_ssl`: `bool` | `str`, default `True`.
+                Whether to verify the server's TLS certificate, or the path to a CA bundle to verify it against.
+                Pass `False` to accept untrusted certificates, for example a self signed one used in development.
+                Note that `OAuthDirectAccessGrant` contacts the identity provider itself, so pass `verify_ssl`
+                there as well if that endpoint also serves an untrusted certificate.
+            - `ssl_context`: `ssl.SSLContext`, optional.
+                A preconfigured SSL context, which takes precedence over `verify_ssl`.
 
         Returns
         -------
         ObjectProxy
             An `ObjectProxy` instance representing the remote Thing with HTTP protocol.
         """
+        import httpx
+
         from hololinked.client.http.consumed_interactions import (
             HTTPAction,
             HTTPEvent,
@@ -338,6 +346,18 @@ class ClientFactory:
         execution_timeout = kwargs.get("execution_timeout", 5.0)
         connect_timeout = kwargs.get("connect_timeout", 10.0)
         request_timeout = kwargs.get("request_timeout", 60.0)
+        verify_ssl = kwargs.get("verify_ssl", True)
+        ssl_context = kwargs.get("ssl_context", None)
+        if ssl_context is None and isinstance(verify_ssl, str):
+            ssl_context = ssl.create_default_context(cafile=verify_ssl)
+        verify = ssl_context if ssl_context is not None else verify_ssl
+        if verify is False:
+            warnings.warn(
+                "TLS certificate verification is disabled, the identity of the server is not checked.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+
         use_localhost = False
         if (
             "http://localhost" in url
@@ -363,10 +383,10 @@ class ClientFactory:
             pool=2,
         )
 
-        req_rep_sync_client = httpx.Client(timeout=req_rep_timeout)
-        req_rep_async_client = httpx.AsyncClient(timeout=req_rep_timeout)
-        sse_sync_client = httpx.Client(timeout=sse_timeout)
-        sse_async_client = httpx.AsyncClient(timeout=sse_timeout)
+        req_rep_sync_client = httpx.Client(timeout=req_rep_timeout, verify=verify)
+        req_rep_async_client = httpx.AsyncClient(timeout=req_rep_timeout, verify=verify)
+        sse_sync_client = httpx.Client(timeout=sse_timeout, verify=verify)
+        sse_async_client = httpx.AsyncClient(timeout=sse_timeout, verify=verify)
 
         # fetch TD
         url = (
