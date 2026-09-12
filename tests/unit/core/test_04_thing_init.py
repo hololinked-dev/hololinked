@@ -17,7 +17,7 @@ from hololinked.core.meta import (
     EventsRegistry,
     PropertiesRegistry,
 )
-from hololinked.core.properties import Parameter  # noqa: F401
+from hololinked.core.properties import Parameter, String  # noqa: F401
 from hololinked.core.state_machine import BoundFSM
 from hololinked.server.zmq import ZMQServer
 
@@ -779,6 +779,74 @@ def test_23_equality_and_hash(thing_cls: ThingMeta):
     assert thing != shared_id
     assert thing != object()
     assert thing.__eq__(None) is False
+
+
+@pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
+def test_24_str_and_contains(thing_cls: ThingMeta):
+    """Test the string representation of a Thing and the membership test for its affordances"""
+    thing = thing_cls(id=f"test_str_and_contains_{thing_cls.__name__}")  # type: Thing
+
+    # req. 1. the string representation names the class and the id
+    assert str(thing) == f"{thing_cls.__name__}({thing.id})"
+
+    # req. 2. the descriptors of all three registries are members, __contains__ asks each registry in turn
+    assert thing.properties.descriptors["state"] in thing
+    assert thing.actions.descriptors["ping"] in thing
+    assert thing.events.descriptors["state_change_event"] in thing
+
+    # req. 3. as established in test_10, class level and instance level descriptors are the same objects,
+    # so the class level ones are members of the instance too
+    assert thing_cls.properties.descriptors["state"] in thing
+    assert thing_cls.actions.descriptors["ping"] in thing
+    assert thing_cls.events.descriptors["state_change_event"] in thing
+
+    # req. 4. names are members as well, because each registry looks in the keys of its descriptors as well
+    assert "state" in thing
+    assert "ping" in thing
+    assert "state_change_event" in thing
+    assert "not_an_affordance" not in thing
+
+    # req. 5. a descriptor that was never registered anywhere is not a member
+    assert String(default="foo") not in thing
+
+    # req. 6. neither is a descriptor that belongs to some other class
+    if thing_cls is Thing:
+        assert OceanOpticsSpectrometer.properties.descriptors["integration_time"] not in thing
+
+    # req. 7. an arbitrary object is not a member
+    assert object() not in thing
+
+
+@pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
+def test_25_context_manager(thing_cls: ThingMeta):
+    """Test the use of a Thing as a context manager"""
+    thing_id = f"test_context_manager_{thing_cls.__name__}"
+    thing = thing_cls(id=thing_id)  # type: Thing
+
+    # req. 1. entering yields the object itself, not a wrapper or a copy
+    with thing as entered:
+        assert entered is thing
+
+    # req. 2. no state is kept between entries, so the same object can be entered again and nested
+    with thing as first, thing as second:
+        assert first is thing
+        assert second is thing
+
+    # req. 3. leaving the block does not suppress an exception raised within it
+    with pytest.raises(RuntimeError):
+        with thing:
+            raise RuntimeError("raised inside the block")
+    # because __exit__ returns None, which python reads as not handled
+    assert thing.__exit__(None, None, None) is None
+
+    # req. 4. leaving the block tears nothing down and the object is left usable.
+    # __exit__ is unrelated to the exit() action, which stops the object's run loop
+    assert thing.ping() is None
+    assert thing.id == thing_id
+    with thing as entered_again:
+        assert entered_again is thing
+
+    # The context manager currently is a dumb API.
 
 
 # """
