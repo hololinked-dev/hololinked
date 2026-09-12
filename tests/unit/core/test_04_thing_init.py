@@ -741,6 +741,46 @@ def test_22_sub_things_ownership(thing_cls: ThingMeta):
     assert child.sub_things == {}
 
 
+@pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
+def test_23_equality_and_hash(thing_cls: ThingMeta):
+    """Test when two Things are considered to be the same object"""
+    suffix = thing_cls.__name__
+    shared_id = f"test_equality_{suffix}"
+    thing = thing_cls(id=shared_id)  # type: Thing
+
+    # req. 1. an object is equal to itself
+    assert thing == thing
+
+    # req. 2. two separately created objects of the same class with the same id are equal
+    twin = thing_cls(id=shared_id)  # type: Thing
+    assert thing is not twin
+    assert thing == twin
+    assert twin == thing
+
+    # req. 3. equal objects hash alike, so either of them can be used to look up the other
+    assert hash(thing) == hash(twin)
+    assert {thing: "value"}[twin] == "value"
+    assert len({thing, twin}) == 1
+
+    # req. 4. the id is part of the identity
+    namesake = thing_cls(id=f"test_equality_other_{suffix}")  # type: Thing
+    assert thing != namesake
+    assert len({thing, namesake}) == 2
+
+    # req. 5. the class is part of the identity, so another class sharing the id is a different object.
+    other_cls = OceanOpticsSpectrometer if thing_cls is Thing else Thing
+    impostor = other_cls(id=shared_id)  # type: Thing
+    assert isinstance(impostor, Thing)  # it passes the isinstance check in __eq__ and is rejected anyway
+    assert thing != impostor
+    assert impostor != thing
+    assert len({thing, impostor}) == 2
+
+    # req. 6. anything that is not a Thing is never equal, not even the id it was created with
+    assert thing != shared_id
+    assert thing != object()
+    assert thing.__eq__(None) is False
+
+
 # """
 # # Summary of tests and requirements:
 
