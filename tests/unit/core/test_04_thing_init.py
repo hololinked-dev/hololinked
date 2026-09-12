@@ -657,6 +657,90 @@ def test_17_inheritance_of_registries():
     assert len(OceanOpticsSpectrometer.events.descriptors) > len(Thing.events.descriptors)
 
 
+"""
+Test sequence is as follows:
+1. Test what `__init__()` demands and what it leaves behind
+"""
+
+
+@pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
+def test_18_init_contract(thing_cls: ThingMeta):
+    """Test the requirements of instantiating a Thing and the state it is left in"""
+    # req. 1. id is a required argument
+    with pytest.raises(TypeError):
+        thing_cls()
+    # Thing itself accepts it only as a keyword, subclasses are free to define their own signature
+    if thing_cls is Thing:
+        with pytest.raises(TypeError):
+            thing_cls("test_positional_id")
+
+    # req. 2. the id is validated while instantiating, not only through the descriptor as in test_01
+    for invalid_id in ["123_invalid", "invalid id", "invalid@id", ""]:
+        with pytest.raises(ValueError):
+            thing_cls(id=invalid_id)
+    with pytest.raises(TypeError):
+        thing_cls(id=42)
+
+    thing = thing_cls(id=f"test_init_contract_{thing_cls.__name__}")  # type: Thing
+
+    # req. 3. no storage backend is attached unless one was asked for
+    assert thing.db_engine is None
+
+    # req. 4. an object is not owned by anyone until it is composed into another Thing
+    assert thing._owners is None
+
+    # req. 5. the qualified id of a standalone object is its own id
+    assert thing._qualified_id == thing.id
+
+
+@pytest.mark.parametrize("thing_cls", [Thing, OceanOpticsSpectrometer])
+def test_22_sub_things_ownership(thing_cls: ThingMeta):
+    """Test how ownership is recorded when a Thing is composed within another Thing"""
+    suffix = thing_cls.__name__
+    parent_a = thing_cls(id=f"test_sub_things_parent_a_{suffix}")  # type: Thing
+    parent_b = thing_cls(id=f"test_sub_things_parent_b_{suffix}")  # type: Thing
+    child = OceanOpticsSpectrometer(id=f"test_sub_things_child_{suffix}")  # type: Thing
+
+    # req. 1. an object that composes nothing has no subthings
+    assert parent_a.sub_things == {}
+    # the dictionary is rebuilt on every access and fails identity test
+    assert parent_a.sub_things is not parent_a.sub_things
+
+    # req. 2. ownership is recorded when the subthings are read, not when the attribute is set
+    parent_a.child = child
+    parent_b.child = child
+    assert child._owners is None
+    assert parent_a.sub_things["child"] is child
+    assert child._owners == [parent_a]
+
+    # req. 3. the same object can be composed within more than one parent
+    assert parent_b.sub_things["child"] is child
+    assert child._owners == [parent_a, parent_b]
+
+    # req. 4. reading the subthings any number of times does not duplicate the owners
+    assert len(parent_a.sub_things) == 1
+    assert len(parent_b.sub_things) == 1
+    assert len(child._owners) == 2
+    # owners are the parents themselves and not merely equal to them
+    assert child._owners[0] is parent_a
+    assert child._owners[1] is parent_b
+
+    # req. 5. only the directly composed objects are reported, composition is not walked recursively
+    grandparent = thing_cls(id=f"test_sub_things_grandparent_{suffix}")  # type: Thing
+    grandparent.middle = parent_a
+    # access one to update known sub things
+    grandparent.sub_things
+    parent_a.sub_things
+    child.sub_things
+    # check now
+    assert list(grandparent.sub_things.keys()) == ["middle"]
+    assert parent_a._owners == [grandparent]
+    # therefore the grandchild gains no new owner
+    assert child._owners == [parent_a, parent_b]
+    # req. 6. a composed object that composes nothing itself has no subthings
+    assert child.sub_things == {}
+
+
 # """
 # # Summary of tests and requirements:
 
