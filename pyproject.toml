@@ -133,15 +133,19 @@ all = [
 minversion = "8.0"
 addopts = "-ra --strict-markers --strict-config --ignore=lib64"
 testpaths = ["tests"]
+pythonpath = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-norecursedirs = ["tests/yet-to-be-integrated*"]
+norecursedirs = ["tests/testkit"]
 asyncio_mode = "auto"
 markers = [
     "order: mark test to run in a specific order",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "unit: marks tests as unit tests",
     "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
+    "mqtt: marks tests that need an MQTT broker, runs only on linux for now",
     "asyncio: mark test as asyncio to run with pytest-asyncio"
 ]
 filterwarnings = [

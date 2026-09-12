@@ -73,7 +73,7 @@ jobs:
         if: matrix.tool == 'ruff'
         run: |
           source .venv/bin/activate
-          ruff check tests/*.py tests/things/*.py tests/helper-scripts/*.py
+          ruff check tests --exclude '*.ipynb'
 
       - name: run ty type checker
         if: matrix.tool == 'ty'
@@ -157,11 +157,188 @@ jobs:
           docker run --rm -v ${{ github.workspace }}:/hololinked zricethezav/gitleaks:latest \
             dir hololinked/.github --verbose --log-level trace
 
-  test:
-    name: unit-integration tests
+  unit-tests:
+    name: unit tests
     needs: scan
 
     strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            python-version: 3.11
+          - os: windows-latest
+            python-version: 3.12
+          - os: windows-latest
+            python-version: 3.13
+          # - os: macos-latest
+          #   python-version: 3.11
+          - os: ubuntu-latest
+            python-version: 3.11
+          - os: ubuntu-latest
+            python-version: 3.12
+          - os: ubuntu-latest
+            python-version: 3.13
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: set up python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: install uv (linux/macOS)
+        if: runner.os != 'Windows'
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: install uv (windows)
+        if: runner.os == 'Windows'
+        run: |
+          python -m pip install uv
+
+      - name: install dependencies (linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          uv venv .venv
+          source .venv/bin/activate
+          uv sync --group test --group dev
+
+      - name: install dependencies (windows)
+        if: runner.os == 'Windows'
+        run: |
+          uv venv .venv
+          .venv\Scripts\activate
+          uv sync --group test --group dev
+
+      - name: run unit tests (linux/macOS)
+        if: runner.os != 'Windows' && matrix.python-version != 3.13
+        run: |
+          source .venv/bin/activate
+          pytest -s -v -m unit
+
+      - name: run unit tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .venv\Scripts\activate
+          pytest -s -v -m unit
+
+      - name: run unit tests and generate coverage report (linux/macOS python 3.13)
+        if: runner.os != 'Windows' && matrix.python-version == 3.13
+        run: |
+          source .venv/bin/activate
+          pytest -s -v -m unit --cov=hololinked --cov-report=xml:coverage-unit.xml
+
+      - name: upload coverage report as artifact
+        uses: actions/upload-artifact@v4
+        if: runner.os != 'Windows' && matrix.python-version == 3.13
+        with:
+          name: coverage-report-unit-ubuntu-latest-py3.13
+          path: coverage-unit.xml
+          if-no-files-found: warn
+
+  integration-tests:
+    name: integration tests
+    needs: scan
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            python-version: 3.11
+          - os: windows-latest
+            python-version: 3.12
+          - os: windows-latest
+            python-version: 3.13
+          # - os: macos-latest
+          #   python-version: 3.11
+          - os: ubuntu-latest
+            python-version: 3.11
+          - os: ubuntu-latest
+            python-version: 3.12
+          - os: ubuntu-latest
+            python-version: 3.13
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: set up python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: install uv (linux/macOS)
+        if: runner.os != 'Windows'
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: install uv (windows)
+        if: runner.os == 'Windows'
+        run: |
+          python -m pip install uv
+
+      - name: install dependencies (linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          uv venv .venv
+          source .venv/bin/activate
+          uv sync --group test --group dev
+
+      - name: install dependencies (windows)
+        if: runner.os == 'Windows'
+        run: |
+          uv venv .venv
+          .venv\Scripts\activate
+          uv sync --group test --group dev
+
+      - name: run integration tests (linux/macOS)
+        if: runner.os != 'Windows' && matrix.python-version != 3.13
+        env:
+          OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
+        run: |
+          source .venv/bin/activate
+          pytest -s -v -m integration
+
+      - name: run integration tests (Windows)
+        if: runner.os == 'Windows'
+        env:
+          OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
+        run: |
+          .venv\Scripts\activate
+          pytest -s -v -m integration
+
+      - name: run integration tests and generate coverage report (linux/macOS python 3.13)
+        if: runner.os != 'Windows' && matrix.python-version == 3.13
+        env:
+          OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
+        run: |
+          source .venv/bin/activate
+          pytest -s -v -m integration --cov=hololinked --cov-report=xml:coverage-integration.xml
+
+      - name: upload coverage report as artifact
+        uses: actions/upload-artifact@v4
+        if: runner.os != 'Windows' && matrix.python-version == 3.13
+        with:
+          name: coverage-report-integration-ubuntu-latest-py3.13
+          path: coverage-integration.xml
+          if-no-files-found: warn
+
+  e2e-tests:
+    name: end-to-end tests
+    needs: scan
+
+    strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -192,14 +369,14 @@ jobs:
         run: |
           echo "${{ secrets.MQTT_TEST_CREDENTIALS }}" | base64 -d > certs.tar.gz
           tar xzf certs.tar.gz
-    
+
       - name: unpack MQTT certificates (windows)
         if: runner.os == 'Windows'
         run: |
           $mqttCerts = "${{ secrets.MQTT_TEST_CREDENTIALS }}"
           [System.IO.File]::WriteAllBytes("certs.tar.gz", [System.Convert]::FromBase64String($mqttCerts))
           tar xzf certs.tar.gz
-    
+
       - name: set up python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
@@ -220,7 +397,7 @@ jobs:
           uv venv .venv
           source .venv/bin/activate
           uv sync --group test --group dev
-          mv tests/patches/testcontainers/mqtt/__init__.py .venv/lib/python*/site-packages/testcontainers/mqtt/__init__.py
+          mv tests/testkit/patches/testcontainers/mqtt/__init__.py .venv/lib/python*/site-packages/testcontainers/mqtt/__init__.py
 
       - name: install dependencies (windows)
         if: runner.os == 'Windows'
@@ -228,54 +405,55 @@ jobs:
           uv venv .venv
           .venv\Scripts\activate
           uv sync --group test --group dev
-          copy tests\patches\testcontainers\mqtt\__init__.py .venv\Lib\site-packages\testcontainers\mqtt\__init__.py
+          copy tests\testkit\patches\testcontainers\mqtt\__init__.py .venv\Lib\site-packages\testcontainers\mqtt\__init__.py
 
-      - name: run unit tests (linux/macOS)
+      - name: run e2e tests (linux/macOS)
         if: runner.os != 'Windows' && matrix.python-version != 3.13
         env:
           OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
         run: |
           source .venv/bin/activate
-          pytest -s -v
+          pytest -s -v -m e2e
 
-      - name: run unit tests (Windows)
+      - name: run e2e tests (Windows)
         if: runner.os == 'Windows'
         env:
           OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
         run: |
           .venv\Scripts\activate
-          pytest -s -v --ignore=tests\test_16_protocols_mqtt.py --ignore=tests\test_98_multiple_protocols_e2e.py
+          pytest -s -v -m e2e
 
-      - name: run unit tests and generate coverage report (linux/macOS python 3.13)
+      - name: run e2e tests and generate coverage report (linux/macOS python 3.13)
         if: runner.os != 'Windows' && matrix.python-version == 3.13
         env:
           OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
         run: |
           source .venv/bin/activate
-          pytest -s -v --cov=hololinked --cov-report=xml:coverage.xml
+          pytest -s -v -m e2e --cov=hololinked --cov-report=xml:coverage-e2e.xml
 
       - name: upload coverage report as artifact
         uses: actions/upload-artifact@v4
         if: runner.os != 'Windows' && matrix.python-version == 3.13
         with:
-          name: coverage-report-ubuntu-latest-py3.13
-          path: coverage.xml
+          name: coverage-report-e2e-ubuntu-latest-py3.13
+          path: coverage-e2e.xml
           if-no-files-found: warn
 
   publish_coverage:
     name: publish coverage
-    needs: test
+    needs: [unit-tests, integration-tests, e2e-tests]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
       - name: checkout code
         uses: actions/checkout@v4
 
-      - name: download coverage artifact
+      - name: download coverage artifacts
         id: dl
         uses: actions/download-artifact@v4
         with:
-          name: coverage-report-ubuntu-latest-py3.13
+          pattern: coverage-report-*-ubuntu-latest-py3.13
+          merge-multiple: true
           path: .
         continue-on-error: true
 
@@ -286,7 +464,7 @@ jobs:
           CI: true
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
+          files: coverage-unit.xml,coverage-integration.xml,coverage-e2e.xml
           fail_ci_if_error: true
           slug: hololinked-dev/hololinked
 
