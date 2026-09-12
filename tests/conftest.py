@@ -2,38 +2,38 @@
 
 import asyncio
 import logging
+import sys
 
-from dataclasses import dataclass
 from uuid import uuid4
 
 import pytest
 import zmq.asyncio
 
+from testkit.helpers import AppIDs, stop_all_runs
+
 from hololinked import Serializers
 from hololinked.config import global_config
-from hololinked.server import stop
-from hololinked.server.server import _runs
 
 
-def stop_all_runs() -> None:
-    """Stop every run."""
-    for run_id in list(_runs):
-        stop(run_id)
+LAYER_MARKERS = ("unit", "integration", "e2e")
 
 
-@dataclass
-class AppIDs:
-    """
-    Application related IDs generally used by end-user,
-    like server, client, and thing IDs.
-    """
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Mark every test with the layer it was collected from, so `-m unit` and friends work"""
+    rootdir = config.rootpath / "tests"
+    for item in items:
+        try:
+            layer = item.path.relative_to(rootdir).parts[0]
+        except ValueError:
+            continue
+        if layer in LAYER_MARKERS:
+            item.add_marker(getattr(pytest.mark, layer))
 
-    server_id: str
-    """RPC server ID"""
-    client_id: str
-    """A client ID"""
-    thing_id: str
-    """A thing ID"""
+    if sys.platform == "win32":
+        skip_mqtt = pytest.mark.skip(reason="an MQTT broker is not available on Windows")
+        for item in items:
+            if "mqtt" in item.keywords:
+                item.add_marker(skip_mqtt)
 
 
 @pytest.fixture(scope="session", autouse=True)

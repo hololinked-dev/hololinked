@@ -8,16 +8,12 @@ from typing import Callable
 import pydantic
 import pytest
 
+from testkit.things import TestThing
+
 from hololinked.core.properties import Number
 from hololinked.storage.bases import BaseDB
 from hololinked.storage.sqlalchemydb import SQLAlchemyDB
 from hololinked.utils import uuid_hex
-
-
-try:
-    from .things import TestThing
-except ImportError:
-    from things import TestThing
 
 
 @dataclass

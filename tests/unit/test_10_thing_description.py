@@ -3,6 +3,8 @@ import logging
 import pytest
 
 from pydantic import BaseModel
+from testkit.things import OceanOpticsSpectrometer, TestThing
+from testkit.things.spectrometer import Intensity
 
 from hololinked.constants import ResourceTypes
 from hololinked.core.properties import (
@@ -22,14 +24,6 @@ from hololinked.metadata.td.interaction_affordance import (
     PropertyAffordance,
 )
 from hololinked.utils import issubklass, uuid_hex
-
-
-try:
-    from .things import OceanOpticsSpectrometer, TestThing
-    from .things.spectrometer import Intensity
-except ImportError:
-    from things import OceanOpticsSpectrometer, TestThing
-    from things.spectrometer import Intensity
 
 
 @pytest.fixture(scope="module")

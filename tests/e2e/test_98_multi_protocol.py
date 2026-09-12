@@ -8,6 +8,8 @@ import pytest
 from testcontainers.mqtt import (
     MosquittoContainer,  # TODO this will not work from the current release of testcontainers
 )
+from testkit.helpers import mqtt_ssl_context, stop_all_runs, wait_until_server_ready
+from testkit.things import TestThing
 
 from hololinked.client import ClientFactory, ObjectProxy
 from hololinked.server import run
@@ -17,26 +19,8 @@ from hololinked.server.zmq.server import ZMQServer
 from hololinked.utils import uuid_hex
 
 
-try:
-    from tests.conftest import stop_all_runs
-    from tests.test_14_protocols_http import wait_until_server_ready
-    from tests.test_16_protocols_mqtt import (
-        mosquitto_container,
-        mqtt_host,
-        mqtt_port,
-        mqtt_ssl_context,
-    )
-    from tests.things import TestThing
-except ImportError:
-    from conftest import stop_all_runs
-    from test_14_protocols_http import wait_until_server_ready
-    from test_16_protocols_mqtt import (  # noqa: F401
-        mosquitto_container,
-        mqtt_host,
-        mqtt_port,
-        mqtt_ssl_context,
-    )
-    from things import TestThing
+pytestmark = pytest.mark.mqtt
+
 
 count = itertools.count(64000)
 

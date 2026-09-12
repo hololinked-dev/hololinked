@@ -1,6 +1,6 @@
 import pytest
 
-from things import TestThing
+from testkit.things import TestThing
 
 from hololinked import Serializers
 from hololinked.core.interfaces import BaseSerializer

@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 import structlog
 
-from things import OceanOpticsSpectrometer
+from testkit.things import OceanOpticsSpectrometer
 
 from hololinked.core import Action, Event, Property, Thing, ThingMeta
 from hololinked.core.actions import BoundAction
