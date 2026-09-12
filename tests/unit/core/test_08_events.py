@@ -1,15 +1,11 @@
 import pytest
 
+from testkit.things import TestThing
+
 from hololinked.core.eventloop.pubsub import EventBus
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.metadata.td.interaction_affordance import EventAffordance
 from hololinked.utils import uuid_hex
-
-
-try:
-    from .things import TestThing
-except ImportError:
-    from things import TestThing
 
 
 def validate_event_dispatcher(descriptor: Event, dispatcher: EventDispatcher, thing: TestThing):

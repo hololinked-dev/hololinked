@@ -8,9 +8,9 @@ import time
 import structlog
 
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from things import OceanOpticsSpectrometer, TestThing
+from testkit.things import OceanOpticsSpectrometer, TestThing
 
 from hololinked import Serializers
 from hololinked.config import global_config

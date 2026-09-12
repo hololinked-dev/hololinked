@@ -7,6 +7,9 @@ from typing import Generator
 
 import pytest
 
+from testkit.helpers import AppIDs as MessageAppIDs
+from testkit.helpers import validate_response_message
+
 from hololinked.core.exceptions import BreakLoop
 from hololinked.server.zmq.brokers import (
     AsyncZMQClient,
@@ -26,14 +29,6 @@ from hololinked.server.zmq.message import (
     SerializableData,
 )
 from hololinked.utils import get_current_async_loop, uuid_hex
-
-
-try:
-    from .conftest import AppIDs as MessageAppIDs
-    from .test_01_message import validate_response_message
-except ImportError:
-    from conftest import AppIDs as MessageAppIDs
-    from test_01_message import validate_response_message
 
 
 @dataclass

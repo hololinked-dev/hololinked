@@ -11,6 +11,10 @@ import jsonschema
 import pytest
 import structlog
 
+from testkit.things import TestThing
+from testkit.things import test_thing_TD as test_thing_original_TD
+from testkit.things.test_thing import replace_methods_with_actions
+
 from hololinked.client.abstractions import SSE
 from hololinked.client.zmq.consumed_interactions import ZMQAction, ZMQEvent, ZMQProperty
 from hololinked.core import Thing
@@ -26,16 +30,6 @@ from hololinked.server.zmq.brokers import (  # noqa: F401
     SyncZMQClient,
 )
 from hololinked.utils import get_current_async_loop, uuid_hex
-
-
-try:
-    from .test_06_actions import replace_methods_with_actions
-    from .things import TestThing
-    from .things import test_thing_TD as test_thing_original_TD
-except ImportError:
-    from test_06_actions import replace_methods_with_actions
-    from things import TestThing
-    from things import test_thing_TD as test_thing_original_TD
 
 
 @pytest.fixture(scope="module")

@@ -1,56 +1,13 @@
 import time
 
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 
 from hololinked.client.abstractions import SSE
-from hololinked.client.factory import ClientFactory
 from hololinked.client.proxy import ObjectProxy
-from hololinked.utils import uuid_hex
-
-
-try:
-    from .conftest import stop_all_runs
-    from .things import TestThing
-    from .utils import fake
-except ImportError:
-    from conftest import stop_all_runs
-    from things import TestThing
-    from utils import fake
-
-
-@pytest.fixture(scope="class")
-def access_point(request) -> str:
-    return "INPROC"
-
-
-@pytest.fixture(scope="class")
-def thing(access_point) -> Generator[TestThing, None, None]:
-    thing_id = f"test-thing-{uuid_hex()}"
-    thing = TestThing(id=thing_id)
-    thing.run_with_zmq_server(forked=True, access_points=[access_point])
-    try:
-        yield thing
-    finally:
-        stop_all_runs()
-
-
-@pytest.fixture(scope="class")
-def thing_model(thing: TestThing) -> dict[str, Any]:
-    return thing.get_thing_model(ignore_errors=True).json()
-
-
-@pytest.fixture(scope="class")
-def client(thing: TestThing, access_point: str) -> Generator[ObjectProxy, None, None]:
-    client = ClientFactory.zmq(
-        server_id=thing.id,
-        thing_id=thing.id,
-        access_point=access_point.replace("*", "localhost"),
-        ignore_TD_errors=True,
-    )
-    yield client
-    # client.close()
+from testkit.helpers import fake
+from testkit.things import TestThing
 
 
 @pytest.mark.asyncio(loop_scope="class")
@@ -306,7 +263,3 @@ class TestRPC_E2E:
     async def test_19_async_write_property(self, client, prop, payload):
         await client.async_write_property(prop, payload)
         assert await client.async_read_property(prop) == payload
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "-s"])

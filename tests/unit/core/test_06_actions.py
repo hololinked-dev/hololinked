@@ -4,6 +4,9 @@ from copy import deepcopy
 
 import pytest
 
+from testkit.things import TestThing
+from testkit.things.test_thing import replace_methods_with_actions
+
 from hololinked.core.actions import (
     Action,
     BoundAction,
@@ -14,14 +17,6 @@ from hololinked.core.thing import action
 from hololinked.metadata.td.interaction_affordance import ActionAffordance
 from hololinked.schema_validators import JSONSchemaValidator
 from hololinked.utils import isclassmethod
-
-
-try:
-    from .things import TestThing
-    from .things.test_thing import replace_methods_with_actions
-except ImportError:
-    from things import TestThing
-    from things.test_thing import replace_methods_with_actions
 
 
 def unbound(action) -> Action:
