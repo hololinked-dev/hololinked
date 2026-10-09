@@ -91,9 +91,9 @@ dev = [
     "numpy>=2.0.0",
     "pandas==2.2.3",
     "pip>=25.2",
-    "ruff>=0.12.10",
+    "ruff==0.14.2",
     "pre-commit>=4.5.0",
-    "ty>=0.0.24",
+    "ty==0.0.35",
 ]
 test = [
     # protocols

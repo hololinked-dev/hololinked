@@ -10,7 +10,6 @@ import pytest
 
 from testkit.things import TestThing
 
-from hololinked.core import Property, Thing
 from hololinked.core.properties import Number
 from hololinked.storage.bases import BaseDB
 from hololinked.storage.sqlalchemydb import SQLAlchemyDB
