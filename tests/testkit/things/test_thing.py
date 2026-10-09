@@ -589,18 +589,18 @@ class TestThing(Thing):
 
     # ----------- Properties with docstrings --------------
 
-    prop_with_docstring = Property(default=5)
+    prop_with_docstring = Number(default=5)
     """This doc comes from a trailing string literal."""
 
-    prop_explicit_doc = Property(default=10, doc="explicitly provided")
+    prop_explicit_doc = Number(default=10, doc="explicitly provided")
     """This should be ignored because doc was set explicitly."""
 
-    prop_no_doc = Property(default=15)
+    prop_no_doc = Number(default=15)
 
-    prop_empty_doc = Property(default=1)
+    prop_empty_doc = Number(default=1)
     """"""
 
-    prop_whitespace_doc = Property(default=2)
+    prop_whitespace_doc = Number(default=2)
     """   """
 
 

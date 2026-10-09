@@ -139,9 +139,6 @@ def resolve_property_docstrings(owner_cls: ThingMeta) -> None:
     if class_def is None:
         return
 
-    def is_property_call(node):
-        return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Property"
-
     body = class_def.body
     i = 0
     while i < len(body):
@@ -150,18 +147,10 @@ def resolve_property_docstrings(owner_cls: ThingMeta) -> None:
             i += 1
             continue
 
-        prop_node: ast.Call | None = None
-        if is_property_call(stmt.value) and isinstance(stmt.value, ast.Call):
-            prop_node = stmt.value
-        elif (
-            isinstance(stmt.value, (ast.Tuple, ast.List))
-            and stmt.value.elts
-            and is_property_call(stmt.value.elts[0])
-            and isinstance(stmt.value.elts[0], ast.Call)
-        ):
-            prop_node = stmt.value.elts[0]
-
-        if prop_node is None:
+        value = stmt.value
+        if isinstance(value, (ast.Tuple, ast.List)) and value.elts:
+            value = value.elts[0]
+        if not isinstance(value, ast.Call):
             i += 1
             continue
 
