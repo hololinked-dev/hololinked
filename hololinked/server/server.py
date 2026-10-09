@@ -20,8 +20,8 @@ from hololinked.utils import (
 )
 
 
-_runs = dict()  # type: dict[str, CrossLoopEvent]
-"""Every run() currently serving, by id, so that stop() can name the one it means."""
+_runs = dict()  # type: dict[str, tuple[CrossLoopEvent, threading.Event]]
+"""Every run() currently serving, by id, with the event that shuts it down and the one set once it has."""
 _runs_lock = threading.Lock()
 """Guards `_runs` - a forked run() registers on its own thread while another may be stopping."""
 
@@ -64,8 +64,9 @@ def run(
     if unbound or not eventloops:
         eventloops.append(EventLoop(things=unbound))
 
-    for eventloop in eventloops:
-        threading.Thread(target=eventloop.run, daemon=True).start()
+    eventloop_threads = [threading.Thread(target=eventloop.run, daemon=True) for eventloop in eventloops]
+    for thread in eventloop_threads:
+        thread.start()
     # a server listening before its event loop runs would refuse the first operations it receives
     for eventloop in eventloops:
         if not eventloop.wait_until_running(timeout=global_config.EVENTLOOP_START_TIMEOUT):
@@ -74,11 +75,12 @@ def run(
             raise RuntimeError(f"{eventloop} did not start within {global_config.EVENTLOOP_START_TIMEOUT} seconds")
 
     shutdown_event = CrossLoopEvent()
+    stopped_event = threading.Event()
     run_id = id or f"run-{uuid_hex()}"
     with _runs_lock:
         if run_id in _runs:
             raise ValueError(f"a run with id {run_id!r} is already serving, give this one another id")
-        _runs[run_id] = shutdown_event
+        _runs[run_id] = (shutdown_event, stopped_event)
 
     async def shutdown():
         await shutdown_event.wait()
@@ -103,9 +105,13 @@ def run(
         for eventloop in eventloops:
             eventloop.stop()
         cancel_pending_tasks_in_current_loop()
+        # things may still be touching sockets until their threads exit
+        for thread in eventloop_threads:
+            thread.join(timeout=global_config.EVENTLOOP_STOP_TIMEOUT)
+        stopped_event.set()
 
 
-def stop(id: str | None = None) -> None:
+def stop(id: str | None = None, wait: bool = False) -> None:
     """
     Shutdown the servers started by `run()`.
 
@@ -113,6 +119,9 @@ def stop(id: str | None = None) -> None:
     ----------
     id: str, optional
         the id given to `run()`. Omit if unspecified.
+    wait: bool, default False
+        block until the run has wound down, at most twice `EVENTLOOP_STOP_TIMEOUT` seconds. Do not wait
+        from an operation running on a `Thing` of that very run, the run waits for that operation to return.
 
     Raises
     ------
@@ -130,11 +139,14 @@ def stop(id: str | None = None) -> None:
                 )
                 return
             id = next(iter(_runs))
-        shutdown_event = _runs.pop(id, None)
-        if shutdown_event is None:
+        events = _runs.pop(id, None)
+        if events is None:
             warnings.warn(f"no run with id {id!r} is serving (cannot stop)", category=UserWarning)
             return
+    shutdown_event, stopped_event = events
     shutdown_event.set()
+    if wait and not stopped_event.wait(timeout=2 * global_config.EVENTLOOP_STOP_TIMEOUT):
+        warnings.warn(f"run {id!r} did not wind down in time after being stopped", category=UserWarning)
 
 
 def parse_params(id: str, access_points: list[tuple[str, str | int | dict | list[str]]]) -> list[BaseProtocolServer]:

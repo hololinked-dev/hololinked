@@ -63,6 +63,7 @@ class Configuration:
         "USE_UVLOOP",
         "TRACE_MALLOC",
         "EVENTLOOP_START_TIMEOUT",
+        "EVENTLOOP_STOP_TIMEOUT",
         # schema validation
         "VALIDATE_SCHEMAS",
         # ZMQ
@@ -112,6 +113,7 @@ class Configuration:
         self.USE_UVLOOP = False
         self.TRACE_MALLOC = False
         self.EVENTLOOP_START_TIMEOUT = 10
+        self.EVENTLOOP_STOP_TIMEOUT = 10
         # self.VALIDATE_SCHEMA_ON_CLIENT = False
         self.VALIDATE_SCHEMAS = False
         # created on first use by zmq_context(), so that importing this package does not require
@@ -388,6 +390,8 @@ for TCP socket binding, used for event addresses. default `65535`.
 `TRACE_MALLOC` - whether to trace memory allocations using tracemalloc module. default `False`.
 
 `EVENTLOOP_START_TIMEOUT` - timeout in seconds to wait for an event loop to start. default `10`. Operations are served only after the event loop has successfully started.
+
+`EVENTLOOP_STOP_TIMEOUT` - timeout in seconds to wait for an event loop and its `Thing`s to wind down once a run is stopped. default `10`.
 
 `VALIDATE_SCHEMAS` - whether to validate JSON schema supplied for properties, actions and events
 (not validation of payload, but validation of schema itself). default `True`.
