@@ -100,6 +100,7 @@ class EventLoop:
         self._stop_hooks = []  # type: list[Callable[[], None]]
         self._loop = None  # type: asyncio.AbstractEventLoop | None
         self._run = False  # flag to stop the event loop and everything hooked onto it
+        self._running_event = threading.Event()
         self.add_things(*(things or []))
 
     def add_thing(self, thing: Thing) -> None:
@@ -142,6 +143,22 @@ class EventLoop:
     def is_running(self) -> bool:
         """Check if the server is running or not."""
         return self._run
+
+    def wait_until_running(self, timeout: float | None = None) -> bool:
+        """
+        Block until `run()` accepts operations.
+
+        Parameters
+        ----------
+        timeout: float, optional
+            seconds to wait, waits forever when not given
+
+        Returns
+        -------
+        bool
+            `True` once running, `False` if the timeout passed first
+        """
+        return self._running_event.wait(timeout)
 
     def run_coro_threadsafe(self, coro: Coroutine[Any, Any, Any]) -> Future:
         """
@@ -521,11 +538,12 @@ class EventLoop:
         extra_coroutines: Sequence[Coroutine]
             coroutines to run beside the event loop's own tasks.
         """
-        self._run = True
         self._loop = get_current_async_loop()
         self.logger.info("starting event loop")
         for thing in self.things.values():
             self.per_thing_schedulers[thing.id] = QueuedScheduler(thing, self)
+        self._run = True
+        self._running_event.set()
         threads = dict()  # type: dict[int, threading.Thread]
         for thing in self.things.values():
             thread = threading.Thread(target=self.run_things, args=([thing],), daemon=True)
@@ -569,6 +587,7 @@ class EventLoop:
     def stop(self) -> None:
         """Stop the event loop, and everything hooked onto it. This method is threadsafe."""
         self._run = False
+        self._running_event.clear()
         for hook in self._stop_hooks:
             try:
                 hook()

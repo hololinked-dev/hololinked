@@ -85,8 +85,7 @@ def thing(thing_id: str) -> TestThing:
 
 def serve(server: ZMQServer, eventloop: EventLoop) -> threading.Thread:
     threading.Thread(target=eventloop.run, daemon=True).start()
-    while not eventloop.is_running:
-        time.sleep(0.01)  # a request submitted before the loop runs is refused, so wait for it
+    assert eventloop.wait_until_running(timeout=10)  # a request submitted before the loop runs is refused
 
     def poll() -> None:
         loop = get_current_async_loop()

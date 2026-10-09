@@ -7,6 +7,7 @@ import warnings
 
 from collections.abc import Sequence
 
+from hololinked.config import global_config
 from hololinked.core.eventloop import EventLoop
 from hololinked.core.interfaces import BaseProtocolServer
 from hololinked.core.utils import CrossLoopEvent
@@ -65,6 +66,12 @@ def run(
 
     for eventloop in eventloops:
         threading.Thread(target=eventloop.run, daemon=True).start()
+    # a server listening before its event loop runs would refuse the first operations it receives
+    for eventloop in eventloops:
+        if not eventloop.wait_until_running(timeout=global_config.EVENTLOOP_START_TIMEOUT):
+            for started in eventloops:
+                started.stop()
+            raise RuntimeError(f"{eventloop} did not start within {global_config.EVENTLOOP_START_TIMEOUT} seconds")
 
     shutdown_event = CrossLoopEvent()
     run_id = id or f"run-{uuid_hex()}"

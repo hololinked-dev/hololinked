@@ -32,7 +32,7 @@ import shutil
 import tracemalloc
 import warnings
 
-from typing import Any  # noqa: F401
+from typing import Any
 
 from .utils import generate_main_script_log_filename, set_global_event_loop_policy
 
@@ -62,6 +62,7 @@ class Configuration:
         # Eventloop
         "USE_UVLOOP",
         "TRACE_MALLOC",
+        "EVENTLOOP_START_TIMEOUT",
         # schema validation
         "VALIDATE_SCHEMAS",
         # ZMQ
@@ -110,6 +111,7 @@ class Configuration:
         self.DB_CONFIG_FILE = None
         self.USE_UVLOOP = False
         self.TRACE_MALLOC = False
+        self.EVENTLOOP_START_TIMEOUT = 10
         # self.VALIDATE_SCHEMA_ON_CLIENT = False
         self.VALIDATE_SCHEMAS = False
         # created on first use by zmq_context(), so that importing this package does not require
@@ -384,6 +386,8 @@ for TCP socket binding, used for event addresses. default `65535`.
 `USE_UVLOOP` - signicantly faster event loop for Linux systems. Reads data from network faster. default `False`.
 
 `TRACE_MALLOC` - whether to trace memory allocations using tracemalloc module. default `False`.
+
+`EVENTLOOP_START_TIMEOUT` - timeout in seconds to wait for an event loop to start. default `10`. Operations are served only after the event loop has successfully started.
 
 `VALIDATE_SCHEMAS` - whether to validate JSON schema supplied for properties, actions and events
 (not validation of payload, but validation of schema itself). default `True`.
