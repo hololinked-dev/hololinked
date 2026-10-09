@@ -24,7 +24,7 @@ class JSONSchema:
     class which is separate.
     """
 
-    _allowed_types: ClassVar = ("string", "number", "integer", "boolean", "object", "array", None)
+    _allowed_types: ClassVar = ("string", "number", "integer", "boolean", "object", "array", "null")
 
     _replacements: ClassVar[dict[type, str | dict]] = {
         int: "integer",
@@ -146,8 +146,8 @@ class JSONSchema:
                 JSONSchema._schemas[type] = schema
         else:
             raise TypeError(
-                "json schema replacement type must be one of allowed type - 'string', 'object', 'array', 'string', "
-                + f"'number', 'integer', 'boolean', 'null'. Given value {json_schema_base_type}"
+                "json schema replacement type must be one of allowed type - 'string', 'number', 'integer', "
+                + f"'boolean', 'object', 'array', 'null'. Given value {json_schema_base_type}"
             )
 
     @classmethod

@@ -43,18 +43,18 @@ CONSTRAINTS: dict[str, dict[str, str]] = {
 
 
 class DataSchemaRoot(ModelRoot):
-    """
-    Root model of non-object DataSchemas.
-
-    JSON schema patterns are ECMA 262 regexes. Python's re supports lookarounds and backreferences like them,
-    pydantic's default rust regex engine does not.
-    """
+    """Root model of non-object DataSchemas."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, regex_engine="python-re")
+    # JSON schema patterns are ECMA 262 regexes. Python's re supports lookarounds and backreferences like them,
+    # pydantic's default rust regex engine does not.
 
 
 def dataschema_to_model(
-    schema: dict[str, Any], name: str, strict: bool = False, root: dict[str, Any] | None = None
+    schema: dict[str, Any],
+    name: str,
+    strict: bool = False,
+    root: dict[str, Any] | None = None,
 ) -> type[BaseModel]:
     """
     Convert a Thing Description DataSchema to a pydantic model, the reverse of `type_to_dataschema`.
@@ -191,7 +191,9 @@ def dataschema_to_type(
             python_type = create_model(
                 name,
                 __config__=ConfigDict(
-                    extra="forbid", json_schema_extra=_annotate(annotations), regex_engine="python-re"
+                    extra="forbid",
+                    json_schema_extra=restore_schema_annotations(annotations),
+                    regex_engine="python-re",
                 ),
             )
         else:
@@ -211,7 +213,11 @@ def dataschema_to_type(
                 # an absent field is not a default, so the None placeholder is neither validated nor in the schema
                 fields[key] = (
                     field_type,
-                    Field(default=None, validate_default=False, json_schema_extra=_drop_default),
+                    Field(
+                        default=None,
+                        validate_default=False,
+                        json_schema_extra=lambda schema: schema.pop("default", None),
+                    ),
                 )
         for key in required:
             fields.setdefault(key, (Any, ...))  # required without a schema accepts any value
@@ -224,7 +230,7 @@ def dataschema_to_type(
             name,
             __config__=ConfigDict(
                 extra="forbid" if additional is False else "allow",
-                json_schema_extra=_annotate(annotations),
+                json_schema_extra=restore_schema_annotations(annotations),
                 regex_engine="python-re",
                 validate_default=True,  # e.g. a nested object's default becomes a model instance
             ),
@@ -251,12 +257,12 @@ def dataschema_to_type(
     if values is not None:
         if constraints:
             # pydantic cannot write constraints on a Literal back to JSON schema, so they filter the values instead
-            adapter = _type_adapter(python_type)
-            values = tuple(value for value in values if _is_valid(adapter, value))
+            adapter = type_adapter(python_type)
+            values = tuple(value for value in values if value_validates(adapter, value))
             if not values:
                 raise ValueError(f"No value of enum or const at {location} satisfies the constraints {constraints}")
         python_type = Literal.__getitem__(values)
-    if "default" in schema and not _is_valid(_type_adapter(python_type), schema["default"]):
+    if "default" in schema and not value_validates(type_adapter(python_type), schema["default"]):
         # pydantic validates a default only when it is used, so a broken TD would fail requests instead
         raise ValueError(f"Default {schema['default']!r} at {location}/default does not validate against its schema")
     if annotations and not issubklass(python_type, BaseModel):  # models carry them in their own schema
@@ -270,13 +276,41 @@ def dataschema_to_type(
     return python_type
 
 
-def _type_adapter(python_type: Any) -> TypeAdapter:
+def type_adapter(python_type: Any) -> TypeAdapter:
+    """
+    Create a `TypeAdapter` validating like the models generated from DataSchemas.
+
+    Parameters
+    ----------
+    python_type: Any
+        a type returned by `dataschema_to_type`
+
+    Returns
+    -------
+    TypeAdapter
+        adapter for `python_type`
+    """
     if issubklass(python_type, BaseModel):
         return TypeAdapter(python_type)  # a model brings its own config
     return TypeAdapter(python_type, config=ConfigDict(regex_engine="python-re"))
 
 
-def _is_valid(adapter: TypeAdapter, value: Any) -> bool:
+def value_validates(adapter: TypeAdapter, value: Any) -> bool:
+    """
+    Check whether a value validates, without raising.
+
+    Parameters
+    ----------
+    adapter: TypeAdapter
+        adapter of the type to validate against
+    value: Any
+        the value to validate
+
+    Returns
+    -------
+    bool
+        `True` if the value is valid, `False` otherwise
+    """
     try:
         adapter.validate_python(value)
         return True
@@ -284,11 +318,21 @@ def _is_valid(adapter: TypeAdapter, value: Any) -> bool:
         return False
 
 
-def _drop_default(schema: dict[str, Any]) -> None:
-    schema.pop("default", None)
+def restore_schema_annotations(annotations: dict[str, Any]) -> Callable[[dict[str, Any]], None]:
+    """
+    Create a `json_schema_extra` hook writing the DataSchema's own annotations into a generated model's schema.
 
+    Parameters
+    ----------
+    annotations: dict[str, Any]
+        the title(s), description(s) and default of the DataSchema
 
-def _annotate(annotations: dict[str, Any]) -> Callable[[dict[str, Any]], None]:
+    Returns
+    -------
+    Callable[[dict[str, Any]], None]
+        hook replacing the generated title with `annotations`
+    """
+
     def json_schema_extra(schema: dict[str, Any]) -> None:
         schema.pop("title", None)  # the generated model name, not part of the DataSchema
         schema.update(annotations)
