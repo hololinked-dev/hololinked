@@ -587,6 +587,22 @@ class TestThing(Thing):
         print(f"execute_instruction called with command={command}, return_data_size={return_data_size}")
         return b""
 
+    # ----------- Properties with docstrings --------------
+
+    prop_with_docstring = Property(default=5)
+    """This doc comes from a trailing string literal."""
+
+    prop_explicit_doc = Property(default=10, doc="explicitly provided")
+    """This should be ignored because doc was set explicitly."""
+
+    prop_no_doc = Property(default=15)
+
+    prop_empty_doc = Property(default=1)
+    """"""
+
+    prop_whitespace_doc = Property(default=2)
+    """   """
+
 
 def replace_methods_with_actions(thing_cls: type[TestThing]) -> None:
     exposed_actions = []

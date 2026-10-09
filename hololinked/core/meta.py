@@ -11,6 +11,7 @@ from hololinked.constants import JSON, JSONSerializable
 from hololinked.core.actions import Action, BoundAction, action
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.property import Property
+from hololinked.core.utils import resolve_property_docstrings
 from hololinked.param.parameterized import EventDispatcher as ParamEventDispatcher
 from hololinked.param.parameterized import EventResolver as ParamEventResolver
 from hololinked.param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
@@ -39,6 +40,7 @@ class ThingMeta(ParameterizedMetaclass):
 
     def __init__(mcs, name, bases, dict_):
         super().__init__(name, bases, dict_)
+        resolve_property_docstrings(mcs)
         mcs._create_actions_registry()
         mcs._create_events_registry()
 

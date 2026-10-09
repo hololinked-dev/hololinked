@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
+import inspect
 import threading
 
 from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
+    from hololinked.core.meta import ThingMeta
     from hololinked.core.thing import Thing
 
 
@@ -93,7 +96,7 @@ class CrossLoopEvent:
             future.set_result(None)
 
 
-def get_all_sub_things_recusively(thing: "Thing") -> list["Thing"]:
+def get_all_sub_things_recusively(thing: Thing) -> list[Thing]:
     """
     Get all sub things recursively from a thing.
 
@@ -108,4 +111,91 @@ def get_all_sub_things_recusively(thing: "Thing") -> list["Thing"]:
     return sub_things
 
 
-__all__ = [CrossLoopEvent.__name__, get_all_sub_things_recusively.__name__]
+def resolve_property_docstrings(owner_cls: ThingMeta) -> None:
+    r"""Parse owning class source and fill Property.doc from trailing string literals.
+
+    Explicit doc="..." always wins — we skip any property whose doc is already set.
+
+    The function is idempotent: calling it multiple times on the same class
+    produces the same result, since it only fills ``doc`` when it is ``None``.
+    """
+    from hololinked.core.property import Property
+
+    try:
+        source = inspect.getsource(owner_cls)
+    except (OSError, TypeError, ValueError):
+        return
+
+    try:
+        tree = ast.parse(source, filename=inspect.getfile(owner_cls))
+    except (SyntaxError, IndentationError):
+        return
+
+    class_def: ast.ClassDef | None = None
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == owner_cls.__name__:
+            class_def = node
+            break
+    if class_def is None:
+        return
+
+    def is_property_call(node):
+        return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Property"
+
+    body = class_def.body
+    i = 0
+    while i < len(body):
+        stmt = body[i]
+        if not isinstance(stmt, ast.Assign):
+            i += 1
+            continue
+
+        prop_node: ast.Call | None = None
+        if is_property_call(stmt.value) and isinstance(stmt.value, ast.Call):
+            prop_node = stmt.value
+        elif (
+            isinstance(stmt.value, (ast.Tuple, ast.List))
+            and stmt.value.elts
+            and is_property_call(stmt.value.elts[0])
+            and isinstance(stmt.value.elts[0], ast.Call)
+        ):
+            prop_node = stmt.value.elts[0]
+
+        if prop_node is None:
+            i += 1
+            continue
+
+        target_names: list[str] = []
+        if isinstance(stmt.targets[0], ast.Name):
+            target_names.append(stmt.targets[0].id)
+        elif isinstance(stmt.targets[0], (ast.Tuple, ast.List)):
+            for elt in stmt.targets[0].elts:
+                if isinstance(elt, ast.Name):
+                    target_names.append(elt.id)
+
+        if not target_names:
+            i += 1
+            continue
+
+        doc: str | None = None
+        next_stmt = body[i + 1] if i + 1 < len(body) else None
+        if isinstance(next_stmt, ast.Expr) and isinstance(next_stmt.value, ast.Constant):
+            raw = next_stmt.value.value
+            if isinstance(raw, str) and raw.strip():
+                doc = raw
+
+        for name in target_names:
+            if name.startswith("_"):
+                continue
+            prop = owner_cls.__dict__.get(name)
+            if isinstance(prop, Property) and prop.doc is None:
+                prop.doc = doc
+
+        i += 1
+
+
+__all__ = [
+    "CrossLoopEvent",
+    "get_all_sub_things_recusively",
+    "resolve_property_docstrings",
+]

@@ -10,6 +10,7 @@ import pytest
 
 from testkit.things import TestThing
 
+from hololinked.core import Property, Thing
 from hololinked.core.properties import Number
 from hololinked.storage.bases import BaseDB
 from hololinked.storage.sqlalchemydb import SQLAlchemyDB
@@ -287,6 +288,29 @@ def test_08_db_config():
     SQLAlchemyDB(thing, config_file="test_sqlite_config.json")
 
     os.remove("test_sqlite_config.json")
+
+
+def test_property_docstring_from_source():
+    """A trailing string literal after a Property assignment fills prop.doc."""
+    assert TestThing.properties.descriptors["prop_with_docstring"].doc == (
+        "This doc comes from a trailing string literal."
+    )
+
+
+def test_property_explicit_doc_takes_precedence():
+    """Explicit doc="..." overrides any trailing string literal."""
+    assert TestThing.properties.descriptors["prop_explicit_doc"].doc == "explicitly provided"
+
+
+def test_property_no_docstring():
+    """A Property with no explicit doc and no trailing string has doc=None."""
+    assert TestThing.properties.descriptors["prop_no_doc"].doc is None
+
+
+def test_property_empty_docstring():
+    """Empty or whitespace-only string literals are skipped."""
+    assert TestThing.properties.descriptors["prop_empty_doc"].doc is None
+    assert TestThing.properties.descriptors["prop_whitespace_doc"].doc is None
 
 
 if __name__ == "__main__":
