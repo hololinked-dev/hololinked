@@ -16,4 +16,4 @@ from .messages import (  # noqa: F401
     validate_response_message,
 )
 from .misc import TrackingFaker, fake, print_lingering_threads  # noqa: F401
-from .mqtt import mqtt_ssl_context  # noqa: F401
+from .mqtt import MQTT_ASSETS, mqtt_ssl_context  # noqa: F401

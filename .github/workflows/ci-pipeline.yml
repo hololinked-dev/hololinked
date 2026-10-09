@@ -35,7 +35,7 @@ jobs:
       - name: sync virtual environment
         run: |
           uv sync --group all
-    
+
   codestyle:
     name: ruff codestyle check/linting
     runs-on: ubuntu-latest
@@ -369,6 +369,10 @@ jobs:
         run: |
           echo "${{ secrets.MQTT_TEST_CREDENTIALS }}" | base64 -d > certs.tar.gz
           tar xzf certs.tar.gz
+          # TODO somehow the tar was created with an extra top-level directory
+          mv daq-system-infrastructure/certs tests/testkit/assets/mqtt/certs
+          mv daq-system-infrastructure/conf/passwords.txt tests/testkit/assets/mqtt/passwords.txt
+          rm -rf daq-system-infrastructure certs.tar.gz
 
       - name: unpack MQTT certificates (windows)
         if: runner.os == 'Windows'
@@ -376,6 +380,10 @@ jobs:
           $mqttCerts = "${{ secrets.MQTT_TEST_CREDENTIALS }}"
           [System.IO.File]::WriteAllBytes("certs.tar.gz", [System.Convert]::FromBase64String($mqttCerts))
           tar xzf certs.tar.gz
+          # TODO somehow the tar was created with an extra top-level directory
+          Move-Item daq-system-infrastructure/certs tests/testkit/assets/mqtt/certs
+          Move-Item daq-system-infrastructure/conf/passwords.txt tests/testkit/assets/mqtt/passwords.txt
+          Remove-Item -Recurse -Force daq-system-infrastructure, certs.tar.gz
 
       - name: set up python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
