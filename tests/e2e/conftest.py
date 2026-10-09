@@ -1,4 +1,3 @@
-import os
 import time
 
 from typing import Generator
@@ -8,23 +7,21 @@ import pytest
 from testcontainers.mqtt import (
     MosquittoContainer,  # TODO this will not work from the current release of testcontainers
 )
-from testkit.helpers import mqtt_ssl_context
+from testkit.helpers import MQTT_ASSETS, mqtt_ssl_context
 
 
 @pytest.fixture(scope="module")
-def mosquitto_container() -> Generator[MosquittoContainer, None, None]:
+def mosquitto_container(tmp_path_factory: pytest.TempPathFactory) -> Generator[MosquittoContainer, None, None]:
+    data = tmp_path_factory.mktemp("mosquitto-data")
+    log = tmp_path_factory.mktemp("mosquitto-log")
+    (data / "persisted").mkdir()
     container = MosquittoContainer(
         volumes=[
-            (
-                os.path.abspath("daq-system-infrastructure/conf/mosquitto.conf"),
-                "/mosquitto/config/mosquitto.conf",
-                "ro",
-            ),
-            (os.path.abspath("daq-system-infrastructure/conf/passwords.txt"), "/mosquitto/config/passwords.txt", "ro"),
-            (os.path.abspath("daq-system-infrastructure/data/mosquitto"), "/mosquitto/data", "rw"),
-            (os.path.abspath("daq-system-infrastructure/data/mosquitto/log"), "/mosquitto/log", "rw"),
-            (os.path.abspath("daq-system-infrastructure/data/mosquitto/persisted"), "/mosquitto/data/persisted", "rw"),
-            (os.path.abspath("daq-system-infrastructure/certs"), "/mosquitto/config/certs", "ro"),
+            (str(MQTT_ASSETS / "mosquitto.conf"), "/mosquitto/config/mosquitto.conf", "ro"),
+            (str(MQTT_ASSETS / "passwords.txt"), "/mosquitto/config/passwords.txt", "ro"),
+            (str(MQTT_ASSETS / "certs"), "/mosquitto/config/certs", "ro"),
+            (str(data), "/mosquitto/data", "rw"),
+            (str(log), "/mosquitto/log", "rw"),
         ],
         username="sampleuser",
         password="samplepass",

@@ -1,5 +1,5 @@
 """
-pydantic specific utility functions for the TD module.
+Convert Python types and pydantic models to Thing Description DataSchemas (code to TD).
 
 This module is largely copied from LabThings fast API.
 Copyright belongs to LabThings, Richard Bowman and developers, licensed under MIT License.
@@ -29,7 +29,8 @@ SOFTWARE.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, TypeAdapter
 from pydantic._internal._core_utils import CoreSchemaOrField, is_core_schema
@@ -40,12 +41,12 @@ from hololinked.constants import JSONSchemaType
 
 AnyUri = str
 Description = str
-Descriptions = Optional[Dict[str, str]]
+Descriptions = Optional[dict[str, str]]
 Title = str
-Titles = Optional[Dict[str, str]]
-Security = Union[List[str], str]
-Scopes = Union[List[str], str]
-TypeDeclaration = Union[str, List[str]]
+Titles = Optional[dict[str, str]]
+Security = Union[list[str], str]
+Scopes = Union[list[str], str]
+TypeDeclaration = Union[str, list[str]]
 
 
 def is_a_reference(d: JSONSchemaType) -> bool:
@@ -261,7 +262,7 @@ def check_recursion(depth: int, limit: int):
 
 def jsonschema_to_dataschema(
     d: dict[str, Any],
-    root_schema: Optional[dict[str, Any]] = None,
+    root_schema: dict[str, Any] | None = None,
     recursion_depth: int = 0,
     recursion_limit: int = 99,
 ) -> dict[str, Any]:
@@ -333,7 +334,7 @@ def jsonschema_to_dataschema(
     return output
 
 
-def type_to_dataschema(t: Union[type, BaseModel], **kwargs) -> dict:
+def type_to_dataschema(t: type | BaseModel, **kwargs) -> dict:
     """
     Convert a Python type to a Thing Description DataSchema.
 

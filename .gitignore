@@ -3,6 +3,8 @@
 .claude/plans
 CLAUDE.md
 todo*
+tests/testkit/assets/mqtt/certs/
+tests/testkit/assets/mqtt/passwords.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

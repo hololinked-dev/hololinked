@@ -5,9 +5,9 @@ from hololinked.server.server import _runs
 
 
 def stop_all_runs() -> None:
-    """Stop every run."""
+    """Stop every run and wait for each to wind down, so that no thread still holds a socket afterwards."""
     for run_id in list(_runs):
-        stop(run_id)
+        stop(run_id, wait=True)
 
 
 @dataclass
