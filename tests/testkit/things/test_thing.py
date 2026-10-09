@@ -603,6 +603,7 @@ class TestThing(Thing):
     prop_whitespace_doc = Property(default=2)
     """   """
 
+
 def replace_methods_with_actions(thing_cls: type[TestThing]) -> None:
     exposed_actions = []
     if not isinstance(thing_cls.action_echo, (Action, BoundAction)):

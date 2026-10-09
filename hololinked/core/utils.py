@@ -139,9 +139,8 @@ def resolve_property_docstrings(owner_cls: ThingMeta) -> None:
     if class_def is None:
         return
 
-    is_property_call = lambda node: (
-        isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Property"
-    )
+    def is_property_call(node):
+        return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Property"
 
     body = class_def.body
     i = 0
