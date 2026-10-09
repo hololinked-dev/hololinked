@@ -1,6 +1,3 @@
 [submodule "docs"]
 	path = docs
 	url = https://github.com/hololinked-dev/docs.git
-[submodule "daq-system-infrastructure"]
-	path = daq-system-infrastructure
-	url = https://github.com/hololinked-dev/daq-system-infrastructure.git
