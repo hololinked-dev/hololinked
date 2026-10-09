@@ -1,6 +1,5 @@
 """Metaclass, descriptor registries and base classes that give a `Thing` its properties, actions and events."""
 
-import ast
 import copy
 import inspect
 
@@ -12,6 +11,7 @@ from hololinked.constants import JSON, JSONSerializable
 from hololinked.core.actions import Action, BoundAction, action
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.property import Property
+from hololinked.core.utils import resolve_property_docstrings
 from hololinked.param.parameterized import EventDispatcher as ParamEventDispatcher
 from hololinked.param.parameterized import EventResolver as ParamEventResolver
 from hololinked.param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
@@ -40,7 +40,7 @@ class ThingMeta(ParameterizedMetaclass):
 
     def __init__(mcs, name, bases, dict_):
         super().__init__(name, bases, dict_)
-        _resolve_property_docstrings(mcs)
+        resolve_property_docstrings(mcs)
         mcs._create_actions_registry()
         mcs._create_events_registry()
 
@@ -106,89 +106,6 @@ class ThingMeta(ParameterizedMetaclass):
     """Set to `True` to activate default SQLite based configuration management."""
     use_mongo_db: bool
     """Set to `True` to activate MongoDB based configuration management."""
-
-
-def _is_property_call(node: ast.Call) -> bool:
-    """Check if the AST call node is a Property(...) call.
-
-    Returns
-    -------
-    bool
-        True if the call is Property(...), False otherwise.
-    """
-    return isinstance(node.func, ast.Name) and node.func.id == "Property"
-
-
-def _resolve_property_docstrings(owner_cls: "ThingMeta") -> None:
-    r"""Parse owning class source and fill Property.doc from trailing string literals.
-
-    Explicit doc="..." always wins — we skip any property whose doc is already set.
-    """
-    try:
-        source = inspect.getsource(owner_cls)
-    except (OSError, TypeError, ValueError):
-        return
-
-    try:
-        tree = ast.parse(source, filename=inspect.getfile(owner_cls))
-    except (SyntaxError, IndentationError):
-        return
-
-    class_def: ast.ClassDef | None = None
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef) and node.name == owner_cls.__name__:
-            class_def = node
-            break
-    if class_def is None:
-        return
-
-    body = class_def.body
-    i = 0
-    while i < len(body):
-        stmt = body[i]
-        if not isinstance(stmt, ast.Assign):
-            i += 1
-            continue
-
-        prop_node: ast.Call | None = None
-        if isinstance(stmt.value, ast.Call) and _is_property_call(stmt.value):
-            prop_node = stmt.value
-        elif (
-            isinstance(stmt.value, (ast.Tuple, ast.List)) and stmt.value.elts and _is_property_call(stmt.value.elts[0])
-        ):
-            prop_node = stmt.value.elts[0]
-
-        if prop_node is None:
-            i += 1
-            continue
-
-        target_names: list[str] = []
-        if isinstance(stmt.targets[0], ast.Name):
-            target_names.append(stmt.targets[0].id)
-        elif isinstance(stmt.targets[0], (ast.Tuple, ast.List)):
-            for elt in stmt.targets[0].elts:
-                if isinstance(elt, ast.Name):
-                    target_names.append(elt.id)
-
-        if not target_names:
-            i += 1
-            continue
-
-        doc: str | None = None
-        next_stmt = body[i + 1] if i + 1 < len(body) else None
-        if isinstance(next_stmt, ast.Expr) and isinstance(next_stmt.value, ast.Constant):
-            raw = next_stmt.value.value
-            if isinstance(raw, str) and raw.strip():
-                doc = raw
-
-        for name in target_names:
-            if name.startswith("_"):
-                continue
-            prop = owner_cls.__dict__.get(name)
-            if isinstance(prop, Property) and prop.doc is None:
-                prop.doc = doc
-
-        i += 1
 
 
 class DescriptorRegistry:

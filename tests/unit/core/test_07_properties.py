@@ -290,52 +290,28 @@ def test_08_db_config():
     os.remove("test_sqlite_config.json")
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "-s"])
-
-
-class _DocstringThing(Thing):
-    """Helper class for property docstring tests."""
-
-    prop_with_docstring = Property(default=5)
-    """This doc comes from a trailing string literal."""
-
-    prop_explicit_doc = Property(default=10, doc="explicitly provided")
-    """This should be ignored because doc was set explicitly."""
-
-    prop_no_doc = Property(default=15)
-
-
-class _EmptyDocstringThing(Thing):
-    """Helper for empty docstring edge cases."""
-
-    prop_empty = Property(default=1)
-    """"""
-
-    prop_whitespace = Property(default=2)
-    """   """
-
-
 def test_property_docstring_from_source():
     """A trailing string literal after a Property assignment fills prop.doc."""
-    assert _DocstringThing.properties.descriptors["prop_with_docstring"].doc == (
+    assert TestThing.properties.descriptors["prop_with_docstring"].doc == (
         "This doc comes from a trailing string literal."
     )
 
 
 def test_property_explicit_doc_takes_precedence():
     """Explicit doc="..." overrides any trailing string literal."""
-    assert _DocstringThing.properties.descriptors["prop_explicit_doc"].doc == ("explicitly provided")
+    assert TestThing.properties.descriptors["prop_explicit_doc"].doc == "explicitly provided"
 
 
 def test_property_no_docstring():
     """A Property with no explicit doc and no trailing string has doc=None."""
-    assert _DocstringThing.properties.descriptors["prop_no_doc"].doc is None
+    assert TestThing.properties.descriptors["prop_no_doc"].doc is None
 
 
 def test_property_empty_docstring():
     """Empty or whitespace-only string literals are skipped."""
-    prop_empty = _EmptyDocstringThing.properties.descriptors["prop_empty"]
-    prop_ws = _EmptyDocstringThing.properties.descriptors["prop_whitespace"]
-    assert prop_empty.doc is None
-    assert prop_ws.doc is None
+    assert TestThing.properties.descriptors["prop_empty_doc"].doc is None
+    assert TestThing.properties.descriptors["prop_whitespace_doc"].doc is None
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])
