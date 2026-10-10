@@ -43,7 +43,7 @@ class DataSchema(WoTSchema):
     titles: Optional[dict[str, str]] = None
     description: Optional[str] = None
     descriptions: Optional[dict[str, str]] = None
-    const: Optional[bool] = None
+    const: Optional[Any] = None
     default: Optional[Any] = None
     readOnly: Optional[bool] = None
     writeOnly: Optional[bool] = None
