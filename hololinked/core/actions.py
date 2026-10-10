@@ -49,6 +49,7 @@ class Action:
         "isclassmethod",
         "iscoroutine",
         "isparameterized",
+        "name",
         "obj",
         "owner",
         "request_as_argument",
@@ -60,6 +61,9 @@ class Action:
 
     state: tuple[Enum | str] | None
     """state machine state(s) in which this action can be executed, any state when None"""
+
+    name: str
+    """name of the action, the attribute it is assigned to on the owning class"""
 
     def __init__(self, obj: MethodType) -> None:
         """
@@ -86,9 +90,10 @@ class Action:
 
     def __set_name__(self, owner, name):
         self.owner = owner
+        self.name = name
 
     def __str__(self) -> str:
-        return f"<Action({self.owner.__name__}.{self.obj.__name__})>"
+        return f"<Action({self.owner.__name__}.{self.name})>"
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Action):
@@ -110,11 +115,6 @@ class Action:
             f"Cannot invoke unbound action {self.name} of {self.owner.__name__}."
             + " Bound methods must be called, not the action itself. Use the appropriate instance to call the method."
         )
-
-    @property
-    def name(self) -> str:
-        """Name of the action."""
-        return self.obj.__name__
 
     @property
     def schema_validator(self) -> BaseSchemaValidator | None:
@@ -221,7 +221,7 @@ class BoundAction:
     @property
     def name(self) -> str:
         """Name of the action."""
-        return self.obj.__name__
+        return self.action.name
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError("call must be implemented by subclass")
@@ -238,7 +238,7 @@ class BoundAction:
         raise NotImplementedError("external_call must be implemented by subclass")
 
     def __str__(self):
-        return f"<BoundAction({self.owner.__name__}.{self.obj.__name__} of {self.owner_inst.id})>"
+        return f"<BoundAction({self.owner.__name__}.{self.name} of {self.owner_inst.id})>"
 
     def __eq__(self, value):
         if not isinstance(value, BoundAction):
@@ -397,7 +397,7 @@ def action(
             if (obj if isinstance(obj, Action) else obj.action).isclassmethod:
                 raise RuntimeError("cannot wrap a classmethod as action once again, please skip")
             warnings.warn(
-                f"{obj.name} is already wrapped as an action, wrapping it again with newer settings.",
+                f"{obj.obj.__name__} is already wrapped as an action, wrapping it again with newer settings.",
                 category=UserWarning,
             )
             obj = obj.obj
