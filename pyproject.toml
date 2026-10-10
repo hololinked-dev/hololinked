@@ -7,7 +7,7 @@ package-dir = {"hololinked" = "hololinked"}
 
 [project]
 name = "hololinked"
-version = "0.4.0"
+version = "0.4.1"
 authors = [
     {name = "Vignesh Vaidyanathan", email = "info@hololinked.dev"},
 ]
@@ -54,11 +54,13 @@ zmq = [
     "pyzmq>=25.1.0,<26.2"
 ]
 mqtt = [
-    "aiomqtt>=2.4.0"
+    "aiomqtt>=2.4.0",
+    "paho-mqtt>=2.0.0",
 ]
 protocols = [
     "pyzmq>=25.1.0,<26.2",
-    "aiomqtt>=2.4.0"
+    "aiomqtt>=2.4.0",
+    "paho-mqtt>=2.0.0",
 ]
 validators = [
     "jsonschema>=4.22.0,<5.0",
@@ -99,6 +101,7 @@ test = [
     # protocols
     "pyzmq>=25.1.0,<26.2",
     "aiomqtt>=2.4.0",
+    "paho-mqtt>=2.0.0",
     # schema
     "jsonschema>=4.22.0,<5.0",
     "fastjsonschema==2.20.0",

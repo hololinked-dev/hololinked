@@ -23,6 +23,7 @@ class ThingDescriptionService:
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
         ssl: bool = True,
+        use_websocket: bool = False,
     ) -> None:
         """
         Initialize the Thing Description service.
@@ -39,12 +40,15 @@ class ThingDescriptionService:
             The `Thing` whose description is generated
         ssl: bool
             Whether the broker is using SSL or not
+        use_websocket: bool
+            Whether the broker is using WebSocket transport
         """
         self.hostname = hostname
         self.port = port
         self.logger = logger.bind(impl=self.__class__.__name__)
         self.thing = thing  # type: Thing
         self.ssl = ssl
+        self.use_websocket = use_websocket
 
     async def generate(
         self,
@@ -110,7 +114,11 @@ class ThingDescriptionService:
                 form = Form()
                 form.op = Operations.observeproperty
                 form.contentType = Serializers.for_object(TD["id"], self.thing.__class__.__name__, name).content_type
-                form.href = f"mqtt{'s' if self.ssl else ''}://{self.hostname}:{self.port}"
+                if self.use_websocket:
+                    scheme = "wss" if self.ssl else "ws"
+                else:
+                    scheme = "mqtts" if self.ssl else "mqtt"
+                form.href = f"{scheme}://{self.hostname}:{self.port}"
                 form.mqv_topic = f"{TD['id']}/{name}"
                 TD["properties"][name]["forms"].append(form.json())
             except Exception as ex:
@@ -151,7 +159,11 @@ class ThingDescriptionService:
                 form = Form()
                 form.op = Operations.subscribeevent
                 form.contentType = Serializers.for_object(TD["id"], self.thing.__class__.__name__, name).content_type
-                form.href = f"mqtt{'s' if self.ssl else ''}://{self.hostname}:{self.port}"
+                if self.use_websocket:
+                    scheme = "wss" if self.ssl else "ws"
+                else:
+                    scheme = "mqtts" if self.ssl else "mqtt"
+                form.href = f"{scheme}://{self.hostname}:{self.port}"
                 form.mqv_topic = f"{TD['id']}/{name}"
                 TD["events"][name]["forms"].append(form.json())
             except Exception as ex:

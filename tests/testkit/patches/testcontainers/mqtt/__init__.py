@@ -15,7 +15,7 @@ import threading
 import time
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from testcontainers.core.container import DockerContainer
@@ -64,10 +64,11 @@ class MosquittoContainer(DockerContainer):
         image: str = "eclipse-mosquitto:latest",
         config_file: str | None = None,
         mqtt_port: int = 1883,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-        ssl_context: Optional[ssl.SSLContext] = None,
-        paho_client_kwargs: Optional[dict] = None,
+        ws_port: int | None = None,
+        username: str | None = None,
+        password: str | None = None,
+        ssl_context: ssl.SSLContext | None = None,
+        paho_client_kwargs: dict | None = None,
         **kwargs,
     ) -> None:
         """
@@ -88,6 +89,8 @@ class MosquittoContainer(DockerContainer):
             mqtt_port (int):
                 The port to expose for MQTT connections inside the container. Defaults to 1883.
                 Use the base class 'ports' mapping to override.
+            ws_port (int, optional):
+                The port to expose for WebSocket connections inside the container. Defaults to None (no WebSocket).
             username (str, optional):
                 Optional username for MQTT authentication. Defaults to None.
             password (str, optional):
@@ -102,20 +105,23 @@ class MosquittoContainer(DockerContainer):
         if config_file is None:
             config_file = Path(__file__).parent / MosquittoContainer.DEFAULT_CONFIG_FILE  # default config file
 
+        ports = (mqtt_port,) if ws_port is None else (mqtt_port, ws_port)
+
         super().__init__(
             image,
-            ports=kwargs.pop("ports", (mqtt_port,)),
+            ports=kwargs.pop("ports", ports),
             volumes=kwargs.pop("volumes", [(config_file, "/mosquitto/config/mosquitto.conf", "ro")]),
             **kwargs,
         )
 
-        self.client: Optional["Client"] = None  # noqa: UP037  # reusable client context
+        self.client: "Client" | None = None  # noqa: UP037  # reusable client context
         self.config_file = config_file
         self.mqtt_port = mqtt_port
+        self.ws_port = ws_port
         self.username = username
         self.password = password
         self.broker_connect_timeout = kwargs.pop("broker_connect_timeout", 30)
-        self.paho_client_kwargs = paho_client_kwargs or dict()
+        self.paho_client_kwargs = paho_client_kwargs or {}
         self.ssl_context = ssl_context
         self._connected_event = threading.Event()
 

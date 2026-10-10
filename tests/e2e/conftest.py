@@ -26,6 +26,7 @@ def mosquitto_container(tmp_path_factory: pytest.TempPathFactory) -> Generator[M
         username="sampleuser",
         password="samplepass",
         mqtt_port=8883,
+        ws_port=9001,
         ssl_context=mqtt_ssl_context(),
     )
 
@@ -63,3 +64,13 @@ def mqtt_host(mosquitto_container: MosquittoContainer) -> str:
 @pytest.fixture(scope="module")
 def mqtt_port(mosquitto_container: MosquittoContainer) -> int:
     return int(mosquitto_container.get_exposed_port(8883))
+
+
+@pytest.fixture(scope="module")
+def mqtt_ws_host(mosquitto_container: MosquittoContainer) -> str:
+    return mosquitto_container.get_container_host_ip()
+
+
+@pytest.fixture(scope="module")
+def mqtt_ws_port(mosquitto_container: MosquittoContainer) -> int:
+    return int(mosquitto_container.get_exposed_port(9001))
