@@ -6,7 +6,7 @@ from collections.abc import Callable
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel
 
 from hololinked import SchemaValidators
 from hololinked.config import global_config
@@ -14,7 +14,7 @@ from hololinked.core.events import Event, EventDispatcher  # noqa: F401
 from hololinked.core.exceptions import StateMachineError
 from hololinked.param.parameterized import Parameter, ParameterizedMetaclass
 from hololinked.param.parameters import Tuple
-from hololinked.utils import issubklass, wrap_plain_types_in_rootmodel
+from hololinked.utils import ModelRoot, issubklass, wrap_plain_types_in_rootmodel
 
 
 if TYPE_CHECKING:
@@ -287,10 +287,10 @@ class Property(Parameter):
             validator = self.validator
             if validator is not None:
                 validator.validate(value)
-            elif issubklass(self.model, RootModel):
-                value = self.model(value)
             elif issubklass(self.model, BaseModel):
-                value = self.model(**value)
+                value = self.model.model_validate(value)  # accepts a model instance as well as its JSON form
+                if issubklass(self.model, ModelRoot):
+                    value = value.root  # wrapper of a plain type
         return super().validate_and_adapt(value)
 
     def external_set(self, obj: Thing, value: Any) -> None:
