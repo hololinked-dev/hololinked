@@ -544,6 +544,12 @@ class EventLoop:
             self.per_thing_schedulers[thing.id] = QueuedScheduler(thing, self)
         self._run = True
         self._running_event.set()
+
+        async def idle() -> None:
+            """Keeps the loop alive until stop(), even without things."""
+            while self._running_event.is_set():
+                await asyncio.sleep(0.1)
+
         threads = dict()  # type: dict[int, threading.Thread]
         for thing in self.things.values():
             thread = threading.Thread(target=self.run_things, args=([thing],), daemon=True)
@@ -557,6 +563,7 @@ class EventLoop:
                     *[self.tunnel_message_to_things(scheduler) for scheduler in self.per_thing_schedulers.values()],
                     *extra_coroutines,
                     *existing_tasks,
+                    idle(),
                 )
             )
             loop.close()
