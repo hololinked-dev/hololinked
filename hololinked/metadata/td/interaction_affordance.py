@@ -370,9 +370,10 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
 
     def build(self) -> None:  # noqa: D102
         action = cast(Action, self.objekt)
-        if action.obj.__doc__:
-            title = get_summary(action.obj.__doc__)
-            description = self.format_doc(action.obj.__doc__)
+        doc = action.doc or action.obj.__doc__
+        if doc:
+            title = get_summary(doc)
+            description = self.format_doc(doc)
             if title and not description.startswith(title):
                 self.title = title
                 self.description = description
