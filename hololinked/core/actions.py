@@ -45,6 +45,7 @@ class Action:
         "_schema_validator",
         "argument_schema",
         "create_task",
+        "doc",
         "idempotent",
         "isclassmethod",
         "iscoroutine",
@@ -65,6 +66,9 @@ class Action:
     name: str
     """name of the action, the attribute it is assigned to on the owning class"""
 
+    doc: str | None
+    """description of the action, the docstring of its method unless given explicitly"""
+
     def __init__(self, obj: MethodType) -> None:
         """
         Initialize an Action.
@@ -75,6 +79,7 @@ class Action:
             the method that is being wrapped as an action
         """
         self.obj = obj
+        self.doc = obj.__doc__
         self.state = None
         self.iscoroutine = False
         self.isclassmethod = False
@@ -323,7 +328,7 @@ class BoundAsyncAction(BoundAction):
         return await self.obj(self.bound_obj, *args, **kwargs)
 
 
-__action_kw_arguments__ = ["safe", "idempotent", "synchronous"]
+__action_kw_arguments__ = ["safe", "idempotent", "synchronous", "doc"]
 
 
 def action(
@@ -363,6 +368,8 @@ def action(
         - `idempotent`: bool,
             indicate in thing description if action is idempotent (for example, allows HTTP clients to cache return value),
             default `False`
+        - `doc`: str,
+            description of the action, used instead of the docstring of the method, which is the default
 
     Returns
     -------
@@ -420,6 +427,7 @@ def action(
         action.safe = kwargs.get("safe", False)
         action.idempotent = kwargs.get("idempotent", False)
         action.synchronous = kwargs.get("synchronous", True)
+        action.doc = kwargs.get("doc", None) or obj.__doc__
 
         if isclassmethod(original):
             action.iscoroutine = has_async_def(obj)
@@ -483,7 +491,7 @@ def action(
         )
     if any(key not in __action_kw_arguments__ for key in kwargs):
         raise ValueError(
-            "Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, "
+            f"Only {', '.join(repr(key) for key in __action_kw_arguments__)} are allowed as keyword arguments, "
             + f"unknown arguments found {kwargs.keys()}"
         )
     inner._arguments = dict(  # ty: ignore[unresolved-attribute]
