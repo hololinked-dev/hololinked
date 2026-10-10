@@ -1,6 +1,6 @@
 """beginner friendly data acquisition and IoT in python."""
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 from .config import global_config  # noqa
 from .core.schema import JSONSchema as JSONSchema
