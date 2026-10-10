@@ -73,3 +73,22 @@ class WoTSchema(BaseModel):
             doc = doc[:idx]
         doc = doc.replace("\n", "").replace("\t", " ").lstrip().rstrip()
         return doc
+
+    @staticmethod
+    def declared_fields(model: type[BaseModel]) -> set[str]:
+        """
+        Collect the fields declared by a pydantic model and all of its subclasses.
+
+        Parameters
+        ----------
+        model: type[BaseModel]
+            the base model
+
+        Returns
+        -------
+        set[str]
+            names of the fields
+        """
+        return set(model.model_fields).union(
+            *(WoTSchema.declared_fields(subclass) for subclass in model.__subclasses__())
+        )
