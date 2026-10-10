@@ -8,7 +8,7 @@ from collections.abc import Callable  # noqa: F401
 from enum import Enum
 from typing import Any, ClassVar, Self, cast
 
-from pydantic import BaseModel, ConfigDict, RootModel
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from hololinked import SchemaValidators
 from hololinked.constants import JSON, ResourceTypes
@@ -47,7 +47,8 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
     description: str | None = None
     descriptions: dict[str, str] | None = None
     forms: list[Form] | None = None
-    # uri variables
+    uriVariables: dict[str, JSON] | None = None
+    semantic_type: str | list[str] | None = Field(default=None, alias="@type")
 
     _custom_metadata_generators: ClassVar = dict()
     model_config = ConfigDict(extra="allow")
@@ -205,7 +206,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         else:
             raise ValueError(f"unknown affordance type - {cls}, cannot create object from TD")
         affordance_json = metadata[affordance_name][name]  # type: dict[str, JSON]
-        fields = set(cls.model_fields)
+        fields = {field.alias or name: name for name, field in cls.model_fields.items()}
         if cls is PropertyAffordance:
             fields.update(WoTSchema.declared_fields(DataSchema))
         affordance = cls()
@@ -213,7 +214,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
             if key == "forms":
                 affordance.forms = [Form.from_TD(form) for form in value]
             elif key in fields:
-                setattr(affordance, key, value)
+                setattr(affordance, fields[key], value)
         affordance._name = name
         affordance._thing_id = metadata["id"]
         return affordance
