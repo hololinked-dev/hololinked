@@ -466,6 +466,7 @@ def test_08_action_doc():
     assert DocumentedActions.acquire.doc == start.__doc__
     assert DocumentedActions.acquire_described.doc == "Acquires on a channel."
     assert DocumentedActions.acquire_again.doc == start.__doc__  # not the docstring of Action
+
     assert ActionAffordance.from_descriptor(DocumentedActions.acquire, DocumentedActions).description == start.__doc__
     affordance = ActionAffordance.from_descriptor(DocumentedActions.acquire_described, DocumentedActions)
     assert affordance.description == "Acquires on a channel."
