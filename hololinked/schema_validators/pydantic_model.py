@@ -79,7 +79,7 @@ class PydanticSchemaValidator(BaseSchemaValidator):
             pydantic_validate_args_kwargs(self.schema, args, kwargs)
 
     def json(self) -> JSONSchemaType:  # noqa: D102
-        return self.schema.model_dump_json()
+        return self.schema.model_dump_json()  # ty: ignore[invalid-return-type, missing-argument]
 
     def __get_state__(self) -> JSONSchemaType:
         return self.json()

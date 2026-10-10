@@ -484,7 +484,7 @@ def action(
 
         return action
 
-    if callable(input_schema):
+    if isinstance(input_schema, (FunctionType, MethodType)):  # a model class is callable too
         raise TypeError(
             "input schema should be a JSON or pydantic BaseModel, not a function/method, "
             + "did you decorate your action wrongly? use @action() instead of @action"

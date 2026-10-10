@@ -277,9 +277,11 @@ class InteractionMetadata(BaseModel):
         """
         raise NotImplementedError
 
-    def to_descriptor(self) -> Property | Action | Event:
+    def to_descriptor(self, *args: Any, **kwargs: Any) -> Property | Action | Event:
         """
         Convert the metadata back to a `Property`, `Action` or `Event` descriptor object.
+
+        Each kind of interaction takes its own arguments, such as the handlers implementing it.
 
         Returns
         -------
