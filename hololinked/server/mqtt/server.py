@@ -46,6 +46,7 @@ class MQTTPublisher(BaseProtocolServer):
         qos: int = 1,
         things: Optional[list[CoreThing]] = None,
         config: Optional[dict] = None,
+        use_websocket: bool = False,
         **kwargs,
     ):
         """
@@ -68,6 +69,8 @@ class MQTTPublisher(BaseProtocolServer):
         config: dict, optional
             Additional runtime configuration for the MQTT publisher, see `RuntimeConfig` object under
             `hololinked.server.mqtt.config`
+        use_websocket: bool
+            Whether to use WebSocket transport instead of TCP
         kwargs: dict
             Additional keyword arguments
         """
@@ -76,6 +79,7 @@ class MQTTPublisher(BaseProtocolServer):
             thing_description_publisher=kwargs.get("thing_description_publisher", ThingDescriptionPublisher),
             thing_description_service=kwargs.get("thing_description_service", ThingDescriptionService),
             qos=qos,
+            use_websocket=use_websocket,
         )
         default_config.update(config or dict())
 
@@ -179,6 +183,7 @@ class MQTTPublisher(BaseProtocolServer):
             username=self.username,
             password=self.password,
             tls_context=self.ssl_context,
+            transport="websockets" if self.config.use_websocket else "tcp",
         )
         try:
             await self.client.__aenter__()

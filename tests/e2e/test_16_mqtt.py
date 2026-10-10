@@ -1,14 +1,15 @@
+import asyncio
 import itertools
-import time
 
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 import pytest
 
 from testcontainers.mqtt import (
     MosquittoContainer,  # TODO this will not work from the current release of testcontainers
 )
-from testkit.helpers import (  # noqa: F401
+from testkit.helpers import (
     hostname_prefix,
     mqtt_ssl_context,
     stop_all_runs,
@@ -32,7 +33,6 @@ count = itertools.count(63500)
 
 @pytest.fixture(scope="module")
 def http_port() -> int:
-    global count
     return next(count)
 
 
@@ -44,7 +44,7 @@ def thing(
     mqtt_port: int,
 ) -> Generator[TestThing, None, None]:
     thing = TestThing(id=f"test-thing-{uuid_hex()}", serial_number="simulation")
-    http_server = HTTPServer(port=http_port, config=dict(cors=True))
+    http_server = HTTPServer(port=http_port, config={"cors": True})
     mqtt_publisher = MQTTPublisher(
         hostname=mqtt_host,
         port=mqtt_port,
@@ -62,14 +62,51 @@ def thing(
         stop_all_runs()
 
 
+@pytest.fixture(scope="module")
+def thing_ws(
+    mosquitto_container: MosquittoContainer,
+    http_port: int,
+    mqtt_ws_host: str,
+    mqtt_ws_port: int,
+) -> Generator[TestThing, None, None]:
+    thing = TestThing(id=f"test-thing-ws-{uuid_hex()}", serial_number="simulation")
+    http_server = HTTPServer(port=http_port + 1, config={"cors": True})
+    mqtt_publisher = MQTTPublisher(
+        hostname=mqtt_ws_host,
+        port=mqtt_ws_port,
+        username="sampleuser",
+        password="samplepass",
+        ssl_context=mqtt_ssl_context(),
+        use_websocket=True,
+    )
+    http_server.add_thing(thing)
+    mqtt_publisher.add_thing(thing)
+    run(http_server, mqtt_publisher, forked=True, print_welcome_message=False)
+    try:
+        wait_until_server_ready(port=http_port + 1)
+        yield thing
+    finally:
+        stop_all_runs()
+
+
 @pytest.fixture(scope="function")
 def td_endpoint(thing: TestThing, http_port: int) -> str:
     return f"{hostname_prefix}:{http_port}/{thing.id}/resources/wot-td"
 
 
 @pytest.fixture(scope="function")
+def td_endpoint_ws(thing_ws: TestThing, http_port: int) -> str:
+    return f"{hostname_prefix}:{http_port + 1}/{thing_ws.id}/resources/wot-td"
+
+
+@pytest.fixture(scope="function")
 def object_proxy_http(td_endpoint: str) -> "ObjectProxy":
     return ClientFactory.http(url=td_endpoint, ignore_TD_errors=True)
+
+
+@pytest.fixture(scope="function")
+def object_proxy_http_ws(td_endpoint_ws: str) -> "ObjectProxy":
+    return ClientFactory.http(url=td_endpoint_ws, ignore_TD_errors=True)
 
 
 @pytest.fixture(scope="function")
@@ -88,6 +125,23 @@ async def object_proxy_mqtt(
     )
 
 
+@pytest.fixture(scope="function")
+async def object_proxy_mqtt_ws(
+    mqtt_ws_host: str,
+    mqtt_ws_port: int,
+    thing_ws: TestThing,
+) -> "ObjectProxy":
+    return ClientFactory.mqtt(
+        hostname=mqtt_ws_host,
+        port=mqtt_ws_port,
+        thing_id=thing_ws.id,
+        username="sampleuser",
+        password="samplepass",
+        ssl_context=mqtt_ssl_context(),
+        use_websocket=True,
+    )
+
+
 async def test_01_subscribe_event(object_proxy_http: "ObjectProxy", object_proxy_mqtt: "ObjectProxy"):
     results = []
 
@@ -95,11 +149,11 @@ async def test_01_subscribe_event(object_proxy_http: "ObjectProxy", object_proxy
         results.append(value)
 
     object_proxy_mqtt.subscribe_event("test_event", cb)
-    time.sleep(3)
+    await asyncio.sleep(3)
 
     for i in range(10):
         object_proxy_http.push_events(total_number_of_events=1)
-        time.sleep(1)
+        await asyncio.sleep(1)
         if len(results) > 0:
             results.clear()
             break
@@ -107,7 +161,7 @@ async def test_01_subscribe_event(object_proxy_http: "ObjectProxy", object_proxy
         pytest.skip("No events received from server, probably due to OS level issues")
 
     object_proxy_http.push_events()
-    time.sleep(3)
+    await asyncio.sleep(3)
     assert len(results) > 0, "No events received"
     assert abs(len(results) - 100) < 3, f"Expected 100 events, got {len(results)}"
     object_proxy_mqtt.unsubscribe_event("test_event")
@@ -141,8 +195,6 @@ async def test_02_observe_properties(
     prospective_values: Any,
     op: str,
 ):
-    # print(object_proxy_mqtt.properties)
-    # assert hasattr(object_proxy_mqtt, f"{prop}_change_event")
     result = []
     attempt = 0
 
@@ -152,7 +204,7 @@ async def test_02_observe_properties(
         attempt += 1
 
     object_proxy_mqtt.observe_property(prop, cb)
-    time.sleep(3)
+    await asyncio.sleep(3)
     for value in prospective_values:
         if op == "read":
             _ = object_proxy_http.read_property(prop)
@@ -161,7 +213,86 @@ async def test_02_observe_properties(
     for _ in range(20):
         if attempt == len(prospective_values):
             break
-        time.sleep(0.1)
+        await asyncio.sleep(0.1)
     object_proxy_mqtt.unobserve_property(prop)
+    for index, res in enumerate(result):
+        assert res.data == prospective_values[index]
+
+
+# ── WebSocket transport tests ──────────────────────────────────────────────
+
+
+async def test_03_subscribe_event_websocket(
+    object_proxy_http_ws: "ObjectProxy",
+    object_proxy_mqtt_ws: "ObjectProxy",
+):
+    results = []
+
+    def cb(value: SSE):
+        results.append(value)
+
+    object_proxy_mqtt_ws.subscribe_event("test_event", cb)
+    await asyncio.sleep(3)
+
+    for i in range(10):
+        object_proxy_http_ws.push_events(total_number_of_events=1)
+        await asyncio.sleep(1)
+        if len(results) > 0:
+            results.clear()
+            break
+    else:
+        pytest.skip("No events received via WebSocket, probably due to OS level issues")
+
+    object_proxy_http_ws.push_events()
+    await asyncio.sleep(3)
+    assert len(results) > 0, "No events received via WebSocket"
+    assert abs(len(results) - 100) < 3, f"Expected ~100 events via WebSocket, got {len(results)}"
+    object_proxy_mqtt_ws.unsubscribe_event("test_event")
+
+
+@pytest.mark.parametrize(
+    "prop, prospective_values, op",
+    [
+        pytest.param(
+            "observable_list_prop",
+            [[1, 2, 3, 4, 5], ["a", "b", "c", "d", "e"], [1, "a", 2, "b", 3]],
+            "write",
+            id="observable-list-prop",
+        ),
+        pytest.param(
+            "observable_readonly_prop",
+            [1, 2, 3, 4, 5],
+            "read",
+            id="observable-readonly-prop",
+        ),
+    ],
+)
+async def test_04_observe_properties_websocket(
+    object_proxy_http_ws: "ObjectProxy",
+    object_proxy_mqtt_ws: "ObjectProxy",
+    prop: str,
+    prospective_values: Any,
+    op: str,
+):
+    result = []
+    attempt = 0
+
+    def cb(value: SSE):
+        nonlocal attempt
+        result.append(value)
+        attempt += 1
+
+    object_proxy_mqtt_ws.observe_property(prop, cb)
+    await asyncio.sleep(3)
+    for value in prospective_values:
+        if op == "read":
+            _ = object_proxy_http_ws.read_property(prop)
+        else:
+            object_proxy_http_ws.write_property(prop, value)
+    for _ in range(20):
+        if attempt == len(prospective_values):
+            break
+        await asyncio.sleep(0.1)
+    object_proxy_mqtt_ws.unobserve_property(prop)
     for index, res in enumerate(result):
         assert res.data == prospective_values[index]

@@ -131,6 +131,7 @@ class ThingDescriptionPublisher:
             logger=logger,
             thing=thing,
             ssl=self.client._client._ssl_context is not None,
+            use_websocket=self.config.use_websocket,
         )
 
     async def publish(self) -> None:

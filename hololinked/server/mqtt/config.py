@@ -18,6 +18,9 @@ class RuntimeConfig(BaseModel):
     qos: Annotated[int, Field(ge=0, le=2)] = 1
     """The (global) MQTT QoS level to use for publishing messages"""
 
+    use_websocket: bool = False
+    """Whether to use WebSocket transport instead of TCP"""
+
     topic_publisher: type[TopicPublisher] | Any = TopicPublisher
     """handler class to be used for publishing to topics (global)"""
     thing_description_publisher: type[ThingDescriptionPublisher] | Any = ThingDescriptionPublisher

@@ -487,6 +487,7 @@ class ClientFactory:
         username: str | None = None,
         password: str | None = None,
         ssl_context: ssl.SSLContext | None = None,
+        use_websocket: bool = False,
         **kwargs,
     ) -> ObjectProxy:
         """
@@ -512,6 +513,8 @@ class ClientFactory:
             The password for authenticating with MQTT broker.
         ssl_context: ssl.SSLContext, optional
             Secure sockets layer for encrypted communication with the MQTT broker.
+        use_websocket: bool
+            Whether to use WebSocket transport instead of TCP.
         kwargs:
             Additional configuration options:
 
@@ -571,6 +574,7 @@ class ClientFactory:
             client_id=id,
             clean_session=True if protocol_version != MQTTProtocolVersion.MQTTv5 else None,
             protocol=protocol_version,
+            transport="websockets" if use_websocket else "tcp",
         )
         if username and password:
             sync_client.username_pw_set(username=username, password=password)
@@ -601,6 +605,7 @@ class ClientFactory:
             password=password,
             protocol=protocol_version,
             tls_context=sync_client._ssl_context,
+            transport="websockets" if use_websocket else "tcp",
         )
 
         object_proxy = ObjectProxy(id=id, logger=logger, td=TD)
