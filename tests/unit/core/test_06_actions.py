@@ -13,7 +13,7 @@ from hololinked.core.actions import (
     BoundAsyncAction,
     BoundSyncAction,
 )
-from hololinked.core.thing import action
+from hololinked.core.thing import Thing, action
 from hololinked.metadata.td.interaction_affordance import ActionAffordance
 from hololinked.schema_validators import JSONSchemaValidator
 from hololinked.utils import isclassmethod
@@ -432,6 +432,23 @@ def test_06_action_affordance(thing: TestThing):
     assert isinstance(affordance.input, dict)
     assert isinstance(affordance.output, dict)
     assert affordance.description is None
+
+
+def test_07_action_name_from_attribute():
+    def start(self, channel: int) -> int:
+        return channel
+
+    class NamedActions(Thing):
+        acquire = action()(start)
+
+    assert NamedActions.acquire.name == "acquire"
+    instance = NamedActions(id="test-action-names")
+    assert instance.acquire.name == "acquire"
+    assert "acquire" in instance.actions.descriptors
+
+    with pytest.raises(AttributeError):
+        # needs descriptor lifecycle __set_name__ to have the name set
+        action()(start).name
 
 
 if __name__ == "__main__":

@@ -607,49 +607,54 @@ class TestThing(Thing):
 def replace_methods_with_actions(thing_cls: type[TestThing]) -> None:
     exposed_actions = []
     if not isinstance(thing_cls.action_echo, (Action, BoundAction)):
-        thing_cls.action_echo = action()(thing_cls.action_echo)
-        thing_cls.action_echo.__set_name__(thing_cls, "action_echo")
+        _action = action()(thing_cls.action_echo)
+        _action.__set_name__(thing_cls, "action_echo")
+        thing_cls.action_echo = _action
     exposed_actions.append("action_echo")
 
     if not isinstance(thing_cls.action_echo_with_classmethod, (Action, BoundAction)):
         # classmethod can be decorated with action
-        thing_cls.action_echo_with_classmethod = action()(thing_cls.action_echo_with_classmethod)
-        # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+        _action = action()(thing_cls.action_echo_with_classmethod)
+        _action.__set_name__(thing_cls, "action_echo_with_classmethod")
+        thing_cls.action_echo_with_classmethod = _action
     exposed_actions.append("action_echo_with_classmethod")
 
     if not isinstance(thing_cls.action_echo_async, (Action, BoundAction)):
         # async methods can be decorated with action
-        thing_cls.action_echo_async = action()(thing_cls.action_echo_async)
-        thing_cls.action_echo_async.__set_name__(thing_cls, "action_echo_async")
+        _action = action()(thing_cls.action_echo_async)
+        _action.__set_name__(thing_cls, "action_echo_async")
+        thing_cls.action_echo_async = _action
     exposed_actions.append("action_echo_async")
 
     if not isinstance(thing_cls.action_echo_async_with_classmethod, (Action, BoundAction)):
         # async classmethods can be decorated with action
-        thing_cls.action_echo_async_with_classmethod = action()(thing_cls.action_echo_async_with_classmethod)
-        # BoundAction already, cannot call __set_name__ on it, at least at the time of writing
+        _action = action()(thing_cls.action_echo_async_with_classmethod)
+        _action.__set_name__(thing_cls, "action_echo_async_with_classmethod")
+        thing_cls.action_echo_async_with_classmethod = _action
     exposed_actions.append("action_echo_async_with_classmethod")
 
     if not isinstance(thing_cls.parameterized_action, (Action, BoundAction)):
         # parameterized function can be decorated with action
-        thing_cls.parameterized_action = action(safe=True)(thing_cls.parameterized_action)
-        thing_cls.parameterized_action.__set_name__(thing_cls, "parameterized_action")
+        _action = action(safe=True)(thing_cls.parameterized_action)
+        _action.__set_name__(thing_cls, "parameterized_action")
+        thing_cls.parameterized_action = _action
     exposed_actions.append("parameterized_action")
 
     if not isinstance(thing_cls.parameterized_action_without_call, (Action, BoundAction)):
-        thing_cls.parameterized_action_without_call = action(idempotent=True)(
-            thing_cls.parameterized_action_without_call
-        )
-        thing_cls.parameterized_action_without_call.__set_name__(thing_cls, "parameterized_action_without_call")
+        _action = action(idempotent=True)(thing_cls.parameterized_action_without_call)
+        _action.__set_name__(thing_cls, "parameterized_action_without_call")
+        thing_cls.parameterized_action_without_call = _action
     exposed_actions.append("parameterized_action_without_call")
 
     if not isinstance(thing_cls.parameterized_action_async, (Action, BoundAction)):
-        thing_cls.parameterized_action_async = action(synchronous=True)(thing_cls.parameterized_action_async)
-        thing_cls.parameterized_action_async.__set_name__(thing_cls, "parameterized_action_async")
+        _action = action(synchronous=True)(thing_cls.parameterized_action_async)
+        _action.__set_name__(thing_cls, "parameterized_action_async")
+        thing_cls.parameterized_action_async = _action
     exposed_actions.append("parameterized_action_async")
 
     if not isinstance(thing_cls.json_schema_validated_action, (Action, BoundAction)):
         # schema validated actions
-        thing_cls.json_schema_validated_action = action(
+        _action = action(
             input_schema={
                 "type": "object",
                 "properties": {
@@ -664,12 +669,14 @@ def replace_methods_with_actions(thing_cls: type[TestThing]) -> None:
                 "properties": {"val1": {"type": "integer"}, "val3": {"type": "object"}},
             },
         )(thing_cls.json_schema_validated_action)
-        thing_cls.json_schema_validated_action.__set_name__(thing_cls, "json_schema_validated_action")
+        _action.__set_name__(thing_cls, "json_schema_validated_action")
+        thing_cls.json_schema_validated_action = _action
     exposed_actions.append("json_schema_validated_action")
 
     if not isinstance(thing_cls.pydantic_validated_action, (Action, BoundAction)):
-        thing_cls.pydantic_validated_action = action()(thing_cls.pydantic_validated_action)
-        thing_cls.pydantic_validated_action.__set_name__(thing_cls, "pydantic_validated_action")
+        _action = action()(thing_cls.pydantic_validated_action)
+        _action.__set_name__(thing_cls, "pydantic_validated_action")
+        thing_cls.pydantic_validated_action = _action
     exposed_actions.append("pydantic_validated_action")
 
     replace_methods_with_actions._exposed_actions = exposed_actions
