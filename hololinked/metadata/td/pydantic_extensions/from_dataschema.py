@@ -24,7 +24,7 @@ PRIMITIVE_TYPES: dict[str, type | None] = {
 }
 
 # keywords with no validation meaning, ignored without a warning
-ANNOTATION_KEYWORDS = frozenset({"unit", "readOnly", "writeOnly", "format", "$comment"})
+ANNOTATION_KEYWORDS = frozenset({"unit", "readOnly", "writeOnly", "format", "$comment", "@type"})
 
 NUMBER_CONSTRAINTS = {
     "minimum": "ge",

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import copy
+import inspect
+import warnings
 
-from collections.abc import Callable  # noqa: F401
+from collections.abc import Callable
 from enum import Enum
+from inspect import Parameter
 from typing import Any, ClassVar, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
@@ -28,7 +31,7 @@ from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
 from hololinked.utils import issubklass
 
 
-from hololinked.core.actions import Action  # isort: skip
+from hololinked.core.actions import Action, action  # isort: skip
 from hololinked.core.events import Event  # isort: skip
 from hololinked.core.property import Property  # isort: skip
 from hololinked.core.thing import Thing, ThingMeta  # isort: skip
@@ -345,6 +348,73 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
         affordance.build_non_compliant_metadata()
         return affordance
 
+    def to_descriptor(
+        self,
+        fget: Callable | None = None,
+        fset: Callable | None = None,
+        schema_validator: str = "pydantic",
+    ) -> Property:
+        """
+        Create the `Property` this affordance describes.
+
+        Parameters
+        ----------
+        fget: Callable, optional
+            read handler, the value is stored on the `Thing` instance if not given
+        fset: Callable, optional
+            write handler, receives the validated value
+        schema_validator: str
+            name the validator of the value is registered under with `SchemaValidators`
+
+        Returns
+        -------
+        Property
+            the descriptor, not yet assigned to a class
+
+        Raises
+        ------
+        ValueError
+            if the value is stored (no `fget`) but the affordance gives no starting value, neither a `default`
+            nor a `null` option
+        """
+        affordance = self.json()
+        keywords = WoTSchema.declared_fields(DataSchema)
+        # a property-level const makes the property constant instead of constraining writes
+        data_schema = {key: value for key, value in affordance.items() if key in keywords and key != "const"}
+        # a null option allows None, the remaining options are the schema of the value
+        options = data_schema.pop("oneOf", [])
+        nullable = any(option.get("type") == "null" for option in options)
+        options = [option for option in options if option.get("type") != "null"]
+        if len(options) == 1:
+            data_schema.update(options[0])
+        elif options:
+            data_schema["oneOf"] = options
+        default = affordance.get("default", affordance.get("const"))
+        constant = "const" in affordance
+        if fget is None and default is None and not (nullable or constant):
+            raise ValueError(f"property {self.name} stores its value, it needs a default or a null option in its schema")
+        if self.writeOnly:
+            warnings.warn(f"writeOnly of property {self.name} is not supported and is ignored", UserWarning, stacklevel=2)
+        model, validator = (
+            schema_for_validator(data_schema, f"{self.name}_value", schema_validator) if data_schema else (None, None)
+        )
+        _property = Property(
+            default=default,
+            doc=self.description,
+            label=self.title,
+            constant=constant,
+            readonly=bool(self.readOnly),
+            allow_None=nullable,
+            observable=bool(self.observable),
+            model=model,
+            fget=fget,
+            fset=fset,
+            deepcopy_default=isinstance(default, (dict, list)),
+            metadata={"unit": self.unit} if self.unit is not None else None,
+        )
+        _property._validator = validator
+        return _property
+
 
 class ActionAffordance(InteractionAffordance, ActionMetadata):
     """
@@ -422,6 +492,50 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
         affordance.build_non_compliant_metadata()
         return affordance
 
+    def to_descriptor(self, obj: Callable, schema_validator: str = "pydantic") -> Action:
+        """
+        Create the `Action` this affordance describes, invoking the given handler.
+
+        Parameters
+        ----------
+        obj: Callable
+            the handler, a sync or async method
+        schema_validator: str
+            name the validator of the input is registered under with `SchemaValidators`
+
+        Returns
+        -------
+        Action
+            the descriptor, not yet assigned to a class
+
+        Raises
+        ------
+        TypeError
+            if the parameters of the handler do not match the input, listing every mismatch
+        """
+        input_schema, validator = None, None
+        if self.input:
+            mismatches = input_signature_mismatches(obj, self.input)
+            if mismatches:
+                raise TypeError(
+                    f"{getattr(obj, '__name__', obj)} does not match the input of action {self.name}: "
+                    + "; ".join(mismatches)
+                )
+            input_schema, validator = schema_for_validator(self.input, f"{self.name}_input", schema_validator)
+        output_schema = None
+        if self.output:
+            output_schema, _ = schema_for_validator(self.output, f"{self.name}_output", schema_validator)
+        # flags absent from the TD keep the defaults of action(), synchronous=True decides the scheduling
+        flags = {key: getattr(self, key) for key in ("safe", "idempotent", "synchronous") if getattr(self, key) is not None}
+        _action = action(
+            input_schema=input_schema,
+            output_schema=output_schema,
+            doc="\n\n".join(text for text in (self.title, self.description) if text) or None,
+            **flags,
+        )(obj)
+        _action._schema_validator = validator
+        return _action
+
 
 class EventAffordance(InteractionAffordance, EventMetadata):
     """
@@ -477,6 +591,26 @@ class EventAffordance(InteractionAffordance, EventMetadata):
         affordance.build_non_compliant_metadata()
         return affordance
 
+    def to_descriptor(self, schema_validator: str = "pydantic") -> Event:
+        """
+        Create the `Event` this affordance describes.
+
+        Parameters
+        ----------
+        schema_validator: str
+            name of the validator, registered with `SchemaValidators`, the event data schema is converted for.
+            The data is not validated on push, so no validator is preset.
+
+        Returns
+        -------
+        Event
+            the descriptor, not yet assigned to a class
+        """
+        schema = None
+        if self.data:
+            schema, _ = schema_for_validator(self.data, f"{self.name}_data", schema_validator)
+        return Event(doc=self.description, label=self.title, schema=schema)
+
 
 def schema_for_validator(
     schema: dict[str, Any],
@@ -506,3 +640,61 @@ def schema_for_validator(
         return dataschema_to_model(schema, name), None
     # preset, otherwise SchemaValidators.for_schema() picks the json_schema validator for any dict
     return schema, validator(schema)
+
+
+def input_signature_mismatches(func: Callable, schema: dict[str, Any]) -> list[str]:
+    """
+    List how the parameters of an action handler do not match the input DataSchema of the action.
+
+    The first positional parameter (`self`) and a keyword-only `request` parameter are not part of the input.
+    An object input arrives as keyword arguments, any other input as a single value.
+
+    Parameters
+    ----------
+    func: Callable
+        the action handler
+    schema: dict[str, Any]
+        the input DataSchema
+
+    Returns
+    -------
+    list[str]
+        every mismatch found, empty if the handler matches
+    """
+    parameters = [
+        parameter
+        for parameter in list(inspect.signature(func).parameters.values())[1:]
+        if not (parameter.kind is Parameter.KEYWORD_ONLY and parameter.name == "request")
+    ]
+    if not (schema.get("type") == "object" or "properties" in schema):
+        positional = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD, Parameter.VAR_POSITIONAL)
+        if len(parameters) != 1 or parameters[0].kind not in positional:
+            return ["the input is a single value, so the handler takes exactly one positional parameter"]
+        return []
+    properties = schema.get("properties", {})
+    takes_kwargs = any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters)
+    keywords = {
+        parameter.name
+        for parameter in parameters
+        if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
+    }
+    mismatches = [
+        f"parameter {parameter.name!r} is positional-only, an object input is given by keyword"
+        for parameter in parameters
+        if parameter.kind is Parameter.POSITIONAL_ONLY
+    ]
+    mismatches += [
+        f"required parameter {parameter.name!r} is not an input property"
+        for parameter in parameters
+        if parameter.name in keywords and parameter.default is Parameter.empty and parameter.name not in properties
+    ]
+    if not takes_kwargs:
+        mismatches += [
+            f"input property {name!r} is not a parameter"
+            for name in sorted(set(properties) | set(schema.get("required", [])))
+            if name not in keywords
+        ]
+    additional = schema.get("additionalProperties", None)
+    if additional is not None and additional is not False and not takes_kwargs:
+        mismatches.append("the input allows additional properties, so the handler takes **kwargs")
+    return mismatches

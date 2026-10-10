@@ -8,6 +8,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
+from hololinked.core.interfaces import InteractionMetadata
+
 
 class WoTSchema(BaseModel):
     """
@@ -52,7 +54,7 @@ class WoTSchema(BaseModel):
         -------
         dict[str, Any]
             JSON representation
-        """  # noqa: D401
+        """
         return self.model_dump()
 
     @classmethod
@@ -77,7 +79,10 @@ class WoTSchema(BaseModel):
     @staticmethod
     def declared_fields(model: type[BaseModel]) -> dict[str, str]:
         """
-        Collect the fields declared by a pydantic model and all of its subclasses.
+        Collect the fields declared by a schema element and all of its subclasses.
+
+        The subclasses are included because they may declare additional fields that should be considered
+        part of the schema. For example, a dataschema for a string has more fields than a generic dataschema.
 
         Parameters
         ----------
@@ -92,5 +97,7 @@ class WoTSchema(BaseModel):
         """
         fields = {field.alias or name: name for name, field in model.model_fields.items()}
         for subclass in model.__subclasses__():
-            fields.update(WoTSchema.declared_fields(subclass))
+            # TODO this is not correct. Multiple inheritance should be handled differently.
+            if not issubclass(subclass, InteractionMetadata):  # an affordance is not a kind of the schema element
+                fields.update(WoTSchema.declared_fields(subclass))
         return fields
