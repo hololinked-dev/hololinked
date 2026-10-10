@@ -13,7 +13,7 @@ from hololinked.core.actions import (
     BoundAsyncAction,
     BoundSyncAction,
 )
-from hololinked.core.thing import action
+from hololinked.core.thing import Thing, action
 from hololinked.metadata.td.interaction_affordance import ActionAffordance
 from hololinked.schema_validators import JSONSchemaValidator
 from hololinked.utils import isclassmethod
@@ -314,7 +314,7 @@ def test_04_api_and_invalid_actions():
 
     with pytest.raises(ValueError) as ex:
         action(safe=True, some_kw=1)
-    assert str(ex.value).startswith("Only 'safe', 'idempotent', 'synchronous' are allowed")
+    assert str(ex.value).startswith("Only 'safe', 'idempotent', 'synchronous', 'doc' are allowed")
 
 
 def test_05_thing_cls_actions(thing: TestThing):
@@ -432,6 +432,44 @@ def test_06_action_affordance(thing: TestThing):
     assert isinstance(affordance.input, dict)
     assert isinstance(affordance.output, dict)
     assert affordance.description is None
+
+
+def test_07_action_name_from_attribute():
+    def start(self, channel: int) -> int:
+        return channel
+
+    class NamedActions(Thing):
+        acquire = action()(start)
+
+    assert NamedActions.acquire.name == "acquire"
+    instance = NamedActions(id="test-action-names")
+    assert instance.acquire.name == "acquire"
+    assert "acquire" in instance.actions.descriptors
+
+    with pytest.raises(AttributeError):
+        # needs descriptor lifecycle __set_name__ to have the name set
+        action()(start).name
+
+
+def test_08_action_doc():
+    def start(self, channel: int) -> int:
+        """Starts the acquisition."""
+        return channel
+
+    with pytest.warns(UserWarning, match="already wrapped"):
+
+        class DocumentedActions(Thing):
+            acquire = action()(start)
+            acquire_described = action(doc="Acquires on a channel.")(start)
+            acquire_again = action(safe=True)(acquire)
+
+    assert DocumentedActions.acquire.doc == start.__doc__
+    assert DocumentedActions.acquire_described.doc == "Acquires on a channel."
+    assert DocumentedActions.acquire_again.doc == start.__doc__  # not the docstring of Action
+
+    assert ActionAffordance.from_descriptor(DocumentedActions.acquire, DocumentedActions).description == start.__doc__
+    affordance = ActionAffordance.from_descriptor(DocumentedActions.acquire_described, DocumentedActions)
+    assert affordance.description == "Acquires on a channel."
 
 
 if __name__ == "__main__":

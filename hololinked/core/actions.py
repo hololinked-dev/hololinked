@@ -45,10 +45,12 @@ class Action:
         "_schema_validator",
         "argument_schema",
         "create_task",
+        "doc",
         "idempotent",
         "isclassmethod",
         "iscoroutine",
         "isparameterized",
+        "name",
         "obj",
         "owner",
         "request_as_argument",
@@ -61,6 +63,12 @@ class Action:
     state: tuple[Enum | str] | None
     """state machine state(s) in which this action can be executed, any state when None"""
 
+    name: str
+    """name of the action, the attribute it is assigned to on the owning class"""
+
+    doc: str | None
+    """description of the action, the docstring of its method unless given explicitly"""
+
     def __init__(self, obj: MethodType) -> None:
         """
         Initialize an Action.
@@ -71,6 +79,7 @@ class Action:
             the method that is being wrapped as an action
         """
         self.obj = obj
+        self.doc = obj.__doc__
         self.state = None
         self.iscoroutine = False
         self.isclassmethod = False
@@ -86,9 +95,10 @@ class Action:
 
     def __set_name__(self, owner, name):
         self.owner = owner
+        self.name = name
 
     def __str__(self) -> str:
-        return f"<Action({self.owner.__name__}.{self.obj.__name__})>"
+        return f"<Action({self.owner.__name__}.{self.name})>"
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Action):
@@ -110,11 +120,6 @@ class Action:
             f"Cannot invoke unbound action {self.name} of {self.owner.__name__}."
             + " Bound methods must be called, not the action itself. Use the appropriate instance to call the method."
         )
-
-    @property
-    def name(self) -> str:
-        """Name of the action."""
-        return self.obj.__name__
 
     @property
     def schema_validator(self) -> BaseSchemaValidator | None:
@@ -221,7 +226,7 @@ class BoundAction:
     @property
     def name(self) -> str:
         """Name of the action."""
-        return self.obj.__name__
+        return self.action.name
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError("call must be implemented by subclass")
@@ -238,7 +243,7 @@ class BoundAction:
         raise NotImplementedError("external_call must be implemented by subclass")
 
     def __str__(self):
-        return f"<BoundAction({self.owner.__name__}.{self.obj.__name__} of {self.owner_inst.id})>"
+        return f"<BoundAction({self.owner.__name__}.{self.name} of {self.owner_inst.id})>"
 
     def __eq__(self, value):
         if not isinstance(value, BoundAction):
@@ -323,7 +328,7 @@ class BoundAsyncAction(BoundAction):
         return await self.obj(self.bound_obj, *args, **kwargs)
 
 
-__action_kw_arguments__ = ["safe", "idempotent", "synchronous"]
+__action_kw_arguments__ = ["safe", "idempotent", "synchronous", "doc"]
 
 
 def action(
@@ -363,6 +368,8 @@ def action(
         - `idempotent`: bool,
             indicate in thing description if action is idempotent (for example, allows HTTP clients to cache return value),
             default `False`
+        - `doc`: str,
+            description of the action, used instead of the docstring of the method, which is the default
 
     Returns
     -------
@@ -397,7 +404,7 @@ def action(
             if (obj if isinstance(obj, Action) else obj.action).isclassmethod:
                 raise RuntimeError("cannot wrap a classmethod as action once again, please skip")
             warnings.warn(
-                f"{obj.name} is already wrapped as an action, wrapping it again with newer settings.",
+                f"{obj.obj.__name__} is already wrapped as an action, wrapping it again with newer settings.",
                 category=UserWarning,
             )
             obj = obj.obj
@@ -420,6 +427,7 @@ def action(
         action.safe = kwargs.get("safe", False)
         action.idempotent = kwargs.get("idempotent", False)
         action.synchronous = kwargs.get("synchronous", True)
+        action.doc = kwargs.get("doc", None) or obj.__doc__
 
         if isclassmethod(original):
             action.iscoroutine = has_async_def(obj)
@@ -483,7 +491,7 @@ def action(
         )
     if any(key not in __action_kw_arguments__ for key in kwargs):
         raise ValueError(
-            "Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, "
+            f"Only {', '.join(repr(key) for key in __action_kw_arguments__)} are allowed as keyword arguments, "
             + f"unknown arguments found {kwargs.keys()}"
         )
     inner._arguments = dict(  # ty: ignore[unresolved-attribute]

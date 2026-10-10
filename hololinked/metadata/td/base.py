@@ -73,3 +73,24 @@ class WoTSchema(BaseModel):
             doc = doc[:idx]
         doc = doc.replace("\n", "").replace("\t", " ").lstrip().rstrip()
         return doc
+
+    @staticmethod
+    def declared_fields(model: type[BaseModel]) -> dict[str, str]:
+        """
+        Collect the fields declared by a pydantic model and all of its subclasses.
+
+        Parameters
+        ----------
+        model: type[BaseModel]
+            the base model
+
+        Returns
+        -------
+        dict[str, str]
+            key of each field in the JSON document (its alias, such as `@type`, if it has one) mapped to its
+            attribute name
+        """
+        fields = {field.alias or name: name for name, field in model.model_fields.items()}
+        for subclass in model.__subclasses__():
+            fields.update(WoTSchema.declared_fields(subclass))
+        return fields

@@ -43,7 +43,7 @@ class DataSchema(WoTSchema):
     titles: Optional[dict[str, str]] = None
     description: Optional[str] = None
     descriptions: Optional[dict[str, str]] = None
-    const: Optional[bool] = None
+    const: Optional[Any] = None
     default: Optional[Any] = None
     readOnly: Optional[bool] = None
     writeOnly: Optional[bool] = None
@@ -52,6 +52,7 @@ class DataSchema(WoTSchema):
     unit: Optional[str] = None
     type: Optional[str] = None
     oneOf: Optional[list[dict[str, Any]]] = None
+    semantic_type: Optional[str | list[str]] = Field(default=None, alias="@type")
 
     model_config = ConfigDict(extra="allow")
     _custom_schema_generators: ClassVar = dict()
@@ -193,6 +194,8 @@ class StringSchema(DataSchema):
     pattern: Optional[str] = None
     minLength: Optional[int] = None
     maxLength: Optional[int] = None
+    contentEncoding: Optional[str] = None
+    contentMediaType: Optional[str] = None
 
     def __init__(self):
         super().__init__()
@@ -332,6 +335,7 @@ class ObjectSchema(DataSchema):
 
     properties: Optional[JSON] = None
     required: Optional[list[str]] = None
+    additionalProperties: Optional[bool | dict[str, Any]] = None
 
     def __init__(self):
         super().__init__()
