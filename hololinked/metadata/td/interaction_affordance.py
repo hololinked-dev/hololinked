@@ -219,7 +219,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
             elif key in fields:
                 setattr(affordance, fields[key], value)
         affordance._name = name
-        affordance._thing_id = metadata["id"]
+        affordance._thing_id = metadata.get("id")  # a Thing Model has no id
         return affordance
 
     @classmethod

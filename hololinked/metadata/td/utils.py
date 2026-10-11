@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 def get_summary(docs: str) -> str:
     """
@@ -21,3 +23,24 @@ def get_summary(docs: str) -> str:
         return docs.partition("\n")[0].strip()
     else:
         return ""
+
+
+def uses_thing_model_extensions(value: Any) -> bool:
+    """
+    Check whether a Thing Model uses `tm:ref` or `{{placeholders}}` anywhere.
+
+    Parameters
+    ----------
+    value: Any
+        the Thing Model JSON, or a part of it
+
+    Returns
+    -------
+    bool
+        True if any `tm:ref` key or string with a placeholder is found
+    """
+    if isinstance(value, dict):
+        return "tm:ref" in value or any(uses_thing_model_extensions(item) for item in [*value, *value.values()])
+    if isinstance(value, list):
+        return any(uses_thing_model_extensions(item) for item in value)
+    return isinstance(value, str) and "{{" in value

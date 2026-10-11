@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar, Optional, Self
@@ -51,9 +53,13 @@ class Metadata(BaseModel):
         """Populate the metadata from the Thing instance."""
         raise NotImplementedError("Implement generate() in subclass")
 
-    def produce(self) -> Thing:
-        """Produce a Thing instance from the metadata."""
+    def produce(self, *args: Any, **kwargs: Any) -> Thing:
+        """Produce a Thing instance from the metadata, served by the given implementation."""
         raise NotImplementedError("Implement produce() in subclass")
+
+    def interactions(self) -> list[InteractionMetadata]:
+        """Return the properties, actions and events the metadata describes."""
+        raise NotImplementedError("Implement interactions() in subclass")
 
     skip_properties: list[str]
     """
@@ -432,3 +438,39 @@ class MetadataFormat:
     action: type[ActionMetadata]
     event: type[EventMetadata]
     interaction: type[InteractionMetadata]
+
+
+def implementing_member(impl: Any, member_name: str, interaction: InteractionMetadata) -> Any:
+    """
+    Find the member of an implementation object for an interaction, wrapped as a member of the `Thing`.
+
+    The member is looked up statically, so no property of the object is read. A method of the object becomes a
+    forwarding action handler, and a `property` or plain attribute a forwarding property. A plain attribute is
+    writable unless the property is read-only. Members of the wrong kind are returned unchanged, so `bind()` reports
+    them.
+
+    Parameters
+    ----------
+    impl: Any
+        the implementation object
+    member_name: str
+        name of the member
+    interaction: InteractionMetadata
+        the interaction it implements
+
+    Returns
+    -------
+    Any
+        the member as the `Thing` uses it, `NotImplemented` if there is none or its name is private
+    """
+    member = NotImplemented if member_name.startswith("_") else inspect.getattr_static(impl, member_name, NotImplemented)
+    if member is NotImplemented or interaction.what == ResourceTypes.EVENT:
+        return member
+    is_method = inspect.isfunction(member) or inspect.ismethod(member) or isinstance(member, (staticmethod, classmethod))
+    if interaction.what == ResourceTypes.ACTION:
+        return forward_action(member_name, getattr(impl, member_name)) if is_method else member
+    if isinstance(member, property):
+        return forward_property(member_name, writable=member.fset is not None)
+    if is_method:
+        return member
+    return forward_property(member_name, writable=not interaction.readOnly)
