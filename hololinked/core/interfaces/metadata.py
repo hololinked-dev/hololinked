@@ -113,6 +113,9 @@ class Metadata(BaseModel):
         """
         Match the members of an object to the interactions of a Thing Model and create their descriptors.
 
+        Once every member conforms, an `EventDelegate` without a `Thing` is set on the object for each event; the
+        caller sets its `thing` after creating the `Thing`.
+
         Parameters
         ----------
         model: Metadata
@@ -139,7 +142,7 @@ class Metadata(BaseModel):
             listing every problem found
         """  # noqa: DOC501 - the TypeErrors raised below are collected as problems
         from hololinked.core.actions import Action, ActionDelegate
-        from hololinked.core.events import Event
+        from hololinked.core.events import Event, EventDelegate
         from hololinked.core.property import Property, PropertyDelegate
         from hololinked.core.thing import Thing
 
@@ -207,6 +210,9 @@ class Metadata(BaseModel):
             ]
         if problems:
             raise ConformanceError(problems)
+        for name, descriptor in descriptors.items():
+            if isinstance(descriptor, Event):
+                setattr(impl, member_names.get(name, name), EventDelegate(name))
         return descriptors
 
     def add_interactions(self) -> None:

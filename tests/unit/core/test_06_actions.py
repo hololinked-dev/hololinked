@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import pytest
 
+from pydantic import BaseModel
 from testkit.things import TestThing
 from testkit.things.test_thing import replace_methods_with_actions
 
@@ -470,6 +471,20 @@ def test_08_action_doc():
     assert ActionAffordance.from_descriptor(DocumentedActions.acquire, DocumentedActions).description == start.__doc__
     affordance = ActionAffordance.from_descriptor(DocumentedActions.acquire_described, DocumentedActions)
     assert affordance.description == "Acquires on a channel."
+
+
+def test_09_action_model_schemas():
+    """a model class is a schema, not a method decorated without '()'."""
+
+    class Channel(BaseModel):
+        channel: int
+
+    def start(self, channel: int) -> int:
+        return channel
+
+    acquire = action(input_schema=Channel, output_schema=Channel)(start)
+    assert acquire.argument_schema is Channel
+    assert acquire.return_value_schema is Channel
 
 
 if __name__ == "__main__":
