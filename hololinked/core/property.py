@@ -73,6 +73,7 @@ class Property(Parameter):
         fset: Callable | None = None,
         fdel: Callable | None = None,
         fcomparator: Callable | None = None,
+        delegate: PropertyDelegate | None = None,
         deepcopy_default: bool = False,
         per_instance_descriptor: bool = False,
         remote: bool = True,
@@ -132,6 +133,9 @@ class Property(Parameter):
         fdel: Callable, default None
             custom deleter method
 
+        delegate: PropertyDelegate, default None
+            reads and writes an attribute of another object instead of the `Thing`, used instead of `fget` and `fset`.
+
         remote: bool, default `True`
             set to `False` to make the property local/not remotely accessible
 
@@ -165,7 +169,15 @@ class Property(Parameter):
             a numeric value, usually in the range 0.0 to 1.0, which allows the order of Properties in a class to be defined in
             a listing or e.g. in GUI menus. A negative precedence indicates a property that should be hidden in such listings.
 
+        Raises
+        ------
+        ValueError
+            if `delegate` is given together with `fget` or `fset`.
         """
+        if delegate is not None:
+            if fget is not None or fset is not None:
+                raise ValueError("a delegated property takes its getter and setter from the delegate")
+            fget, fset = delegate.get, delegate.set
         super().__init__(
             default=default,
             doc=doc,
@@ -179,6 +191,7 @@ class Property(Parameter):
             fget=fget,
             fset=fset,
             fdel=fdel,
+            isbound=delegate is not None,
             precedence=precedence,
         )
         self.db_persist = db_persist
@@ -387,4 +400,47 @@ class Property(Parameter):
         return MetadataFormats.get(format).property.from_descriptor(self, owner_inst or self.owner)
 
 
-__all__ = [Property.__name__]
+class PropertyDelegate:
+    """
+    Reads and writes an attribute of another object for a property, such as a driver serving a Thing Model.
+
+    The property takes `get` and `set` as its getter and setter and, with `isbound` set, calls them without the
+    owning `Thing`. The attribute may be a plain attribute or a python `property` of that object.
+    """
+
+    __slots__ = ("impl", "member_name")
+
+    def __init__(self, impl: Any, member_name: str) -> None:
+        """
+        Initialize the delegate.
+
+        Parameters
+        ----------
+        impl: Any
+            the object whose attribute implements the property
+        member_name: str
+            name of the attribute on that object
+        """
+        self.impl = impl
+        self.member_name = member_name
+
+    def get(self) -> Any:
+        """
+        Read the attribute.
+
+        Returns
+        -------
+        Any
+            the value of the attribute
+        """
+        return getattr(self.impl, self.member_name)
+
+    def set(self, value: Any) -> None:
+        """Write the attribute."""
+        setattr(self.impl, self.member_name, value)
+
+    def __repr__(self) -> str:
+        return f"<PropertyDelegate({type(self.impl).__name__}.{self.member_name})>"
+
+
+__all__ = [Property.__name__, PropertyDelegate.__name__]

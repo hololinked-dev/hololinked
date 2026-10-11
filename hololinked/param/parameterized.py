@@ -224,6 +224,7 @@ class Parameter(metaclass=ParameterMetaclass):
         "fget",
         "fset",
         "fdel",
+        "isbound",
         "_disable_post_slot_set",
     ]
 
@@ -247,6 +248,7 @@ class Parameter(metaclass=ParameterMetaclass):
         fget: typing.Optional[typing.Callable] = None,
         fset: typing.Optional[typing.Callable] = None,
         fdel: typing.Optional[typing.Callable] = None,
+        isbound: bool = False,
         precedence: typing.Optional[float] = None,
     ) -> None:  # pylint: disable-msg=R0913
         """Initialize a new Parameter object and store the supplied attributes:
@@ -305,6 +307,9 @@ class Parameter(metaclass=ParameterMetaclass):
 
         class_member : To make a ...
 
+        isbound: if true, fget and fset are already bound to another object and are called
+        without the owning instance, as fget() and fset(value).
+
         precedence: a numeric value, usually in the range 0.0 to 1.0,
         which allows the order of Parameters in a class to be defined in
         a listing or e.g. in GUI menus. A negative precedence indicates
@@ -333,6 +338,7 @@ class Parameter(metaclass=ParameterMetaclass):
         self.fget = fget  # type: typing.Union[typing.Callable, None]
         self.fset = fset  # type: typing.Union[typing.Callable, None]
         self.fdel = fdel  # type: typing.Union[typing.Callable, None]
+        self.isbound = isbound
 
     def __set_name__(self, owner: typing.Any, attrib_name: str) -> None:
         self._internal_name = f"_{attrib_name}_param_value"
@@ -407,6 +413,8 @@ class Parameter(metaclass=ParameterMetaclass):
             # this is a precedence why __get__ should be called with None for class_member
             # therefore class_member logic above is handled in that way
             return self
+        if self.isbound:
+            return self.fget()
         if self.fget is not None:
             return self.fget(obj)
         return obj.__dict__.get(self._internal_name, self.default)
@@ -457,7 +465,9 @@ class Parameter(metaclass=ParameterMetaclass):
             old = getattr(obj, self._internal_name, self.default)
 
         # The following needs to be optimised, probably through lambda functions?
-        if self.fset is not None:
+        if self.isbound:
+            self.fset(value)
+        elif self.fset is not None:
             # for class_member, self.fset.__get__(None, obj) is same as self.fset
             self.fset(obj, value)
         else:
