@@ -201,6 +201,48 @@ class EventDispatcher:
         self._synchronize_event.set()
 
 
+class EventDelegate:
+    """
+    Pushes an event of a `Thing` for another object, such as a driver serving a Thing Model.
+
+    Set on that object so it can push the event without holding the `Thing`. Pushes are dropped while the `Thing`
+    is not served, since there is no publisher and no subscriber yet.
+    """
+
+    __slots__ = ("name", "thing")
+
+    def __init__(self, thing: Thing, name: str) -> None:
+        """
+        Initialize the delegate.
+
+        Parameters
+        ----------
+        thing: Thing
+            the `Thing` owning the event
+        name: str
+            name of the event on the `Thing`
+        """
+        self.thing = thing
+        self.name = name
+
+    def push(self, data: Any) -> None:
+        """
+        Publish the event, or drop it while the `Thing` is not served.
+
+        Parameters
+        ----------
+        data: Any
+            payload of the event
+        """
+        dispatcher = getattr(self.thing, self.name)  # type: EventDispatcher
+        if dispatcher.publisher is not None:
+            dispatcher.push(data)
+
+    def __repr__(self) -> str:
+        return f"<EventDelegate({type(self.thing).__name__}.{self.name})>"
+
+
 __all__ = [
     Event.__name__,
+    EventDelegate.__name__,
 ]
