@@ -205,25 +205,28 @@ class EventDelegate:
     """
     Pushes an event of a `Thing` for another object, such as a driver serving a Thing Model.
 
-    Set on that object so it can push the event without holding the `Thing`. Pushes are dropped while the `Thing`
-    is not served, since there is no publisher and no subscriber yet.
+    Set on that object so it can push the event without holding the `Thing`. The `Thing` is set once it exists;
+    pushes are dropped until then and while it is not served, since there is no publisher and no subscriber yet.
     """
 
     __slots__ = ("name", "thing")
 
-    def __init__(self, thing: Thing, name: str) -> None:
+    thing: Thing | None
+    """the `Thing` owning the event, None until it is created"""
+
+    def __init__(self, name: str, thing: Thing | None = None) -> None:
         """
         Initialize the delegate.
 
         Parameters
         ----------
-        thing: Thing
-            the `Thing` owning the event
         name: str
             name of the event on the `Thing`
+        thing: Thing, optional
+            the `Thing` owning the event, set later if it does not exist yet
         """
-        self.thing = thing
         self.name = name
+        self.thing = thing
 
     def push(self, data: Any) -> None:
         """
@@ -234,12 +237,15 @@ class EventDelegate:
         data: Any
             payload of the event
         """
+        if self.thing is None:
+            return
         dispatcher = getattr(self.thing, self.name)  # type: EventDispatcher
         if dispatcher.publisher is not None:
             dispatcher.push(data)
 
     def __repr__(self) -> str:
-        return f"<EventDelegate({type(self.thing).__name__}.{self.name})>"
+        owner = type(self.thing).__name__ if self.thing is not None else "no Thing"
+        return f"<EventDelegate({owner}.{self.name})>"
 
 
 __all__ = [

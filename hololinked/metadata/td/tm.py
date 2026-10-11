@@ -14,7 +14,7 @@ from typing import Any, Optional
 
 from pydantic import ConfigDict, Field
 
-from hololinked.core.events import EventDelegate
+from hololinked.core.events import Event
 from hololinked.core.interfaces import Metadata
 from hololinked.metadata.td.base import WoTSchema
 from hololinked.metadata.td.interaction_affordance import (
@@ -135,8 +135,9 @@ class ThingModel(WoTSchema, Metadata):
         descriptors = Metadata.bind(self, impl, member_names=member_names, schema_validator=schema_validator)
         namespace = {**descriptors, "_thing_model": self, "__doc__": self.description}
         thing = type(class_name(self.title), (Thing,), namespace)(id=id, **kwargs)
-        for name in self.events:
-            setattr(impl, member_names.get(name, name), EventDelegate(thing, name))
+        for name, descriptor in descriptors.items():
+            if isinstance(descriptor, Event):  # the delegate set by bind()
+                getattr(impl, member_names.get(name, name)).thing = thing
         return thing
 
     @classmethod
