@@ -492,7 +492,10 @@ class EventLoop:
         elif operation == Operations.invokeaction:
             if payload is None:
                 payload = dict()
-            args = payload.pop("__args__", tuple())
+            if isinstance(payload, dict):
+                args = payload.pop("__args__", tuple())
+            else:
+                args, payload = (payload,), dict()  # a single value/non-object input
             # payload then become kwargs
             if preserialized_payload != b"":
                 args = (preserialized_payload,) + args
