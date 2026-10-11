@@ -45,6 +45,7 @@ class Action:
         "_schema_validator",
         "argument_schema",
         "create_task",
+        "delegate",
         "doc",
         "idempotent",
         "isclassmethod",
@@ -69,14 +70,17 @@ class Action:
     doc: str | None
     """description of the action, the docstring of its method unless given explicitly"""
 
-    def __init__(self, obj: MethodType) -> None:
+    delegate: bool
+    """True if `obj` is an `ActionDelegate`, which calls the method of another underlying object, like a driver."""
+
+    def __init__(self, obj: MethodType | ActionDelegate) -> None:
         """
         Initialize an Action.
 
         Parameters
         ----------
-        obj: MethodType
-            the method that is being wrapped as an action
+        obj: MethodType | ActionDelegate
+            the method that is being wrapped as an action, or the delegate to the method of another object
         """
         self.obj = obj
         self.doc = obj.__doc__
@@ -92,6 +96,7 @@ class Action:
         self.argument_schema = None
         self.return_value_schema = None
         self._schema_validator = None
+        self.delegate = False
 
     def __set_name__(self, owner, name):
         self.owner = owner
@@ -158,7 +163,7 @@ class Action:
 class BoundAction:
     """A bound action, base class for both sync and async methods."""
 
-    obj: FunctionType | MethodType
+    obj: FunctionType | MethodType | ActionDelegate
 
     __slots__ = [
         "action",
@@ -168,7 +173,7 @@ class BoundAction:
         "owner_inst",
     ]
 
-    def __init__(self, obj: FunctionType | MethodType, descriptor: Action, owner_inst, owner) -> None:
+    def __init__(self, obj: FunctionType | MethodType | ActionDelegate, descriptor: Action, owner_inst, owner) -> None:
         self.obj = obj
         self.action = descriptor
         self.owner = owner
@@ -256,7 +261,7 @@ class BoundAction:
     def __getattribute__(self, name):
         # https://docs.python.org/3/howto/descriptor.html#functions-and-methods
         if name == "__doc__":
-            return self.obj.__doc__
+            return self.action.doc
         return super().__getattribute__(name)
 
     def to_metadata(self, owner_inst: Thing | ThingMeta | None = None, format: str = "wot") -> ActionMetadata:
@@ -297,6 +302,8 @@ class BoundSyncAction(BoundAction):
         return self.__call__(*args, **kwargs)
 
     def __call__(self, *args, **kwargs):
+        if self.action.delegate:
+            return self.obj(*args, **kwargs)
         if self.action.isclassmethod:
             return self.obj(*args, **kwargs)
         return self.obj(self.bound_obj, *args, **kwargs)
@@ -323,9 +330,47 @@ class BoundAsyncAction(BoundAction):
         return await self.__call__(*args, **kwargs)
 
     async def __call__(self, *args, **kwargs):
+        if self.action.delegate:
+            return await self.obj(*args, **kwargs)
         if self.action.isclassmethod:
             return await self.obj(*args, **kwargs)
         return await self.obj(self.bound_obj, *args, **kwargs)
+
+
+class ActionDelegate:
+    """
+    Calls a method of another object for an action, such as a driver serving a Thing Model.
+
+    The action holds the delegate as `Action.obj`, sets `Action.delegate` and calls it without the owning `Thing`,
+    so the method receives only the arguments of the action.
+    """
+
+    __slots__ = ("impl", "member_name")
+
+    def __init__(self, impl: Any, member_name: str) -> None:
+        """
+        Initialize the delegate.
+
+        Parameters
+        ----------
+        impl: Any
+            the object whose method implements the action
+        member_name: str
+            name of the method on that object
+        """
+        self.impl = impl
+        self.member_name = member_name
+
+    @property
+    def handler(self) -> Callable:
+        """The method, looked up on the object at every access."""
+        return getattr(self.impl, self.member_name)
+
+    def __call__(self, *args, **kwargs) -> Any:
+        return self.handler(*args, **kwargs)
+
+    def __repr__(self) -> str:
+        return f"<ActionDelegate({type(self.impl).__name__}.{self.member_name})>"
 
 
 __action_kw_arguments__ = ["safe", "idempotent", "synchronous", "doc"]
@@ -393,7 +438,7 @@ def action(
 
         original = obj
         if (
-            not isinstance(obj, (FunctionType, MethodType, Action, BoundAction))
+            not isinstance(obj, (FunctionType, MethodType, Action, BoundAction, ActionDelegate))
             and not isclassmethod(obj)
             and not issubklass(obj, ParameterizedFunction)
         ):
@@ -408,9 +453,15 @@ def action(
                 category=UserWarning,
             )
             obj = obj.obj
-        if obj.__name__.startswith("__"):
-            raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")
+
+        delegate = obj if isinstance(obj, ActionDelegate) else None
+        target = delegate.handler if delegate is not None else obj
+        name = delegate.member_name if delegate is not None else obj.__name__
+        if name.startswith("__"):
+            raise ValueError(f"dunder objects cannot become remote : {name}")
+
         action = Action(original)  # type: Action
+        action.delegate = delegate is not None
 
         action.state = Tuple(
             default=None,
@@ -420,14 +471,14 @@ def action(
             accept_item=True,
         ).validate_and_adapt(state)
 
-        if "request" in getfullargspec(obj).kwonlyargs:
+        if "request" in getfullargspec(target).kwonlyargs:
             action.request_as_argument = True
 
         action.create_task = kwargs.get("create_task", False)
         action.safe = kwargs.get("safe", False)
         action.idempotent = kwargs.get("idempotent", False)
         action.synchronous = kwargs.get("synchronous", True)
-        action.doc = kwargs.get("doc", None) or obj.__doc__
+        action.doc = kwargs.get("doc", None) or target.__doc__
 
         if isclassmethod(original):
             action.iscoroutine = has_async_def(obj)
@@ -436,14 +487,14 @@ def action(
             action.iscoroutine = iscoroutinefunction(obj.__call__)
             action.isparameterized = True
         else:
-            action.iscoroutine = iscoroutinefunction(obj)
+            action.iscoroutine = iscoroutinefunction(target)
 
         if not input_schema:
             try:
-                input_schema = get_input_model_from_signature(obj, remove_first_positional_arg=True)
+                input_schema = get_input_model_from_signature(target, remove_first_positional_arg=delegate is None)
             except Exception as ex:
                 warnings.warn(
-                    f"Could not infer input schema for {obj.__name__} due to - {ex!s}. "
+                    f"Could not infer input schema for {name} due to - {ex!s}. "
                     + "Considering filing a bug report if you think this should have worked correctly",
                     category=RuntimeWarning,
                 )
@@ -451,7 +502,7 @@ def action(
             if not SchemaValidators.is_supported(input_schema):
                 raise TypeError(
                     "no registered schema validator can validate against the input schema "
-                    + f"of {obj.__name__}, which is of type {type(input_schema)}. Supply a JSON schema, "
+                    + f"of {name}, which is of type {type(input_schema)}. Supply a JSON schema, "
                     + "a pydantic model, or register a validator that matches it with "
                     + "SchemaValidators.register()."
                 )
@@ -461,10 +512,10 @@ def action(
 
         if not output_schema:
             try:
-                output_schema = get_return_type_from_signature(obj)
+                output_schema = get_return_type_from_signature(target)
             except Exception as ex:
                 warnings.warn(
-                    f"Could not infer output schema for {obj.__name__} due to {ex!s}. "
+                    f"Could not infer output schema for {name} due to {ex!s}. "
                     + "Considering filing a bug report if you think this should have worked correctly",
                     category=RuntimeWarning,
                 )
@@ -474,7 +525,7 @@ def action(
             if not SchemaValidators.is_supported(output_schema):
                 raise TypeError(
                     "no registered schema validator can validate against the output schema "
-                    + f"of {obj.__name__}, which is of type {type(output_schema)}. Supply a JSON schema, "
+                    + f"of {name}, which is of type {type(output_schema)}. Supply a JSON schema, "
                     + "a pydantic model, or register a validator that matches it with "
                     + "SchemaValidators.register()."
                 )
@@ -503,4 +554,4 @@ def action(
     return inner
 
 
-__all__ = [action.__name__, Action.__name__]
+__all__ = [action.__name__, Action.__name__, ActionDelegate.__name__]
