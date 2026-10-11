@@ -31,7 +31,7 @@ from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
 from hololinked.utils import issubklass
 
 
-from hololinked.core.actions import Action, action  # isort: skip
+from hololinked.core.actions import Action, ActionDelegate, action  # isort: skip
 from hololinked.core.events import Event  # isort: skip
 from hololinked.core.property import Property  # isort: skip
 from hololinked.core.thing import Thing, ThingMeta  # isort: skip
@@ -440,7 +440,7 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
 
     def build(self) -> None:  # noqa: D102
         action = cast(Action, self.objekt)
-        doc = action.doc or action.obj.__doc__
+        doc = action.doc
         if doc:
             title = get_summary(doc)
             description = self.format_doc(doc)
@@ -642,17 +642,18 @@ def schema_for_validator(
     return schema, validator(schema)
 
 
-def input_signature_mismatches(func: Callable, schema: dict[str, Any]) -> list[str]:
+def input_signature_mismatches(func: Callable | ActionDelegate, schema: dict[str, Any]) -> list[str]:
     """
     List how the parameters of an action handler do not match the input DataSchema of the action.
 
     The first positional parameter (`self`) and a keyword-only `request` parameter are not part of the input.
+    A delegate's method belongs to another object, so its signature has no `self` to skip.
     An object input arrives as keyword arguments, any other input as a single value.
 
     Parameters
     ----------
-    func: Callable
-        the action handler
+    func: Callable | ActionDelegate
+        the action handler, or the delegate calling a method of another object
     schema: dict[str, Any]
         the input DataSchema
 
@@ -661,9 +662,13 @@ def input_signature_mismatches(func: Callable, schema: dict[str, Any]) -> list[s
     list[str]
         every mismatch found, empty if the handler matches
     """
+    if isinstance(func, ActionDelegate):
+        parameters = list(inspect.signature(func.handler).parameters.values())
+    else:
+        parameters = list(inspect.signature(func).parameters.values())[1:]
     parameters = [
         parameter
-        for parameter in list(inspect.signature(func).parameters.values())[1:]
+        for parameter in parameters
         if not (parameter.kind is Parameter.KEYWORD_ONLY and parameter.name == "request")
     ]
     if not (schema.get("type") == "object" or "properties" in schema):
