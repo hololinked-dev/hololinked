@@ -33,7 +33,7 @@ from hololinked.utils import issubklass
 
 from hololinked.core.actions import Action, ActionDelegate, action  # isort: skip
 from hololinked.core.events import Event  # isort: skip
-from hololinked.core.property import Property  # isort: skip
+from hololinked.core.property import Property, PropertyDelegate  # isort: skip
 from hololinked.core.thing import Thing, ThingMeta  # isort: skip
 
 
@@ -352,6 +352,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
         self,
         fget: Callable | None = None,
         fset: Callable | None = None,
+        delegate: PropertyDelegate | None = None,
         schema_validator: str = "pydantic",
     ) -> Property:
         """
@@ -363,6 +364,8 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             read handler, the value is stored on the `Thing` instance if not given
         fset: Callable, optional
             write handler, receives the validated value
+        delegate: PropertyDelegate, optional
+            reads and writes an attribute of another object, used instead of `fget` and `fset`
         schema_validator: str
             name the validator of the value is registered under with `SchemaValidators`
 
@@ -374,8 +377,8 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
         Raises
         ------
         ValueError
-            if the value is stored (no `fget`) but the affordance gives no starting value, neither a `default`
-            nor a `null` option
+            if the value is stored (no `fget` or `delegate`) but the affordance gives no starting value, neither a
+            `default` nor a `null` option
         """
         affordance = self.json()
         keywords = WoTSchema.declared_fields(DataSchema)
@@ -391,7 +394,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             data_schema["oneOf"] = options
         default = affordance.get("default", affordance.get("const"))
         constant = "const" in affordance
-        if fget is None and default is None and not (nullable or constant):
+        if fget is None and delegate is None and default is None and not (nullable or constant):
             raise ValueError(f"property {self.name} stores its value, it needs a default or a null option in its schema")
         if self.writeOnly:
             warnings.warn(f"writeOnly of property {self.name} is not supported and is ignored", UserWarning, stacklevel=2)
@@ -409,6 +412,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             model=model,
             fget=fget,
             fset=fset,
+            delegate=delegate,
             deepcopy_default=isinstance(default, (dict, list)),
             metadata={"unit": self.unit} if self.unit is not None else None,
         )
@@ -492,14 +496,14 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
         affordance.build_non_compliant_metadata()
         return affordance
 
-    def to_descriptor(self, obj: Callable, schema_validator: str = "pydantic") -> Action:
+    def to_descriptor(self, obj: Callable | ActionDelegate, schema_validator: str = "pydantic") -> Action:
         """
         Create the `Action` this affordance describes, invoking the given handler.
 
         Parameters
         ----------
-        obj: Callable
-            the handler, a sync or async method
+        obj: Callable | ActionDelegate
+            the handler, a sync or async method, or the delegate to a method of another object
         schema_validator: str
             name the validator of the input is registered under with `SchemaValidators`
 

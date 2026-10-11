@@ -138,9 +138,9 @@ class Metadata(BaseModel):
         ConformanceError
             listing every problem found
         """  # noqa: DOC501 - the TypeErrors raised below are collected as problems
-        from hololinked.core.actions import Action
+        from hololinked.core.actions import Action, ActionDelegate
         from hololinked.core.events import Event
-        from hololinked.core.property import Property
+        from hololinked.core.property import Property, PropertyDelegate
         from hololinked.core.thing import Thing
 
         member_names = dict(member_names or {})
@@ -156,16 +156,18 @@ class Metadata(BaseModel):
                 if member is NotImplemented:  # the value is stored on the Thing
                     descriptors[name] = affordance.to_descriptor(schema_validator=schema_validator)
                     continue
-                if not isinstance(member, property):
-                    raise TypeError(f"implemented by a {type(member).__name__}, only a @property implements a property")
-                descriptor = cast(
-                    Property,
-                    affordance.to_descriptor(fget=member.fget, fset=member.fset, schema_validator=schema_validator),
-                )
-                if descriptor.readonly and member.fset is not None:
-                    raise TypeError("read-only, but the @property has a setter")
-                if not (descriptor.readonly or descriptor.constant) and member.fset is None:
-                    raise TypeError("writable, but the @property has no setter")
+                if not isinstance(member, PropertyDelegate):
+                    raise TypeError(
+                        f"implemented by a {type(member).__name__}, only a @property or an attribute implements a property"
+                    )
+                descriptor = cast(Property, affordance.to_descriptor(delegate=member, schema_validator=schema_validator))
+                # a plain attribute is writable whenever the property is, a @property only through its setter
+                accessor = inspect.getattr_static(impl, member.member_name)
+                if isinstance(accessor, property):
+                    if descriptor.readonly and accessor.fset is not None:
+                        raise TypeError("read-only, but the @property has a setter")
+                    if not (descriptor.readonly or descriptor.constant) and accessor.fset is None:
+                        raise TypeError("writable, but the @property has no setter")
                 descriptors[name] = descriptor
             except (TypeError, ValueError) as ex:
                 problems.append(f"property {name!r}: {ex}")
@@ -179,7 +181,7 @@ class Metadata(BaseModel):
                     if not allow_missing_actions:
                         raise TypeError("has no handler")
                     continue
-                if not inspect.isfunction(member):
+                if not isinstance(member, ActionDelegate):
                     raise TypeError(f"implemented by a {type(member).__name__}, only a method implements an action")
                 descriptors[name] = affordance.to_descriptor(member, schema_validator=schema_validator)
             except (TypeError, ValueError) as ex:
@@ -570,12 +572,11 @@ class MetadataFormat:
 
 def implementing_member(impl: Any, member_name: str, interaction: InteractionMetadata) -> Any:
     """
-    Find the member of an implementation object for an interaction, wrapped as a member of the `Thing`.
+    Find the member of an implementation object for an interaction, wrapped as a delegate of the `Thing`.
 
-    The member is looked up statically, so no property of the object is read. A method of the object becomes a
-    forwarding action handler, and a `property` or plain attribute a forwarding property. A plain attribute is
-    writable unless the property is read-only. Members of the wrong kind are returned unchanged, so `bind()` reports
-    them.
+    The member is looked up statically, so no property of the object is read. A method of the object becomes an
+    `ActionDelegate`, and a `property` or plain attribute a `PropertyDelegate`. Members of the wrong kind are returned
+    unchanged, so `bind()` reports them. Events are returned unchanged, they are not implemented by the object.
 
     Parameters
     ----------
@@ -591,17 +592,18 @@ def implementing_member(impl: Any, member_name: str, interaction: InteractionMet
     Any
         the member as the `Thing` uses it, `NotImplemented` if there is none or its name is private
     """
+    from hololinked.core.actions import ActionDelegate
+    from hololinked.core.property import PropertyDelegate
+
     member = NotImplemented if member_name.startswith("_") else inspect.getattr_static(impl, member_name, NotImplemented)
     if member is NotImplemented or interaction.what == ResourceTypes.EVENT:
         return member
     is_method = inspect.isfunction(member) or inspect.ismethod(member) or isinstance(member, (staticmethod, classmethod))
     if interaction.what == ResourceTypes.ACTION:
-        return forward_action(member_name, getattr(impl, member_name)) if is_method else member
-    if isinstance(member, property):
-        return forward_property(member_name, writable=member.fset is not None)
+        return ActionDelegate(impl, member_name) if is_method else member
     if is_method:
         return member
-    return forward_property(member_name, writable=not interaction.readOnly)
+    return PropertyDelegate(impl, member_name)
 
 
 def is_thing_builtin(name: str, descriptor_type: type[Property | Action | Event]) -> bool:

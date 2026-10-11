@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 from pydantic import ConfigDict, Field
 
+from hololinked.core.events import EventDelegate
 from hololinked.core.interfaces import Metadata
 from hololinked.metadata.td.base import WoTSchema
 from hololinked.metadata.td.interaction_affordance import (
@@ -106,7 +107,7 @@ class ThingModel(WoTSchema, Metadata):
 
         Members of the object implement the interactions by name: a method implements an action, a `property` or a
         plain attribute implements a property. Properties without a member store their value, and every event is
-        injected into the object as an emitter, `impl.<event>.push(data)`.
+        set on the object as an `EventDelegate`, `impl.<event>.push(data)`.
 
         Parameters
         ----------
@@ -132,11 +133,10 @@ class ThingModel(WoTSchema, Metadata):
         """
         member_names = dict(kwargs.pop("member_names", None) or {})
         descriptors = Metadata.bind(self, impl, member_names=member_names, schema_validator=schema_validator)
-        # one class per call, so the implementation is stored on the class and set before the Thing initializes
-        namespace = {**descriptors, "_impl": impl, "_thing_model": self, "__doc__": self.description}
+        namespace = {**descriptors, "_thing_model": self, "__doc__": self.description}
         thing = type(class_name(self.title), (Thing,), namespace)(id=id, **kwargs)
         for name in self.events:
-            setattr(impl, member_names.get(name, name), ThingEventEmitter(thing, name))
+            setattr(impl, member_names.get(name, name), EventDelegate(thing, name))
         return thing
 
     @classmethod
