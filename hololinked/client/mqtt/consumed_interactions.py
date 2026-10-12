@@ -86,9 +86,7 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
         def on_topic_message(client: PahoMQTTClient, userdata, message: MQTTMessage):
             try:
                 payload = message.payload
-                # message.properties.readProperty("content_type") if message.properties else form.contentType
-                # TODO, fix this, make sure to that content_type is not empty after extracting
-                content_type = form.contentType or "application/json"
+                content_type = getattr(message.properties, "ContentType", None) or form.contentType or "application/json"
                 serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
                 if deserialize and content_type and serializer:
                     try:
@@ -128,9 +126,7 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
                 continue
             try:
                 payload = message.payload
-                # message.properties.readProperty("content_type") if message.properties else form.contentType
-                # TODO, fix this, make sure to that content_type is not empty after extracting
-                content_type = form.contentType or "application/json"
+                content_type = getattr(message.properties, "ContentType", None) or form.contentType or "application/json"
                 serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
                 if deserialize and content_type and serializer:
                     try:
