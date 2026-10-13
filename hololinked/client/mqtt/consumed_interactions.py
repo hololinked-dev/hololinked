@@ -35,6 +35,7 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
         "schema_validator",
         "subscribed",
         "sync_client",
+        "topic",
     ]
     # __slots__ dont support multiple inheritance. Here there is no multiple inheritance but just to be consistent
     # with other protocols which use multiple inheritance, we will keep the slots in the lowest child
@@ -71,6 +72,7 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
         self.sync_client = sync_client
         self.async_client = async_client
         self.subscribed = True
+        self.topic = None  # type: str | None
 
     def listen(  # noqa: D102
         self,
@@ -82,6 +84,7 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
         # This method is called from a different thread but also finishes quickly, we wont redo this way
         # for the time being.
         topic = form.mqv_topic or f"{self.resource.thing_id}/{self.resource.name}"
+        self.topic = topic
 
         def on_topic_message(client: PahoMQTTClient, userdata, message: MQTTMessage):
             try:
@@ -114,6 +117,7 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
         deserialize: bool = True,
     ) -> None:
         topic = form.mqv_topic or f"{self.resource.thing_id}/{self.resource.name}"
+        self.topic = topic
         try:
             await self.async_client.__aenter__()
         except aiomqtt.MqttReentrantError:
@@ -147,4 +151,5 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
 
     def unsubscribe(self) -> None:  # noqa: D102
         self.subscribed = False
-        self.sync_client.message_callback_remove(f"{self.resource.thing_id}/{self.resource.name}")
+        topic = self.topic or f"{self.resource.thing_id}/{self.resource.name}"
+        self.sync_client.message_callback_remove(topic)
