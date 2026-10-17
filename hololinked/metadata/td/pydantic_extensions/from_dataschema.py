@@ -141,7 +141,12 @@ def dataschema_to_type(
 
     def convert(subschema: dict[str, Any], pointer: str, suffix: Any) -> Any:
         return dataschema_to_type(
-            subschema, strict, location=f"{location}/{pointer}", name=f"{name}_{suffix}", root=root, depth=depth + 1
+            subschema,
+            strict,
+            location=f"{location}/{pointer}",
+            name=f"{name}_{suffix}",
+            root=root,
+            depth=depth + 1,
         )
 
     if "$ref" in schema:

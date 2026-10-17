@@ -99,7 +99,7 @@ class ThingModel(WoTSchema, Metadata):
         self.add_interaction_affordances()
         return self
 
-    def produce(self, impl: Any, id: str, schema_validator: str = "pydantic", **kwargs: Any) -> Thing:
+    def produce(self, impl: Any, id: str, validator: str = "pydantic", **kwargs: Any) -> Thing:
         """
         Create a `Thing` instance based on the Thing Model, possibly binding with an existing implementation object `impl`.
 
@@ -115,7 +115,7 @@ class ThingModel(WoTSchema, Metadata):
             the object implementing the Thing Model, can be `None`.
         id: str
             id of the `Thing`
-        schema_validator: str
+        validator: str
             validator type for payloads, usually pydantic for pydantic models
         **kwargs: Any
             Additional keyword arguments:
@@ -159,7 +159,7 @@ class ThingModel(WoTSchema, Metadata):
             model=self,
             impl=impl,
             member_names_map=member_names_map,
-            schema_validator=schema_validator,
+            validator=validator,
             property_impl=kwargs.pop("property_impl", None),
             action_impl=kwargs.pop("action_impl", None),
         )
