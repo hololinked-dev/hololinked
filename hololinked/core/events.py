@@ -202,12 +202,7 @@ class EventDispatcher:
 
 
 class EventDelegate:
-    """
-    Pushes an event of a `Thing` for another object, such as a driver serving a Thing Model.
-
-    Set on that object so it can push the event without holding the `Thing`. The `Thing` is set once it exists;
-    pushes are dropped until then and while it is not served, since there is no publisher and no subscriber yet.
-    """
+    """Pushes an event of a `Thing` for another object, such as a driver serving a Thing Model."""
 
     __slots__ = ("name", "thing")
 

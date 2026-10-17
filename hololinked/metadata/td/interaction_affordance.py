@@ -51,6 +51,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
     descriptions: dict[str, str] | None = None
     forms: list[Form] | None = None
     uriVariables: dict[str, JSON] | None = None
+
     semantic_type: str | list[str] | None = Field(default=None, alias="@type")
 
     _custom_metadata_generators: ClassVar = dict()
@@ -223,7 +224,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         return affordance
 
     @classmethod
-    def from_TD(self, name: str, TD: JSON) -> Self:
+    def from_TD(cls, name: str, TD: JSON) -> Self:
         """
         Populate the schema from the TD and return it as an instance of this class.
 
@@ -247,7 +248,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         ValueError
             If the affordance type cannot be determined from the TD.
         """
-        return self.from_metadata(name, TD)
+        return cls.from_metadata(name, TD)
 
     @classmethod
     def register_descriptor(
@@ -395,9 +396,13 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
         default = affordance.get("default", affordance.get("const"))
         constant = "const" in affordance
         if fget is None and delegate is None and default is None and not (nullable or constant):
-            raise ValueError(f"property {self.name} stores its value, it needs a default or a null option in its schema")
+            raise ValueError(
+                f"property {self.name} stores its value, it needs a default or a null option in its schema"
+            )
         if self.writeOnly:
-            warnings.warn(f"writeOnly of property {self.name} is not supported and is ignored", UserWarning, stacklevel=2)
+            warnings.warn(
+                f"writeOnly of property {self.name} is not supported and is ignored", UserWarning, stacklevel=2
+            )
         model, validator = (
             schema_for_validator(data_schema, f"{self.name}_value", schema_validator) if data_schema else (None, None)
         )
@@ -530,7 +535,9 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
         if self.output:
             output_schema, _ = schema_for_validator(self.output, f"{self.name}_output", schema_validator)
         # flags absent from the TD keep the defaults of action(), synchronous=True decides the scheduling
-        flags = {key: getattr(self, key) for key in ("safe", "idempotent", "synchronous") if getattr(self, key) is not None}
+        flags = {
+            key: getattr(self, key) for key in ("safe", "idempotent", "synchronous") if getattr(self, key) is not None
+        }
         _action = action(
             input_schema=input_schema,
             output_schema=output_schema,

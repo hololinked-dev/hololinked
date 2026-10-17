@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 class ConformanceError(TypeError):
-    """User code does not implement a Thing Model, lists every problem found."""
+    """Metadata conformance error."""
 
     def __init__(self, problems: list[str]) -> None:
         """
@@ -35,7 +35,9 @@ class ConformanceError(TypeError):
             every problem found
         """
         self.problems = problems
-        super().__init__("implementation does not conform to the Thing Model:\n" + "\n".join(f"- {p}" for p in problems))
+        super().__init__(
+            "implementation does not conform to the Thing Model:\n" + "\n".join(f"- {p}" for p in problems)
+        )
 
 
 class Metadata(BaseModel):
@@ -93,22 +95,21 @@ class Metadata(BaseModel):
     this list is supposed to be used as a builtin blacklist.
     """
 
-    if TYPE_CHECKING:  # declared by each metadata format as its own fields
-        properties: Mapping[str, PropertyMetadata]
-        """properties the metadata describes, keyed by name"""
-        actions: Mapping[str, ActionMetadata]
-        """actions the metadata describes, keyed by name"""
-        events: Mapping[str, EventMetadata]
-        """events the metadata describes, keyed by name"""
+    properties: Mapping[str, PropertyMetadata]
+    """properties the metadata describes, keyed by name"""
+    actions: Mapping[str, ActionMetadata]
+    """actions the metadata describes, keyed by name"""
+    events: Mapping[str, EventMetadata]
+    """events the metadata describes, keyed by name"""
 
     @staticmethod
     def bind(
         model: Metadata,
         impl: Any,
-        member_names: Mapping[str, str] | None = None,
+        member_names_map: Mapping[str, str] | None = None,
         allow_extra: bool = False,
-        allow_missing_actions: bool = False,
         schema_validator: str = "pydantic",
+        **kwargs: Any,
     ) -> dict[str, Property | Action | Event]:
         """
         Match the members of an object to the interactions of a Thing Model and create their descriptors.
@@ -122,14 +123,16 @@ class Metadata(BaseModel):
             the Thing Model
         impl: Any
             the object implementing it, its members are looked up statically
-        member_names: Mapping[str, str], optional
+        member_names_map: Mapping[str, str], optional
             interaction name mapped to the member implementing it, when the two differ
         allow_extra: bool
             keep `Property`, `Action` and `Event` members that are not in the Thing Model
-        allow_missing_actions: bool
-            accept actions without a handler, which are then left to be reported when the Thing is instantiated
         schema_validator: str
             name the validator of payloads is registered under with `SchemaValidators`
+        **kwargs: Any
+            `property_impl` - type (or tuple of types) of members implementing a property through
+            `get(impl)`, `set(impl, value)` and `delete(impl)`; `action_impl` - type (or tuple of types) of members
+            implementing an action through `__call__(impl, *args, **kwargs)`
 
         Returns
         -------
@@ -146,63 +149,116 @@ class Metadata(BaseModel):
         from hololinked.core.property import Property, PropertyDelegate
         from hololinked.core.thing import Thing
 
-        member_names = dict(member_names or {})
+        member_names_map = dict(member_names_map or {})
+        property_impl = kwargs.get("property_impl")
+        action_impl = kwargs.get("action_impl")
         interaction_names = {*model.properties, *model.actions, *model.events}
-        problems = [f"member_names maps {name!r}, which is not in the Thing Model" for name in member_names if name not in interaction_names]
+        problems = [
+            f"member_names maps {name!r}, which is not in the Thing Model"
+            for name in member_names_map
+            if name not in interaction_names
+        ]
         descriptors: dict[str, Property | Action | Event] = {}
 
         for name, affordance in model.properties.items():
-            member = implementing_member(impl, member_names.get(name, name), affordance)
+            builtin = getattr(Thing, name, None)
+            member_name = member_names_map.get(name, name)
+            impl_member = None if member_name.startswith("_") else inspect.getattr_static(impl, member_name, None)
             try:
-                if is_thing_builtin(name, Property) and member is NotImplemented:
-                    continue
-                if member is NotImplemented:  # the value is stored on the Thing
+                if builtin is not None:
+                    # our `Thing` class already defines this property, its presence on the implementation object may
+                    # cause a conflict
+                    if not (isinstance(builtin, Property) and getattr(builtin, "is_remote", True)):
+                        # the member on the Thing class is not a remote Property, cannot be present on ThingModel/TD
+                        # as it is not exposed
+                        raise TypeError(f"clashes with Thing.{name}")
+                    if impl_member is None:
+                        # defined on Thing only, no conflict.
+                        # TODO, slightly misleading, how will the impl access it?
+                        continue
+                if impl_member is None:
+                    # the value is stored on the Thing as an internal attribute
+                    # TODO, slightly misleading, how will the impl access it?
                     descriptors[name] = affordance.to_descriptor(schema_validator=schema_validator)
                     continue
-                if not isinstance(member, PropertyDelegate):
+                is_property_impl_type = property_impl is not None and isinstance(impl_member, property_impl)
+                if not is_property_impl_type and (
+                    inspect.isfunction(impl_member)
+                    or inspect.ismethod(impl_member)
+                    or isinstance(impl_member, (staticmethod, classmethod))
+                ):
                     raise TypeError(
-                        f"implemented by a {type(member).__name__}, only a @property or an attribute implements a property"
+                        f"implemented by a {type(impl_member).__name__},"
+                        " only a @property, an attribute or a property_impl implements a property"
                     )
-                descriptor = cast(Property, affordance.to_descriptor(delegate=member, schema_validator=schema_validator))
+                descriptor = cast(
+                    Property,
+                    affordance.to_descriptor(
+                        delegate=PropertyDelegate(
+                            impl,
+                            member_name,
+                            delegate=impl_member if is_property_impl_type else None,
+                        ),
+                        schema_validator=schema_validator,
+                    ),
+                )
                 # a plain attribute is writable whenever the property is, a @property only through its setter
-                accessor = inspect.getattr_static(impl, member.member_name)
-                if isinstance(accessor, property):
-                    if descriptor.readonly and accessor.fset is not None:
+                if isinstance(impl_member, property):
+                    if descriptor.readonly and impl_member.fset is not None:
                         raise TypeError("read-only, but the @property has a setter")
-                    if not (descriptor.readonly or descriptor.constant) and accessor.fset is None:
+                    if not (descriptor.readonly or descriptor.constant) and impl_member.fset is None:
                         raise TypeError("writable, but the @property has no setter")
                 descriptors[name] = descriptor
             except (TypeError, ValueError) as ex:
                 problems.append(f"property {name!r}: {ex}")
 
         for name, affordance in model.actions.items():
-            member = implementing_member(impl, member_names.get(name, name), affordance)
+            builtin = getattr(Thing, name, None)
+            member_name = member_names_map.get(name, name)
+            impl_member = None if member_name.startswith("_") else inspect.getattr_static(impl, member_name, None)
             try:
-                if is_thing_builtin(name, Action) and member is NotImplemented:
+                if builtin is not None and not (isinstance(builtin, Action) and getattr(builtin, "is_remote", True)):
+                    raise TypeError(f"clashes with Thing.{name}")
+                if builtin is not None and impl_member is None:
                     continue
-                if member is NotImplemented:
-                    if not allow_missing_actions:
-                        raise TypeError("has no handler")
-                    continue
-                if not isinstance(member, ActionDelegate):
-                    raise TypeError(f"implemented by a {type(member).__name__}, only a method implements an action")
-                descriptors[name] = affordance.to_descriptor(member, schema_validator=schema_validator)
+                if impl_member is None:
+                    raise TypeError("has no handler")
+                uses_action_impl = action_impl is not None and isinstance(impl_member, action_impl)
+                if not uses_action_impl and not (
+                    inspect.isfunction(impl_member)
+                    or inspect.ismethod(impl_member)
+                    or isinstance(impl_member, (staticmethod, classmethod))
+                ):
+                    raise TypeError(
+                        f"implemented by a {type(impl_member).__name__},"
+                        " only a method or an action_impl implements an action"
+                    )
+                descriptors[name] = affordance.to_descriptor(
+                    ActionDelegate(impl, member_name, delegate=impl_member if uses_action_impl else None),
+                    schema_validator=schema_validator,
+                )
             except (TypeError, ValueError) as ex:
                 problems.append(f"action {name!r}: {ex}")
 
         for name, affordance in model.events.items():
-            member = implementing_member(impl, member_names.get(name, name), affordance)
+            builtin = getattr(Thing, name, None)
+            member_name = member_names_map.get(name, name)
+            impl_member = None if member_name.startswith("_") else inspect.getattr_static(impl, member_name, None)
             try:
-                if is_thing_builtin(name, Event) and member is NotImplemented:
+                if builtin is not None and not (isinstance(builtin, Event) and getattr(builtin, "is_remote", True)):
+                    raise TypeError(f"clashes with Thing.{name}")
+                if builtin is not None and impl_member is None:
                     continue
-                if member is not NotImplemented:
-                    raise TypeError(f"is created from the Thing Model, remove the {type(member).__name__} named after it")
+                if impl_member is not None:
+                    raise TypeError(
+                        f"is created from the Thing Model, remove the {type(impl_member).__name__} named after it"
+                    )
                 descriptors[name] = affordance.to_descriptor(schema_validator=schema_validator)
             except (TypeError, ValueError) as ex:
                 problems.append(f"event {name!r}: {ex}")
 
         if not allow_extra:
-            claimed = {member_names.get(name, name) for name in interaction_names}
+            claimed = {member_names_map.get(name, name) for name in interaction_names}
             problems += [
                 f"{type(member).__name__} {name!r} is not in the Thing Model, pass allow_extra=True to keep it"
                 for name, member in inspect.getmembers_static(impl)
@@ -212,7 +268,7 @@ class Metadata(BaseModel):
             raise ConformanceError(problems)
         for name, descriptor in descriptors.items():
             if isinstance(descriptor, Event):
-                setattr(impl, member_names.get(name, name), EventDelegate(name))
+                setattr(impl, member_names_map.get(name, name), EventDelegate(name))
         return descriptors
 
     def add_interactions(self) -> None:
@@ -574,70 +630,3 @@ class MetadataFormat:
     action: type[ActionMetadata]
     event: type[EventMetadata]
     interaction: type[InteractionMetadata]
-
-
-def implementing_member(impl: Any, member_name: str, interaction: InteractionMetadata) -> Any:
-    """
-    Find the member of an implementation object for an interaction, wrapped as a delegate of the `Thing`.
-
-    The member is looked up statically, so no property of the object is read. A method of the object becomes an
-    `ActionDelegate`, and a `property` or plain attribute a `PropertyDelegate`. Members of the wrong kind are returned
-    unchanged, so `bind()` reports them. Events are returned unchanged, they are not implemented by the object.
-
-    Parameters
-    ----------
-    impl: Any
-        the implementation object
-    member_name: str
-        name of the member
-    interaction: InteractionMetadata
-        the interaction it implements
-
-    Returns
-    -------
-    Any
-        the member as the `Thing` uses it, `NotImplemented` if there is none or its name is private
-    """
-    from hololinked.core.actions import ActionDelegate
-    from hololinked.core.property import PropertyDelegate
-
-    member = NotImplemented if member_name.startswith("_") else inspect.getattr_static(impl, member_name, NotImplemented)
-    if member is NotImplemented or interaction.what == ResourceTypes.EVENT:
-        return member
-    is_method = inspect.isfunction(member) or inspect.ismethod(member) or isinstance(member, (staticmethod, classmethod))
-    if interaction.what == ResourceTypes.ACTION:
-        return ActionDelegate(impl, member_name) if is_method else member
-    if is_method:
-        return member
-    return PropertyDelegate(impl, member_name)
-
-
-def is_thing_builtin(name: str, descriptor_type: type[Property | Action | Event]) -> bool:
-    """
-    Check whether `Thing` itself implements an interaction, such as its `state` property or `ping` action.
-
-    Parameters
-    ----------
-    name: str
-        name of the interaction
-    descriptor_type: type[Property | Action | Event]
-        the kind of descriptor the interaction becomes
-
-    Returns
-    -------
-    bool
-        True if `Thing` has a remotely accessible descriptor of that kind under the name
-
-    Raises
-    ------
-    TypeError
-        if `Thing` uses the name for something else, which the interaction would replace
-    """
-    from hololinked.core.thing import Thing
-
-    builtin = getattr(Thing, name, NotImplemented)
-    if builtin is NotImplemented:
-        return False
-    if isinstance(builtin, descriptor_type) and getattr(builtin, "is_remote", True):
-        return True
-    raise TypeError(f"clashes with Thing.{name}")
