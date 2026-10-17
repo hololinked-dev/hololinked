@@ -6,7 +6,7 @@ from collections.abc import Callable
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel
 
 from hololinked import SchemaValidators
 from hololinked.config import global_config
@@ -14,7 +14,7 @@ from hololinked.core.events import Event, EventDispatcher  # noqa: F401
 from hololinked.core.exceptions import StateMachineError
 from hololinked.param.parameterized import Parameter, ParameterizedMetaclass
 from hololinked.param.parameters import Tuple
-from hololinked.utils import issubklass, wrap_plain_types_in_rootmodel
+from hololinked.utils import ModelRoot, issubklass, wrap_plain_types_in_rootmodel
 
 
 if TYPE_CHECKING:
@@ -38,6 +38,7 @@ class Property(Parameter):
         "db_commit",
         "db_init",
         "db_persist",
+        "delegate",
         "fcomparator",
         "metadata",
         "model",
@@ -46,6 +47,9 @@ class Property(Parameter):
 
     state: tuple[Enum | str] | None
     """state machine state(s) in which this property can be written, any state when None"""
+
+    delegate: PropertyDelegate | None
+    """reads and writes an attribute of another object, like a driver, instead of the `Thing`, None if not delegated"""
 
     model: Any
     """
@@ -73,6 +77,7 @@ class Property(Parameter):
         fset: Callable | None = None,
         fdel: Callable | None = None,
         fcomparator: Callable | None = None,
+        delegate: PropertyDelegate | None = None,
         deepcopy_default: bool = False,
         per_instance_descriptor: bool = False,
         remote: bool = True,
@@ -132,6 +137,9 @@ class Property(Parameter):
         fdel: Callable, default None
             custom deleter method
 
+        delegate: PropertyDelegate, default None
+            reads and writes an attribute of another object instead of the `Thing`, used instead of `fget` and `fset`.
+
         remote: bool, default `True`
             set to `False` to make the property local/not remotely accessible
 
@@ -165,7 +173,15 @@ class Property(Parameter):
             a numeric value, usually in the range 0.0 to 1.0, which allows the order of Properties in a class to be defined in
             a listing or e.g. in GUI menus. A negative precedence indicates a property that should be hidden in such listings.
 
+        Raises
+        ------
+        ValueError
+            if `delegate` is given together with `fget` or `fset`.
         """
+        if delegate is not None:
+            if fget is not None or fset is not None or fdel is not None:
+                raise ValueError("a delegated property takes its getter, setter and deleter from the delegate")
+            fget, fset, fdel = delegate.get, delegate.set, delegate.delete
         super().__init__(
             default=default,
             doc=doc,
@@ -179,8 +195,10 @@ class Property(Parameter):
             fget=fget,
             fset=fset,
             fdel=fdel,
+            isbound=delegate is not None,
             precedence=precedence,
         )
+        self.delegate = delegate
         self.db_persist = db_persist
         self.db_init = db_init
         self.db_commit = db_commit
@@ -200,7 +218,7 @@ class Property(Parameter):
         ).validate_and_adapt(state)
 
         self.model = None
-        self._validator = None
+        self._schema_validator = None
         if not model:
             return
         if SchemaValidators.is_supported(model):
@@ -224,9 +242,9 @@ class Property(Parameter):
     @property
     def validator(self) -> BaseSchemaValidator | None:
         """Validator for the value of this property, None if the property is validated by a pydantic model instead."""
-        if self._validator is None and self.model is not None and not issubklass(self.model, BaseModel):
-            self._validator = SchemaValidators.for_schema(self.model)(self.model)
-        return self._validator
+        if self._schema_validator is None and self.model is not None and not issubklass(self.model, BaseModel):
+            self._schema_validator = SchemaValidators.for_schema(self.model)(self.model)
+        return self._schema_validator
 
     def __get__(self, obj: Thing, objtype: ParameterizedMetaclass) -> Any:  # ty: ignore[invalid-method-override]
         read_value = super().__get__(obj, objtype)
@@ -287,10 +305,10 @@ class Property(Parameter):
             validator = self.validator
             if validator is not None:
                 validator.validate(value)
-            elif issubklass(self.model, RootModel):
-                value = self.model(value)
             elif issubklass(self.model, BaseModel):
-                value = self.model(**value)
+                value = self.model.model_validate(value)  # accepts a model instance as well as its JSON form
+                if issubklass(self.model, ModelRoot):
+                    value = value.root  # wrapper of a plain type
         return super().validate_and_adapt(value)
 
     def external_set(self, obj: Thing, value: Any) -> None:
@@ -387,4 +405,81 @@ class Property(Parameter):
         return MetadataFormats.get(format).property.from_descriptor(self, owner_inst or self.owner)
 
 
-__all__ = [Property.__name__]
+class PropertyDelegate:
+    """Reads and writes an attribute of another object for a property, such as a driver serving a Thing Model."""
+
+    __slots__ = ("impl", "member_name", "thing", "delegate")
+
+    def __init__(
+        self,
+        impl: Any,
+        member_name: str,
+        thing: Thing | None = None,
+        delegate: Any = None,
+    ) -> None:
+        """
+        Initialize the delegate.
+
+        Parameters
+        ----------
+        impl: Any
+            the object whose attribute implements the property
+        member_name: str
+            name of the attribute on that object
+        thing: Thing | None, optional
+            the `Thing` owning the property, set later if it does not exist yet
+        delegate: Any, optional
+            the member of `impl` implementing the property through `get(impl)`, `set(impl, value)` and
+            `delete(impl)`, used instead of reading, writing and deleting the attribute
+        """
+        self.impl = impl
+        self.member_name = member_name
+        self.thing = thing
+        self.delegate = delegate
+
+    def get(self) -> Any:
+        """
+        Read the attribute.
+
+        Returns
+        -------
+        Any
+            the value of the attribute
+        """
+        if self.delegate is not None and hasattr(self.delegate, "get"):
+            return self.delegate.get(self.impl)
+        return getattr(self.impl, self.member_name)
+
+    def set(self, value: Any) -> None:
+        """
+        Write the attribute.
+
+        Parameters
+        ----------
+        value: Any
+            the value to write to the attribute
+        """
+        if self.delegate is not None and hasattr(self.delegate, "set"):
+            self.delegate.set(self.impl, value)
+            return
+        setattr(self.impl, self.member_name, value)
+
+    def delete(self) -> None:
+        """
+        Delete the attribute.
+
+        Raises
+        ------
+        AttributeError
+            If the attribute does not exist.
+        """
+        if self.delegate is not None and hasattr(self.delegate, "delete"):
+            self.delegate.delete(self.impl)
+            return
+        delattr(self.impl, self.member_name)
+
+    def __repr__(self) -> str:
+        return f"<PropertyDelegate({type(self.impl).__name__}.{self.member_name})>"
+
+
+__all__ = [Property.__name__, PropertyDelegate.__name__]

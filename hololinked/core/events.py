@@ -30,12 +30,16 @@ class Event:
         "_internal_name",
         "_observable",
         "_publisher",
+        "delegate",
         "doc",
         "label",
         "name",
         "owner",
         "schema",
     ]
+
+    delegate: EventDelegate | None
+    """lets another object, like a driver, push this event without the `Thing`, None if not delegated"""
 
     def __init__(
         self,
@@ -62,6 +66,7 @@ class Event:
         self.schema = schema
         self.label = label
         self._observable = False
+        self.delegate = None
 
     def __set_name__(self, owner: ThingMeta, name: str) -> None:
         self.name = name
@@ -201,6 +206,52 @@ class EventDispatcher:
         self._synchronize_event.set()
 
 
+class EventDelegate:
+    """Pushes an event of a `Thing` for another object, such as a driver serving a Thing Model."""
+
+    __slots__ = ("impl", "name", "thing")
+
+    thing: Thing | None
+    """the `Thing` owning the event, None until it is created"""
+
+    def __init__(self, impl: Any, name: str, thing: Thing | None = None) -> None:
+        """
+        Initialize the delegate.
+
+        Parameters
+        ----------
+        impl: Any
+            the object pushing the event
+        name: str
+            name of the event on the `Thing`
+        thing: Thing, optional
+            the `Thing` owning the event, set later if it does not exist yet
+        """
+        self.impl = impl
+        self.name = name
+        self.thing = thing
+
+    def push(self, data: Any) -> None:
+        """
+        Publish the event, or drop it while the `Thing` is not served.
+
+        Parameters
+        ----------
+        data: Any
+            payload of the event
+        """
+        if self.thing is None:
+            return
+        dispatcher = getattr(self.thing, self.name)  # type: EventDispatcher
+        if dispatcher.publisher is not None:
+            dispatcher.push(data)
+
+    def __repr__(self) -> str:
+        owner = type(self.thing).__name__ if self.thing is not None else "no Thing"
+        return f"<EventDelegate({owner}.{self.name})>"
+
+
 __all__ = [
     Event.__name__,
+    EventDelegate.__name__,
 ]

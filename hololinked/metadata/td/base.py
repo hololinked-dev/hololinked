@@ -52,7 +52,7 @@ class WoTSchema(BaseModel):
         -------
         dict[str, Any]
             JSON representation
-        """  # noqa: D401
+        """
         return self.model_dump()
 
     @classmethod
@@ -73,3 +73,31 @@ class WoTSchema(BaseModel):
             doc = doc[:idx]
         doc = doc.replace("\n", "").replace("\t", " ").lstrip().rstrip()
         return doc
+
+    @staticmethod
+    def declared_fields(model: type[BaseModel], skip_subclasses: tuple[type[BaseModel], ...] = ()) -> dict[str, str]:
+        """
+        Collect the fields declared by a schema element and all of its subclasses.
+
+        The subclasses are included because they may declare additional fields that should be considered
+        part of the schema. For example, a dataschema for a string has more fields than a generic dataschema.
+
+        Parameters
+        ----------
+        model: type[BaseModel]
+            the base model
+        skip_subclasses: tuple[type[BaseModel], ...], optional
+            subclasses to skip
+
+        Returns
+        -------
+        dict[str, str]
+            key of each field in the JSON document (its alias, such as `@type`, if it has one) mapped to its
+            attribute name
+        """
+        fields = {field.alias or name: name for name, field in model.model_fields.items()}
+        for subclass in model.__subclasses__():
+            if issubclass(subclass, skip_subclasses):
+                continue
+            fields.update(WoTSchema.declared_fields(subclass, skip_subclasses=skip_subclasses))
+        return fields
