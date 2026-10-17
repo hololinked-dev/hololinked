@@ -155,9 +155,9 @@ class ThingModel(WoTSchema, Metadata):
             listing every member that does not match the Thing Model
         """
         member_names_map = dict(kwargs.pop("member_names_map", None) or {})
-        descriptors = Metadata.bind(
-            self,
-            impl,
+        descriptors = Metadata.namespace_from(
+            model=self,
+            impl=impl,
             member_names_map=member_names_map,
             schema_validator=schema_validator,
             property_impl=kwargs.pop("property_impl", None),
@@ -169,8 +169,9 @@ class ThingModel(WoTSchema, Metadata):
         thing = class_def(id=id, **kwargs.pop("thing_kwargs", {}))
         # update the delegates if any
         for descriptor in descriptors.values():
-            if descriptor.delegate:
+            if descriptor.delegate is not None:
                 descriptor.delegate.thing = thing
+
         return thing
 
     @classmethod

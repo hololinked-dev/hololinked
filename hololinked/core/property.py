@@ -38,6 +38,7 @@ class Property(Parameter):
         "db_commit",
         "db_init",
         "db_persist",
+        "delegate",
         "fcomparator",
         "metadata",
         "model",
@@ -46,6 +47,9 @@ class Property(Parameter):
 
     state: tuple[Enum | str] | None
     """state machine state(s) in which this property can be written, any state when None"""
+
+    delegate: PropertyDelegate | None
+    """reads and writes an attribute of another object, like a driver, instead of the `Thing`, None if not delegated"""
 
     model: Any
     """
@@ -194,6 +198,7 @@ class Property(Parameter):
             isbound=delegate is not None,
             precedence=precedence,
         )
+        self.delegate = delegate
         self.db_persist = db_persist
         self.db_init = db_init
         self.db_commit = db_commit

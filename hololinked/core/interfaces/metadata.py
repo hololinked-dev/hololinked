@@ -23,7 +23,11 @@ if TYPE_CHECKING:
 
 
 class ConformanceError(TypeError):
-    """Metadata conformance error."""
+    """
+    Metadata conformance error.
+
+    i.e. the device description language or an API did not confirm to the implementation.
+    """
 
     def __init__(self, problems: list[str]) -> None:
         """
@@ -36,7 +40,8 @@ class ConformanceError(TypeError):
         """
         self.problems = problems
         super().__init__(
-            "implementation does not conform to the Thing Model:\n" + "\n".join(f"- {p}" for p in problems)
+            "implementation does not conform to the Device Description Language:\n"
+            + "\n".join(f"- {p}" for p in problems)
         )
 
 
@@ -103,7 +108,7 @@ class Metadata(BaseModel):
     """events the metadata describes, keyed by name"""
 
     @staticmethod
-    def bind(
+    def namespace_from(
         model: Metadata,
         impl: Any,
         member_names_map: Mapping[str, str] | None = None,
@@ -112,21 +117,18 @@ class Metadata(BaseModel):
         **kwargs: Any,
     ) -> dict[str, Property | Action | Event]:
         """
-        Match the members of an object to the interactions of a Thing Model and create their descriptors.
-
-        Once every member conforms, an `EventDelegate` without a `Thing` is set on the object for each event; the
-        caller sets its `thing` after creating the `Thing`.
+        Match the members of an object to the interactions of a Device Description Language and create their descriptors.
 
         Parameters
         ----------
         model: Metadata
-            the Thing Model
+            the Device Description Language
         impl: Any
             the object implementing it, its members are looked up statically
         member_names_map: Mapping[str, str], optional
             interaction name mapped to the member implementing it, when the two differ
         allow_extra: bool
-            keep `Property`, `Action` and `Event` members that are not in the Thing Model
+            keep `Property`, `Action` and `Event` members that are not in the Device Description Language
         schema_validator: str
             name the validator of payloads is registered under with `SchemaValidators`
         **kwargs: Any
@@ -137,7 +139,7 @@ class Metadata(BaseModel):
         Returns
         -------
         dict[str, Property | Action | Event]
-            the descriptors keyed by their name in the Thing Model, not yet assigned to a class
+            the descriptors keyed by their name in the Device Description Language, not yet assigned to a class
 
         Raises
         ------
@@ -154,7 +156,7 @@ class Metadata(BaseModel):
         action_impl = kwargs.get("action_impl")
         interaction_names = {*model.properties, *model.actions, *model.events}
         problems = [
-            f"member_names maps {name!r}, which is not in the Thing Model"
+            f"member_names maps {name!r}, which is not in the Device Description Language"
             for name in member_names_map
             if name not in interaction_names
         ]
@@ -169,7 +171,7 @@ class Metadata(BaseModel):
                     # our `Thing` class already defines this property, its presence on the implementation object may
                     # cause a conflict
                     if not (isinstance(builtin, Property) and getattr(builtin, "is_remote", True)):
-                        # the member on the Thing class is not a remote Property, cannot be present on ThingModel/TD
+                        # the member on the Thing class is not a remote Property, cannot be present on the DDL
                         # as it is not exposed
                         raise TypeError(f"clashes with Thing.{name}")
                     if impl_member is None:
@@ -251,7 +253,8 @@ class Metadata(BaseModel):
                     continue
                 if impl_member is not None:
                     raise TypeError(
-                        f"is created from the Thing Model, remove the {type(impl_member).__name__} named after it"
+                        "is created from the Device Description Language, "
+                        f"remove the {type(impl_member).__name__} named after it"
                     )
                 descriptors[name] = affordance.to_descriptor(schema_validator=schema_validator)
             except (TypeError, ValueError) as ex:
@@ -260,15 +263,17 @@ class Metadata(BaseModel):
         if not allow_extra:
             claimed = {member_names_map.get(name, name) for name in interaction_names}
             problems += [
-                f"{type(member).__name__} {name!r} is not in the Thing Model, pass allow_extra=True to keep it"
+                f"{type(member).__name__} {name!r} is not in the Device Description Language, pass allow_extra=True to keep it"
                 for name, member in inspect.getmembers_static(impl)
                 if isinstance(member, (Property, Action, Event)) and name not in claimed and not hasattr(Thing, name)
             ]
         if problems:
             raise ConformanceError(problems)
+        # update the impl object itself only if there is no conformance errors
         for name, descriptor in descriptors.items():
             if isinstance(descriptor, Event):
-                setattr(impl, member_names_map.get(name, name), EventDelegate(name))
+                descriptor.delegate = EventDelegate(impl, name)
+                setattr(impl, member_names_map.get(name, name), descriptor.delegate)
         return descriptors
 
     def add_interactions(self) -> None:

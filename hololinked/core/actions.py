@@ -71,8 +71,8 @@ class Action:
     doc: str | None
     """description of the action, the docstring of its method unless given explicitly"""
 
-    delegate: bool
-    """True if `obj` is an `ActionDelegate`, which calls the method of another underlying object, like a driver."""
+    delegate: ActionDelegate | None
+    """calls the method of another object, like a driver, when `obj` is this delegate, None if not delegated"""
 
     def __init__(self, obj: MethodType | ActionDelegate) -> None:
         """
@@ -87,7 +87,7 @@ class Action:
         self.doc = obj.__doc__
         self.state = None
         self.iscoroutine = False
-        self.isclassmethod = False
+        self.isclassmethod = False  # legacy, no longer necessary, but left as metadata
         self.isparameterized = False
         self.request_as_argument = False
         self.create_task = False
@@ -97,7 +97,7 @@ class Action:
         self.argument_schema = None
         self.return_value_schema = None
         self._schema_validator = None
-        self.delegate = False
+        self.delegate = None
 
     def __set_name__(self, owner, name):
         self.owner = owner
@@ -180,6 +180,7 @@ class BoundAction:
         self.owner = owner
         self.owner_inst = owner_inst
         self.bound_obj = owner if descriptor.isclassmethod else owner_inst
+        # checking classmethod feels necessary, we should reuse python's binding mechanism
 
     @property
     def descriptor(self) -> Action:
@@ -303,9 +304,7 @@ class BoundSyncAction(BoundAction):
         return self.__call__(*args, **kwargs)
 
     def __call__(self, *args, **kwargs):
-        if self.action.delegate:
-            return self.obj(*args, **kwargs)
-        if self.action.isclassmethod:
+        if self.action.delegate is not None:
             return self.obj(*args, **kwargs)
         return self.obj(self.bound_obj, *args, **kwargs)
 
@@ -331,9 +330,7 @@ class BoundAsyncAction(BoundAction):
         return await self.__call__(*args, **kwargs)
 
     async def __call__(self, *args, **kwargs):
-        if self.action.delegate:
-            return await self.obj(*args, **kwargs)
-        if self.action.isclassmethod:
+        if self.action.delegate is not None:
             return await self.obj(*args, **kwargs)
         return await self.obj(self.bound_obj, *args, **kwargs)
 
@@ -449,14 +446,15 @@ def action(
         state = inner._arguments.get("state", None)  # ty: ignore[unresolved-attribute]
         kwargs = inner._arguments.get("kwargs", {})  # ty: ignore[unresolved-attribute]
 
-        original = obj
+        is_classmethod = isclassmethod(obj)
         if (
             not isinstance(obj, (FunctionType, MethodType, Action, BoundAction, ActionDelegate))
-            and not isclassmethod(obj)
+            and not is_classmethod
             and not issubklass(obj, ParameterizedFunction)
         ):
             raise TypeError(f"target for action or is not a function/method. Given type {type(obj)}") from None
-        if isclassmethod(obj):
+        if is_classmethod:
+            # the function itself, called with the class the action is accessed through
             obj = obj.__func__
         if isinstance(obj, (Action, BoundAction)):
             if (obj if isinstance(obj, Action) else obj.action).isclassmethod:
@@ -468,13 +466,14 @@ def action(
             obj = obj.obj
 
         delegate = obj if isinstance(obj, ActionDelegate) else None
-        target = delegate.handler if delegate is not None else obj
         name = delegate.member_name if delegate is not None else obj.__name__
         if name.startswith("__"):
             raise ValueError(f"dunder objects cannot become remote : {name}")
 
-        action = Action(original)  # type: Action
-        action.delegate = delegate is not None
+        action = Action(obj)  # type: Action
+        action.delegate = delegate
+        if delegate is not None:
+            obj = delegate.handler  # the method the delegate calls, inspected below
 
         action.state = Tuple(
             default=None,
@@ -484,27 +483,27 @@ def action(
             accept_item=True,
         ).validate_and_adapt(state)
 
-        if "request" in getfullargspec(target).kwonlyargs:
+        if "request" in getfullargspec(obj).kwonlyargs:
             action.request_as_argument = True
 
         action.create_task = kwargs.get("create_task", False)
         action.safe = kwargs.get("safe", False)
         action.idempotent = kwargs.get("idempotent", False)
         action.synchronous = kwargs.get("synchronous", True)
-        action.doc = kwargs.get("doc", None) or target.__doc__
+        action.doc = kwargs.get("doc", None) or obj.__doc__
 
-        if isclassmethod(original):
+        if is_classmethod:
             action.iscoroutine = has_async_def(obj)
             action.isclassmethod = True
         elif issubklass(obj, ParameterizedFunction):
             action.iscoroutine = iscoroutinefunction(obj.__call__)
             action.isparameterized = True
         else:
-            action.iscoroutine = iscoroutinefunction(target)
+            action.iscoroutine = iscoroutinefunction(obj)
 
         if not input_schema:
             try:
-                input_schema = get_input_model_from_signature(target, remove_first_positional_arg=delegate is None)
+                input_schema = get_input_model_from_signature(obj, remove_first_positional_arg=delegate is None)
             except Exception as ex:
                 warnings.warn(
                     f"Could not infer input schema for {name} due to - {ex!s}. "
@@ -525,7 +524,7 @@ def action(
 
         if not output_schema:
             try:
-                output_schema = get_return_type_from_signature(target)
+                output_schema = get_return_type_from_signature(obj)
             except Exception as ex:
                 warnings.warn(
                     f"Could not infer output schema for {name} due to {ex!s}. "
