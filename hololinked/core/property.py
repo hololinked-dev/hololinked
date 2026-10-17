@@ -218,7 +218,7 @@ class Property(Parameter):
         ).validate_and_adapt(state)
 
         self.model = None
-        self._validator = None
+        self._schema_validator = None
         if not model:
             return
         if SchemaValidators.is_supported(model):
@@ -242,9 +242,9 @@ class Property(Parameter):
     @property
     def validator(self) -> BaseSchemaValidator | None:
         """Validator for the value of this property, None if the property is validated by a pydantic model instead."""
-        if self._validator is None and self.model is not None and not issubklass(self.model, BaseModel):
-            self._validator = SchemaValidators.for_schema(self.model)(self.model)
-        return self._validator
+        if self._schema_validator is None and self.model is not None and not issubklass(self.model, BaseModel):
+            self._schema_validator = SchemaValidators.for_schema(self.model)(self.model)
+        return self._schema_validator
 
     def __get__(self, obj: Thing, objtype: ParameterizedMetaclass) -> Any:  # ty: ignore[invalid-method-override]
         read_value = super().__get__(obj, objtype)

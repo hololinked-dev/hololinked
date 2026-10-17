@@ -8,8 +8,6 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
-from hololinked.core.interfaces import InteractionMetadata
-
 
 class WoTSchema(BaseModel):
     """
@@ -77,7 +75,7 @@ class WoTSchema(BaseModel):
         return doc
 
     @staticmethod
-    def declared_fields(model: type[BaseModel]) -> dict[str, str]:
+    def declared_fields(model: type[BaseModel], skip_subclasses: tuple[type[BaseModel], ...] = ()) -> dict[str, str]:
         """
         Collect the fields declared by a schema element and all of its subclasses.
 
@@ -88,6 +86,8 @@ class WoTSchema(BaseModel):
         ----------
         model: type[BaseModel]
             the base model
+        skip_subclasses: tuple[type[BaseModel], ...], optional
+            subclasses to skip
 
         Returns
         -------
@@ -97,7 +97,7 @@ class WoTSchema(BaseModel):
         """
         fields = {field.alias or name: name for name, field in model.model_fields.items()}
         for subclass in model.__subclasses__():
-            # TODO this is not correct. Multiple inheritance should be handled differently.
-            if not issubclass(subclass, InteractionMetadata):  # an affordance is not a kind of the schema element
-                fields.update(WoTSchema.declared_fields(subclass))
+            if issubclass(subclass, skip_subclasses):
+                continue
+            fields.update(WoTSchema.declared_fields(subclass, skip_subclasses=skip_subclasses))
         return fields

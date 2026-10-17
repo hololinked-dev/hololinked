@@ -43,7 +43,7 @@ class Action:
     """
 
     __slots__ = [
-        "_schema_validator",
+        "_validator",
         "argument_schema",
         "create_task",
         "delegate",

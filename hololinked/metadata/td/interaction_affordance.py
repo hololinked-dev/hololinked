@@ -27,7 +27,6 @@ from hololinked.metadata.td.data_schema import DataSchema
 from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.pydantic_extensions import dataschema_to_model, type_to_dataschema
 from hololinked.metadata.td.utils import get_summary
-from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
 from hololinked.utils import issubklass
 
 
@@ -212,7 +211,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         affordance_json = metadata[affordance_name][name]  # type: dict[str, JSON]
         fields = {field.alias or name: name for name, field in cls.model_fields.items()}
         if cls is PropertyAffordance:
-            fields.update(WoTSchema.declared_fields(DataSchema))
+            fields.update(WoTSchema.declared_fields(DataSchema, skip_subclasses=(PropertyAffordance,)))
         affordance = cls()
         for key, value in affordance_json.items():
             if key == "forms":
@@ -354,7 +353,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
         fget: Callable | None = None,
         fset: Callable | None = None,
         delegate: PropertyDelegate | None = None,
-        schema_validator: str = "pydantic",
+        validator: str = "pydantic",
     ) -> Property:
         """
         Create the `Property` this affordance describes.
@@ -367,7 +366,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             write handler, receives the validated value
         delegate: PropertyDelegate, optional
             reads and writes an attribute of another object, used instead of `fget` and `fset`
-        schema_validator: str
+        validator: str
             name the validator of the value is registered under with `SchemaValidators`
 
         Returns
@@ -381,8 +380,10 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             if the value is stored (no `fget` or `delegate`) but the affordance gives no starting value, neither a
             `default` nor a `null` option
         """
-        affordance = self.json()
-        keywords = WoTSchema.declared_fields(DataSchema)
+        affordance = self.json()  # we need to convert to JSON because
+        # dataschema validation of API first approach proceeds through a JSON schema validator
+        # looks sort of circular, something to think about later.
+        keywords = WoTSchema.declared_fields(DataSchema, skip_subclasses=(PropertyAffordance,))
         # a property-level const makes the property constant instead of constraining writes
         data_schema = {key: value for key, value in affordance.items() if key in keywords and key != "const"}
         # a null option allows None, the remaining options are the schema of the value
@@ -396,16 +397,14 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
         default = affordance.get("default", affordance.get("const"))
         constant = "const" in affordance
         if fget is None and delegate is None and default is None and not (nullable or constant):
-            raise ValueError(
-                f"property {self.name} stores its value, it needs a default or a null option in its schema"
-            )
+            raise ValueError(f"property {self.name} needs a default or a null option in its schema")
         if self.writeOnly:
             warnings.warn(
-                f"writeOnly of property {self.name} is not supported and is ignored", UserWarning, stacklevel=2
+                f"writeOnly of property {self.name} is not supported and is ignored",
+                UserWarning,
+                stacklevel=2,
             )
-        model, validator = (
-            schema_for_validator(data_schema, f"{self.name}_value", schema_validator) if data_schema else (None, None)
-        )
+        model, _validator = schema_validator(data_schema, f"{self.name}_value", validator)
         _property = Property(
             default=default,
             doc=self.description,
@@ -421,7 +420,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             deepcopy_default=isinstance(default, (dict, list)),
             metadata={"unit": self.unit} if self.unit is not None else None,
         )
-        _property._validator = validator
+        _property._schema_validator = _validator
         return _property
 
 
@@ -501,7 +500,7 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
         affordance.build_non_compliant_metadata()
         return affordance
 
-    def to_descriptor(self, obj: Callable | ActionDelegate, schema_validator: str = "pydantic") -> Action:
+    def to_descriptor(self, obj: Callable | ActionDelegate, validator: str = "pydantic") -> Action:
         """
         Create the `Action` this affordance describes, invoking the given handler.
 
@@ -509,7 +508,7 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
         ----------
         obj: Callable | ActionDelegate
             the handler, a sync or async method, or the delegate to a method of another object
-        schema_validator: str
+        validator: str
             name the validator of the input is registered under with `SchemaValidators`
 
         Returns
@@ -522,7 +521,7 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
         TypeError
             if the parameters of the handler do not match the input, listing every mismatch
         """
-        input_schema, validator = None, None
+        input_schema, _validator = None, None
         if self.input:
             mismatches = input_signature_mismatches(obj, self.input)
             if mismatches:
@@ -530,10 +529,10 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
                     f"{getattr(obj, '__name__', obj)} does not match the input of action {self.name}: "
                     + "; ".join(mismatches)
                 )
-            input_schema, validator = schema_for_validator(self.input, f"{self.name}_input", schema_validator)
+            input_schema, _validator = schema_validator(self.input, f"{self.name}_input", validator)
         output_schema = None
         if self.output:
-            output_schema, _ = schema_for_validator(self.output, f"{self.name}_output", schema_validator)
+            output_schema, _ = schema_validator(self.output, f"{self.name}_output", validator)
         # flags absent from the TD keep the defaults of action(), synchronous=True decides the scheduling
         flags = {
             key: getattr(self, key) for key in ("safe", "idempotent", "synchronous") if getattr(self, key) is not None
@@ -544,7 +543,7 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
             doc="\n\n".join(text for text in (self.title, self.description) if text) or None,
             **flags,
         )(obj)
-        _action._schema_validator = validator
+        _action._schema_validator = _validator
         return _action
 
 
@@ -602,13 +601,13 @@ class EventAffordance(InteractionAffordance, EventMetadata):
         affordance.build_non_compliant_metadata()
         return affordance
 
-    def to_descriptor(self, schema_validator: str = "pydantic") -> Event:
+    def to_descriptor(self, validator: str = "pydantic") -> Event:
         """
         Create the `Event` this affordance describes.
 
         Parameters
         ----------
-        schema_validator: str
+        validator: str
             name of the validator, registered with `SchemaValidators`, the event data schema is converted for.
             The data is not validated on push, so no validator is preset.
 
@@ -619,14 +618,14 @@ class EventAffordance(InteractionAffordance, EventMetadata):
         """
         schema = None
         if self.data:
-            schema, _ = schema_for_validator(self.data, f"{self.name}_data", schema_validator)
+            schema, _ = schema_validator(self.data, f"{self.name}_data", validator)
         return Event(doc=self.description, label=self.title, schema=schema)
 
 
-def schema_for_validator(
+def schema_validator(
     schema: dict[str, Any],
     name: str,
-    schema_validator: str = "pydantic",
+    typ: str = "pydantic",
 ) -> tuple[Any, BaseSchemaValidator | None]:
     """
     Convert a DataSchema of a Thing Description into the schema a validator takes.
@@ -637,7 +636,7 @@ def schema_for_validator(
         the DataSchema
     name: str
         name of the model generated for a pydantic validator, for example `<action>_input`
-    schema_validator: str
+    typ: str
         name the validator is registered under with `SchemaValidators`
 
     Returns
@@ -646,7 +645,9 @@ def schema_for_validator(
         the schema for the descriptor, and the validator instance to preset on it. A pydantic model is left to the
         type based lookup, since a `Property` validates by calling the model rather than through a validator.
     """
-    validator = getattr(SchemaValidators, schema_validator)
+    from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
+
+    validator = getattr(SchemaValidators, typ)
     if issubklass(validator, PydanticSchemaValidator):
         return dataschema_to_model(schema, name), None
     # preset, otherwise SchemaValidators.for_schema() picks the json_schema validator for any dict

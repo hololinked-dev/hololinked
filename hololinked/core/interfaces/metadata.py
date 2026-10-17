@@ -113,7 +113,7 @@ class Metadata(BaseModel):
         impl: Any,
         member_names_map: Mapping[str, str] | None = None,
         allow_extra: bool = False,
-        schema_validator: str = "pydantic",
+        validator: str = "pydantic",
         **kwargs: Any,
     ) -> dict[str, Property | Action | Event]:
         """
@@ -129,7 +129,7 @@ class Metadata(BaseModel):
             interaction name mapped to the member implementing it, when the two differ
         allow_extra: bool
             keep `Property`, `Action` and `Event` members that are not in the Device Description Language
-        schema_validator: str
+        validator: str
             name the validator of payloads is registered under with `SchemaValidators`
         **kwargs: Any
             `property_impl` - type (or tuple of types) of members implementing a property through
@@ -179,9 +179,9 @@ class Metadata(BaseModel):
                         # TODO, slightly misleading, how will the impl access it?
                         continue
                 if impl_member is None:
-                    # the value is stored on the Thing as an internal attribute
+                    # the value is stored on the Thing as an internal attribute.
                     # TODO, slightly misleading, how will the impl access it?
-                    descriptors[name] = affordance.to_descriptor(schema_validator=schema_validator)
+                    descriptors[name] = affordance.to_descriptor(validator=validator)
                     continue
                 is_property_impl_type = property_impl is not None and isinstance(impl_member, property_impl)
                 if not is_property_impl_type and (
@@ -201,7 +201,7 @@ class Metadata(BaseModel):
                             member_name,
                             delegate=impl_member if is_property_impl_type else None,
                         ),
-                        schema_validator=schema_validator,
+                        validator=validator,
                     ),
                 )
                 # a plain attribute is writable whenever the property is, a @property only through its setter
@@ -219,11 +219,14 @@ class Metadata(BaseModel):
             member_name = member_names_map.get(name, name)
             impl_member = None if member_name.startswith("_") else inspect.getattr_static(impl, member_name, None)
             try:
-                if builtin is not None and not (isinstance(builtin, Action) and getattr(builtin, "is_remote", True)):
-                    raise TypeError(f"clashes with Thing.{name}")
-                if builtin is not None and impl_member is None:
-                    continue
+                # same comments as for properties
+                if builtin is not None:
+                    if not (isinstance(builtin, Action) and getattr(builtin, "is_remote", True)):
+                        raise TypeError(f"clashes with Thing.{name}")
+                    if impl_member is None:
+                        continue
                 if impl_member is None:
+                    # this if condition differs from properties, as actions must have a handler
                     raise TypeError("has no handler")
                 uses_action_impl = action_impl is not None and isinstance(impl_member, action_impl)
                 if not uses_action_impl and not (
@@ -237,7 +240,7 @@ class Metadata(BaseModel):
                     )
                 descriptors[name] = affordance.to_descriptor(
                     ActionDelegate(impl, member_name, delegate=impl_member if uses_action_impl else None),
-                    schema_validator=schema_validator,
+                    validator=validator,
                 )
             except (TypeError, ValueError) as ex:
                 problems.append(f"action {name!r}: {ex}")
@@ -247,16 +250,18 @@ class Metadata(BaseModel):
             member_name = member_names_map.get(name, name)
             impl_member = None if member_name.startswith("_") else inspect.getattr_static(impl, member_name, None)
             try:
-                if builtin is not None and not (isinstance(builtin, Event) and getattr(builtin, "is_remote", True)):
-                    raise TypeError(f"clashes with Thing.{name}")
-                if builtin is not None and impl_member is None:
-                    continue
+                # same comments as for properties
+                if builtin is not None:
+                    if not (isinstance(builtin, Event) and getattr(builtin, "is_remote", True)):
+                        raise TypeError(f"clashes with Thing.{name}")
+                    if impl_member is None:
+                        continue
                 if impl_member is not None:
                     raise TypeError(
                         "is created from the Device Description Language, "
                         f"remove the {type(impl_member).__name__} named after it"
                     )
-                descriptors[name] = affordance.to_descriptor(schema_validator=schema_validator)
+                descriptors[name] = affordance.to_descriptor(validator=validator)
             except (TypeError, ValueError) as ex:
                 problems.append(f"event {name!r}: {ex}")
 
