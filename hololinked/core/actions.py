@@ -6,7 +6,8 @@ import warnings
 
 from collections.abc import Callable
 from enum import Enum
-from inspect import getfullargspec, iscoroutinefunction
+from functools import partial, update_wrapper
+from inspect import getfullargspec, iscoroutinefunction, signature
 from types import FunctionType, MethodType
 from typing import TYPE_CHECKING, Any
 
@@ -339,15 +340,15 @@ class BoundAsyncAction(BoundAction):
 
 class ActionDelegate:
     """
-    Calls a method of another object for an action, such as a driver serving a Thing Model.
+    A wrapper that delegates the action call to another object's method.
 
-    The action holds the delegate as `Action.obj`, sets `Action.delegate` and calls it without the owning `Thing`,
-    so the method receives only the arguments of the action.
+    For example, in the case of a driver serving a Thing Model, the action call on the Thing can be delegated to the
+    corresponding method on the driver object.
     """
 
-    __slots__ = ("impl", "member_name")
+    __slots__ = ("impl", "member_name", "thing", "delegate")
 
-    def __init__(self, impl: Any, member_name: str) -> None:
+    def __init__(self, impl: Any, member_name: str, thing: Any | None = None, delegate: Any = None) -> None:
         """
         Initialize the delegate.
 
@@ -357,14 +358,26 @@ class ActionDelegate:
             the object whose method implements the action
         member_name: str
             name of the method on that object
+        thing: Any | None, optional
+            the Thing instance this action is associated with, if any
+        delegate: Any, optional
+            the member of `impl` implementing the action through `__call__(impl, *args, **kwargs)`, called instead of
+            the method
         """
         self.impl = impl
         self.member_name = member_name
+        self.thing = thing
+        self.delegate = delegate
 
     @property
     def handler(self) -> Callable:
-        """The method, looked up on the object at every access."""
-        return getattr(self.impl, self.member_name)
+        """The method, looked up on the object at every access, or the delegate bound to the object like a method."""
+        if self.delegate is None:
+            return getattr(self.impl, self.member_name)
+        call = self.delegate.__call__
+        bound = partial(call, self.impl)
+        bound.__signature__ = signature(bound)  # ty: ignore[unresolved-attribute]
+        return update_wrapper(bound, call)  # docstring and type hints of the delegate
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.handler(*args, **kwargs)

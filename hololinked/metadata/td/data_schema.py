@@ -52,6 +52,7 @@ class DataSchema(WoTSchema):
     unit: Optional[str] = None
     type: Optional[str] = None
     oneOf: Optional[list[dict[str, Any]]] = None
+
     semantic_type: Optional[str | list[str]] = Field(default=None, alias="@type")
 
     model_config = ConfigDict(extra="allow")

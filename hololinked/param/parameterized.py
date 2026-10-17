@@ -508,6 +508,8 @@ class Parameter(metaclass=ParameterMetaclass):
 
     def __delete__(self, obj: typing.Union["Parameterized", typing.Any]) -> None:
         if self.fdel is not None:
+            if self.isbound:
+                return self.fdel()
             if self.class_member:
                 # For class properties, bind the deletor to the class,
                 # especially when this method is called as del instance.parameter_name

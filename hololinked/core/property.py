@@ -175,9 +175,9 @@ class Property(Parameter):
             if `delegate` is given together with `fget` or `fset`.
         """
         if delegate is not None:
-            if fget is not None or fset is not None:
-                raise ValueError("a delegated property takes its getter and setter from the delegate")
-            fget, fset = delegate.get, delegate.set
+            if fget is not None or fset is not None or fdel is not None:
+                raise ValueError("a delegated property takes its getter, setter and deleter from the delegate")
+            fget, fset, fdel = delegate.get, delegate.set, delegate.delete
         super().__init__(
             default=default,
             doc=doc,
@@ -401,16 +401,17 @@ class Property(Parameter):
 
 
 class PropertyDelegate:
-    """
-    Reads and writes an attribute of another object for a property, such as a driver serving a Thing Model.
+    """Reads and writes an attribute of another object for a property, such as a driver serving a Thing Model."""
 
-    The property takes `get` and `set` as its getter and setter and, with `isbound` set, calls them without the
-    owning `Thing`. The attribute may be a plain attribute or a python `property` of that object.
-    """
+    __slots__ = ("impl", "member_name", "thing", "delegate")
 
-    __slots__ = ("impl", "member_name")
-
-    def __init__(self, impl: Any, member_name: str) -> None:
+    def __init__(
+        self,
+        impl: Any,
+        member_name: str,
+        thing: Thing | None = None,
+        delegate: Any = None,
+    ) -> None:
         """
         Initialize the delegate.
 
@@ -420,9 +421,16 @@ class PropertyDelegate:
             the object whose attribute implements the property
         member_name: str
             name of the attribute on that object
+        thing: Thing | None, optional
+            the `Thing` owning the property, set later if it does not exist yet
+        delegate: Any, optional
+            the member of `impl` implementing the property through `get(impl)`, `set(impl, value)` and
+            `delete(impl)`, used instead of reading, writing and deleting the attribute
         """
         self.impl = impl
         self.member_name = member_name
+        self.thing = thing
+        self.delegate = delegate
 
     def get(self) -> Any:
         """
@@ -433,11 +441,37 @@ class PropertyDelegate:
         Any
             the value of the attribute
         """
+        if self.delegate is not None and hasattr(self.delegate, "get"):
+            return self.delegate.get(self.impl)
         return getattr(self.impl, self.member_name)
 
     def set(self, value: Any) -> None:
-        """Write the attribute."""
+        """
+        Write the attribute.
+
+        Parameters
+        ----------
+        value: Any
+            the value to write to the attribute
+        """
+        if self.delegate is not None and hasattr(self.delegate, "set"):
+            self.delegate.set(self.impl, value)
+            return
         setattr(self.impl, self.member_name, value)
+
+    def delete(self) -> None:
+        """
+        Delete the attribute.
+
+        Raises
+        ------
+        AttributeError
+            If the attribute does not exist.
+        """
+        if self.delegate is not None and hasattr(self.delegate, "delete"):
+            self.delegate.delete(self.impl)
+            return
+        delattr(self.impl, self.member_name)
 
     def __repr__(self) -> str:
         return f"<PropertyDelegate({type(self.impl).__name__}.{self.member_name})>"
