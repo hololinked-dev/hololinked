@@ -29,7 +29,7 @@ def get_summary(docs: str) -> str:
 
 def a_class_name_from_title_string(title: str | None) -> str:
     """
-    Name of the class `produce()` makes, the title of the Thing Model as a Python identifier.
+    Generate a class name from the title of the Thing Model/Thing Description as a Python identifier.
 
     Parameters
     ----------

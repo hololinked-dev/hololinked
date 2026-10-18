@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import copy
-import inspect
 import warnings
 
 from collections.abc import Callable
 from enum import Enum
-from inspect import Parameter
 from typing import Any, ClassVar, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
@@ -27,7 +25,7 @@ from hololinked.metadata.td.data_schema import DataSchema
 from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.pydantic_extensions import dataschema_to_model, type_to_dataschema
 from hololinked.metadata.td.utils import get_summary
-from hololinked.utils import issubklass
+from hololinked.utils import check_input_signature, issubklass
 
 
 from hololinked.core.actions import Action, ActionDelegate, action  # isort: skip
@@ -420,7 +418,9 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             deepcopy_default=isinstance(default, (dict, list)),
             metadata={"unit": self.unit} if self.unit is not None else None,
         )
-        _property._schema_validator = _validator
+        if _validator is not None:
+            # override the builtin validator although it might be the same.
+            _property._schema_validator = _validator
         return _property
 
 
@@ -518,17 +518,12 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
 
         Raises
         ------
-        TypeError
+        InputSignatureError
             if the parameters of the handler do not match the input, listing every mismatch
         """
         input_schema, _validator = None, None
         if self.input:
-            mismatches = input_signature_mismatches(obj, self.input)
-            if mismatches:
-                raise TypeError(
-                    f"{getattr(obj, '__name__', obj)} does not match the input of action {self.name}: "
-                    + "; ".join(mismatches)
-                )
+            check_input_signature(obj, self.input)
             input_schema, _validator = schema_validator(self.input, f"{self.name}_input", validator)
         output_schema = None
         if self.output:
@@ -652,66 +647,3 @@ def schema_validator(
         return dataschema_to_model(schema, name), None
     # preset, otherwise SchemaValidators.for_schema() picks the json_schema validator for any dict
     return schema, validator(schema)
-
-
-def input_signature_mismatches(func: Callable | ActionDelegate, schema: dict[str, Any]) -> list[str]:
-    """
-    List how the parameters of an action handler do not match the input DataSchema of the action.
-
-    The first positional parameter (`self`) and a keyword-only `request` parameter are not part of the input.
-    A delegate's method belongs to another object, so its signature has no `self` to skip.
-    An object input arrives as keyword arguments, any other input as a single value.
-
-    Parameters
-    ----------
-    func: Callable | ActionDelegate
-        the action handler, or the delegate calling a method of another object
-    schema: dict[str, Any]
-        the input DataSchema
-
-    Returns
-    -------
-    list[str]
-        every mismatch found, empty if the handler matches
-    """
-    if isinstance(func, ActionDelegate):
-        parameters = list(inspect.signature(func.handler).parameters.values())
-    else:
-        parameters = list(inspect.signature(func).parameters.values())[1:]
-    parameters = [
-        parameter
-        for parameter in parameters
-        if not (parameter.kind is Parameter.KEYWORD_ONLY and parameter.name == "request")
-    ]
-    if not (schema.get("type") == "object" or "properties" in schema):
-        positional = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD, Parameter.VAR_POSITIONAL)
-        if len(parameters) != 1 or parameters[0].kind not in positional:
-            return ["the input is a single value, so the handler takes exactly one positional parameter"]
-        return []
-    properties = schema.get("properties", {})
-    takes_kwargs = any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters)
-    keywords = {
-        parameter.name
-        for parameter in parameters
-        if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
-    }
-    mismatches = [
-        f"parameter {parameter.name!r} is positional-only, an object input is given by keyword"
-        for parameter in parameters
-        if parameter.kind is Parameter.POSITIONAL_ONLY
-    ]
-    mismatches += [
-        f"required parameter {parameter.name!r} is not an input property"
-        for parameter in parameters
-        if parameter.name in keywords and parameter.default is Parameter.empty and parameter.name not in properties
-    ]
-    if not takes_kwargs:
-        mismatches += [
-            f"input property {name!r} is not a parameter"
-            for name in sorted(set(properties) | set(schema.get("required", [])))
-            if name not in keywords
-        ]
-    additional = schema.get("additionalProperties", None)
-    if additional is not None and additional is not False and not takes_kwargs:
-        mismatches.append("the input allows additional properties, so the handler takes **kwargs")
-    return mismatches

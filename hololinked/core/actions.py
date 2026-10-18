@@ -43,7 +43,7 @@ class Action:
     """
 
     __slots__ = [
-        "_validator",
+        "_schema_validator",
         "argument_schema",
         "create_task",
         "delegate",
@@ -343,7 +343,7 @@ class ActionDelegate:
     corresponding method on the driver object.
     """
 
-    __slots__ = ("impl", "member_name", "thing", "delegate")
+    __slots__ = ("_bound_delegate", "delegate", "impl", "member_name", "thing")
 
     def __init__(self, impl: Any, member_name: str, thing: Any | None = None, delegate: Any = None) -> None:
         """
@@ -358,23 +358,29 @@ class ActionDelegate:
         thing: Any | None, optional
             the Thing instance this action is associated with, if any
         delegate: Any, optional
-            the member of `impl` implementing the action through `__call__(impl, *args, **kwargs)`, called instead of
-            the method
+            A custom implementation of a method determined to be the Action on the impl, not accessible through
+            `__getattr__` or similar (this is usually not the case). Use this argument when the action cannot be
+            accessed through python builtin attribute lookup on the implementation object. For example, `keithley2600`
+            package implements `KeithleyFunction` as a model for an action. Its accessible through attribute lookup.
+            Were it not, one would need to provide it explicitly through the `delegate` argument to invoke it correctly.
         """
         self.impl = impl
         self.member_name = member_name
         self.thing = thing
         self.delegate = delegate
+        self._bound_delegate = None
 
     @property
     def handler(self) -> Callable:
         """The method, looked up on the object at every access, or the delegate bound to the object like a method."""
         if self.delegate is None:
             return getattr(self.impl, self.member_name)
-        call = self.delegate.__call__
-        bound = partial(call, self.impl)
-        bound.__signature__ = signature(bound)  # ty: ignore[unresolved-attribute]
-        return update_wrapper(bound, call)  # docstring and type hints of the delegate
+        if self._bound_delegate is None:  # built once, the delegate and the object do not change
+            call = self.delegate.__call__
+            bound = partial(call, self.impl)
+            bound.__signature__ = signature(bound)  # ty: ignore[unresolved-attribute]
+            self._bound_delegate = update_wrapper(bound, call)  # docstring and type hints of the delegate
+        return self._bound_delegate
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.handler(*args, **kwargs)

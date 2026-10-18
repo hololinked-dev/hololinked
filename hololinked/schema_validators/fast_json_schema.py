@@ -1,5 +1,7 @@
 """JSON schema validator based on the `fastjsonschema` package. `pip install fastjsonschema` to use."""
 
+from typing import Any
+
 import fastjsonschema
 
 from hololinked.constants import JSONSchemaType
@@ -62,8 +64,9 @@ class FastJSONSchemaValidator(BaseSchemaValidator):
         """
         fastjsonschema.compile(schema)
 
-    def validate(self, data) -> None:  # noqa: D102
+    def validate(self, data) -> Any:  # noqa: D102
         self.validator(data)
+        return data
 
     def validate_method_call(self, args, kwargs) -> None:  # noqa: D102
         if not (self.schema.get("type") == "object" or "properties" in self.schema):

@@ -24,9 +24,9 @@ if TYPE_CHECKING:
 
 class ConformanceError(TypeError):
     """
-    Metadata conformance error.
+    Metadata conformance error while parsing it from a document.
 
-    i.e. the device description language or an API did not confirm to the implementation.
+    i.e. the device description language or an API did not confirm to the implementation given or asked to be created.
     """
 
     def __init__(self, problems: list[str]) -> None:
@@ -79,7 +79,7 @@ class Metadata(BaseModel):
         raise NotImplementedError("Implement generate() in subclass")
 
     def produce(self, *args: Any, **kwargs: Any) -> Thing:
-        """Produce a Thing instance from the metadata, served by the given implementation."""
+        """Produce a Thing instance from the metadata."""
         raise NotImplementedError("Implement produce() in subclass")
 
     skip_properties: list[str]
@@ -108,7 +108,7 @@ class Metadata(BaseModel):
     """events the metadata describes, keyed by name"""
 
     @staticmethod
-    def namespace_from(
+    def compile_descriptors_from(
         model: Metadata,
         impl: Any,
         member_names_map: Mapping[str, str] | None = None,

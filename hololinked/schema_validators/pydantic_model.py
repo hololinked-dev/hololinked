@@ -1,16 +1,18 @@
 """Schema validator based on pydantic models."""
 
+from __future__ import annotations
+
 import typing
 
 from collections.abc import Mapping
 from functools import cached_property
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, RootModel
 
 from hololinked.constants import JSONSchemaType
 from hololinked.core.interfaces import BaseSchemaValidator
-from hololinked.utils import issubklass
+from hololinked.utils import issubklass, wrap_plain_types_in_rootmodel
 
 from .utils import pydantic_validate_args_kwargs
 
@@ -47,14 +49,33 @@ class PydanticSchemaValidator(BaseSchemaValidator):
         super().__init__(schema)
         self.validator = schema.model_validate
 
+    @classmethod
+    def from_type(cls, type_: Any) -> PydanticSchemaValidator:
+        """
+        Create a validator for a plain type or typing form, such as `int` or `list[int]`, wrapped in a root model.
+
+        Parameters
+        ----------
+        type_: Any
+            the type to validate against, a pydantic model is used as it is
+
+        Returns
+        -------
+        PydanticSchemaValidator
+            the validator, whose `schema` is the root model
+        """
+        return cls(wrap_plain_types_in_rootmodel(type_))
+
     @cached_property
     def input_kind(self) -> Literal["fields", "mapping", "value"]:
         """
         How the arguments of a method call make up the value validated against the model.
 
-        - `fields`: arguments map onto the fields of the model
-        - `mapping`: a root model of a mapping or model, the keyword arguments together are the value
-        - `value`: a root model of anything else, the single argument is the value
+        - `fields`: a regular model, each argument is validated as the field of the same name
+        - `mapping`: a root model wrapping a mapping or another model, all keyword arguments are collected
+          into one dict and validated as the root
+        - `value`: a root model wrapping any other type, the call takes exactly one argument, which is validated
+          as the root
         """
         if not issubklass(self.schema, RootModel):
             return "fields"
@@ -62,8 +83,17 @@ class PydanticSchemaValidator(BaseSchemaValidator):
         root_type = typing.get_origin(root_type) or root_type
         return "mapping" if issubklass(root_type, (Mapping, BaseModel)) else "value"
 
-    def validate(self, data) -> None:  # noqa: D102
-        self.validator(data)
+    def validate(self, data) -> Any:
+        """
+        Validate the data against the model.
+
+        Returns
+        -------
+        Any
+            the model instance, or the value it wraps for a root model, like `3` for a root model of `int`
+        """
+        value = self.validator(data)
+        return value.root if isinstance(value, RootModel) else value
 
     def validate_method_call(self, args, kwargs) -> None:  # noqa: D102
         if self.input_kind == "value":

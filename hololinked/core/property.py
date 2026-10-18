@@ -6,15 +6,13 @@ from collections.abc import Callable
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
-
 from hololinked import SchemaValidators
 from hololinked.config import global_config
 from hololinked.core.events import Event, EventDispatcher  # noqa: F401
 from hololinked.core.exceptions import StateMachineError
 from hololinked.param.parameterized import Parameter, ParameterizedMetaclass
 from hololinked.param.parameters import Tuple
-from hololinked.utils import ModelRoot, issubklass, wrap_plain_types_in_rootmodel
+from hololinked.utils import issubklass
 
 
 if TYPE_CHECKING:
@@ -34,7 +32,7 @@ class Property(Parameter):
         "_observable_event_descriptor",
         "_old_value_internal_name",
         "_remote",
-        "_validator",
+        "_schema_validator",
         "db_commit",
         "db_init",
         "db_persist",
@@ -225,8 +223,10 @@ class Property(Parameter):
             self.model = model
             if global_config.VALIDATE_SCHEMAS:
                 SchemaValidators.check_schema(model)
+            self._schema_validator = SchemaValidators.for_schema(model)(model)
         else:
-            self.model = wrap_plain_types_in_rootmodel(model)
+            self._schema_validator = SchemaValidators.for_plain_type(model)
+            self.model = self._schema_validator.schema
 
     def __set_name__(self, owner: Any, attrib_name: str) -> None:
         super().__set_name__(owner, attrib_name)
@@ -240,10 +240,8 @@ class Property(Parameter):
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
 
     @property
-    def validator(self) -> BaseSchemaValidator | None:
-        """Validator for the value of this property, None if the property is validated by a pydantic model instead."""
-        if self._schema_validator is None and self.model is not None and not issubklass(self.model, BaseModel):
-            self._schema_validator = SchemaValidators.for_schema(self.model)(self.model)
+    def schema_validator(self) -> BaseSchemaValidator | None:
+        """Validator for the value of this property, created with the property, None if the property has no model."""
         return self._schema_validator
 
     def __get__(self, obj: Thing, objtype: ParameterizedMetaclass) -> Any:  # ty: ignore[invalid-method-override]
@@ -276,7 +274,7 @@ class Property(Parameter):
                         return
                 elif not self.fcomparator(obj, old_value, value):
                     return
-            elif not old_value != value:
+            elif old_value == value:
                 return
             event_dispatcher.push(value)  # ty: ignore[unresolved-attribute]
 
@@ -302,13 +300,7 @@ class Property(Parameter):
             else:
                 raise ValueError(f"Property {self.name} does not allow None values")
         if self.model:
-            validator = self.validator
-            if validator is not None:
-                validator.validate(value)
-            elif issubklass(self.model, BaseModel):
-                value = self.model.model_validate(value)  # accepts a model instance as well as its JSON form
-                if issubklass(self.model, ModelRoot):
-                    value = value.root  # wrapper of a plain type
+            value = self.schema_validator.validate(value)  # ty: ignore[unresolved-attribute]  # created with the model
         return super().validate_and_adapt(value)
 
     def external_set(self, obj: Thing, value: Any) -> None:
@@ -429,8 +421,10 @@ class PropertyDelegate:
         thing: Thing | None, optional
             the `Thing` owning the property, set later if it does not exist yet
         delegate: Any, optional
-            the member of `impl` implementing the property through `get(impl)`, `set(impl, value)` and
-            `delete(impl)`, used instead of reading, writing and deleting the attribute
+            the member of `impl` implementing the property through `get()`, `set(value)` and
+            `delete()`. Use this argument when the property has a custom implementation for getting, setting, or
+            deleting its value which is not auto-invoked with `getattr(impl, member_name)`,
+            `setattr(impl, member_name, value)`, or `delattr(impl, member_name)`.
         """
         self.impl = impl
         self.member_name = member_name

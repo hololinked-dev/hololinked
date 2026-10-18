@@ -12,7 +12,8 @@ import typing
 
 from collections import OrderedDict
 from collections.abc import Callable, Coroutine, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
+from enum import StrEnum
 from functools import wraps
 from inspect import Parameter, signature
 from pathlib import Path
@@ -638,6 +639,116 @@ def forkable(func):
     return wrapper
 
 
+class MismatchKind(StrEnum):
+    """How the parameters of an action handler do not match the input of the action, worded for the error."""
+
+    SINGLE_VALUE_ARITY = "the input is a single value, so the handler takes exactly one positional parameter"
+    POSITIONAL_ONLY = "parameter {name!r} is positional-only, an object input is given by keyword"
+    REQUIRED_NOT_IN_INPUT = "required parameter {name!r} is not an input property"
+    PROPERTY_NOT_A_PARAMETER = "input property {name!r} is not a parameter"
+    ADDITIONAL_NEEDS_KWARGS = "the input allows additional properties, so the handler takes **kwargs"
+
+
+@dataclass(frozen=True)
+class SignatureMismatch:
+    """A mismatch between the parameters of an action handler and the input of the action."""
+
+    kind: MismatchKind
+    name: str | None = None
+    """the parameter or input property concerned, None if the mismatch is about the handler as a whole"""
+
+    def __str__(self) -> str:
+        return self.kind.value.format(name=self.name)
+
+
+class InputSignatureError(TypeError):
+    """The parameters of an action handler do not match the input of the action, lists every mismatch."""
+
+    def __init__(self, handler: Any, mismatches: list[SignatureMismatch]) -> None:
+        """
+        Initialize the error.
+
+        Parameters
+        ----------
+        handler: Any
+            the action handler
+        mismatches: list[SignatureMismatch]
+            every mismatch found
+        """
+        self.mismatches = mismatches
+        super().__init__(
+            f"{getattr(handler, '__name__', handler)} does not match the input of the action: "
+            + "; ".join(map(str, mismatches))
+        )
+
+
+def check_input_signature(func: Callable, schema: dict[str, Any]) -> None:
+    """
+    Check that the parameters of an action handler match the input DataSchema of the action.
+
+    The first positional parameter (`self`) and a keyword-only `request` parameter are not part of the input.
+    A delegate's method belongs to another object, so its signature has no `self` to skip.
+    An object input arrives as keyword arguments, any other input as a single value.
+
+    Parameters
+    ----------
+    func: Callable
+        the action handler, or the `ActionDelegate` calling a method of another object
+    schema: dict[str, Any]
+        the input DataSchema
+
+    Raises
+    ------
+    InputSignatureError
+        listing every mismatch found
+    """
+    from hololinked.core.actions import ActionDelegate  # core imports this module
+
+    if isinstance(func, ActionDelegate):
+        parameters = list(inspect.signature(func.handler).parameters.values())
+    else:
+        parameters = list(inspect.signature(func).parameters.values())[1:]
+    parameters = [
+        parameter
+        for parameter in parameters
+        if not (parameter.kind is Parameter.KEYWORD_ONLY and parameter.name == "request")
+    ]
+    mismatches: list[SignatureMismatch] = []
+    if not (schema.get("type") == "object" or "properties" in schema):
+        positional = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD, Parameter.VAR_POSITIONAL)
+        if len(parameters) != 1 or parameters[0].kind not in positional:
+            mismatches.append(SignatureMismatch(MismatchKind.SINGLE_VALUE_ARITY))
+    else:
+        properties = schema.get("properties", {})
+        takes_kwargs = any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters)
+        keywords = {
+            parameter.name
+            for parameter in parameters
+            if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
+        }
+        mismatches += [
+            SignatureMismatch(MismatchKind.POSITIONAL_ONLY, parameter.name)
+            for parameter in parameters
+            if parameter.kind is Parameter.POSITIONAL_ONLY
+        ]
+        mismatches += [
+            SignatureMismatch(MismatchKind.REQUIRED_NOT_IN_INPUT, parameter.name)
+            for parameter in parameters
+            if parameter.name in keywords and parameter.default is Parameter.empty and parameter.name not in properties
+        ]
+        if not takes_kwargs:
+            mismatches += [
+                SignatureMismatch(MismatchKind.PROPERTY_NOT_A_PARAMETER, name)
+                for name in sorted(set(properties) | set(schema.get("required", [])))
+                if name not in keywords
+            ]
+        additional = schema.get("additionalProperties", None)
+        if additional is not None and additional is not False and not takes_kwargs:
+            mismatches.append(SignatureMismatch(MismatchKind.ADDITIONAL_NEEDS_KWARGS))
+    if mismatches:
+        raise InputSignatureError(func, mismatches)
+
+
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
@@ -655,4 +766,8 @@ __all__ = [
     get_return_type_from_signature.__name__,
     getattr_without_descriptor_read.__name__,
     forkable.__name__,
+    check_input_signature.__name__,
+    InputSignatureError.__name__,
+    MismatchKind.__name__,
+    SignatureMismatch.__name__,
 ]
