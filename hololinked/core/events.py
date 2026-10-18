@@ -233,15 +233,20 @@ class EventDelegate:
 
     def push(self, data: Any) -> None:
         """
-        Publish the event, or drop it while the `Thing` is not served.
+        Publish the event.
 
         Parameters
         ----------
         data: Any
             payload of the event
+
+        Raises
+        ------
+        AttributeError
+            if the `Thing` owning the event is not set or not ready
         """
         if self.thing is None:
-            return
+            raise AttributeError(f"The Thing owning the event '{self.name}' is not set or is not ready.")
         dispatcher = getattr(self.thing, self.name)  # type: EventDispatcher
         if dispatcher.publisher is not None:
             dispatcher.push(data)

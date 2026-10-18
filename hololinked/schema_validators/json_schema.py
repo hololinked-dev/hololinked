@@ -1,5 +1,7 @@
 """JSON schema validator based on the standard python `jsonschema` package."""
 
+from typing import Any
+
 import jsonschema
 
 from hololinked.constants import JSONSchemaType
@@ -61,8 +63,9 @@ class JSONSchemaValidator(BaseSchemaValidator):
         """
         jsonschema.Draft7Validator.check_schema(schema)
 
-    def validate(self, data) -> None:  # noqa: D102
+    def validate(self, data) -> Any:  # noqa: D102
         self.validator.validate(data)
+        return data
 
     def validate_method_call(self, args, kwargs) -> None:  # noqa: D102
         if not (self.schema.get("type") == "object" or "properties" in self.schema):

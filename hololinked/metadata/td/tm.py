@@ -103,11 +103,14 @@ class ThingModel(WoTSchema, Metadata):
         """
         Create a `Thing` instance based on the Thing Model, possibly binding with an existing implementation object `impl`.
 
-        Members of the object implement the interactions by name:
+        Members of the `impl` must implement the interactions by name:
         - a method must implement an action
         - a `property` must be implemented as a plain attribute or a python `property` descriptor
 
         Events do not have a mapping and are created based on the Thing Model definition, accessible at runtime.
+
+        If custom objects implement properties and actions, use the `property_impl` and `action_impl` keyword arguments
+        to provide the corresponding implementation objects.
 
         Parameters
         ----------
@@ -155,7 +158,7 @@ class ThingModel(WoTSchema, Metadata):
             listing every member that does not match the Thing Model
         """
         member_names_map = dict(kwargs.pop("member_names_map", None) or {})
-        descriptors = Metadata.namespace_from(
+        descriptors = Metadata.compile_descriptors_from(
             model=self,
             impl=impl,
             member_names_map=member_names_map,
