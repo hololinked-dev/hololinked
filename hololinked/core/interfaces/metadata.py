@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import inspect
+
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Self, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -12,10 +14,35 @@ from hololinked.constants import ResourceTypes
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from hololinked.core.actions import Action
     from hololinked.core.events import Event
     from hololinked.core.property import Property
     from hololinked.core.thing import Thing, ThingMeta
+
+
+class ConformanceError(TypeError):
+    """
+    Metadata conformance error while parsing it from a document.
+
+    i.e. the device description language or an API did not confirm to the implementation given or asked to be created.
+    """
+
+    def __init__(self, problems: list[str]) -> None:
+        """
+        Initialize the error.
+
+        Parameters
+        ----------
+        problems: list[str]
+            every problem found
+        """
+        self.problems = problems
+        super().__init__(
+            "implementation does not conform to the Device Description Language:\n"
+            + "\n".join(f"- {p}" for p in problems)
+        )
 
 
 class Metadata(BaseModel):
@@ -51,7 +78,7 @@ class Metadata(BaseModel):
         """Populate the metadata from the Thing instance."""
         raise NotImplementedError("Implement generate() in subclass")
 
-    def produce(self) -> Thing:
+    def produce(self, *args: Any, **kwargs: Any) -> Thing:
         """Produce a Thing instance from the metadata."""
         raise NotImplementedError("Implement produce() in subclass")
 
@@ -72,6 +99,187 @@ class Metadata(BaseModel):
     List of default event names to skip when generating the metadata. Different from `skip_names` as
     this list is supposed to be used as a builtin blacklist.
     """
+
+    properties: Mapping[str, PropertyMetadata]
+    """properties the metadata describes, keyed by name"""
+    actions: Mapping[str, ActionMetadata]
+    """actions the metadata describes, keyed by name"""
+    events: Mapping[str, EventMetadata]
+    """events the metadata describes, keyed by name"""
+
+    @staticmethod
+    def compile_descriptors_from(
+        model: Metadata,
+        impl: Any,
+        member_names_map: Mapping[str, str] | None = None,
+        allow_extra: bool = False,
+        validator: str = "pydantic",
+        **kwargs: Any,
+    ) -> dict[str, Property | Action | Event]:
+        """
+        Match the members of an object to the interactions of a Device Description Language and create their descriptors.
+
+        Parameters
+        ----------
+        model: Metadata
+            the Device Description Language
+        impl: Any
+            the object implementing it, its members are looked up statically
+        member_names_map: Mapping[str, str], optional
+            interaction name mapped to the member implementing it, when the two differ
+        allow_extra: bool
+            keep `Property`, `Action` and `Event` members that are not in the Device Description Language
+        validator: str
+            name the validator of payloads is registered under with `SchemaValidators`
+        **kwargs: Any
+            `property_impl` - type (or tuple of types) of members implementing a property through
+            `get(impl)`, `set(impl, value)` and `delete(impl)`; `action_impl` - type (or tuple of types) of members
+            implementing an action through `__call__(impl, *args, **kwargs)`
+
+        Returns
+        -------
+        dict[str, Property | Action | Event]
+            the descriptors keyed by their name in the Device Description Language, not yet assigned to a class
+
+        Raises
+        ------
+        ConformanceError
+            listing every problem found
+        """  # noqa: DOC501 - the TypeErrors raised below are collected as problems
+        from hololinked.core.actions import Action, ActionDelegate
+        from hololinked.core.events import Event, EventDelegate
+        from hololinked.core.property import Property, PropertyDelegate
+        from hololinked.core.thing import Thing
+
+        member_names_map = dict(member_names_map or {})
+        property_impl = kwargs.get("property_impl")
+        action_impl = kwargs.get("action_impl")
+        interaction_names = {*model.properties, *model.actions, *model.events}
+        problems = [
+            f"member_names maps {name!r}, which is not in the Device Description Language"
+            for name in member_names_map
+            if name not in interaction_names
+        ]
+        descriptors: dict[str, Property | Action | Event] = {}
+
+        for name, affordance in model.properties.items():
+            builtin = getattr(Thing, name, None)
+            member_name = member_names_map.get(name, name)
+            impl_member = None if member_name.startswith("_") else inspect.getattr_static(impl, member_name, None)
+            try:
+                if builtin is not None:
+                    # our `Thing` class already defines this property, its presence on the implementation object may
+                    # cause a conflict
+                    if not (isinstance(builtin, Property) and getattr(builtin, "is_remote", True)):
+                        # the member on the Thing class is not a remote Property, cannot be present on the DDL
+                        # as it is not exposed
+                        raise TypeError(f"clashes with Thing.{name}")
+                    if impl_member is None:
+                        # defined on Thing only, no conflict.
+                        # TODO, slightly misleading, how will the impl access it?
+                        continue
+                if impl_member is None:
+                    # the value is stored on the Thing as an internal attribute.
+                    # TODO, slightly misleading, how will the impl access it?
+                    descriptors[name] = affordance.to_descriptor(validator=validator)
+                    continue
+                is_property_impl_type = property_impl is not None and isinstance(impl_member, property_impl)
+                if not is_property_impl_type and (
+                    inspect.isfunction(impl_member)
+                    or inspect.ismethod(impl_member)
+                    or isinstance(impl_member, (staticmethod, classmethod))
+                ):
+                    raise TypeError(
+                        f"implemented by a {type(impl_member).__name__},"
+                        " only a @property, an attribute or a property_impl implements a property"
+                    )
+                descriptor = cast(
+                    Property,
+                    affordance.to_descriptor(
+                        delegate=PropertyDelegate(
+                            impl,
+                            member_name,
+                            delegate=impl_member if is_property_impl_type else None,
+                        ),
+                        validator=validator,
+                    ),
+                )
+                # a plain attribute is writable whenever the property is, a @property only through its setter
+                if isinstance(impl_member, property):
+                    if descriptor.readonly and impl_member.fset is not None:
+                        raise TypeError("read-only, but the @property has a setter")
+                    if not (descriptor.readonly or descriptor.constant) and impl_member.fset is None:
+                        raise TypeError("writable, but the @property has no setter")
+                descriptors[name] = descriptor
+            except (TypeError, ValueError) as ex:
+                problems.append(f"property {name!r}: {ex}")
+
+        for name, affordance in model.actions.items():
+            builtin = getattr(Thing, name, None)
+            member_name = member_names_map.get(name, name)
+            impl_member = None if member_name.startswith("_") else inspect.getattr_static(impl, member_name, None)
+            try:
+                # same comments as for properties
+                if builtin is not None:
+                    if not (isinstance(builtin, Action) and getattr(builtin, "is_remote", True)):
+                        raise TypeError(f"clashes with Thing.{name}")
+                    if impl_member is None:
+                        continue
+                if impl_member is None:
+                    # this if condition differs from properties, as actions must have a handler
+                    raise TypeError("has no handler")
+                uses_action_impl = action_impl is not None and isinstance(impl_member, action_impl)
+                if not uses_action_impl and not (
+                    inspect.isfunction(impl_member)
+                    or inspect.ismethod(impl_member)
+                    or isinstance(impl_member, (staticmethod, classmethod))
+                ):
+                    raise TypeError(
+                        f"implemented by a {type(impl_member).__name__},"
+                        " only a method or an action_impl implements an action"
+                    )
+                descriptors[name] = affordance.to_descriptor(
+                    ActionDelegate(impl, member_name, delegate=impl_member if uses_action_impl else None),
+                    validator=validator,
+                )
+            except (TypeError, ValueError) as ex:
+                problems.append(f"action {name!r}: {ex}")
+
+        for name, affordance in model.events.items():
+            builtin = getattr(Thing, name, None)
+            member_name = member_names_map.get(name, name)
+            impl_member = None if member_name.startswith("_") else inspect.getattr_static(impl, member_name, None)
+            try:
+                # same comments as for properties
+                if builtin is not None:
+                    if not (isinstance(builtin, Event) and getattr(builtin, "is_remote", True)):
+                        raise TypeError(f"clashes with Thing.{name}")
+                    if impl_member is None:
+                        continue
+                if impl_member is not None:
+                    raise TypeError(
+                        "is created from the Device Description Language, "
+                        f"remove the {type(impl_member).__name__} named after it"
+                    )
+                descriptors[name] = affordance.to_descriptor(validator=validator)
+            except (TypeError, ValueError) as ex:
+                problems.append(f"event {name!r}: {ex}")
+
+        if not allow_extra:
+            claimed = {member_names_map.get(name, name) for name in interaction_names}
+            problems += [
+                f"{type(member).__name__} {name!r} is not in the Device Description Language, pass allow_extra=True to keep it"
+                for name, member in inspect.getmembers_static(impl)
+                if isinstance(member, (Property, Action, Event)) and name not in claimed and not hasattr(Thing, name)
+            ]
+        if problems:
+            raise ConformanceError(problems)
+        # update the impl object itself only if there is no conformance errors
+        for name, descriptor in descriptors.items():
+            if isinstance(descriptor, Event):
+                descriptor.delegate = EventDelegate(impl, name)
+                setattr(impl, member_names_map.get(name, name), descriptor.delegate)
+        return descriptors
 
     def add_interactions(self) -> None:
         """
@@ -277,9 +485,11 @@ class InteractionMetadata(BaseModel):
         """
         raise NotImplementedError
 
-    def to_descriptor(self) -> Property | Action | Event:
+    def to_descriptor(self, *args: Any, **kwargs: Any) -> Property | Action | Event:
         """
         Convert the metadata back to a `Property`, `Action` or `Event` descriptor object.
+
+        Each kind of interaction takes its own arguments, such as the handlers implementing it.
 
         Returns
         -------

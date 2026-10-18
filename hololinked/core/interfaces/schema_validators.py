@@ -17,8 +17,16 @@ class BaseSchemaValidator:
     def __init__(self, schema) -> None:
         self.schema = schema
 
-    def validate(self, data: Any) -> None:
-        """Validate the data against the schema."""
+    def validate(self, data: Any) -> Any:
+        """
+        Validate the data against the schema.
+
+        Returns
+        -------
+        Any
+            the validated value, converted to the type inherently supported by the validator if the validator does so
+            (like a pydantic model instance for pydantic-based validators), otherwise the data as given
+        """
         raise NotImplementedError("validate method must be implemented by subclass")
 
     def validate_method_call(self, args: tuple[Any], kwargs: dict[str, Any]) -> None:

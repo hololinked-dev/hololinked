@@ -1,10 +1,13 @@
 """JSON schema validator based on the standard python `jsonschema` package."""
 
+from typing import Any
+
 import jsonschema
 
 from hololinked.constants import JSONSchemaType
 from hololinked.core.interfaces import BaseSchemaValidator
-from hololinked.utils import json_schema_merge_args_to_kwargs
+
+from .utils import json_schema_merge_args_to_kwargs
 
 
 class JSONSchemaValidator(BaseSchemaValidator):
@@ -60,10 +63,17 @@ class JSONSchemaValidator(BaseSchemaValidator):
         """
         jsonschema.Draft7Validator.check_schema(schema)
 
-    def validate(self, data) -> None:  # noqa: D102
+    def validate(self, data) -> Any:  # noqa: D102
         self.validator.validate(data)
+        return data
 
     def validate_method_call(self, args, kwargs) -> None:  # noqa: D102
+        if not (self.schema.get("type") == "object" or "properties" in self.schema):
+            values = [*args, *kwargs.values()]
+            if len(values) != 1:
+                raise ValueError(f"Expected exactly one argumentt, given {len(values)}.")
+            self.validate(values[0])
+            return
         if len(args) > 0:
             kwargs = json_schema_merge_args_to_kwargs(self.schema, args, kwargs)
             # TODO fix type definition

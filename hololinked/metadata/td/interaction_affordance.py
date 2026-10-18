@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import copy
+import warnings
 
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, ClassVar, Optional, Self, cast  # noqa: F401
+from typing import Any, ClassVar, Self, cast
 
-from pydantic import BaseModel, ConfigDict, RootModel
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
+from hololinked import SchemaValidators
 from hololinked.constants import JSON, ResourceTypes
 from hololinked.core.interfaces import (
     ActionMetadata,
+    BaseSchemaValidator,
     EventMetadata,
     InteractionMetadata,
     PropertyMetadata,
@@ -19,14 +23,14 @@ from hololinked.core.interfaces import (
 from hololinked.metadata.td.base import WoTSchema
 from hololinked.metadata.td.data_schema import DataSchema
 from hololinked.metadata.td.forms import Form
-from hololinked.metadata.td.pydantic_extensions import type_to_dataschema
+from hololinked.metadata.td.pydantic_extensions import dataschema_to_model, type_to_dataschema
 from hololinked.metadata.td.utils import get_summary
-from hololinked.utils import issubklass
+from hololinked.utils import check_input_signature, issubklass
 
 
-from hololinked.core.actions import Action  # isort: skip
+from hololinked.core.actions import Action, ActionDelegate, action  # isort: skip
 from hololinked.core.events import Event  # isort: skip
-from hololinked.core.property import Property  # isort: skip
+from hololinked.core.property import Property, PropertyDelegate  # isort: skip
 from hololinked.core.thing import Thing, ThingMeta  # isort: skip
 
 
@@ -38,12 +42,14 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
     [UML Diagram](https://docs.hololinked.dev/UML/PDF/InteractionAffordance.pdf) <br>
     """
 
-    title: Optional[str] = None
-    titles: Optional[dict[str, str]] = None
-    description: Optional[str] = None
-    descriptions: Optional[dict[str, str]] = None
-    forms: Optional[list[Form]] = None
-    # uri variables
+    title: str | None = None
+    titles: dict[str, str] | None = None
+    description: str | None = None
+    descriptions: dict[str, str] | None = None
+    forms: list[Form] | None = None
+    uriVariables: dict[str, JSON] | None = None
+
+    semantic_type: str | list[str] | None = Field(default=None, alias="@type")
 
     _custom_metadata_generators: ClassVar = dict()
     model_config = ConfigDict(extra="allow")
@@ -201,19 +207,21 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         else:
             raise ValueError(f"unknown affordance type - {cls}, cannot create object from TD")
         affordance_json = metadata[affordance_name][name]  # type: dict[str, JSON]
+        fields = {field.alias or name: name for name, field in cls.model_fields.items()}
+        if cls is PropertyAffordance:
+            fields.update(WoTSchema.declared_fields(DataSchema, skip_subclasses=(PropertyAffordance,)))
         affordance = cls()
-        for field in cls.model_fields:
-            if field in affordance_json:
-                if field == "forms":
-                    affordance.forms = [Form.from_TD(form) for form in affordance_json[field]]
-                else:
-                    setattr(affordance, field, affordance_json[field])
+        for key, value in affordance_json.items():
+            if key == "forms":
+                affordance.forms = [Form.from_TD(form) for form in value]
+            elif key in fields:
+                setattr(affordance, fields[key], value)
         affordance._name = name
-        affordance._thing_id = metadata["id"]
+        affordance._thing_id = metadata.get("id")  # a Thing Model has no id
         return affordance
 
     @classmethod
-    def from_TD(self, name: str, TD: JSON) -> Self:
+    def from_TD(cls, name: str, TD: JSON) -> Self:
         """
         Populate the schema from the TD and return it as an instance of this class.
 
@@ -237,13 +245,13 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         ValueError
             If the affordance type cannot be determined from the TD.
         """
-        return self.from_metadata(name, TD)
+        return cls.from_metadata(name, TD)
 
     @classmethod
     def register_descriptor(
         cls,
         descriptor: Property | Action | Event,
-        metadata_generator: type[InteractionAffordance] | type[InteractionMetadata],
+        metadata_generator: type[InteractionAffordance | InteractionMetadata],
     ) -> None:
         """
         Register a custom schema generator for a descriptor.
@@ -273,7 +281,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
             )
         InteractionAffordance._custom_metadata_generators[descriptor] = metadata_generator
 
-    def __deepcopy__(self, memo):  # noqa: D105
+    def __deepcopy__(self, memo):
         if self.__class__ == PropertyAffordance:
             result = PropertyAffordance()
         elif self.__class__ == ActionAffordance:
@@ -307,7 +315,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
     """
 
     # [Supported Fields]() <br>
-    observable: Optional[bool] = None
+    observable: bool | None = None
 
     def __init__(self):
         super().__init__()
@@ -328,7 +336,7 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             self.observable = property.observable
 
     @classmethod
-    def from_descriptor(cls, property: Property, owner: Thing | ThingMeta) -> "PropertyAffordance":  # noqa: D102
+    def from_descriptor(cls, property: Property, owner: Thing | ThingMeta) -> PropertyAffordance:  # noqa: D102
         if not isinstance(property, Property):
             raise TypeError(f"property must be instance of Property, given type {type(property)}")
         affordance = PropertyAffordance()
@@ -337,6 +345,83 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
         affordance.build()
         affordance.build_non_compliant_metadata()
         return affordance
+
+    def to_descriptor(
+        self,
+        fget: Callable | None = None,
+        fset: Callable | None = None,
+        delegate: PropertyDelegate | None = None,
+        validator: str = "pydantic",
+    ) -> Property:
+        """
+        Create the `Property` this affordance describes.
+
+        Parameters
+        ----------
+        fget: Callable, optional
+            read handler, the value is stored on the `Thing` instance if not given
+        fset: Callable, optional
+            write handler, receives the validated value
+        delegate: PropertyDelegate, optional
+            reads and writes an attribute of another object, used instead of `fget` and `fset`
+        validator: str
+            name the validator of the value is registered under with `SchemaValidators`
+
+        Returns
+        -------
+        Property
+            the descriptor, not yet assigned to a class
+
+        Raises
+        ------
+        ValueError
+            if the value is stored (no `fget` or `delegate`) but the affordance gives no starting value, neither a
+            `default` nor a `null` option
+        """
+        affordance = self.json()  # we need to convert to JSON because
+        # dataschema validation of API first approach proceeds through a JSON schema validator
+        # looks sort of circular, something to think about later.
+        keywords = WoTSchema.declared_fields(DataSchema, skip_subclasses=(PropertyAffordance,))
+        # a property-level const makes the property constant instead of constraining writes
+        data_schema = {key: value for key, value in affordance.items() if key in keywords and key != "const"}
+        # a null option allows None, the remaining options are the schema of the value
+        options = data_schema.pop("oneOf", [])
+        nullable = any(option.get("type") == "null" for option in options)
+        options = [option for option in options if option.get("type") != "null"]
+        if len(options) == 1:
+            data_schema.update(options[0])
+        elif options:
+            data_schema["oneOf"] = options
+        default = affordance.get("default", affordance.get("const"))
+        constant = "const" in affordance
+        if fget is None and delegate is None and default is None and not (nullable or constant):
+            raise ValueError(f"property {self.name} needs a default or a null option in its schema")
+        if self.writeOnly:
+            warnings.warn(
+                f"writeOnly of property {self.name} is not supported and is ignored",
+                UserWarning,
+                stacklevel=2,
+            )
+        model, _validator = schema_validator(data_schema, f"{self.name}_value", validator)
+        _property = Property(
+            default=default,
+            doc=self.description,
+            label=self.title,
+            constant=constant,
+            readonly=bool(self.readOnly),
+            allow_None=nullable,
+            observable=bool(self.observable),
+            model=model,
+            fget=fget,
+            fset=fset,
+            delegate=delegate,
+            deepcopy_default=isinstance(default, (dict, list)),
+            metadata={"unit": self.unit} if self.unit is not None else None,
+        )
+        if _validator is not None:
+            # override the builtin validator although it might be the same.
+            _property._schema_validator = _validator
+        return _property
 
 
 class ActionAffordance(InteractionAffordance, ActionMetadata):
@@ -348,11 +433,11 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
     """
 
     # [Supported Fields]() <br>
-    input: Optional[JSON] = None
-    output: Optional[JSON] = None
-    safe: Optional[bool] = None
-    idempotent: Optional[bool] = None
-    synchronous: Optional[bool] = None
+    input: JSON | None = None
+    output: JSON | None = None
+    safe: bool | None = None
+    idempotent: bool | None = None
+    synchronous: bool | None = None
 
     def __init__(self):
         super().__init__()
@@ -363,9 +448,10 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
 
     def build(self) -> None:  # noqa: D102
         action = cast(Action, self.objekt)
-        if action.obj.__doc__:
-            title = get_summary(action.obj.__doc__)
-            description = self.format_doc(action.obj.__doc__)
+        doc = action.doc
+        if doc:
+            title = get_summary(doc)
+            description = self.format_doc(doc)
             if title and not description.startswith(title):
                 self.title = title
                 self.description = description
@@ -404,7 +490,7 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
             self.safe = action.safe
 
     @classmethod
-    def from_descriptor(cls, action: Action, owner: Thing | ThingMeta, **kwargs) -> "ActionAffordance":  # noqa: D102
+    def from_descriptor(cls, action: Action, owner: Thing | ThingMeta, **kwargs) -> ActionAffordance:  # noqa: D102
         if not isinstance(action, Action):
             raise TypeError(f"action must be instance of Action, given type {type(action)}")
         affordance = ActionAffordance()
@@ -413,6 +499,47 @@ class ActionAffordance(InteractionAffordance, ActionMetadata):
         affordance.build()
         affordance.build_non_compliant_metadata()
         return affordance
+
+    def to_descriptor(self, obj: Callable | ActionDelegate, validator: str = "pydantic") -> Action:
+        """
+        Create the `Action` this affordance describes, invoking the given handler.
+
+        Parameters
+        ----------
+        obj: Callable | ActionDelegate
+            the handler, a sync or async method, or the delegate to a method of another object
+        validator: str
+            name the validator of the input is registered under with `SchemaValidators`
+
+        Returns
+        -------
+        Action
+            the descriptor, not yet assigned to a class
+
+        Raises
+        ------
+        InputSignatureError
+            if the parameters of the handler do not match the input, listing every mismatch
+        """
+        input_schema, _validator = None, None
+        if self.input:
+            check_input_signature(obj, self.input)
+            input_schema, _validator = schema_validator(self.input, f"{self.name}_input", validator)
+        output_schema = None
+        if self.output:
+            output_schema, _ = schema_validator(self.output, f"{self.name}_output", validator)
+        # flags absent from the TD keep the defaults of action(), synchronous=True decides the scheduling
+        flags = {
+            key: getattr(self, key) for key in ("safe", "idempotent", "synchronous") if getattr(self, key) is not None
+        }
+        _action = action(
+            input_schema=input_schema,
+            output_schema=output_schema,
+            doc="\n\n".join(text for text in (self.title, self.description) if text) or None,
+            **flags,
+        )(obj)
+        _action._schema_validator = _validator
+        return _action
 
 
 class EventAffordance(InteractionAffordance, EventMetadata):
@@ -424,8 +551,8 @@ class EventAffordance(InteractionAffordance, EventMetadata):
     """
 
     # [Supported Fields]() <br>
-    subscription: Optional[str] = None
-    data: Optional[JSON] = None
+    subscription: str | None = None
+    data: JSON | None = None
 
     def __init__(self):
         super().__init__()
@@ -459,7 +586,7 @@ class EventAffordance(InteractionAffordance, EventMetadata):
                 raise ValueError(f"unknown schema definition for event data, given type: {type(event.schema)}")
 
     @classmethod
-    def from_descriptor(cls, event: Event, owner: Thing | ThingMeta, **kwargs) -> "EventAffordance":  # noqa: D102
+    def from_descriptor(cls, event: Event, owner: Thing | ThingMeta, **kwargs) -> EventAffordance:  # noqa: D102
         if not isinstance(event, Event):
             raise TypeError(f"event must be instance of Event, given type {type(event)}")
         affordance = EventAffordance()
@@ -468,3 +595,55 @@ class EventAffordance(InteractionAffordance, EventMetadata):
         affordance.build()
         affordance.build_non_compliant_metadata()
         return affordance
+
+    def to_descriptor(self, validator: str = "pydantic") -> Event:
+        """
+        Create the `Event` this affordance describes.
+
+        Parameters
+        ----------
+        validator: str
+            name of the validator, registered with `SchemaValidators`, the event data schema is converted for.
+            The data is not validated on push, so no validator is preset.
+
+        Returns
+        -------
+        Event
+            the descriptor, not yet assigned to a class
+        """
+        schema = None
+        if self.data:
+            schema, _ = schema_validator(self.data, f"{self.name}_data", validator)
+        return Event(doc=self.description, label=self.title, schema=schema)
+
+
+def schema_validator(
+    schema: dict[str, Any],
+    name: str,
+    typ: str = "pydantic",
+) -> tuple[Any, BaseSchemaValidator | None]:
+    """
+    Convert a DataSchema of a Thing Description into the schema a validator takes.
+
+    Parameters
+    ----------
+    schema: dict[str, Any]
+        the DataSchema
+    name: str
+        name of the model generated for a pydantic validator, for example `<action>_input`
+    typ: str
+        name the validator is registered under with `SchemaValidators`
+
+    Returns
+    -------
+    tuple[Any, BaseSchemaValidator | None]
+        the schema for the descriptor, and the validator instance to preset on it. A pydantic model is left to the
+        type based lookup, since a `Property` validates by calling the model rather than through a validator.
+    """
+    from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
+
+    validator = getattr(SchemaValidators, typ)
+    if issubklass(validator, PydanticSchemaValidator):
+        return dataschema_to_model(schema, name), None
+    # preset, otherwise SchemaValidators.for_schema() picks the json_schema validator for any dict
+    return schema, validator(schema)
