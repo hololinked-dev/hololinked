@@ -337,10 +337,13 @@ class BoundAsyncAction(BoundAction):
 
 class ActionDelegate:
     """
-    A wrapper that delegates the action call to another object's method.
+    A thing wrapper that delegates the action call to another object's method.
 
     For example, in the case of a driver serving a Thing Model, the action call on the Thing can be delegated to the
     corresponding method on the driver object.
+
+    Generally used when an API document binds actions to specific implementation methods; could technically be
+    subsumed within an `Action` class itself, but is separated for explicit delegation.
     """
 
     __slots__ = ("_bound_delegate", "delegate", "impl", "member_name", "thing")

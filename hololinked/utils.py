@@ -639,7 +639,7 @@ def forkable(func):
     return wrapper
 
 
-class MismatchKind(StrEnum):
+class SignatureMismatchKind(StrEnum):
     """How the parameters of an action handler do not match the input of the action, worded for the error."""
 
     SINGLE_VALUE_ARITY = "the input is a single value, so the handler takes exactly one positional parameter"
@@ -653,7 +653,7 @@ class MismatchKind(StrEnum):
 class SignatureMismatch:
     """A mismatch between the parameters of an action handler and the input of the action."""
 
-    kind: MismatchKind
+    kind: SignatureMismatchKind
     name: str | None = None
     """the parameter or input property concerned, None if the mismatch is about the handler as a whole"""
 
@@ -717,7 +717,7 @@ def check_input_signature(func: Callable, schema: dict[str, Any]) -> None:
     if not (schema.get("type") == "object" or "properties" in schema):
         positional = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD, Parameter.VAR_POSITIONAL)
         if len(parameters) != 1 or parameters[0].kind not in positional:
-            mismatches.append(SignatureMismatch(MismatchKind.SINGLE_VALUE_ARITY))
+            mismatches.append(SignatureMismatch(SignatureMismatchKind.SINGLE_VALUE_ARITY))
     else:
         properties = schema.get("properties", {})
         takes_kwargs = any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters)
@@ -727,24 +727,24 @@ def check_input_signature(func: Callable, schema: dict[str, Any]) -> None:
             if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
         }
         mismatches += [
-            SignatureMismatch(MismatchKind.POSITIONAL_ONLY, parameter.name)
+            SignatureMismatch(SignatureMismatchKind.POSITIONAL_ONLY, parameter.name)
             for parameter in parameters
             if parameter.kind is Parameter.POSITIONAL_ONLY
         ]
         mismatches += [
-            SignatureMismatch(MismatchKind.REQUIRED_NOT_IN_INPUT, parameter.name)
+            SignatureMismatch(SignatureMismatchKind.REQUIRED_NOT_IN_INPUT, parameter.name)
             for parameter in parameters
             if parameter.name in keywords and parameter.default is Parameter.empty and parameter.name not in properties
         ]
         if not takes_kwargs:
             mismatches += [
-                SignatureMismatch(MismatchKind.PROPERTY_NOT_A_PARAMETER, name)
+                SignatureMismatch(SignatureMismatchKind.PROPERTY_NOT_A_PARAMETER, name)
                 for name in sorted(set(properties) | set(schema.get("required", [])))
                 if name not in keywords
             ]
         additional = schema.get("additionalProperties", None)
         if additional is not None and additional is not False and not takes_kwargs:
-            mismatches.append(SignatureMismatch(MismatchKind.ADDITIONAL_NEEDS_KWARGS))
+            mismatches.append(SignatureMismatch(SignatureMismatchKind.ADDITIONAL_NEEDS_KWARGS))
     if mismatches:
         raise InputSignatureError(func, mismatches)
 
@@ -768,6 +768,6 @@ __all__ = [
     forkable.__name__,
     check_input_signature.__name__,
     InputSignatureError.__name__,
-    MismatchKind.__name__,
+    SignatureMismatchKind.__name__,
     SignatureMismatch.__name__,
 ]

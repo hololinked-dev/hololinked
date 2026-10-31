@@ -402,7 +402,9 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
                 UserWarning,
                 stacklevel=2,
             )
-        model, _validator = schema_validator(data_schema, f"{self.name}_value", validator)
+        model, _validator = None, None
+        if data_schema:
+            model, _validator = schema_validator(data_schema, f"{self.name}_value", validator)
         _property = Property(
             default=default,
             doc=self.description,
@@ -418,9 +420,8 @@ class PropertyAffordance(DataSchema, InteractionAffordance, PropertyMetadata):
             deepcopy_default=isinstance(default, (dict, list)),
             metadata={"unit": self.unit} if self.unit is not None else None,
         )
-        if _validator is not None:
-            # override the builtin validator although it might be the same.
-            _property._schema_validator = _validator
+        # override the builtin validator although it might be the same.
+        _property._schema_validator = _validator
         return _property
 
 
@@ -621,7 +622,7 @@ def schema_validator(
     schema: dict[str, Any],
     name: str,
     typ: str = "pydantic",
-) -> tuple[Any, BaseSchemaValidator | None]:
+) -> tuple[Any, BaseSchemaValidator]:
     """
     Convert a DataSchema of a Thing Description into the schema a validator takes.
 
@@ -636,14 +637,12 @@ def schema_validator(
 
     Returns
     -------
-    tuple[Any, BaseSchemaValidator | None]
-        the schema for the descriptor, and the validator instance to preset on it. A pydantic model is left to the
-        type based lookup, since a `Property` validates by calling the model rather than through a validator.
+    tuple[Any, BaseSchemaValidator]
+        the schema for the descriptor, and the validator instance to preset on it
     """
     from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
 
     validator = getattr(SchemaValidators, typ)
-    if issubklass(validator, PydanticSchemaValidator):
-        return dataschema_to_model(schema, name), None
-    # preset, otherwise SchemaValidators.for_schema() picks the json_schema validator for any dict
-    return schema, validator(schema)
+    converted = dataschema_to_model(schema, name) if issubklass(validator, PydanticSchemaValidator) else schema
+    # preset, otherwise SchemaValidators.for_schema() picks whichever validator was registered last for the schema type
+    return converted, validator(converted)

@@ -8,13 +8,16 @@ from collections.abc import Mapping
 from functools import cached_property
 from typing import Any, Literal
 
+import pydantic
+
 from pydantic import BaseModel, RootModel
 
 from hololinked.constants import JSONSchemaType
+from hololinked.core.exceptions import ValidationError
 from hololinked.core.interfaces import BaseSchemaValidator
 from hololinked.utils import issubklass, wrap_plain_types_in_rootmodel
 
-from .utils import pydantic_validate_args_kwargs
+from .utils import pydantic_validate_args_kwargs, pydantic_validation_error_message
 
 
 class PydanticSchemaValidator(BaseSchemaValidator):
@@ -91,22 +94,35 @@ class PydanticSchemaValidator(BaseSchemaValidator):
         -------
         Any
             the model instance, or the value it wraps for a root model, like `3` for a root model of `int`
+
+        Raises
+        ------
+        ValidationError
+            if the data does not conform to the model
         """
-        value = self.validator(data)
+        try:
+            value = self.validator(data)
+        except pydantic.ValidationError as ex:
+            raise ValidationError(pydantic_validation_error_message(ex)) from ex
         return value.root if isinstance(value, RootModel) else value
 
     def validate_method_call(self, args, kwargs) -> None:  # noqa: D102
-        if self.input_kind == "value":
-            values = [*args, *kwargs.values()]
-            if len(values) != 1:
-                raise ValueError(f"Expected exactly one argument, given {len(values)}.")
-            self.validator(values[0])
-        elif self.input_kind == "mapping":
-            if args:
-                raise ValueError("Positional arguments are not accepted for an object input, give keyword arguments.")
-            self.validator(kwargs)
-        else:
-            pydantic_validate_args_kwargs(self.schema, args, kwargs)
+        try:
+            if self.input_kind == "value":
+                values = [*args, *kwargs.values()]
+                if len(values) != 1:
+                    raise ValidationError(f"Expected exactly one argument, given {len(values)}.")
+                self.validator(values[0])
+            elif self.input_kind == "mapping":
+                if args:
+                    raise ValidationError(
+                        "Positional arguments are not accepted for an object input, give keyword arguments."
+                    )
+                self.validator(kwargs)
+            else:
+                pydantic_validate_args_kwargs(self.schema, args, kwargs)
+        except pydantic.ValidationError as ex:
+            raise ValidationError(pydantic_validation_error_message(ex)) from ex
 
     def json(self) -> JSONSchemaType:  # noqa: D102
         return self.schema.model_dump_json()  # ty: ignore[invalid-return-type, missing-argument]

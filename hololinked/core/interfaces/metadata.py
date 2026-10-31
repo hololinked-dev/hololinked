@@ -183,15 +183,12 @@ class Metadata(BaseModel):
                     # TODO, slightly misleading, how will the impl access it?
                     descriptors[name] = affordance.to_descriptor(validator=validator)
                     continue
-                is_property_impl_type = property_impl is not None and isinstance(impl_member, property_impl)
-                if not is_property_impl_type and (
-                    inspect.isfunction(impl_member)
-                    or inspect.ismethod(impl_member)
-                    or isinstance(impl_member, (staticmethod, classmethod))
-                ):
+                is_custom_property_impl_type = property_impl is not None and isinstance(impl_member, property_impl)
+                is_data_descriptor = inspect.isdatadescriptor(impl_member) and not isinstance(impl_member, Property)
+                if not (is_custom_property_impl_type or is_data_descriptor):
                     raise TypeError(
                         f"implemented by a {type(impl_member).__name__},"
-                        " only a @property, an attribute or a property_impl implements a property"
+                        " only a @property, a data descriptor or a property_impl implements a property"
                     )
                 descriptor = cast(
                     Property,
@@ -199,12 +196,11 @@ class Metadata(BaseModel):
                         delegate=PropertyDelegate(
                             impl,
                             member_name,
-                            delegate=impl_member if is_property_impl_type else None,
+                            delegate=impl_member if is_custom_property_impl_type else None,
                         ),
                         validator=validator,
                     ),
                 )
-                # a plain attribute is writable whenever the property is, a @property only through its setter
                 if isinstance(impl_member, property):
                     if descriptor.readonly and impl_member.fset is not None:
                         raise TypeError("read-only, but the @property has a setter")
@@ -228,8 +224,8 @@ class Metadata(BaseModel):
                 if impl_member is None:
                     # this if condition differs from properties, as actions must have a handler
                     raise TypeError("has no handler")
-                uses_action_impl = action_impl is not None and isinstance(impl_member, action_impl)
-                if not uses_action_impl and not (
+                is_custom_action_impl_type = action_impl is not None and isinstance(impl_member, action_impl)
+                if not is_custom_action_impl_type and not (
                     inspect.isfunction(impl_member)
                     or inspect.ismethod(impl_member)
                     or isinstance(impl_member, (staticmethod, classmethod))
@@ -239,7 +235,7 @@ class Metadata(BaseModel):
                         " only a method or an action_impl implements an action"
                     )
                 descriptors[name] = affordance.to_descriptor(
-                    ActionDelegate(impl, member_name, delegate=impl_member if uses_action_impl else None),
+                    ActionDelegate(impl, member_name, delegate=impl_member if is_custom_action_impl_type else None),
                     validator=validator,
                 )
             except (TypeError, ValueError) as ex:

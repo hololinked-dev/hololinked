@@ -1,6 +1,6 @@
-import jsonschema
 import pytest
 
+from hololinked.core.exceptions import ValidationError
 from hololinked.core.interfaces.schema_validators import BaseSchemaValidator
 from hololinked.metadata.td.pydantic_extensions import dataschema_to_model
 from hololinked.schema_validators.fast_json_schema import FastJSONSchemaValidator
@@ -28,7 +28,7 @@ def test_method_call(validator: BaseSchemaValidator, args: tuple, kwargs: dict, 
     if valid:
         validator.validate_method_call(args, kwargs)
     else:
-        with pytest.raises((ValueError, jsonschema.ValidationError)):
+        with pytest.raises(ValidationError):
             validator.validate_method_call(args, kwargs)
 
 
