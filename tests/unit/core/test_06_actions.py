@@ -38,12 +38,12 @@ def test_01_allowed_actions():
     # 1. instance method can be decorated with action
     assert TestThing.action_echo == action()(TestThing.action_echo.obj)  # already predecorated as action
     # 2. classmethod can be decorated with action
-    assert Action(TestThing.action_echo_with_classmethod) == action()(TestThing.action_echo_with_classmethod)
+    assert Action(TestThing.action_echo_with_classmethod.__func__) == action()(TestThing.action_echo_with_classmethod)
     assert isclassmethod(TestThing.action_echo_with_classmethod)
     # 3. async methods can be decorated with action
     assert Action(TestThing.action_echo_async) == action()(TestThing.action_echo_async)
     # 4. async classmethods can be decorated with action
-    assert Action(TestThing.action_echo_async_with_classmethod) == action()(
+    assert Action(TestThing.action_echo_async_with_classmethod.__func__) == action()(
         TestThing.action_echo_async_with_classmethod
     )
     assert isclassmethod(TestThing.action_echo_async_with_classmethod)
@@ -282,7 +282,7 @@ def test_03_metadata():
     assert isinstance(action.schema_validator, JSONSchemaValidator)
 
 
-def test_04_api_and_invalid_actions():
+def test_04_invalid_actions():
     """Test if action prevents invalid objects from being named as actions and raises neat errors"""
     # done allow action decorator to be terminated without '()' on a method
     with pytest.raises(TypeError) as ex:
@@ -435,15 +435,15 @@ def test_06_action_affordance(thing: TestThing):
     assert affordance.description is None
 
 
-def test_07_action_name_from_attribute():
+def test_07_action_name_override():
     def start(self, channel: int) -> int:
         return channel
 
-    class NamedActions(Thing):
+    class TestThing(Thing):
         acquire = action()(start)
 
-    assert NamedActions.acquire.name == "acquire"
-    instance = NamedActions(id="test-action-names")
+    assert TestThing.acquire.name == "acquire"
+    instance = TestThing(id="test-action-names")
     assert instance.acquire.name == "acquire"
     assert "acquire" in instance.actions.descriptors
 
@@ -452,28 +452,28 @@ def test_07_action_name_from_attribute():
         action()(start).name
 
 
-def test_08_action_doc():
+def test_08_action_doc_override():
     def start(self, channel: int) -> int:
         """Starts the acquisition."""
         return channel
 
     with pytest.warns(UserWarning, match="already wrapped"):
 
-        class DocumentedActions(Thing):
+        class TestThing(Thing):
             acquire = action()(start)
             acquire_described = action(doc="Acquires on a channel.")(start)
             acquire_again = action(safe=True)(acquire)
 
-    assert DocumentedActions.acquire.doc == start.__doc__
-    assert DocumentedActions.acquire_described.doc == "Acquires on a channel."
-    assert DocumentedActions.acquire_again.doc == start.__doc__  # not the docstring of Action
+    assert TestThing.acquire.doc == start.__doc__
+    assert TestThing.acquire_described.doc == "Acquires on a channel."
+    assert TestThing.acquire_again.doc == start.__doc__
 
-    assert ActionAffordance.from_descriptor(DocumentedActions.acquire, DocumentedActions).description == start.__doc__
-    affordance = ActionAffordance.from_descriptor(DocumentedActions.acquire_described, DocumentedActions)
+    assert ActionAffordance.from_descriptor(TestThing.acquire, TestThing).description == start.__doc__
+    affordance = ActionAffordance.from_descriptor(TestThing.acquire_described, TestThing)
     assert affordance.description == "Acquires on a channel."
 
 
-def test_09_action_model_schemas():
+def test_09_action_schema_override():
     """a model class is a schema, not a method decorated without '()'."""
 
     class Channel(BaseModel):
