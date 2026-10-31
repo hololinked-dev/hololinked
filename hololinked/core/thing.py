@@ -131,16 +131,23 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             - `json_filename`: `str`, optional
                 If using JSON storage, this filename is used to persist property values. If not provided, a default filename
                 is generated based on the instance name.
+
+        Raises
+        ------
+        ValueError
+            if `id` is None.
         """
         from hololinked import Serializers, prepare_object_storage
         from hololinked.core.logger import prepare_object_logger
         from hololinked.core.state_machine import prepare_object_FSM
 
+        if id is None:
+            raise ValueError("Thing id cannot be None")
+        if isinstance(id, str) and id.startswith("/"):
+            id = id.removeprefix("/")
         Propertized.__init__(self, id=id, logger=logger, **kwargs)
         RemoteInvokable.__init__(self)
         EventSource.__init__(self)
-        if self.id.startswith("/"):
-            self.id = self.id.removeprefix("/")
         serializer = kwargs.get("serializer", None)
         if serializer is not None:
             Serializers.register_for_thing_instance(self.id, serializer)
@@ -422,9 +429,10 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             self.logger.debug("exit() called on a object that is not exposed yet.")
             return
         if self._owners:
+            owners = ", ".join(f"{owner.__class__.__name__} with ID {owner.id}" for owner in self._owners)
             raise NotImplementedError(
                 "call exit on the top-level object, composed objects cannot exit the loop. "
-                + f"This object belongs to {self._owners.__class__.__name__} with ID {self._owners.id}."
+                + f"This object belongs to {owners}."
             )
         self.eventloop.stop()
 
