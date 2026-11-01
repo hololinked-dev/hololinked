@@ -1,10 +1,14 @@
 """JSON schema validator based on the standard python `jsonschema` package."""
 
+from typing import Any
+
 import jsonschema
 
 from hololinked.constants import JSONSchemaType
+from hololinked.core.exceptions import ValidationError
 from hololinked.core.interfaces import BaseSchemaValidator
-from hololinked.utils import json_schema_merge_args_to_kwargs
+
+from .utils import json_schema_merge_args_to_kwargs
 
 
 class JSONSchemaValidator(BaseSchemaValidator):
@@ -60,10 +64,21 @@ class JSONSchemaValidator(BaseSchemaValidator):
         """
         jsonschema.Draft7Validator.check_schema(schema)
 
-    def validate(self, data) -> None:  # noqa: D102
-        self.validator.validate(data)
+    def validate(self, data) -> Any:  # noqa: D102
+        try:
+            self.validator.validate(data)
+        except jsonschema.ValidationError as ex:
+            path = ".".join(str(part) for part in ex.absolute_path)
+            raise ValidationError(f"{path}: {ex.message}" if path else ex.message) from ex
+        return data
 
     def validate_method_call(self, args, kwargs) -> None:  # noqa: D102
+        if not (self.schema.get("type") == "object" or "properties" in self.schema):
+            values = [*args, *kwargs.values()]
+            if len(values) != 1:
+                raise ValidationError(f"Expected exactly one argument, given {len(values)}.")
+            self.validate(values[0])
+            return
         if len(args) > 0:
             kwargs = json_schema_merge_args_to_kwargs(self.schema, args, kwargs)
             # TODO fix type definition

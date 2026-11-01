@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import pytest
 
+from pydantic import BaseModel
 from testkit.things import TestThing
 from testkit.things.test_thing import replace_methods_with_actions
 
@@ -13,7 +14,7 @@ from hololinked.core.actions import (
     BoundAsyncAction,
     BoundSyncAction,
 )
-from hololinked.core.thing import action
+from hololinked.core.thing import Thing, action
 from hololinked.metadata.td.interaction_affordance import ActionAffordance
 from hololinked.schema_validators import JSONSchemaValidator
 from hololinked.utils import isclassmethod
@@ -37,12 +38,12 @@ def test_01_allowed_actions():
     # 1. instance method can be decorated with action
     assert TestThing.action_echo == action()(TestThing.action_echo.obj)  # already predecorated as action
     # 2. classmethod can be decorated with action
-    assert Action(TestThing.action_echo_with_classmethod) == action()(TestThing.action_echo_with_classmethod)
+    assert Action(TestThing.action_echo_with_classmethod.__func__) == action()(TestThing.action_echo_with_classmethod)
     assert isclassmethod(TestThing.action_echo_with_classmethod)
     # 3. async methods can be decorated with action
     assert Action(TestThing.action_echo_async) == action()(TestThing.action_echo_async)
     # 4. async classmethods can be decorated with action
-    assert Action(TestThing.action_echo_async_with_classmethod) == action()(
+    assert Action(TestThing.action_echo_async_with_classmethod.__func__) == action()(
         TestThing.action_echo_async_with_classmethod
     )
     assert isclassmethod(TestThing.action_echo_async_with_classmethod)
@@ -281,7 +282,7 @@ def test_03_metadata():
     assert isinstance(action.schema_validator, JSONSchemaValidator)
 
 
-def test_04_api_and_invalid_actions():
+def test_04_invalid_actions():
     """Test if action prevents invalid objects from being named as actions and raises neat errors"""
     # done allow action decorator to be terminated without '()' on a method
     with pytest.raises(TypeError) as ex:
@@ -314,7 +315,7 @@ def test_04_api_and_invalid_actions():
 
     with pytest.raises(ValueError) as ex:
         action(safe=True, some_kw=1)
-    assert str(ex.value).startswith("Only 'safe', 'idempotent', 'synchronous' are allowed")
+    assert str(ex.value).startswith("Only 'safe', 'idempotent', 'synchronous', 'doc' are allowed")
 
 
 def test_05_thing_cls_actions(thing: TestThing):
@@ -432,6 +433,58 @@ def test_06_action_affordance(thing: TestThing):
     assert isinstance(affordance.input, dict)
     assert isinstance(affordance.output, dict)
     assert affordance.description is None
+
+
+def test_07_action_name_override():
+    def start(self, channel: int) -> int:
+        return channel
+
+    class TestThing(Thing):
+        acquire = action()(start)
+
+    assert TestThing.acquire.name == "acquire"
+    instance = TestThing(id="test-action-names")
+    assert instance.acquire.name == "acquire"
+    assert "acquire" in instance.actions.descriptors
+
+    with pytest.raises(AttributeError):
+        # needs descriptor lifecycle __set_name__ to have the name set
+        action()(start).name
+
+
+def test_08_action_doc_override():
+    def start(self, channel: int) -> int:
+        """Starts the acquisition."""
+        return channel
+
+    with pytest.warns(UserWarning, match="already wrapped"):
+
+        class TestThing(Thing):
+            acquire = action()(start)
+            acquire_described = action(doc="Acquires on a channel.")(start)
+            acquire_again = action(safe=True)(acquire)
+
+    assert TestThing.acquire.doc == start.__doc__
+    assert TestThing.acquire_described.doc == "Acquires on a channel."
+    assert TestThing.acquire_again.doc == start.__doc__
+
+    assert ActionAffordance.from_descriptor(TestThing.acquire, TestThing).description == start.__doc__
+    affordance = ActionAffordance.from_descriptor(TestThing.acquire_described, TestThing)
+    assert affordance.description == "Acquires on a channel."
+
+
+def test_09_action_schema_override():
+    """a model class is a schema, not a method decorated without '()'."""
+
+    class Channel(BaseModel):
+        channel: int
+
+    def start(self, channel: int) -> int:
+        return channel
+
+    acquire = action(input_schema=Channel, output_schema=Channel)(start)
+    assert acquire.argument_schema is Channel
+    assert acquire.return_value_schema is Channel
 
 
 if __name__ == "__main__":

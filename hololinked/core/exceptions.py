@@ -28,6 +28,10 @@ class DatabaseError(Exception):
     """Raise to show database related errors."""
 
 
+class ValidationError(ValueError):
+    """Raised by every schema validator when data does not conform to its schema, whichever library validates."""
+
+
 __all__ = [
     "BreakInnerLoop",
     "BreakAllLoops",
@@ -35,4 +39,5 @@ __all__ = [
     "BreakFlow",
     "StateMachineError",
     "DatabaseError",
+    "ValidationError",
 ]

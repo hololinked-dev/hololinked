@@ -1,10 +1,14 @@
 """JSON schema validator based on the `fastjsonschema` package. `pip install fastjsonschema` to use."""
 
+from typing import Any
+
 import fastjsonschema
 
 from hololinked.constants import JSONSchemaType
+from hololinked.core.exceptions import ValidationError
 from hololinked.core.interfaces import BaseSchemaValidator
-from hololinked.utils import json_schema_merge_args_to_kwargs
+
+from .utils import json_schema_merge_args_to_kwargs
 
 
 class FastJSONSchemaValidator(BaseSchemaValidator):
@@ -61,10 +65,20 @@ class FastJSONSchemaValidator(BaseSchemaValidator):
         """
         fastjsonschema.compile(schema)
 
-    def validate(self, data) -> None:  # noqa: D102
-        self.validator(data)
+    def validate(self, data) -> Any:  # noqa: D102
+        try:
+            self.validator(data)
+        except fastjsonschema.JsonSchemaValueException as ex:
+            raise ValidationError(ex.message) from ex
+        return data
 
     def validate_method_call(self, args, kwargs) -> None:  # noqa: D102
+        if not (self.schema.get("type") == "object" or "properties" in self.schema):
+            values = [*args, *kwargs.values()]
+            if len(values) != 1:
+                raise ValidationError(f"Expected exactly one argument, given {len(values)}.")
+            self.validate(values[0])
+            return
         if len(args) > 0:
             kwargs = json_schema_merge_args_to_kwargs(self.schema, args, kwargs)
             # TODO fix type definition

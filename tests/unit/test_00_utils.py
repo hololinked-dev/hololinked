@@ -1,13 +1,13 @@
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
 from pydantic import BaseModel, ValidationError
 
+from hololinked.schema_validators.utils import pydantic_validate_args_kwargs
 from hololinked.utils import (
     get_input_model_from_signature,
     issubklass,
-    pydantic_validate_args_kwargs,
 )
 
 
@@ -356,9 +356,9 @@ def test_08_model_func_with_args_and_kwargs():
 def test_08_model_func_with_annotated_args_and_kwargs_model():
     model = get_input_model_from_signature(func_with_annotated_args_and_kwargs)
     assert issubklass(model, BaseModel)
-    assert model.model_fields["args"].annotation == List[int] or model.model_fields["args"].annotation == list[int]
+    assert model.model_fields["args"].annotation == list[int] or model.model_fields["args"].annotation == list[int]
     assert (
-        model.model_fields["kwargs"].annotation == Dict[str, int]
+        model.model_fields["kwargs"].annotation == dict[str, int]
         or model.model_fields["kwargs"].annotation == dict[str, int]
     )
     assert len(model.model_fields) == 2
