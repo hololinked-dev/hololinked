@@ -232,6 +232,10 @@ class TestThing(Thing):
         doc="A property with a simple pydantic model to check RW",
     )
 
+    pydantic_plain_type_int_prop = Property(model=int, default=0)
+
+    pydantic_plain_type_list_prop = Property(model=list[int | str], default=[], deepcopy_default=True)
+
     schema = {"type": "string", "minLength": 1, "maxLength": 10, "pattern": "^[a-z]+$"}
 
     json_schema_prop = Property(
