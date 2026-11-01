@@ -24,6 +24,7 @@ from hololinked.utils import MappableSingleton, issubklass
 
 if TYPE_CHECKING:
     from hololinked.core.thing import Thing
+    from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
 
 
 class AdapterRegistry(MappableSingleton):
@@ -170,7 +171,7 @@ class SchemaValidators(Registry):
 
     json_schema: type[BaseSchemaValidator]
     """JSON Schema validator class that can be instantiated with a JSON schema to validate data against that schema."""
-    pydantic: type[BaseSchemaValidator]
+    pydantic: type[PydanticSchemaValidator]
     """
     Pydantic validator class that can be instantiated with a Pydantic model to validate data against
     the schema defined by that model, or a plain python type with `SchemaValidators.from_type()`.
