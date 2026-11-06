@@ -34,7 +34,8 @@ def event_affordance(affordance: dict) -> EventAffordance:
     return EventAffordance.from_metadata("data_ready", {"id": "thing", "events": {"data_ready": affordance}})
 
 
-def test_thing(descriptor: Property | Action, name: str = "value") -> Thing:
+# dont add underscore as test_ is reserved for pytest test functions
+def testthing(descriptor: Property | Action, name: str = "value") -> Thing:
     return type("TestThing", (Thing,), {name: descriptor})(id=f"test-thing-{uuid_hex()}")
 
 
@@ -159,7 +160,7 @@ def test_04_property_data_schema():
     ],
 )
 def test_05_property_validates_writes(schema_validator: str, schema: dict, valid: list[Any], invalid: list[Any]):
-    thing = test_thing(property_affordance(schema).to_descriptor(validator=schema_validator))
+    thing = testthing(property_affordance(schema).to_descriptor(validator=schema_validator))
     for value in valid:
         thing.value = value
     for value in invalid:
@@ -197,7 +198,7 @@ def test_06_property_flags(
     assert property.observable is bool(observable)
     assert property.metadata == ({"unit": unit} if unit else None)
     assert (property.label, property.doc) == (title, description)
-    thing = test_thing(property)
+    thing = testthing(property)
     assert thing.value == 3
     if read_only:
         with pytest.raises(ValueError, match="Read-only"):
@@ -245,7 +246,7 @@ def test_07_property_null_option(
     # check with the actual validator
     property = affordance.to_descriptor(validator=schema_validator)
     assert property.allow_None
-    thing = test_thing(property)
+    thing = testthing(property)
     for value in valid:
         thing.value = value
         assert thing.value == value
@@ -266,7 +267,7 @@ def test_07_property_null_option(
 def test_08_property_const(schema_validator: str, schema: dict, value: Any):
     property = property_affordance(schema).to_descriptor(validator=schema_validator)
     assert property.constant
-    thing = test_thing(property)
+    thing = testthing(property)
     assert thing.value == value
     with pytest.raises(ValueError, match="Constant"):
         thing.value = value
@@ -286,7 +287,7 @@ def test_10_property_handlers(schema_validator):
         fset=lambda self, value: written.append(value),
         validator=schema_validator,
     )
-    thing = test_thing(property)
+    thing = testthing(property)
     assert thing.value == 7
     thing.value = 5
     with pytest.raises(ValidationError):
@@ -342,7 +343,7 @@ def test_12_attribute_like_property_needs_a_starting_value():
     affordance = property_affordance({"type": "integer"})
     with pytest.raises(ValueError, match="needs a default or a null option"):
         affordance.to_descriptor()
-    test_thing(affordance.to_descriptor(fget=lambda self: 1))
+    testthing(affordance.to_descriptor(fget=lambda self: 1))
 
 
 @pytest.mark.parametrize("schema_validator", ["pydantic", "json_schema"])
@@ -375,7 +376,7 @@ def test_12_attribute_like_property_needs_a_starting_value():
 )
 def test_13_action_input(schema_validator: str, schema: dict, handler: Callable, valid: list[Any], invalid: list[Any]):
     """an object input is called with keyword arguments, any other input with one positional argument."""
-    thing = test_thing(action_affordance({"input": schema}).to_descriptor(handler, validator=schema_validator), "act")
+    thing = testthing(action_affordance({"input": schema}).to_descriptor(handler, validator=schema_validator), "act")
     for payload, expected in valid:
         # normally we need the eventloop object which does the splitting of args and kwargs
         # for this test we do this manually for now.
@@ -556,3 +557,13 @@ def test_17_event(schema_validator):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
+
+
+"""
+Metadata class - compile_descriptors_from
+Working of the delegates
+to_descriptor
+from_metadata
+from_file
+produce
+"""

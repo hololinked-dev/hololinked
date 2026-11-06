@@ -6,14 +6,13 @@ from collections import OrderedDict
 from inspect import Parameter
 from typing import Any
 
-import pydantic
-
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 
 from hololinked.core.exceptions import ValidationError
 
 
-def pydantic_validation_error_message(ex: pydantic.ValidationError) -> str:
+def pydantic_validation_error_message(ex: PydanticValidationError) -> str:
     """
     Format the errors of pydantic without the model name and documentation links.
 

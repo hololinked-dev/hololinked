@@ -1,84 +1,74 @@
-# import itertools
+import itertools
 
-# from typing import Generator
+from typing import Generator
 
-# import pytest
-# import requests
+import pytest
+import requests
 
-# from testkit.helpers import hostname_prefix, stop_all_runs, wait_until_server_ready
+from testkit.helpers import hostname_prefix, stop_all_runs, wait_until_server_ready
+from testkit.things import OscilloscopeDriver, oscilloscope_TD
 
-# from hololinked.core import Thing
-# from hololinked.metadata.td import ThingModel
-# from hololinked.utils import uuid_hex
-
-
-# ports = itertools.count(63000)
-
-# TD = {
-#     "title": "Amplifier",
-#     "properties": {"gain": {"type": "number", "minimum": 0}},
-#     "actions": {
-#         "double": {"input": {"type": "number"}, "output": {"type": "number"}},
-#         "scale": {
-#             "input": {
-#                 "type": "object",
-#                 "properties": {"value": {"type": "number"}, "factor": {"type": "number"}},
-#                 "required": ["value", "factor"],
-#             },
-#         },
-#     },
-# }
+from hololinked.core import Thing
+from hololinked.metadata.td import ThingModel
+from hololinked.utils import uuid_hex
 
 
-# class AmplifierDriver:
-#     def __init__(self) -> None:
-#         self._gain = 1.5
-
-#     @property
-#     def gain(self) -> float:
-#         return self._gain
-
-#     @gain.setter
-#     def gain(self, value: float) -> None:
-#         self._gain = value
-
-#     def double(self, value: float) -> float:
-#         return value * 2
-
-#     def scale(self, value: float, factor: float) -> float:
-#         return value * factor
+ports = itertools.count(63000)
 
 
-# @pytest.fixture(scope="module")
-# def amplifier() -> Generator[tuple[Thing, int], None, None]:
-#     port = next(ports)
-#     thing = ThingModel.from_metadata(TD).produce(AmplifierDriver(), id=f"amplifier-{uuid_hex()}")
-#     thing.run_with_http_server(address="127.0.0.1", port=port, forked=True, print_welcome_message=False)
-#     try:
-#         wait_until_server_ready(port=port)
-#         yield thing, port
-#     finally:
-#         stop_all_runs()
+@pytest.fixture(scope="module")
+def oscilloscope() -> Generator[tuple[Thing, int], None, None]:
+    port = next(ports)
+    thing = ThingModel.from_metadata(oscilloscope_TD).produce(OscilloscopeDriver(), id=f"oscilloscope-{uuid_hex()}")
+    thing.run_with_http_server(address="127.0.0.1", port=port, forked=True, print_welcome_message=False)
+    try:
+        wait_until_server_ready(port=port)
+        yield thing, port
+    finally:
+        stop_all_runs()
 
 
-# def test_01_single_value_input(amplifier):
-#     """a generic WoT client sends a bare value for a non-object input."""
-#     thing, port = amplifier
-#     response = requests.post(f"{hostname_prefix}:{port}/{thing.id}/double", json=5)
+@pytest.fixture
+def http_client() -> requests.Session:
+    with requests.Session() as session:
+        yield session
+
+
+def test_01_read_write_property(oscilloscope, http_client):
+    """a generic WoT client sends a bare value for a non-object input."""
+    thing, port = oscilloscope
+    response = http_client.get(f"{hostname_prefix}:{port}/{thing.id}/time-resolution")
+    assert response.status_code == 200
+    assert isinstance(response.json(), (int, float))
+
+    response = http_client.put(f"{hostname_prefix}:{port}/{thing.id}/time-resolution", json=2.0)
+    assert response.status_code == 200
+
+    response = http_client.get(f"{hostname_prefix}:{port}/{thing.id}/time-resolution")
+    assert response.status_code == 200
+    assert response.json() == 2.0
+
+
+def test_02_invoke_action(oscilloscope, http_client):
+    thing, port = oscilloscope
+    response = http_client.post(f"{hostname_prefix}:{port}/{thing.id}/set-trigger-level", json=0.5)
+    assert response.status_code == 200
+    assert response.json() == 0.5
+    response = http_client.post(f"{hostname_prefix}:{port}/{thing.id}/set-trigger-level", json="x")
+    assert response.json()["exception"]["type"] == "ValidationError"  # an error in the body, with status 200
+
+
+# def test_02_object_input_and_property(oscilloscope):
+#     thing, port = oscilloscope
+#     response = requests.post(
+#         f"{hostname_prefix}:{port}/{thing.id}/configure-channel",
+#         json={"channel": 1, "volts_per_division": 0.2},
+#     )
 #     assert response.status_code == 200
-#     assert response.json() == 10
-#     response = requests.post(f"{hostname_prefix}:{port}/{thing.id}/double", json="x")
-#     assert "validation error" in response.json()["exception"]["message"]  # an error in the body, with status 200
-
-
-# def test_02_object_input_and_property(amplifier):
-#     thing, port = amplifier
-#     response = requests.post(f"{hostname_prefix}:{port}/{thing.id}/scale", json={"value": 2, "factor": 3})
+#     assert response.json() == 2.0
+#     response = requests.get(f"{hostname_prefix}:{port}/{thing.id}/time-resolution")
 #     assert response.status_code == 200
-#     assert response.json() == 6
-#     response = requests.get(f"{hostname_prefix}:{port}/{thing.id}/gain")
-#     assert response.status_code == 200
-#     assert response.json() == 1.5
+#     assert response.json() == 1.0
 
 
 # if __name__ == "__main__":

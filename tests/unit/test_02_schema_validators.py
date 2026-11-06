@@ -24,7 +24,7 @@ each_validator = pytest.mark.parametrize(
 )
 
 
-def test_method_call(validator: BaseSchemaValidator, args: tuple, kwargs: dict, valid: bool) -> None:
+def validate_method_call(validator: BaseSchemaValidator, args: tuple, kwargs: dict, valid: bool) -> None:
     if valid:
         validator.validate_method_call(args, kwargs)
     else:
@@ -47,7 +47,7 @@ def test_method_call(validator: BaseSchemaValidator, args: tuple, kwargs: dict, 
 )
 def test_01_single_value_input(make_validator, schema, args, kwargs, valid):
     """an input that is not an object is one value, given positionally or as the only keyword argument."""
-    test_method_call(make_validator(schema), args, kwargs, valid)
+    validate_method_call(make_validator(schema), args, kwargs, valid)
 
 
 @each_validator
@@ -61,7 +61,7 @@ def test_01_single_value_input(make_validator, schema, args, kwargs, valid):
 )
 def test_02_mapping_input(make_validator, args, kwargs, valid):
     """an object without properties needs all arguments as keywords."""
-    test_method_call(make_validator(DICTIONARY), args, kwargs, valid)
+    validate_method_call(make_validator(DICTIONARY), args, kwargs, valid)
 
 
 @each_validator
@@ -75,7 +75,7 @@ def test_02_mapping_input(make_validator, args, kwargs, valid):
 )
 def test_03_fields_input(make_validator, args, kwargs, valid):
     """an object with properties maps the arguments onto them."""
-    test_method_call(make_validator(OBJECT), args, kwargs, valid)
+    validate_method_call(make_validator(OBJECT), args, kwargs, valid)
 
 
 if __name__ == "__main__":

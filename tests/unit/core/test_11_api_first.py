@@ -1,8 +1,11 @@
+import copy
 import json
 
 from inspect import getattr_static
 
 import pytest
+
+from testkit.things import OscilloscopeDriver, oscilloscope_TD
 
 from hololinked.core import Action, Event, Property, Thing
 from hololinked.core.interfaces import Metadata
@@ -11,55 +14,22 @@ from hololinked.metadata.td import ThingModel
 from hololinked.utils import uuid_hex
 
 
-TD = {
-    "id": "oscilloscope",
-    "title": "Oscilloscope",
-    "properties": {
-        "time_resolution": {"type": "number", "minimum": 0},
-        "channel_count": {"type": "integer", "readOnly": True},
-        "comment": {"type": "string", "default": "scope"},
-    },
-    "actions": {
-        "start_acquisition": {
-            "input": {"type": "object", "properties": {"channel": {"type": "integer"}}, "required": ["channel"]},
-        },
-        "stop": {},
-    },
-    "events": {
-        "data_ready": {"data": {"type": "array", "items": {"type": "number"}}},
-    },
-}
-
-
-class Oscilloscope:
-    @property
-    def time_resolution(self) -> float:
-        return self._resolution
-
-    @time_resolution.setter
-    def time_resolution(self, value: float) -> None:
-        self._resolution = value
-
-    @property
-    def channel_count(self) -> int:
-        return 4
-
-    def start_acquisition(self, channel: int) -> int:
-        return channel
-
-    def stop(self) -> None: ...
+@pytest.fixture
+def TD():
+    return copy.deepcopy(oscilloscope_TD)
 
 
 @pytest.mark.parametrize("source", ["file", "json variable"])
-def test_01_load_thing_model(source, tmp_path):
+def test_01_load_thing_model(TD, source, tmp_path):
     if source == "file":
         path = tmp_path / "oscilloscope.td.json"
         path.write_text(json.dumps({key: value for key, value in TD.items() if key != "id"}))  # a Thing Model has no id
         model = ThingModel.from_file(str(path))
+        assert (model.id, model.title) == (None, "Oscilloscope")
     else:
         model = ThingModel.from_metadata(TD)
+        assert (model.id, model.title) == ("oscilloscope", "Oscilloscope")
 
-    assert (model.id, model.title) == ("oscilloscope", "Oscilloscope")
     interactions: list[InteractionMetadata] = [
         *model.properties.values(),
         *model.actions.values(),
@@ -76,7 +46,7 @@ def test_01_load_thing_model(source, tmp_path):
         else:
             raise ValueError(f"Unexpected interaction kind: {i.what}, this test failed.")
 
-    assert ThingModel.from_file(str(path)).properties["time_resolution"].json() == {"type": "number", "minimum": 0}
+    assert model.properties["time_resolution"].json() == {"type": "number", "minimum": 0}
 
 
 @pytest.mark.parametrize(
@@ -86,16 +56,16 @@ def test_01_load_thing_model(source, tmp_path):
         {"title": "Oscilloscope {{SERIAL}}"},
     ],
 )
-def test_02_thing_model_extensions_rejected(extension):
+def test_02_thing_model_extensions_rejected(TD, extension):
     with pytest.raises(NotImplementedError, match="tm:ref"):
         ThingModel.from_metadata({**TD, **extension})
 
 
 @pytest.mark.parametrize("schema_validator", ["pydantic", "json_schema"])
-def test_03_compile_descriptors(schema_validator: str):
+def test_03_compile_descriptors(TD, schema_validator: str):
     descriptors = Metadata.compile_descriptors_from(
         model=ThingModel.from_metadata(TD),
-        impl=Oscilloscope(),
+        impl=OscilloscopeDriver(),
         validator=schema_validator,
     )
 
@@ -125,13 +95,13 @@ def test_03_compile_descriptors(schema_validator: str):
     #     thing.start_acquisition.external_call(channel="x")
 
 
-def test_04_member_names_map_allows_name_override():
+def test_04_member_names_map_allows_name_override(TD):
     camelCaseJavascriptDocument = {
         "title": "Scope",
         "actions": {"startAcquisition": TD["actions"]["start_acquisition"]},
     }
     model = ThingModel.from_metadata(camelCaseJavascriptDocument)
-    impl = Oscilloscope()
+    impl = OscilloscopeDriver()
     descriptors = Metadata.compile_descriptors_from(
         model=model,
         impl=impl,
@@ -145,6 +115,15 @@ def test_04_member_names_map_allows_name_override():
         match="member_names maps 'stop', which is not in the Device Description Language",
     ):
         Metadata.compile_descriptors_from(model, impl, member_names_map=member_names_map)
+
+
+def test_05_allow_extra(TD):
+    model = ThingModel.from_metadata(TD)
+    impl = OscilloscopeDriver()
+    impl.extra = Property(default=1)
+    with pytest.raises(ConformanceError, match="'extra' is not in the Device Description Language"):
+        Metadata.compile_descriptors_from(model, impl)
+    assert "extra" not in Metadata.compile_descriptors_from(model, impl, allow_extra=True)
 
 
 # def test_05_every_problem_reported_together():
@@ -188,75 +167,42 @@ def test_04_member_names_map_allows_name_override():
 #         assert problem.startswith(start)
 
 
-def test_06_allow_extra():
-    model = ThingModel.from_metadata(TD)
-    impl = Oscilloscope()
-    impl.extra = Property(default=1)
-    with pytest.raises(ConformanceError, match="'extra' is not in the Device Description Language"):
-        Metadata.compile_descriptors_from(model, impl)
-    assert "extra" not in Metadata.compile_descriptors_from(model, impl, allow_extra=True)
+@pytest.mark.parametrize(
+    "extras, is_remote",
+    [
+        (
+            {
+                "actions": {"ping": {}, "exit": {}},
+                "properties": {"state": {"type": "string", "readOnly": True}},
+            },
+            True,
+        ),
+        (
+            {
+                "properties": {"logger": {"type": "string"}},
+                "actions": {"run_with_http_server": {}},
+            },
+            False,
+        ),
+    ],
+)
+def test_07_thing_builtins(TD, extras, is_remote):
+    """interactions Thing implements itself are kept unless the user implements them, others clash."""
+    for typ, items in extras.items():
+        for name, schema in items.items():
+            TD[typ][name] = schema
+    model, impl = ThingModel.from_metadata(TD), OscilloscopeDriver()
 
-
-# def test_07_thing_builtins():
-#     """interactions Thing implements itself are kept unless the user implements them, others clash."""
-#     td = {
-#         "title": "Scope",
-#         "properties": {"state": {"type": "string", "readOnly": True}},
-#         "actions": {"ping": {}, "exit": {}},
-#     }
-
-#     class Pinger:
-#         def ping(self) -> None: ...
-
-#     descriptors = Metadata.compile_descriptors_from(ThingModel.from_metadata(td), Pinger())
-#     assert list(descriptors) == ["ping"]
-
-#     td = {"title": "Scope", "properties": {"logger": {"type": "string"}}, "actions": {"run_with_http_server": {}}}
-#     model, impl = ThingModel.from_metadata(td), SimpleNamespace()
-#     with pytest.raises(ConformanceError) as error:
-#         Metadata.compile_descriptors_from(model, impl)
-#     assert error.value.problems == [
-#         "property 'logger': clashes with Thing.logger",
-#         "action 'run_with_http_server': clashes with Thing.run_with_http_server",
-#     ]
-
-
-# class OscilloscopeDriver:
-#     """no hololinked dependency, implements TD by its members."""
-
-#     def __init__(self) -> None:
-#         self._resolution = 1.0
-#         self._comment = "driver"
-#         self.written = []
-#         self.stopped = False
-
-#     @property
-#     def time_resolution(self) -> float:
-#         return self._resolution
-
-#     @time_resolution.setter
-#     def time_resolution(self, value: float) -> None:
-#         self.written.append(value)
-#         self._resolution = value
-
-#     @property
-#     def channel_count(self) -> int:
-#         return 4
-
-#     @property
-#     def comment(self) -> str:
-#         return self._comment
-
-#     @comment.setter
-#     def comment(self, value: str) -> None:
-#         self._comment = value
-
-#     def start_acquisition(self, channel: int) -> int:
-#         self.data_ready.push([1.0, 2.0])
-#         return channel
-
-#     async def stop(self) -> None:
-#         self.stopped = True
+    if is_remote:
+        descriptors = Metadata.compile_descriptors_from(model, impl)
+        assert not {name for items in extras.values() for name in items} & descriptors.keys()
+    else:
+        with pytest.raises(ConformanceError) as error:
+            Metadata.compile_descriptors_from(model, impl)
+        assert error.value.problems == [
+            "property 'logger': clashes with Thing.logger",
+            "action 'run_with_http_server': clashes with Thing.run_with_http_server",
+        ]
 
 
 # @pytest.mark.parametrize("schema_validator", ["pydantic", "json_schema"])
@@ -311,12 +257,14 @@ def test_06_allow_extra():
 #     ]
 
 
-# def test_10_produce_id():
-#     model = ThingModel.from_metadata({key: value for key, value in TD.items() if key != "id"})
-#     driver = OscilloscopeDriver()
-#     with pytest.raises(TypeError, match="id"):
-#         model.produce(driver)
-#     assert model.produce(driver, id="scope-sim").id == "scope-sim"
+def test_10_cannot_produce_thing_without_id(TD):
+    # either file or JSON must have ID
+    model = ThingModel.from_metadata({key: value for key, value in TD.items() if key != "id"})
+    driver = OscilloscopeDriver()
+    with pytest.raises(TypeError, match="id"):
+        model.produce(driver)
+    # or pass it explicitly
+    assert model.produce(driver, id="scope-sim").id == "scope-sim"
 
 
 # def test_11_produce_names_and_signatures():
