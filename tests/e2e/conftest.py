@@ -1,5 +1,8 @@
+import ssl
 import time
 
+from importlib.resources import files
+from pathlib import Path
 from typing import Generator
 
 import pytest
@@ -7,19 +10,36 @@ import pytest
 from testcontainers.mqtt import (
     MosquittoContainer,  # TODO this will not work from the current release of testcontainers
 )
-from testkit.helpers import MQTT_ASSETS, mqtt_ssl_context
+from testkit.helpers import generate_mqtt_credentials, generate_mqtt_ssl_context
+
+
+MOSQUITTO_CONF = files("testkit") / "assets" / "mqtt" / "mosquitto.conf"
+
+
+@pytest.fixture(scope="session")
+def mqtt_credentials(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return generate_mqtt_credentials(tmp_path_factory.mktemp("mqtt-credentials"))
+
+
+@pytest.fixture(scope="session")
+def mqtt_ssl(mqtt_credentials: Path) -> ssl.SSLContext:
+    return generate_mqtt_ssl_context(mqtt_credentials / "certs" / "ca.crt")
 
 
 @pytest.fixture(scope="module")
-def mosquitto_container(tmp_path_factory: pytest.TempPathFactory) -> Generator[MosquittoContainer, None, None]:
+def mosquitto_container(
+    tmp_path_factory: pytest.TempPathFactory,
+    mqtt_credentials: Path,
+    mqtt_ssl: ssl.SSLContext,
+) -> Generator[MosquittoContainer, None, None]:
     data = tmp_path_factory.mktemp("mosquitto-data")
     log = tmp_path_factory.mktemp("mosquitto-log")
     (data / "persisted").mkdir()
     container = MosquittoContainer(
         volumes=[
-            (str(MQTT_ASSETS / "mosquitto.conf"), "/mosquitto/config/mosquitto.conf", "ro"),
-            (str(MQTT_ASSETS / "passwords.txt"), "/mosquitto/config/passwords.txt", "ro"),
-            (str(MQTT_ASSETS / "certs"), "/mosquitto/config/certs", "ro"),
+            (str(MOSQUITTO_CONF), "/mosquitto/config/mosquitto.conf", "ro"),
+            (str(mqtt_credentials / "passwords.txt"), "/mosquitto/config/passwords.txt", "ro"),
+            (str(mqtt_credentials / "certs"), "/mosquitto/config/certs", "ro"),
             (str(data), "/mosquitto/data", "rw"),
             (str(log), "/mosquitto/log", "rw"),
         ],
@@ -27,7 +47,7 @@ def mosquitto_container(tmp_path_factory: pytest.TempPathFactory) -> Generator[M
         password="samplepass",
         mqtt_port=8883,
         ws_port=9001,
-        ssl_context=mqtt_ssl_context(),
+        ssl_context=mqtt_ssl,
     )
 
     # One could in principle retry the tests directly
