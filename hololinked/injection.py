@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import typing
 import warnings
 
 from collections.abc import Callable, Iterator, Mapping
@@ -23,6 +24,7 @@ from hololinked.utils import MappableSingleton, issubklass
 
 if TYPE_CHECKING:
     from hololinked.core.thing import Thing
+    from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
 
 
 class AdapterRegistry(MappableSingleton):
@@ -169,10 +171,10 @@ class SchemaValidators(Registry):
 
     json_schema: type[BaseSchemaValidator]
     """JSON Schema validator class that can be instantiated with a JSON schema to validate data against that schema."""
-    pydantic: type[BaseSchemaValidator]
+    pydantic: type[PydanticSchemaValidator]
     """
     Pydantic validator class that can be instantiated with a Pydantic model to validate data against
-    the schema defined by that model.
+    the schema defined by that model, or a plain python type with `SchemaValidators.from_type()`.
     """
 
     predicates: ClassVar[dict[str, Callable[[Any], bool]]] = {
@@ -314,6 +316,34 @@ class SchemaValidators(Registry):
         check = getattr(cls.for_schema(schema), "check_schema", None)
         if check is not None:
             check(schema)
+
+    @classmethod
+    def for_plain_type(cls, type_: Any) -> BaseSchemaValidator:
+        """
+        Get a validator for a plain python type or typing form, such as `int` or `list[int]`, that no predicate matches.
+
+        The type is wrapped in a root model by the validator registered as `pydantic`. Only types, typing forms and
+        string annotations (forward references such as `"int"`) are accepted, so that any other unsupported schema
+        is still reported instead of being handed to pydantic.
+
+        Parameters
+        ----------
+        type_: Any
+            the type to validate against
+
+        Returns
+        -------
+        BaseSchemaValidator
+            the validator, whose `schema` is the root model
+
+        Raises
+        ------
+        TypeError
+            if the given object is neither a type, a typing form nor a string annotation
+        """
+        if not (isinstance(type_, (type, str)) or typing.get_origin(type_) is not None):
+            raise TypeError(f"only plain types are accepted, given {type_!r}")
+        return cls.pydantic.from_type(type_)
 
     @classmethod
     def reset(cls) -> None:

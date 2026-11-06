@@ -6,7 +6,8 @@ import warnings
 
 from collections.abc import Callable
 from enum import Enum
-from inspect import getfullargspec, iscoroutinefunction
+from functools import partial, update_wrapper
+from inspect import getfullargspec, iscoroutinefunction, signature
 from types import FunctionType, MethodType
 from typing import TYPE_CHECKING, Any
 
@@ -45,10 +46,13 @@ class Action:
         "_schema_validator",
         "argument_schema",
         "create_task",
+        "delegate",
+        "doc",
         "idempotent",
         "isclassmethod",
         "iscoroutine",
         "isparameterized",
+        "name",
         "obj",
         "owner",
         "request_as_argument",
@@ -61,19 +65,29 @@ class Action:
     state: tuple[Enum | str] | None
     """state machine state(s) in which this action can be executed, any state when None"""
 
-    def __init__(self, obj: MethodType) -> None:
+    name: str
+    """name of the action, the attribute it is assigned to on the owning class"""
+
+    doc: str | None
+    """description of the action, the docstring of its method unless given explicitly"""
+
+    delegate: ActionDelegate | None
+    """calls the method of another object, like a driver, when `obj` is this delegate, None if not delegated"""
+
+    def __init__(self, obj: MethodType | ActionDelegate) -> None:
         """
         Initialize an Action.
 
         Parameters
         ----------
-        obj: MethodType
-            the method that is being wrapped as an action
+        obj: MethodType | ActionDelegate
+            the method that is being wrapped as an action, or the delegate to the method of another object
         """
         self.obj = obj
+        self.doc = obj.__doc__
         self.state = None
         self.iscoroutine = False
-        self.isclassmethod = False
+        self.isclassmethod = False  # legacy, no longer necessary, but left as metadata
         self.isparameterized = False
         self.request_as_argument = False
         self.create_task = False
@@ -83,12 +97,14 @@ class Action:
         self.argument_schema = None
         self.return_value_schema = None
         self._schema_validator = None
+        self.delegate = None
 
     def __set_name__(self, owner, name):
         self.owner = owner
+        self.name = name
 
     def __str__(self) -> str:
-        return f"<Action({self.owner.__name__}.{self.obj.__name__})>"
+        return f"<Action({self.owner.__name__}.{self.name})>"
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Action):
@@ -110,11 +126,6 @@ class Action:
             f"Cannot invoke unbound action {self.name} of {self.owner.__name__}."
             + " Bound methods must be called, not the action itself. Use the appropriate instance to call the method."
         )
-
-    @property
-    def name(self) -> str:
-        """Name of the action."""
-        return self.obj.__name__
 
     @property
     def schema_validator(self) -> BaseSchemaValidator | None:
@@ -153,7 +164,7 @@ class Action:
 class BoundAction:
     """A bound action, base class for both sync and async methods."""
 
-    obj: FunctionType | MethodType
+    obj: FunctionType | MethodType | ActionDelegate
 
     __slots__ = [
         "action",
@@ -163,12 +174,13 @@ class BoundAction:
         "owner_inst",
     ]
 
-    def __init__(self, obj: FunctionType | MethodType, descriptor: Action, owner_inst, owner) -> None:
+    def __init__(self, obj: FunctionType | MethodType | ActionDelegate, descriptor: Action, owner_inst, owner) -> None:
         self.obj = obj
         self.action = descriptor
         self.owner = owner
         self.owner_inst = owner_inst
         self.bound_obj = owner if descriptor.isclassmethod else owner_inst
+        # checking classmethod feels necessary, we should reuse python's binding mechanism
 
     @property
     def descriptor(self) -> Action:
@@ -221,7 +233,7 @@ class BoundAction:
     @property
     def name(self) -> str:
         """Name of the action."""
-        return self.obj.__name__
+        return self.action.name
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError("call must be implemented by subclass")
@@ -238,7 +250,7 @@ class BoundAction:
         raise NotImplementedError("external_call must be implemented by subclass")
 
     def __str__(self):
-        return f"<BoundAction({self.owner.__name__}.{self.obj.__name__} of {self.owner_inst.id})>"
+        return f"<BoundAction({self.owner.__name__}.{self.name} of {self.owner_inst.id})>"
 
     def __eq__(self, value):
         if not isinstance(value, BoundAction):
@@ -251,7 +263,7 @@ class BoundAction:
     def __getattribute__(self, name):
         # https://docs.python.org/3/howto/descriptor.html#functions-and-methods
         if name == "__doc__":
-            return self.obj.__doc__
+            return self.action.doc
         return super().__getattribute__(name)
 
     def to_metadata(self, owner_inst: Thing | ThingMeta | None = None, format: str = "wot") -> ActionMetadata:
@@ -292,7 +304,7 @@ class BoundSyncAction(BoundAction):
         return self.__call__(*args, **kwargs)
 
     def __call__(self, *args, **kwargs):
-        if self.action.isclassmethod:
+        if self.action.delegate is not None:
             return self.obj(*args, **kwargs)
         return self.obj(self.bound_obj, *args, **kwargs)
 
@@ -318,12 +330,69 @@ class BoundAsyncAction(BoundAction):
         return await self.__call__(*args, **kwargs)
 
     async def __call__(self, *args, **kwargs):
-        if self.action.isclassmethod:
+        if self.action.delegate is not None:
             return await self.obj(*args, **kwargs)
         return await self.obj(self.bound_obj, *args, **kwargs)
 
 
-__action_kw_arguments__ = ["safe", "idempotent", "synchronous"]
+class ActionDelegate:
+    """
+    A thing wrapper that delegates the action call to another object's method.
+
+    For example, in the case of a driver serving a Thing Model, the action call on the Thing can be delegated to the
+    corresponding method on the driver object.
+
+    Generally used when an API document binds actions to specific implementation methods; could technically be
+    subsumed within an `Action` class itself, but is separated for explicit delegation.
+    """
+
+    __slots__ = ("_bound_delegate", "delegate", "impl", "member_name", "thing")
+
+    def __init__(self, impl: Any, member_name: str, thing: Any | None = None, delegate: Any = None) -> None:
+        """
+        Initialize the delegate.
+
+        Parameters
+        ----------
+        impl: Any
+            the object whose method implements the action
+        member_name: str
+            name of the method on that object
+        thing: Any | None, optional
+            the Thing instance this action is associated with, if any
+        delegate: Any, optional
+            A custom implementation of a method determined to be the Action on the impl, not accessible through
+            `__getattr__` or similar (this is usually not the case). Use this argument when the action cannot be
+            accessed through python builtin attribute lookup on the implementation object. For example, `keithley2600`
+            package implements `KeithleyFunction` as a model for an action. Its accessible through attribute lookup.
+            Were it not, one would need to provide it explicitly through the `delegate` argument to invoke it correctly.
+        """
+        self.impl = impl
+        self.member_name = member_name
+        self.thing = thing
+        self.delegate = delegate
+        self._bound_delegate = None
+
+    @property
+    def handler(self) -> Callable:
+        """The method, looked up on the object at every access, or the delegate bound to the object like a method."""
+        if self.delegate is None:
+            return getattr(self.impl, self.member_name)
+        if self._bound_delegate is None:  # built once, the delegate and the object do not change
+            call = self.delegate.__call__
+            bound = partial(call, self.impl)
+            bound.__signature__ = signature(bound)  # ty: ignore[unresolved-attribute]
+            self._bound_delegate = update_wrapper(bound, call)  # docstring and type hints of the delegate
+        return self._bound_delegate
+
+    def __call__(self, *args, **kwargs) -> Any:
+        return self.handler(*args, **kwargs)
+
+    def __repr__(self) -> str:
+        return f"<ActionDelegate({type(self.impl).__name__}.{self.member_name})>"
+
+
+__action_kw_arguments__ = ["safe", "idempotent", "synchronous", "doc"]
 
 
 def action(
@@ -363,6 +432,8 @@ def action(
         - `idempotent`: bool,
             indicate in thing description if action is idempotent (for example, allows HTTP clients to cache return value),
             default `False`
+        - `doc`: str,
+            description of the action, used instead of the docstring of the method, which is the default
 
     Returns
     -------
@@ -384,26 +455,34 @@ def action(
         state = inner._arguments.get("state", None)  # ty: ignore[unresolved-attribute]
         kwargs = inner._arguments.get("kwargs", {})  # ty: ignore[unresolved-attribute]
 
-        original = obj
+        is_classmethod = isclassmethod(obj)
         if (
-            not isinstance(obj, (FunctionType, MethodType, Action, BoundAction))
-            and not isclassmethod(obj)
+            not isinstance(obj, (FunctionType, MethodType, Action, BoundAction, ActionDelegate))
+            and not is_classmethod
             and not issubklass(obj, ParameterizedFunction)
         ):
             raise TypeError(f"target for action or is not a function/method. Given type {type(obj)}") from None
-        if isclassmethod(obj):
+        if is_classmethod:
+            # the function itself, called with the class the action is accessed through
             obj = obj.__func__
         if isinstance(obj, (Action, BoundAction)):
             if (obj if isinstance(obj, Action) else obj.action).isclassmethod:
                 raise RuntimeError("cannot wrap a classmethod as action once again, please skip")
             warnings.warn(
-                f"{obj.name} is already wrapped as an action, wrapping it again with newer settings.",
+                f"{obj.obj.__name__} is already wrapped as an action, wrapping it again with newer settings.",
                 category=UserWarning,
             )
             obj = obj.obj
-        if obj.__name__.startswith("__"):
-            raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")
-        action = Action(original)  # type: Action
+
+        delegate = obj if isinstance(obj, ActionDelegate) else None
+        name = delegate.member_name if delegate is not None else obj.__name__
+        if name.startswith("__"):
+            raise ValueError(f"dunder objects cannot become remote : {name}")
+
+        action = Action(obj)  # type: Action
+        action.delegate = delegate
+        if delegate is not None:
+            obj = delegate.handler  # the method the delegate calls, inspected below
 
         action.state = Tuple(
             default=None,
@@ -420,8 +499,9 @@ def action(
         action.safe = kwargs.get("safe", False)
         action.idempotent = kwargs.get("idempotent", False)
         action.synchronous = kwargs.get("synchronous", True)
+        action.doc = kwargs.get("doc", None) or obj.__doc__
 
-        if isclassmethod(original):
+        if is_classmethod:
             action.iscoroutine = has_async_def(obj)
             action.isclassmethod = True
         elif issubklass(obj, ParameterizedFunction):
@@ -432,10 +512,10 @@ def action(
 
         if not input_schema:
             try:
-                input_schema = get_input_model_from_signature(obj, remove_first_positional_arg=True)
+                input_schema = get_input_model_from_signature(obj, remove_first_positional_arg=delegate is None)
             except Exception as ex:
                 warnings.warn(
-                    f"Could not infer input schema for {obj.__name__} due to - {ex!s}. "
+                    f"Could not infer input schema for {name} due to - {ex!s}. "
                     + "Considering filing a bug report if you think this should have worked correctly",
                     category=RuntimeWarning,
                 )
@@ -443,7 +523,7 @@ def action(
             if not SchemaValidators.is_supported(input_schema):
                 raise TypeError(
                     "no registered schema validator can validate against the input schema "
-                    + f"of {obj.__name__}, which is of type {type(input_schema)}. Supply a JSON schema, "
+                    + f"of {name}, which is of type {type(input_schema)}. Supply a JSON schema, "
                     + "a pydantic model, or register a validator that matches it with "
                     + "SchemaValidators.register()."
                 )
@@ -456,7 +536,7 @@ def action(
                 output_schema = get_return_type_from_signature(obj)
             except Exception as ex:
                 warnings.warn(
-                    f"Could not infer output schema for {obj.__name__} due to {ex!s}. "
+                    f"Could not infer output schema for {name} due to {ex!s}. "
                     + "Considering filing a bug report if you think this should have worked correctly",
                     category=RuntimeWarning,
                 )
@@ -466,7 +546,7 @@ def action(
             if not SchemaValidators.is_supported(output_schema):
                 raise TypeError(
                     "no registered schema validator can validate against the output schema "
-                    + f"of {obj.__name__}, which is of type {type(output_schema)}. Supply a JSON schema, "
+                    + f"of {name}, which is of type {type(output_schema)}. Supply a JSON schema, "
                     + "a pydantic model, or register a validator that matches it with "
                     + "SchemaValidators.register()."
                 )
@@ -476,14 +556,14 @@ def action(
 
         return action
 
-    if callable(input_schema):
+    if isinstance(input_schema, (FunctionType, MethodType)):  # a model class is callable too
         raise TypeError(
             "input schema should be a JSON or pydantic BaseModel, not a function/method, "
             + "did you decorate your action wrongly? use @action() instead of @action"
         )
     if any(key not in __action_kw_arguments__ for key in kwargs):
         raise ValueError(
-            "Only 'safe', 'idempotent', 'synchronous' are allowed as keyword arguments, "
+            f"Only {', '.join(repr(key) for key in __action_kw_arguments__)} are allowed as keyword arguments, "
             + f"unknown arguments found {kwargs.keys()}"
         )
     inner._arguments = dict(  # ty: ignore[unresolved-attribute]
@@ -495,4 +575,4 @@ def action(
     return inner
 
 
-__all__ = [action.__name__, Action.__name__]
+__all__ = [action.__name__, Action.__name__, ActionDelegate.__name__]

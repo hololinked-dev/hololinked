@@ -24,7 +24,7 @@ PRIMITIVE_TYPES: dict[str, type | None] = {
 }
 
 # keywords with no validation meaning, ignored without a warning
-ANNOTATION_KEYWORDS = frozenset({"unit", "readOnly", "writeOnly", "format", "$comment"})
+ANNOTATION_KEYWORDS = frozenset({"unit", "readOnly", "writeOnly", "format", "$comment", "@type"})
 
 NUMBER_CONSTRAINTS = {
     "minimum": "ge",
@@ -141,7 +141,12 @@ def dataschema_to_type(
 
     def convert(subschema: dict[str, Any], pointer: str, suffix: Any) -> Any:
         return dataschema_to_type(
-            subschema, strict, location=f"{location}/{pointer}", name=f"{name}_{suffix}", root=root, depth=depth + 1
+            subschema,
+            strict,
+            location=f"{location}/{pointer}",
+            name=f"{name}_{suffix}",
+            root=root,
+            depth=depth + 1,
         )
 
     if "$ref" in schema:
