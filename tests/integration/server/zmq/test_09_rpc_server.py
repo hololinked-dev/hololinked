@@ -453,19 +453,19 @@ class TestRPCBroker:
 
         with pytest.raises(Exception) as ex1:
             json_schema_validated_action(val1="1", val2="hello", val3={"field": "value"}, val4=[])
-        assert str(ex1.value).startswith("'1' is not of type 'integer'")
+        assert str(ex1.value) == "val1: '1' is not of type 'integer'"
         with pytest.raises(Exception) as ex2:
             json_schema_validated_action("1", val2="hello", val3={"field": "value"}, val4=[])
-        assert str(ex2.value).startswith("'1' is not of type 'integer'")
+        assert str(ex2.value) == "val1: '1' is not of type 'integer'"
         with pytest.raises(Exception) as ex3:
             json_schema_validated_action(1, 2, val3={"field": "value"}, val4=[])
-        assert str(ex3.value).startswith("2 is not of type 'string'")
+        assert str(ex3.value) == "val2: 2 is not of type 'string'"
         with pytest.raises(Exception) as ex4:
             json_schema_validated_action(1, "hello", val3="field", val4=[])
-        assert str(ex4.value).startswith("'field' is not of type 'object'")
+        assert str(ex4.value) == "val3: 'field' is not of type 'object'"
         with pytest.raises(Exception) as ex5:
             json_schema_validated_action(1, "hello", val3={"field": "value"}, val4="[]")
-        assert str(ex5.value).startswith("'[]' is not of type 'array'")
+        assert str(ex5.value) == "val4: '[]' is not of type 'array'"
         # data with valid schema
         return_value = json_schema_validated_action(val1=1, val2="hello", val3={"field": "value"}, val4=[])
         assert return_value == {"val1": 1, "val3": {"field": "value"}}
@@ -482,51 +482,22 @@ class TestRPCBroker:
             logger=structlog.get_logger(),
         )
 
+        # one error, prefixed by the field that failed
         with pytest.raises(Exception) as ex1:
             pydantic_validated_action(val1="1", val2="hello", val3={"field": "value"}, val4=[])
-        assert (
-            "validation error for pydantic_validated_action_input" in str(ex1.value)
-            and "val1" in str(ex1.value)
-            and "val2" not in str(ex1.value)
-            and "val3" not in str(ex1.value)
-            and "val4" not in str(ex1.value)
-        )
+        assert str(ex1.value).startswith("val1: ") and ";" not in str(ex1.value)
         with pytest.raises(Exception) as ex2:
             pydantic_validated_action("1", val2="hello", val3={"field": "value"}, val4=[])
-        assert (
-            "validation error for pydantic_validated_action_input" in str(ex2.value)
-            and "val1" in str(ex2.value)
-            and "val2" not in str(ex2.value)
-            and "val3" not in str(ex2.value)
-            and "val4" not in str(ex2.value)
-        )
+        assert str(ex2.value).startswith("val1: ") and ";" not in str(ex2.value)
         with pytest.raises(Exception) as ex3:
             pydantic_validated_action(1, 2, val3={"field": "value"}, val4=[])
-        assert (
-            "validation error for pydantic_validated_action_input" in str(ex3.value)
-            and "val1" not in str(ex3.value)
-            and "val2" in str(ex3.value)
-            and "val3" not in str(ex3.value)
-            and "val4" not in str(ex3.value)
-        )
+        assert str(ex3.value).startswith("val2: ") and ";" not in str(ex3.value)
         with pytest.raises(Exception) as ex4:
             pydantic_validated_action(1, "hello", val3="field", val4=[])
-        assert (
-            "validation error for pydantic_validated_action_input" in str(ex4.value)
-            and "val1" not in str(ex4.value)
-            and "val2" not in str(ex4.value)
-            and "val3" in str(ex4.value)
-            and "val4" not in str(ex4.value)
-        )
+        assert str(ex4.value).startswith("val3: ") and ";" not in str(ex4.value)
         with pytest.raises(Exception) as ex5:
             pydantic_validated_action(1, "hello", val3={"field": "value"}, val4="[]")
-        assert (
-            "validation error for pydantic_validated_action_input" in str(ex5.value)
-            and "val1" not in str(ex5.value)
-            and "val2" not in str(ex5.value)
-            and "val3" not in str(ex5.value)
-            and "val4" in str(ex5.value)
-        )
+        assert str(ex5.value).startswith("val4: ") and ";" not in str(ex5.value)
         # data with valid schema
         return_value = pydantic_validated_action(val1=1, val2="hello", val3={"field": "value"}, val4=[])
         assert return_value == {"val2": "hello", "val4": []}
@@ -563,7 +534,7 @@ class TestRPCBroker:
 
         with pytest.raises(Exception) as ex:
             json_schema_prop.set("world1")
-        assert "Failed validating 'pattern' in schema:" in str(ex.value)
+        assert str(ex.value) == "'world1' does not match '^[a-z]+$'"
 
     def test_16_pydantic_model_property(self, thing: TestThing, sync_client: SyncZMQClient):
         """Test pydantic model based property"""
@@ -582,7 +553,7 @@ class TestRPCBroker:
         invalid_value = {"foo": 1, "bar": "1", "foo_bar": 1.0}
         with pytest.raises(Exception) as ex:
             pydantic_prop.set(invalid_value)
-        assert "validation error for PydanticProp" in str(ex.value)
+        assert str(ex.value) == "foo: Input should be a valid string"
 
         pydantic_simple_prop = ZMQProperty(
             resource=TestThing.pydantic_simple_prop.to_metadata(thing),
@@ -595,7 +566,7 @@ class TestRPCBroker:
         assert pydantic_simple_prop.get() == 5
         with pytest.raises(Exception) as ex:
             pydantic_simple_prop.set("5str")
-        assert "validation error for 'int'" in str(ex.value)
+        assert str(ex.value).startswith("Input should be a valid integer")
 
     def test_17_creation_defaults(self, thing: TestThing, server: ZMQServer):
         """Test server configuration defaults"""
