@@ -6,7 +6,7 @@ import inspect
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -54,7 +54,7 @@ class Metadata(BaseModel):
         self,
         thing: Thing | None = None,
         ignore_errors: bool = False,
-        skip_names: Optional[list[str]] = [],
+        skip_names: list[str] | None = [],
     ) -> None:
         """
         Initialize the Metadata.
@@ -456,7 +456,7 @@ class InteractionMetadata(BaseModel):
         raise NotImplementedError("from_descriptor() must be implemented in subclass of InteractionMetadata")
 
     @classmethod
-    def from_metadata(cls, name: str, metadata: dict[str, Any]) -> Self:
+    def from_metadata(cls, name: str, metadata: dict[str, Any], strict: bool = True) -> Self:
         """
         Populate the metadata from the provided JSON and return it as an instance of this class.
 
@@ -468,6 +468,8 @@ class InteractionMetadata(BaseModel):
             name of the interaction used as key in the metadata
         metadata: JSON
             metadata JSON dictionary (the entire one, not just the component of the interaction)
+        strict: bool, default True
+            Unknown keys will raise an error if True, default True
 
         Returns
         -------
@@ -526,7 +528,6 @@ class InteractionMetadata(BaseModel):
 
     def build_non_compliant_metadata(self) -> None:
         """If there is additional non standard metadata to be added, they can be added here."""
-        pass
 
     def override_defaults(self, **kwargs):
         """
@@ -548,9 +549,7 @@ class InteractionMetadata(BaseModel):
                 setattr(self, key, value)
 
     def __hash__(self):
-        return hash(
-            self.thing_id if self.thing_id else "" + self.thing_cls.__name__ if self.thing_cls else "" + self.name
-        )
+        return hash(self.thing_id or ("" + self.thing_cls.__name__ if self.thing_cls else "" + self.name))
 
     def __str__(self):
         if self.thing_cls:

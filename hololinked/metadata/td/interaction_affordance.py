@@ -174,7 +174,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         return default
 
     @classmethod
-    def from_metadata(cls, name: str, metadata: dict[str, Any]) -> Self:
+    def from_metadata(cls, name: str, metadata: dict[str, Any], strict: bool = True) -> Self:
         """
         Populate the schema from the TD and return it as an instance of this class.
 
@@ -187,6 +187,8 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
             name of the interaction affordance used as key in the TD
         metadata: dict[str, Any]
             Thing Description JSON dictionary (the entire one, not just the component of the affordance)
+        strict: bool, optional
+            Unknown keys will raise an error if True, default True
 
         Returns
         -------
@@ -216,12 +218,16 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
                 affordance.forms = [Form.from_TD(form) for form in value]
             elif key in fields:
                 setattr(affordance, fields[key], value)
+            elif not strict:
+                warnings.warn(f"Unknown key '{key}' found in affordance JSON at '{name}'.", category=UserWarning)
+            else:
+                raise KeyError(f"Unknown key '{key}' found in affordance JSON at '{name}'.")
         affordance._name = name
         affordance._thing_id = metadata.get("id")  # a Thing Model has no id
         return affordance
 
     @classmethod
-    def from_TD(cls, name: str, TD: JSON) -> Self:
+    def from_TD(cls, name: str, TD: JSON, strict: bool = True) -> Self:
         """
         Populate the schema from the TD and return it as an instance of this class.
 
@@ -245,7 +251,7 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         ValueError
             If the affordance type cannot be determined from the TD.
         """
-        return cls.from_metadata(name, TD)
+        return cls.from_metadata(name, TD, strict=strict)
 
     @classmethod
     def register_descriptor(
