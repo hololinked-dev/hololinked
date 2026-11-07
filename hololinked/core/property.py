@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import Enum
+from operator import attrgetter
 from typing import TYPE_CHECKING, Any
 
 from hololinked import SchemaValidators
@@ -400,7 +401,7 @@ class Property(Parameter):
 class PropertyDelegate:
     """Reads and writes an attribute of another object for a property, such as a driver serving a Thing Model."""
 
-    __slots__ = ("impl", "member_name", "thing", "delegate")
+    __slots__ = ("impl", "member_name", "thing", "delegate", "bound")
 
     def __init__(
         self,
@@ -408,6 +409,7 @@ class PropertyDelegate:
         member_name: str,
         thing: Thing | None = None,
         delegate: Any = None,
+        bound: bool = False,
     ) -> None:
         """
         Initialize the delegate.
@@ -417,19 +419,24 @@ class PropertyDelegate:
         impl: Any
             the object whose attribute implements the property
         member_name: str
-            name of the attribute on that object
+            name of the attribute on that object, a dotted name `a.b.c` walks the attributes at every access
         thing: Thing | None, optional
             the `Thing` owning the property, set later if it does not exist yet
         delegate: Any, optional
-            the member of `impl` implementing the property through `get()`, `set(value)` and
-            `delete()`. Use this argument when the property has a custom implementation for getting, setting, or
-            deleting its value which is not auto-invoked with `getattr(impl, member_name)`,
-            `setattr(impl, member_name, value)`, or `delattr(impl, member_name)`.
+            the member of `impl` implementing the property, either unbound through `get(impl)`, `set(impl, value)`
+            and `delete(impl)`, or already bound to its owner through `get()`, `set(value)` and `delete()`.
+            Use this argument when the property has a custom implementation for getting, setting, or deleting its
+            value which is not auto-invoked with `getattr(impl, member_name)`, `setattr(impl, member_name, value)`,
+            or `delattr(impl, member_name)`.
+        bound: bool
+            whether the delegate is already bound to its owner, otherwise `impl` is passed as first argument.
+            See `hololinked.core.utils.is_unbound_property_delegate()`.
         """
         self.impl = impl
         self.member_name = member_name
         self.thing = thing
         self.delegate = delegate
+        self.bound = bound
 
     def get(self) -> Any:
         """
@@ -441,8 +448,8 @@ class PropertyDelegate:
             the value of the attribute
         """
         if self.delegate is not None and hasattr(self.delegate, "get"):
-            return self.delegate.get(self.impl)
-        return getattr(self.impl, self.member_name)
+            return self.delegate.get() if self.bound else self.delegate.get(self.impl)
+        return attrgetter(self.member_name)(self.impl)  # also walks dotted names, a.b.c
 
     def set(self, value: Any) -> None:
         """
@@ -454,9 +461,14 @@ class PropertyDelegate:
             the value to write to the attribute
         """
         if self.delegate is not None and hasattr(self.delegate, "set"):
-            self.delegate.set(self.impl, value)
+            if self.bound:
+                self.delegate.set(value)
+            else:
+                self.delegate.set(self.impl, value)
             return
-        setattr(self.impl, self.member_name, value)
+        parent, _, leaf = self.member_name.rpartition(".")  # the owner of a dotted name a.b.c is looked up every call
+        owner = attrgetter(parent)(self.impl) if parent else self.impl
+        setattr(owner, leaf, value)
 
     def delete(self) -> None:
         """
@@ -468,9 +480,14 @@ class PropertyDelegate:
             If the attribute does not exist.
         """
         if self.delegate is not None and hasattr(self.delegate, "delete"):
-            self.delegate.delete(self.impl)
+            if self.bound:
+                self.delegate.delete()
+            else:
+                self.delegate.delete(self.impl)
             return
-        delattr(self.impl, self.member_name)
+        parent, _, leaf = self.member_name.rpartition(".")  # the owner of a dotted name a.b.c is looked up every call
+        owner = attrgetter(parent)(self.impl) if parent else self.impl
+        delattr(owner, leaf)
 
     def __repr__(self) -> str:
         return f"<PropertyDelegate({type(self.impl).__name__}.{self.member_name})>"

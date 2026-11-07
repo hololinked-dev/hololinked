@@ -10,7 +10,8 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, create_model
 
-from hololinked.utils import ModelRoot, issubklass
+from hololinked.core.utils import ModelRoot
+from hololinked.utils import issubklass
 
 from .to_dataschema import check_recursion, look_up_reference
 

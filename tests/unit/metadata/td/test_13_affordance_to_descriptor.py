@@ -8,6 +8,7 @@ from hololinked import SchemaValidators
 from hololinked.core import Action, Property, Thing
 from hololinked.core.exceptions import ValidationError
 from hololinked.core.interfaces.schema_validators import BaseSchemaValidator
+from hololinked.core.utils import InputSignatureError, SignatureMismatchKind, check_input_signature
 from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
@@ -18,7 +19,7 @@ from hololinked.metadata.td.interaction_affordance import (
 from hololinked.metadata.td.interaction_affordance import schema_validator as schema_validator_factory
 from hololinked.schema_validators.json_schema import JSONSchemaValidator
 from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
-from hololinked.utils import InputSignatureError, SignatureMismatchKind, check_input_signature, issubklass, uuid_hex
+from hololinked.utils import issubklass, uuid_hex
 
 
 def property_affordance(schema: dict) -> PropertyAffordance:
@@ -84,7 +85,7 @@ def test_01_metadata_dataclass_retains_known_definitions_from_api(schema: dict):
         (EventAffordance, "events"),
     ],
 )
-def test_02_metadata_dataclass_drops_unknown_definitions_from_api(
+def test_02_metadata_dataclass_drops_unknown_definitions_from_api_when_not_strict(
     affordance_cls: type[InteractionAffordance],
     kind: str,
 ):
@@ -104,7 +105,17 @@ def test_02_metadata_dataclass_drops_unknown_definitions_from_api(
             },
         },
     }
-    loaded = affordance_cls.from_metadata("value", td).json()
+
+    unknown = "x-custom" if affordance_cls is PropertyAffordance else "minimum"  # for actions and events
+
+    # first just check if the error is raised
+    with pytest.raises(KeyError, match=f"Unknown key '{unknown}'"):
+        affordance_cls.from_metadata("value", td)
+
+    # allow the error to pass as warning when strict is False
+    with pytest.warns(UserWarning, match="Unknown key"):
+        loaded = affordance_cls.from_metadata("value", td, strict=False).json()
+
     expected = {**declared, "minimum": 0} if affordance_cls is PropertyAffordance else declared
     assert loaded == expected  # minimum is a data schema keyword, valid only on a property
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 
 from typing import Any, ClassVar
 
@@ -58,7 +59,11 @@ class WoTSchema(BaseModel):
     @classmethod
     def format_doc(cls, doc: str) -> str:
         """
-        Strip tabs, newlines, whitespaces etc. to format the docstring nicely.
+        Format a python docstring to a normal description.
+
+        Strip tabs, newlines, whitespaces etc. to format the docstring nicely. Parameter sections are removed,
+        both numpydoc (`Parameters` underlined with dashes) and Sphinx/reST field
+        lists (`:param x:`, `:returns:`, `:raises:` etc.). Lines are joined with a single space.
 
         Returns
         -------
@@ -71,8 +76,18 @@ class WoTSchema(BaseModel):
         idx = doc.find(marker)
         if idx != -1:
             doc = doc[:idx]
-        doc = doc.replace("\n", "").replace("\t", " ").lstrip().rstrip()
-        return doc
+        # Remove everything from the first Sphinx/reST field on (:param x:, :returns:, :raises: ...)
+        # (re caches compiled patterns, so this is not recompiled on every call)
+        match = re.search(
+            r"^:(param|parameter|arg|argument|key|keyword|type|raises?|except|exception"
+            r"|var|ivar|cvar|vartype|returns?|rtype|yields?|ytype)\b[^:\n]*:",
+            doc,
+            flags=re.MULTILINE,
+        )
+        if match:
+            doc = doc[: match.start()]
+        # join lines with a space and collapse tabs, indentation and blank lines into single spaces
+        return " ".join(doc.split())
 
     @staticmethod
     def declared_fields(model: type[BaseModel], skip_subclasses: tuple[type[BaseModel], ...] = ()) -> dict[str, str]:

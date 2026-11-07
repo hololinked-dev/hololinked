@@ -15,7 +15,8 @@ from pydantic import BaseModel, RootModel
 from hololinked.constants import JSONSchemaType
 from hololinked.core.exceptions import ValidationError
 from hololinked.core.interfaces import BaseSchemaValidator
-from hololinked.utils import issubklass, wrap_plain_types_in_rootmodel
+from hololinked.core.utils import wrap_plain_types_in_rootmodel
+from hololinked.utils import issubklass
 
 from .utils import pydantic_validate_args_kwargs, pydantic_validation_error_message
 

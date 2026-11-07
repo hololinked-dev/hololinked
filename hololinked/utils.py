@@ -8,19 +8,13 @@ import sys
 import threading
 import traceback
 import types
-import typing
 
-from collections import OrderedDict
-from collections.abc import Callable, Coroutine, Sequence
-from dataclasses import asdict, dataclass
-from enum import StrEnum
+from collections.abc import Callable, Coroutine
+from dataclasses import asdict
 from functools import wraps
-from inspect import Parameter, signature
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
-
-from pydantic import BaseModel, ConfigDict, Field, RootModel, create_model
 
 
 def get_IP_from_interface(interface_name: str = "Ethernet", adapter_name: str | None = None) -> str:
@@ -481,139 +475,6 @@ class MappableSingleton(Singleton):
         return hasattr(self, key)
 
 
-def get_input_model_from_signature(
-    func: Callable,
-    remove_first_positional_arg: bool = False,
-    ignore: Sequence[str] | None = None,
-    model_for_empty_annotations: bool = False,
-) -> type[BaseModel] | None:
-    """
-    Create a pydantic model for a function's signature.
-
-    Parameters
-    ----------
-    func: Callable
-        The function for which to create the pydantic model.
-    remove_first_positional_arg: bool, optional
-        Remove the first argument from the model. This is appropriate for methods,
-        as the first argument, self, is baked in when it's called, but is present
-        in the signature.
-    ignore: Sequence[str], optional
-        Ignore arguments that have the specified name.
-    model_for_empty_annotations: bool, optional
-        If True, create a model even if there are no annotations.
-
-    Raises
-    ------
-    ValueError
-        if the first positional argument is to be removed but the signature has none
-
-    Returns
-    -------
-    Type[BaseModel] or None
-        A pydantic model class describing the input parameters, or None if there are no parameters.
-    """
-    parameters = OrderedDict(signature(func).parameters)  # type: OrderedDict[str, Parameter]
-    if len(parameters) == 0:
-        return None
-
-    if all(p.annotation is Parameter.empty for p in parameters.values()) and not model_for_empty_annotations:
-        return None
-
-    if remove_first_positional_arg:
-        name, parameter = next(iter(parameters.items()))  # get the first parameter
-        if parameter.kind in (Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD):
-            raise ValueError("Can't remove first positional argument: there is none.")
-        del parameters[name]
-
-    # fields is a dictionary of tuples of (type, default) that defines the input model
-    type_hints = typing.get_type_hints(func, include_extras=True)
-    fields = {}  # type: dict[str, tuple[type, Any]]
-    for name, p in parameters.items():
-        if ignore and name in ignore:
-            continue
-        if p.kind == Parameter.VAR_KEYWORD:
-            keyword_type = dict[str, typing.Any] if p.annotation is Parameter.empty else type_hints[name]
-            p_type = typing.Annotated[keyword_type, Parameter.VAR_KEYWORD]
-            default = dict() if p.default is Parameter.empty else p.default
-        elif p.kind == Parameter.VAR_POSITIONAL:
-            positional_type = tuple if p.annotation is Parameter.empty else type_hints[name]
-            p_type = typing.Annotated[positional_type, Parameter.VAR_POSITIONAL]
-            default = tuple() if p.default is Parameter.empty else p.default
-        else:
-            # `type_hints` does more processing than p.annotation - but will
-            # not have entries for missing annotations.
-            p_type = typing.Any if p.annotation is Parameter.empty else type_hints[name]
-            # pydantic uses `...` to represent missing defaults (i.e. required params)
-            default = Field(...) if p.default is Parameter.empty else p.default
-        fields[name] = (p_type, default)
-
-    # If there are no fields, we don't want to return a model
-    if len(fields) == 0:
-        return None
-
-    model = create_model(  # type: ignore[call-overload]
-        f"{func.__name__}_input",  # ty: ignore[unresolved-attribute]  # a function always has one
-        **fields,
-        __config__=ConfigDict(extra="forbid", strict=True, arbitrary_types_allowed=True),
-    )
-    return model
-
-
-class ModelRoot(RootModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-def wrap_plain_types_in_rootmodel(model: Any) -> type[BaseModel | RootModel]:
-    """
-    Ensure a type is a subclass of BaseModel.
-
-    If a `BaseModel` subclass is passed to this function, we will pass it
-    through unchanged. Otherwise, we wrap the type in a RootModel.
-    In the future, we may explicitly check that the argument is a type
-    and not a model instance.
-
-    Returns
-    -------
-    Type[BaseModel] | Type[RootModel]
-        a `BaseModel` subclass which can be used for validation. If the input was already a `BaseModel` subclass,
-        it is returned unchanged. Otherwise, a new `RootModel` subclass is returned which wraps the input type.
-    """
-    if model is None:
-        return  # ty: ignore[invalid-return-type]
-    if issubklass(model, BaseModel):
-        return model
-    return create_model(f"{model!r}", root=(model, ...), __base__=ModelRoot)  # type: ignore[call-overload]
-
-
-def get_return_type_from_signature(func: Callable) -> RootModel | None:
-    """
-    Determine the return type of a function.
-
-    Returns
-    -------
-    RootModel | None
-        a model for the return annotation, or None when there is none
-    """
-    sig = inspect.signature(func)
-    if sig.return_annotation == inspect.Signature.empty:
-        return None  # type: ignore[return-value]
-    else:
-        # We use `get_type_hints` rather than just `sig.return_annotation`
-        # because it resolves forward references, etc.
-        type_hints = typing.get_type_hints(func, include_extras=True)
-
-        if (
-            "return" not in type_hints
-            or type_hints["return"] is typing.Any
-            or type_hints["return"] is None
-            or type_hints["return"] is type(None)
-        ):
-            return None
-
-        return wrap_plain_types_in_rootmodel(type_hints["return"])  # ty: ignore[invalid-return-type]  # a RootModel subclass is returned for plain types
-
-
 def forkable(func):
     """
     Decorator to make a function forkable into a separate thread.
@@ -639,116 +500,6 @@ def forkable(func):
     return wrapper
 
 
-class SignatureMismatchKind(StrEnum):
-    """How the parameters of an action handler do not match the input of the action, worded for the error."""
-
-    SINGLE_VALUE_ARITY = "the input is a single value, so the handler takes exactly one positional parameter"
-    POSITIONAL_ONLY = "parameter {name!r} is positional-only, an object input is given by keyword"
-    REQUIRED_NOT_IN_INPUT = "required parameter {name!r} is not an input property"
-    PROPERTY_NOT_A_PARAMETER = "input property {name!r} is not a parameter"
-    ADDITIONAL_NEEDS_KWARGS = "the input allows additional properties, so the handler takes **kwargs"
-
-
-@dataclass(frozen=True)
-class SignatureMismatch:
-    """A mismatch between the parameters of an action handler and the input of the action."""
-
-    kind: SignatureMismatchKind
-    name: str | None = None
-    """the parameter or input property concerned, None if the mismatch is about the handler as a whole"""
-
-    def __str__(self) -> str:
-        return self.kind.value.format(name=self.name)
-
-
-class InputSignatureError(TypeError):
-    """The parameters of an action handler do not match the input of the action, lists every mismatch."""
-
-    def __init__(self, handler: Any, mismatches: list[SignatureMismatch]) -> None:
-        """
-        Initialize the error.
-
-        Parameters
-        ----------
-        handler: Any
-            the action handler
-        mismatches: list[SignatureMismatch]
-            every mismatch found
-        """
-        self.mismatches = mismatches
-        super().__init__(
-            f"{getattr(handler, '__name__', handler)} does not match the input of the action: "
-            + "; ".join(map(str, mismatches))
-        )
-
-
-def check_input_signature(func: Callable, schema: dict[str, Any]) -> None:
-    """
-    Check that the parameters of an action handler match the input DataSchema of the action.
-
-    The first positional parameter (`self`) and a keyword-only `request` parameter are not part of the input.
-    A delegate's method belongs to another object, so its signature has no `self` to skip.
-    An object input arrives as keyword arguments, any other input as a single value.
-
-    Parameters
-    ----------
-    func: Callable
-        the action handler, or the `ActionDelegate` calling a method of another object
-    schema: dict[str, Any]
-        the input DataSchema
-
-    Raises
-    ------
-    InputSignatureError
-        listing every mismatch found
-    """
-    from hololinked.core.actions import ActionDelegate  # core imports this module
-
-    if isinstance(func, ActionDelegate):
-        parameters = list(inspect.signature(func.handler).parameters.values())
-    else:
-        parameters = list(inspect.signature(func).parameters.values())[1:]
-    parameters = [
-        parameter
-        for parameter in parameters
-        if not (parameter.kind is Parameter.KEYWORD_ONLY and parameter.name == "request")
-    ]
-    mismatches: list[SignatureMismatch] = []
-    if not (schema.get("type") == "object" or "properties" in schema):
-        positional = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD, Parameter.VAR_POSITIONAL)
-        if len(parameters) != 1 or parameters[0].kind not in positional:
-            mismatches.append(SignatureMismatch(SignatureMismatchKind.SINGLE_VALUE_ARITY))
-    else:
-        properties = schema.get("properties", {})
-        takes_kwargs = any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters)
-        keywords = {
-            parameter.name
-            for parameter in parameters
-            if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
-        }
-        mismatches += [
-            SignatureMismatch(SignatureMismatchKind.POSITIONAL_ONLY, parameter.name)
-            for parameter in parameters
-            if parameter.kind is Parameter.POSITIONAL_ONLY
-        ]
-        mismatches += [
-            SignatureMismatch(SignatureMismatchKind.REQUIRED_NOT_IN_INPUT, parameter.name)
-            for parameter in parameters
-            if parameter.name in keywords and parameter.default is Parameter.empty and parameter.name not in properties
-        ]
-        if not takes_kwargs:
-            mismatches += [
-                SignatureMismatch(SignatureMismatchKind.PROPERTY_NOT_A_PARAMETER, name)
-                for name in sorted(set(properties) | set(schema.get("required", [])))
-                if name not in keywords
-            ]
-        additional = schema.get("additionalProperties", None)
-        if additional is not None and additional is not False and not takes_kwargs:
-            mismatches.append(SignatureMismatch(SignatureMismatchKind.ADDITIONAL_NEEDS_KWARGS))
-    if mismatches:
-        raise InputSignatureError(func, mismatches)
-
-
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
@@ -761,13 +512,6 @@ __all__ = [
     get_signature.__name__,
     isclassmethod.__name__,
     issubklass.__name__,
-    get_input_model_from_signature.__name__,
-    wrap_plain_types_in_rootmodel.__name__,
-    get_return_type_from_signature.__name__,
     getattr_without_descriptor_read.__name__,
     forkable.__name__,
-    check_input_signature.__name__,
-    InputSignatureError.__name__,
-    SignatureMismatchKind.__name__,
-    SignatureMismatch.__name__,
 ]

@@ -18,11 +18,10 @@ from hololinked.config import global_config
 from hololinked.constants import JSON
 from hololinked.core.exceptions import StateMachineError
 from hololinked.core.interfaces.metadata import ActionMetadata
+from hololinked.core.utils import get_input_model_from_signature, get_return_type_from_signature
 from hololinked.param.parameterized import ParameterizedFunction
 from hololinked.param.parameters import Tuple
 from hololinked.utils import (
-    get_input_model_from_signature,
-    get_return_type_from_signature,
     has_async_def,
     isclassmethod,
     issubklass,
@@ -346,9 +345,16 @@ class ActionDelegate:
     subsumed within an `Action` class itself, but is separated for explicit delegation.
     """
 
-    __slots__ = ("_bound_delegate", "delegate", "impl", "member_name", "thing")
+    __slots__ = ("_handler", "bound", "delegate", "impl", "member_name", "thing")
 
-    def __init__(self, impl: Any, member_name: str, thing: Any | None = None, delegate: Any = None) -> None:
+    def __init__(
+        self,
+        impl: Any,
+        member_name: str,
+        thing: Any | None = None,
+        delegate: Any = None,
+        bound: bool = False,
+    ) -> None:
         """
         Initialize the delegate.
 
@@ -363,27 +369,32 @@ class ActionDelegate:
         delegate: Any, optional
             A custom implementation of a method determined to be the Action on the impl, not accessible through
             `__getattr__` or similar (this is usually not the case). Use this argument when the action cannot be
-            accessed through python builtin attribute lookup on the implementation object. For example, `keithley2600`
-            package implements `KeithleyFunction` as a model for an action. Its accessible through attribute lookup.
-            Were it not, one would need to provide it explicitly through the `delegate` argument to invoke it correctly.
+            accessed through python builtin attribute lookup on the implementation object.
+        bound: bool
+            whether the delegate is already bound to its owner and called as `delegate(*args, **kwargs)`, otherwise
+            it is called as `delegate(impl, *args, **kwargs)`. See `hololinked.core.utils.is_unbound_action_delegate()`.
         """
         self.impl = impl
         self.member_name = member_name
         self.thing = thing
         self.delegate = delegate
-        self._bound_delegate = None
+        self.bound = bound
+        self._handler = None
 
     @property
     def handler(self) -> Callable:
-        """The method, looked up on the object at every access, or the delegate bound to the object like a method."""
+        """The method, looked up on the object at every access, or the delegate (bound to the object like a method)."""
         if self.delegate is None:
             return getattr(self.impl, self.member_name)
-        if self._bound_delegate is None:  # built once, the delegate and the object do not change
+        if self._handler is None:  # built once, the delegate and the object do not change
             call = self.delegate.__call__
-            bound = partial(call, self.impl)
-            bound.__signature__ = signature(bound)  # ty: ignore[unresolved-attribute]
-            self._bound_delegate = update_wrapper(bound, call)  # docstring and type hints of the delegate
-        return self._bound_delegate
+            if self.bound:
+                self._handler = call
+            else:
+                handler = partial(call, self.impl)
+                handler.__signature__ = signature(handler)  # ty: ignore[unresolved-attribute]
+                self._handler = update_wrapper(handler, call)  # docstring and type hints of the delegate
+        return self._handler
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.handler(*args, **kwargs)
