@@ -85,7 +85,7 @@ def test_01_metadata_dataclass_retains_known_definitions_from_api(schema: dict):
         (EventAffordance, "events"),
     ],
 )
-def test_02_metadata_dataclass_drops_unknown_definitions_from_api(
+def test_02_metadata_dataclass_drops_unknown_definitions_from_api_when_not_strict(
     affordance_cls: type[InteractionAffordance],
     kind: str,
 ):
@@ -105,7 +105,17 @@ def test_02_metadata_dataclass_drops_unknown_definitions_from_api(
             },
         },
     }
-    loaded = affordance_cls.from_metadata("value", td).json()
+
+    unknown = "x-custom" if affordance_cls is PropertyAffordance else "minimum"  # for actions and events
+
+    # first just check if the error is raised
+    with pytest.raises(KeyError, match=f"Unknown key '{unknown}'"):
+        affordance_cls.from_metadata("value", td)
+
+    # allow the error to pass as warning when strict is False
+    with pytest.warns(UserWarning, match="Unknown key"):
+        loaded = affordance_cls.from_metadata("value", td, strict=False).json()
+
     expected = {**declared, "minimum": 0} if affordance_cls is PropertyAffordance else declared
     assert loaded == expected  # minimum is a data schema keyword, valid only on a property
 
