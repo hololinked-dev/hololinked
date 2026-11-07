@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 
 from collections.abc import ItemsView
-from typing import Any, Optional
+from typing import Any, ClassVar
 
 from pydantic import ConfigDict, Field
 
@@ -24,7 +24,7 @@ from hololinked.metadata.td.metadata import VersionInfo
 from hololinked.metadata.td.utils import a_class_name_from_title_string, model_spec_has_extensions
 
 
-from hololinked.core import Thing  # noqa  # isort: skip
+from hololinked.core import Thing  # isort: skip
 
 
 class ThingModel(WoTSchema, Metadata):
@@ -36,15 +36,15 @@ class ThingModel(WoTSchema, Metadata):
     """
 
     context: list[str | dict[str, str]] = Field(["https://www.w3.org/2022/wot/td/v1.1"], alias="@context")
-    type: Optional[str | list[str]] = None
-    id: Optional[str] = None
-    title: Optional[str] = None
-    description: Optional[str] = None
-    version: Optional[VersionInfo] = None
-    created: Optional[str] = None
-    modified: Optional[str] = None
-    support: Optional[str] = None
-    base: Optional[str] = None
+    type: str | list[str] | None = None
+    id: str | None = None
+    title: str | None = None
+    description: str | None = None
+    version: VersionInfo | None = None
+    created: str | None = None
+    modified: str | None = None
+    support: str | None = None
+    base: str | None = None
     properties: dict[str, PropertyAffordance] = Field(default_factory=dict)
     actions: dict[str, ActionAffordance] = Field(default_factory=dict)
     events: dict[str, EventAffordance] = Field(default_factory=dict)
@@ -54,9 +54,9 @@ class ThingModel(WoTSchema, Metadata):
     def __init__(
         self,
         thing: Thing | None = None,
-        allow_loose_schema: Optional[bool] = False,
+        allow_loose_schema: bool | None = False,
         ignore_errors: bool = False,
-        skip_names: Optional[list[str]] = [],
+        skip_names: list[str] | None = [],
     ) -> None:
         WoTSchema.__init__(self)
         Metadata.__init__(
@@ -145,6 +145,10 @@ class ThingModel(WoTSchema, Metadata):
             - `action_impl_call` - optional, if you have not implemented a standard method for an action in your
             implementation class, you can provide an object that handles action calls. default methods on the
             implementation object do not require that you provide this.
+            - `dynamic_attributes` - optional, False by default. A property whose member is not found statically is
+            read and written on the implementation object at access time (through its `__getattr__` /
+            `__setattr__`) instead of being stored on the `Thing`. Dotted member names like `a.b.c`, from the Thing
+            Model or `member_names_map`, walk the attributes. Such members are checked on first use only.
             - `thing_kwargs` - any other argument of the `Thing` object
 
         Returns
@@ -165,6 +169,7 @@ class ThingModel(WoTSchema, Metadata):
             validator=validator,
             property_impl=kwargs.pop("property_impl", None),
             action_impl=kwargs.pop("action_impl", None),
+            dynamic_attributes=kwargs.pop("dynamic_attributes", False),
         )
         namespace = {**descriptors, "_thing_model": self, "__doc__": self.description}
         # create the class with the namespace
@@ -178,7 +183,7 @@ class ThingModel(WoTSchema, Metadata):
         return thing
 
     @classmethod
-    def from_metadata(cls, metadata: dict[str, Any]) -> ThingModel:
+    def from_metadata(cls, metadata: dict[str, Any], strict: bool = True) -> ThingModel:
         """
         Convert a JSON specification of a Thing Description or a Thing Model into a ThingModel instance.
 
@@ -186,6 +191,8 @@ class ThingModel(WoTSchema, Metadata):
         ----------
         metadata: dict[str, Any]
             the Thing Description or Thing Model JSON
+        strict: bool, optional
+            Unknown keys will raise an error if True, default True
 
         Returns
         -------
@@ -207,14 +214,21 @@ class ThingModel(WoTSchema, Metadata):
             context = metadata["@context"]
             model.context = context if isinstance(context, list) else [context]
         model.properties = {
-            name: PropertyAffordance.from_metadata(name, metadata) for name in metadata.get("properties", {})
+            name: PropertyAffordance.from_metadata(name=name, metadata=metadata, strict=strict)
+            for name in metadata.get("properties", {})
         }
-        model.actions = {name: ActionAffordance.from_metadata(name, metadata) for name in metadata.get("actions", {})}
-        model.events = {name: EventAffordance.from_metadata(name, metadata) for name in metadata.get("events", {})}
+        model.actions = {
+            name: ActionAffordance.from_metadata(name=name, metadata=metadata, strict=strict)
+            for name in metadata.get("actions", {})
+        }
+        model.events = {
+            name: EventAffordance.from_metadata(name=name, metadata=metadata, strict=strict)
+            for name in metadata.get("events", {})
+        }
         return model
 
     @classmethod
-    def from_file(cls, path: str) -> ThingModel:
+    def from_file(cls, path: str, strict: bool = True) -> ThingModel:
         """
         Load a Thing Description or a plain Thing Model from a JSON file.
 
@@ -222,6 +236,8 @@ class ThingModel(WoTSchema, Metadata):
         ----------
         path: str
             path of the JSON file
+        strict: bool, optional
+            Unknown keys will raise an error if strict is True.
 
         Returns
         -------
@@ -229,13 +245,13 @@ class ThingModel(WoTSchema, Metadata):
             the model with its properties, actions and events, not attached to a Thing instance
         """
         with open(path, encoding="utf-8") as file:
-            return cls.from_metadata(json.load(file))
+            return cls.from_metadata(json.load(file), strict=strict)
 
     # not the best code and logic, but works for now
-    skip_properties: list[str] = ["expose", "thing_description", "GUI", "object_info"]
+    skip_properties: ClassVar[list[str]] = ["expose", "thing_description", "GUI", "object_info"]
     """list of property names to skip when generating the TD"""
 
-    skip_actions: list[str] = [
+    skip_actions: ClassVar[list[str]] = [
         Thing._add_property.name,
         Thing._get_properties.name,
         Thing._get_properties_in_db.name,
@@ -245,7 +261,7 @@ class ThingModel(WoTSchema, Metadata):
     ]
     """list of action names to skip when generating the TD"""
 
-    skip_events: list[str] = []
+    skip_events: ClassVar[list[str]] = []
     """list of event names to skip when generating the TD"""
 
     def add_interaction_affordances(self) -> None:

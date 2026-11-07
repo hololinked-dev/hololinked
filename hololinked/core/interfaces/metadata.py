@@ -6,7 +6,7 @@ import inspect
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -54,7 +54,7 @@ class Metadata(BaseModel):
         self,
         thing: Thing | None = None,
         ignore_errors: bool = False,
-        skip_names: Optional[list[str]] = [],
+        skip_names: list[str] | None = [],
     ) -> None:
         """
         Initialize the Metadata.
@@ -134,7 +134,10 @@ class Metadata(BaseModel):
         **kwargs: Any
             `property_impl` - type (or tuple of types) of members implementing a property through
             `get(impl)`, `set(impl, value)` and `delete(impl)`; `action_impl` - type (or tuple of types) of members
-            implementing an action through `__call__(impl, *args, **kwargs)`
+            implementing an action through `__call__(impl, *args, **kwargs)`; `dynamic_attributes` - bool, a property
+            whose member is not found statically is read and written on the object at access time (through its
+            `__getattr__` / `__setattr__`, dotted names like `a.b.c` walk the attributes) instead of being stored on
+            the `Thing`. Such members are checked on first use only.
 
         Returns
         -------
@@ -154,6 +157,7 @@ class Metadata(BaseModel):
         member_names_map = dict(member_names_map or {})
         property_impl = kwargs.get("property_impl")
         action_impl = kwargs.get("action_impl")
+        dynamic_attributes = kwargs.get("dynamic_attributes", False)
         interaction_names = {*model.properties, *model.actions, *model.events}
         problems = [
             f"member_names maps {name!r}, which is not in the Device Description Language"
@@ -167,6 +171,7 @@ class Metadata(BaseModel):
             member_name = member_names_map.get(name, name)
             impl_member = None if member_name.startswith("_") else inspect.getattr_static(impl, member_name, None)
             try:
+                # check overlap with builtins
                 if builtin is not None:
                     # our `Thing` class already defines this property, its presence on the implementation object may
                     # cause a conflict
@@ -178,18 +183,28 @@ class Metadata(BaseModel):
                         # defined on Thing only, no conflict.
                         # TODO, slightly misleading, how will the impl access it?
                         continue
+                if impl_member is None and dynamic_attributes and not member_name.startswith("_"):
+                    # resolved on the object at access time, e.g. members loaded by a __getattr__
+                    descriptors[name] = affordance.to_descriptor(
+                        delegate=PropertyDelegate(impl, member_name),
+                        validator=validator,
+                    )
+                    continue
                 if impl_member is None:
                     # the value is stored on the Thing as an internal attribute.
                     # TODO, slightly misleading, how will the impl access it?
                     descriptors[name] = affordance.to_descriptor(validator=validator)
                     continue
+                # check the type of the implementation
                 is_custom_property_impl_type = property_impl is not None and isinstance(impl_member, property_impl)
                 is_data_descriptor = inspect.isdatadescriptor(impl_member) and not isinstance(impl_member, Property)
-                if not (is_custom_property_impl_type or is_data_descriptor):
+                is_plain_attribute = not hasattr(type(impl_member), "__get__") and not callable(impl_member)
+                if not (is_custom_property_impl_type or is_data_descriptor or is_plain_attribute):
                     raise TypeError(
-                        f"implemented by a {type(impl_member).__name__},"
-                        " only a @property, a data descriptor or a property_impl implements a property"
+                        f"implemented by a {type(impl_member).__name__}, only a @property, a data descriptor,"
+                        " a plain attribute or a property_impl implements a property"
                     )
+                # create the descriptor now
                 descriptor = cast(
                     Property,
                     affordance.to_descriptor(
@@ -201,11 +216,19 @@ class Metadata(BaseModel):
                         validator=validator,
                     ),
                 )
+                # check readonly, constant and its consistency with the implementation
                 if isinstance(impl_member, property):
                     if descriptor.readonly and impl_member.fset is not None:
                         raise TypeError("read-only, but the @property has a setter")
                     if not (descriptor.readonly or descriptor.constant) and impl_member.fset is None:
                         raise TypeError("writable, but the @property has no setter")
+                if (
+                    is_custom_property_impl_type
+                    and not (descriptor.readonly or descriptor.constant)
+                    and not callable(getattr(impl_member, "set", None))
+                ):
+                    # a set() on a read-only property_impl is allowed, as the Thing already blocks writes
+                    raise TypeError(f"writable, but the {type(impl_member).__name__} has no set()")
                 descriptors[name] = descriptor
             except (TypeError, ValueError) as ex:
                 problems.append(f"property {name!r}: {ex}")
@@ -234,10 +257,15 @@ class Metadata(BaseModel):
                         f"implemented by a {type(impl_member).__name__},"
                         " only a method or an action_impl implements an action"
                     )
-                descriptors[name] = affordance.to_descriptor(
-                    ActionDelegate(impl, member_name, delegate=impl_member if is_custom_action_impl_type else None),
-                    validator=validator,
+                action_delegate = ActionDelegate(
+                    impl, member_name, delegate=impl_member if is_custom_action_impl_type else None
                 )
+                if is_custom_action_impl_type:
+                    # bound if its __call__ already takes the input as is, otherwise the impl is passed first
+                    bound_delegate = ActionDelegate(impl, member_name, delegate=impl_member, bound=True)
+                    if bound_delegate.accepts(getattr(affordance, "input", None)):
+                        action_delegate = bound_delegate
+                descriptors[name] = affordance.to_descriptor(action_delegate, validator=validator)
             except (TypeError, ValueError) as ex:
                 problems.append(f"action {name!r}: {ex}")
 
@@ -456,7 +484,7 @@ class InteractionMetadata(BaseModel):
         raise NotImplementedError("from_descriptor() must be implemented in subclass of InteractionMetadata")
 
     @classmethod
-    def from_metadata(cls, name: str, metadata: dict[str, Any]) -> Self:
+    def from_metadata(cls, name: str, metadata: dict[str, Any], strict: bool = True) -> Self:
         """
         Populate the metadata from the provided JSON and return it as an instance of this class.
 
@@ -468,6 +496,8 @@ class InteractionMetadata(BaseModel):
             name of the interaction used as key in the metadata
         metadata: JSON
             metadata JSON dictionary (the entire one, not just the component of the interaction)
+        strict: bool, default True
+            Unknown keys will raise an error if True, default True
 
         Returns
         -------
@@ -526,7 +556,6 @@ class InteractionMetadata(BaseModel):
 
     def build_non_compliant_metadata(self) -> None:
         """If there is additional non standard metadata to be added, they can be added here."""
-        pass
 
     def override_defaults(self, **kwargs):
         """
@@ -548,9 +577,7 @@ class InteractionMetadata(BaseModel):
                 setattr(self, key, value)
 
     def __hash__(self):
-        return hash(
-            self.thing_id if self.thing_id else "" + self.thing_cls.__name__ if self.thing_cls else "" + self.name
-        )
+        return hash(self.thing_id or ("" + self.thing_cls.__name__ if self.thing_cls else "" + self.name))
 
     def __str__(self):
         if self.thing_cls:

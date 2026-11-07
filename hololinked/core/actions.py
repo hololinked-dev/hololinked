@@ -7,7 +7,7 @@ import warnings
 from collections.abc import Callable
 from enum import Enum
 from functools import partial, update_wrapper
-from inspect import getfullargspec, iscoroutinefunction, signature
+from inspect import Parameter, getfullargspec, iscoroutinefunction, signature
 from types import FunctionType, MethodType
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +21,7 @@ from hololinked.core.interfaces.metadata import ActionMetadata
 from hololinked.param.parameterized import ParameterizedFunction
 from hololinked.param.parameters import Tuple
 from hololinked.utils import (
+    check_input_signature,
     get_input_model_from_signature,
     get_return_type_from_signature,
     has_async_def,
@@ -346,9 +347,16 @@ class ActionDelegate:
     subsumed within an `Action` class itself, but is separated for explicit delegation.
     """
 
-    __slots__ = ("_bound_delegate", "delegate", "impl", "member_name", "thing")
+    __slots__ = ("_handler", "bound", "delegate", "impl", "member_name", "thing")
 
-    def __init__(self, impl: Any, member_name: str, thing: Any | None = None, delegate: Any = None) -> None:
+    def __init__(
+        self,
+        impl: Any,
+        member_name: str,
+        thing: Any | None = None,
+        delegate: Any = None,
+        bound: bool = False,
+    ) -> None:
         """
         Initialize the delegate.
 
@@ -366,24 +374,58 @@ class ActionDelegate:
             accessed through python builtin attribute lookup on the implementation object. For example, `keithley2600`
             package implements `KeithleyFunction` as a model for an action. Its accessible through attribute lookup.
             Were it not, one would need to provide it explicitly through the `delegate` argument to invoke it correctly.
+        bound: bool
+            whether the delegate is already bound to its owner and called as `delegate(*args, **kwargs)`, otherwise
+            it is called as `delegate(impl, *args, **kwargs)`. See `accepts()` to decide it from the input.
         """
         self.impl = impl
         self.member_name = member_name
         self.thing = thing
         self.delegate = delegate
-        self._bound_delegate = None
+        self.bound = bound
+        self._handler = None
 
     @property
     def handler(self) -> Callable:
-        """The method, looked up on the object at every access, or the delegate bound to the object like a method."""
+        """The method, looked up on the object at every access, or the delegate (bound to the object like a method)."""
         if self.delegate is None:
             return getattr(self.impl, self.member_name)
-        if self._bound_delegate is None:  # built once, the delegate and the object do not change
+        if self._handler is None:  # built once, the delegate and the object do not change
             call = self.delegate.__call__
-            bound = partial(call, self.impl)
-            bound.__signature__ = signature(bound)  # ty: ignore[unresolved-attribute]
-            self._bound_delegate = update_wrapper(bound, call)  # docstring and type hints of the delegate
-        return self._bound_delegate
+            if self.bound:
+                self._handler = call
+            else:
+                handler = partial(call, self.impl)
+                handler.__signature__ = signature(handler)  # ty: ignore[unresolved-attribute]
+                self._handler = update_wrapper(handler, call)  # docstring and type hints of the delegate
+        return self._handler
+
+    def accepts(self, schema: dict[str, Any] | None) -> bool:
+        """
+        Whether the handler takes the input described by the schema as is.
+
+        Used to tell a bound delegate from an unbound one: the implementation object is an extra first argument
+        that is not part of the input.
+
+        Parameters
+        ----------
+        schema: dict[str, Any] | None
+            the input DataSchema of the action, `None` if it has no input
+
+        Returns
+        -------
+        bool
+            True if the parameters match the input, or, without an input, if no positional argument is required
+        """
+        try:
+            if schema:
+                check_input_signature(self, schema)
+                return True
+            parameters = signature(self.handler).parameters.values()
+        except (TypeError, ValueError):  # InputSignatureError is a TypeError
+            return False
+        positional = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD)
+        return not any(p.kind in positional and p.default is Parameter.empty for p in parameters)
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.handler(*args, **kwargs)
