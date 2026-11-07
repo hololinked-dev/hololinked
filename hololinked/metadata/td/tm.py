@@ -145,6 +145,10 @@ class ThingModel(WoTSchema, Metadata):
             - `action_impl_call` - optional, if you have not implemented a standard method for an action in your
             implementation class, you can provide an object that handles action calls. default methods on the
             implementation object do not require that you provide this.
+            - `dynamic_attributes` - optional, False by default. A property whose member is not found statically is
+            read and written on the implementation object at access time (through its `__getattr__` /
+            `__setattr__`) instead of being stored on the `Thing`. Dotted member names like `a.b.c`, from the Thing
+            Model or `member_names_map`, walk the attributes. Such members are checked on first use only.
             - `thing_kwargs` - any other argument of the `Thing` object
 
         Returns
@@ -165,6 +169,7 @@ class ThingModel(WoTSchema, Metadata):
             validator=validator,
             property_impl=kwargs.pop("property_impl", None),
             action_impl=kwargs.pop("action_impl", None),
+            dynamic_attributes=kwargs.pop("dynamic_attributes", False),
         )
         namespace = {**descriptors, "_thing_model": self, "__doc__": self.description}
         # create the class with the namespace

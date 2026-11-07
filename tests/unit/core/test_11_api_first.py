@@ -252,7 +252,7 @@ def test_07_thing_builtins(TD, extras, is_remote):
 #         model.produce(broken, id="scope")
 #     assert error.value.problems == [
 #         "property 'channel_count': implemented by a function,"
-#         " only a @property, a data descriptor or a property_impl implements a property",
+#         " only a @property, a data descriptor, a plain attribute or a property_impl implements a property",
 #         "event 'data_ready': is created from the Device Description Language, remove the NoneType named after it",
 #     ]
 
