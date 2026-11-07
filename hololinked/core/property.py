@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
-
 from collections.abc import Callable
 from enum import Enum
 from operator import attrgetter
@@ -411,6 +409,7 @@ class PropertyDelegate:
         member_name: str,
         thing: Thing | None = None,
         delegate: Any = None,
+        bound: bool = False,
     ) -> None:
         """
         Initialize the delegate.
@@ -426,45 +425,18 @@ class PropertyDelegate:
         delegate: Any, optional
             the member of `impl` implementing the property, either unbound through `get(impl)`, `set(impl, value)`
             and `delete(impl)`, or already bound to its owner through `get()`, `set(value)` and `delete()`.
-            Which of the two is decided once from the signature of `get`. Use this argument when the property has a
-            custom implementation for getting, setting, or deleting its value which is not auto-invoked with
-            `getattr(impl, member_name)`, `setattr(impl, member_name, value)`, or `delattr(impl, member_name)`.
+            Use this argument when the property has a custom implementation for getting, setting, or deleting its
+            value which is not auto-invoked with `getattr(impl, member_name)`, `setattr(impl, member_name, value)`,
+            or `delattr(impl, member_name)`.
+        bound: bool
+            whether the delegate is already bound to its owner, otherwise `impl` is passed as first argument.
+            See `hololinked.core.utils.is_unbound_property_delegate()`.
         """
         self.impl = impl
         self.member_name = member_name
         self.thing = thing
         self.delegate = delegate
-        self.bound = self.is_bound(delegate)
-
-    @staticmethod
-    def is_bound(delegate: Any) -> bool:
-        """
-        Whether the delegate is bound to its owner, i.e. its `get` takes no positional argument.
-
-        Without a `get`, with a signature that cannot be read or with `*args`, the delegate is taken as unbound
-        (called with the implementation object as first argument).
-
-        Parameters
-        ----------
-        delegate: Any
-            the delegate implementing the property
-
-        Returns
-        -------
-        bool
-            True if `get()`, `set(value)` and `delete()` are called without the implementation object
-        """
-        get = getattr(delegate, "get", None)
-        if get is None:
-            return False
-        try:
-            parameters = inspect.signature(get).parameters.values()
-        except (TypeError, ValueError):
-            return False
-        if any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in parameters):
-            return False
-        positional = (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-        return not any(p.kind in positional and p.default is inspect.Parameter.empty for p in parameters)
+        self.bound = bound
 
     def get(self) -> Any:
         """
@@ -494,7 +466,8 @@ class PropertyDelegate:
             else:
                 self.delegate.set(self.impl, value)
             return
-        owner, leaf = self.owner_and_leaf()
+        parent, _, leaf = self.member_name.rpartition(".")  # the owner of a dotted name a.b.c is looked up every call
+        owner = attrgetter(parent)(self.impl) if parent else self.impl
         setattr(owner, leaf, value)
 
     def delete(self) -> None:
@@ -512,22 +485,9 @@ class PropertyDelegate:
             else:
                 self.delegate.delete(self.impl)
             return
-        owner, leaf = self.owner_and_leaf()
+        parent, _, leaf = self.member_name.rpartition(".")  # the owner of a dotted name a.b.c is looked up every call
+        owner = attrgetter(parent)(self.impl) if parent else self.impl
         delattr(owner, leaf)
-
-    def owner_and_leaf(self) -> tuple[Any, str]:
-        """
-        Split the member name into the object owning the attribute and the attribute name.
-
-        For a dotted name `a.b.c`, the owner `impl.a.b` is looked up at every call, as it may be loaded dynamically.
-
-        Returns
-        -------
-        tuple[Any, str]
-            the owner and the name of the attribute on it
-        """
-        parent, _, leaf = self.member_name.rpartition(".")
-        return (attrgetter(parent)(self.impl) if parent else self.impl), leaf
 
     def __repr__(self) -> str:
         return f"<PropertyDelegate({type(self.impl).__name__}.{self.member_name})>"

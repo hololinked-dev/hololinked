@@ -82,24 +82,6 @@ class Metadata(BaseModel):
         """Produce a Thing instance from the metadata."""
         raise NotImplementedError("Implement produce() in subclass")
 
-    skip_properties: list[str]
-    """
-    List of default property names to skip when generating the metadata. Different from `skip_names` as
-    this list is supposed to be used as a builtin blacklist.
-    """
-
-    skip_actions: list[str]
-    """
-    List of default action names to skip when generating the metadata. Different from `skip_names` as
-    this list is supposed to be used as a builtin blacklist.
-    """
-
-    skip_events: list[str]
-    """
-    List of default event names to skip when generating the metadata. Different from `skip_names` as
-    this list is supposed to be used as a builtin blacklist.
-    """
-
     properties: Mapping[str, PropertyMetadata]
     """properties the metadata describes, keyed by name"""
     actions: Mapping[str, ActionMetadata]
@@ -153,6 +135,7 @@ class Metadata(BaseModel):
         from hololinked.core.events import Event, EventDelegate
         from hololinked.core.property import Property, PropertyDelegate
         from hololinked.core.thing import Thing
+        from hololinked.core.utils import is_unbound_action_delegate, is_unbound_property_delegate
 
         member_names_map = dict(member_names_map or {})
         property_impl = kwargs.get("property_impl")
@@ -183,17 +166,17 @@ class Metadata(BaseModel):
                         # defined on Thing only, no conflict.
                         # TODO, slightly misleading, how will the impl access it?
                         continue
-                if impl_member is None and dynamic_attributes and not member_name.startswith("_"):
-                    # resolved on the object at access time, e.g. members loaded by a __getattr__
-                    descriptors[name] = affordance.to_descriptor(
-                        delegate=PropertyDelegate(impl, member_name),
-                        validator=validator,
-                    )
-                    continue
                 if impl_member is None:
-                    # the value is stored on the Thing as an internal attribute.
-                    # TODO, slightly misleading, how will the impl access it?
-                    descriptors[name] = affordance.to_descriptor(validator=validator)
+                    if dynamic_attributes and not member_name.startswith("_"):
+                        # resolved on the object at access time, e.g. members loaded by a __getattr__
+                        descriptors[name] = affordance.to_descriptor(
+                            delegate=PropertyDelegate(impl, member_name),
+                            validator=validator,
+                        )
+                    else:
+                        # the value is stored on the Thing as an internal attribute.
+                        # TODO, slightly misleading, how will the impl access it?
+                        descriptors[name] = affordance.to_descriptor(validator=validator)
                     continue
                 # check the type of the implementation
                 is_custom_property_impl_type = property_impl is not None and isinstance(impl_member, property_impl)
@@ -212,6 +195,7 @@ class Metadata(BaseModel):
                             impl,
                             member_name,
                             delegate=impl_member if is_custom_property_impl_type else None,
+                            bound=is_custom_property_impl_type and not is_unbound_property_delegate(impl_member),
                         ),
                         validator=validator,
                     ),
@@ -257,14 +241,11 @@ class Metadata(BaseModel):
                         f"implemented by a {type(impl_member).__name__},"
                         " only a method or an action_impl implements an action"
                     )
-                action_delegate = ActionDelegate(
-                    impl, member_name, delegate=impl_member if is_custom_action_impl_type else None
-                )
                 if is_custom_action_impl_type:
-                    # bound if its __call__ already takes the input as is, otherwise the impl is passed first
-                    bound_delegate = ActionDelegate(impl, member_name, delegate=impl_member, bound=True)
-                    if bound_delegate.accepts(getattr(affordance, "input", None)):
-                        action_delegate = bound_delegate
+                    bound = not is_unbound_action_delegate(impl_member.__call__, getattr(affordance, "input", None))
+                    action_delegate = ActionDelegate(impl, member_name, delegate=impl_member, bound=bound)
+                else:
+                    action_delegate = ActionDelegate(impl, member_name, delegate=None)
                 descriptors[name] = affordance.to_descriptor(action_delegate, validator=validator)
             except (TypeError, ValueError) as ex:
                 problems.append(f"action {name!r}: {ex}")

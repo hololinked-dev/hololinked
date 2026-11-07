@@ -8,6 +8,7 @@ from hololinked import SchemaValidators
 from hololinked.core import Action, Property, Thing
 from hololinked.core.exceptions import ValidationError
 from hololinked.core.interfaces.schema_validators import BaseSchemaValidator
+from hololinked.core.utils import InputSignatureError, SignatureMismatchKind, check_input_signature
 from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
@@ -18,7 +19,7 @@ from hololinked.metadata.td.interaction_affordance import (
 from hololinked.metadata.td.interaction_affordance import schema_validator as schema_validator_factory
 from hololinked.schema_validators.json_schema import JSONSchemaValidator
 from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator
-from hololinked.utils import InputSignatureError, SignatureMismatchKind, check_input_signature, issubklass, uuid_hex
+from hololinked.utils import issubklass, uuid_hex
 
 
 def property_affordance(schema: dict) -> PropertyAffordance:

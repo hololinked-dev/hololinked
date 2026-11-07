@@ -20,12 +20,13 @@ from hololinked.core.interfaces import (
     InteractionMetadata,
     PropertyMetadata,
 )
+from hololinked.core.utils import check_input_signature
 from hololinked.metadata.td.base import WoTSchema
 from hololinked.metadata.td.data_schema import DataSchema
 from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.pydantic_extensions import dataschema_to_model, type_to_dataschema
 from hololinked.metadata.td.utils import get_summary
-from hololinked.utils import check_input_signature, issubklass
+from hololinked.utils import issubklass
 
 
 from hololinked.core.actions import Action, ActionDelegate, action  # isort: skip
@@ -198,7 +199,9 @@ class InteractionAffordance(WoTSchema, InteractionMetadata):
         Raises
         ------
         ValueError
-            If the affordance type cannot be determined from the TD.
+            If the affordance type cannot be determined from the TD
+        KeyError
+            If an unknown key is found in the affordance JSON and strict is True, not dict KeyError
         """
         if cls == PropertyAffordance:
             affordance_name = "properties"

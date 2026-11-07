@@ -7,7 +7,7 @@ package-dir = {"hololinked" = "hololinked"}
 
 [project]
 name = "hololinked"
-version = "0.4.2"
+version = "0.5.0"
 authors = [
     {name = "Vignesh Vaidyanathan", email = "info@hololinked.dev"},
 ]

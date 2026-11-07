@@ -249,20 +249,27 @@ class ThingModel(WoTSchema, Metadata):
 
     # not the best code and logic, but works for now
     skip_properties: ClassVar[list[str]] = ["expose", "thing_description", "GUI", "object_info"]
-    """list of property names to skip when generating the TD"""
+    """
+    List of default property names to skip when generating the metadata. Different from `skip_names` as
+    this list is supposed to be used as a builtin blacklist.
+    """
 
     skip_actions: ClassVar[list[str]] = [
         Thing._add_property.name,
         Thing._get_properties.name,
         Thing._get_properties_in_db.name,
         Thing._set_properties.name,
-        "get_postman_collection",
-        "get_our_thing_model",
     ]
-    """list of action names to skip when generating the TD"""
+    """
+    List of default action names to skip when generating the metadata. Different from `skip_names` as
+    this list is supposed to be used as a builtin blacklist.
+    """
 
     skip_events: ClassVar[list[str]] = []
-    """list of event names to skip when generating the TD"""
+    """
+    List of default event names to skip when generating the metadata. Different from `skip_names` as
+    this list is supposed to be used as a builtin blacklist.
+    """
 
     def add_interaction_affordances(self) -> None:
         """

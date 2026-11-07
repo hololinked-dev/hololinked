@@ -7,7 +7,7 @@ import warnings
 from collections.abc import Callable
 from enum import Enum
 from functools import partial, update_wrapper
-from inspect import Parameter, getfullargspec, iscoroutinefunction, signature
+from inspect import getfullargspec, iscoroutinefunction, signature
 from types import FunctionType, MethodType
 from typing import TYPE_CHECKING, Any
 
@@ -18,12 +18,10 @@ from hololinked.config import global_config
 from hololinked.constants import JSON
 from hololinked.core.exceptions import StateMachineError
 from hololinked.core.interfaces.metadata import ActionMetadata
+from hololinked.core.utils import get_input_model_from_signature, get_return_type_from_signature
 from hololinked.param.parameterized import ParameterizedFunction
 from hololinked.param.parameters import Tuple
 from hololinked.utils import (
-    check_input_signature,
-    get_input_model_from_signature,
-    get_return_type_from_signature,
     has_async_def,
     isclassmethod,
     issubklass,
@@ -371,12 +369,10 @@ class ActionDelegate:
         delegate: Any, optional
             A custom implementation of a method determined to be the Action on the impl, not accessible through
             `__getattr__` or similar (this is usually not the case). Use this argument when the action cannot be
-            accessed through python builtin attribute lookup on the implementation object. For example, `keithley2600`
-            package implements `KeithleyFunction` as a model for an action. Its accessible through attribute lookup.
-            Were it not, one would need to provide it explicitly through the `delegate` argument to invoke it correctly.
+            accessed through python builtin attribute lookup on the implementation object.
         bound: bool
             whether the delegate is already bound to its owner and called as `delegate(*args, **kwargs)`, otherwise
-            it is called as `delegate(impl, *args, **kwargs)`. See `accepts()` to decide it from the input.
+            it is called as `delegate(impl, *args, **kwargs)`. See `hololinked.core.utils.is_unbound_action_delegate()`.
         """
         self.impl = impl
         self.member_name = member_name
@@ -399,33 +395,6 @@ class ActionDelegate:
                 handler.__signature__ = signature(handler)  # ty: ignore[unresolved-attribute]
                 self._handler = update_wrapper(handler, call)  # docstring and type hints of the delegate
         return self._handler
-
-    def accepts(self, schema: dict[str, Any] | None) -> bool:
-        """
-        Whether the handler takes the input described by the schema as is.
-
-        Used to tell a bound delegate from an unbound one: the implementation object is an extra first argument
-        that is not part of the input.
-
-        Parameters
-        ----------
-        schema: dict[str, Any] | None
-            the input DataSchema of the action, `None` if it has no input
-
-        Returns
-        -------
-        bool
-            True if the parameters match the input, or, without an input, if no positional argument is required
-        """
-        try:
-            if schema:
-                check_input_signature(self, schema)
-                return True
-            parameters = signature(self.handler).parameters.values()
-        except (TypeError, ValueError):  # InputSignatureError is a TypeError
-            return False
-        positional = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD)
-        return not any(p.kind in positional and p.default is Parameter.empty for p in parameters)
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.handler(*args, **kwargs)
