@@ -34,7 +34,7 @@ One may call these "attributes, commands, events" or similar terms, but the unde
 For example, consider an optical spectrometer. Two approaches are possible based on whether you want to write code first, or define an API first:
 
 <details open>
-<summary><b>Code-first</b></summary>
+<summary><h3>Code-first</h3></summary>
 
 Import all the necessary objects that define a `Thing`:
 
@@ -338,35 +338,13 @@ There are other improved ways to configure protocol servers, please refer docume
 </details>
 
 <details>
-<summary><b>API-first</b></summary>
+<summary><h3>API-first</h3></summary>
 
 > status: Experimental/alpha
 
-One would require a "Thing Model" of the sorts, written either in JSON or YAML, which then binds to an implementation. A Thing Model can be defined as a description of the capabilities of the device, without the protocol specific information, as similar capabilites may be exposed in any protocol and protocols do not define how a device behaves. It is similar to a class in OOP, except only the contract and data models are defined. 
+In an API-first approach, instead of writing code to begin with, one could first define a "Thing Model", written either in JSON or YAML which then binds to an implementation. A Thing Model can be defined as a description of the capabilities of the device, without the protocol specific information, as similar device capabilites may be exposed in any protocol and protocols do not define how a hardware behaves. It is similar to a class in OOP, except only the contract and data models are defined.
 
-Lets say one has a device driver already implemented as follows:
-
-```python
-class DCPowerSupply:
-
-    @property
-    def voltage(self) -> float:
-        """Get or set the voltage of the power supply."""
-        # placeholder for actual device interaction
-
-    @voltage.setter
-    def voltage(self, value: float):
-        if not (0 <= value <= 30):
-            raise ValueError("Voltage must be between 0 and 30V")
-        # placeholder for actual device interaction
-
-    def toggle_power(self, state: bool) -> None:
-        """Turn the power supply on or off."""
-        # add logic here to turn the power supply on or off
-
-```
-
-Define your Thing Model for it:
+A Thing Model for a DC Power Supply could like the follows:
 
 ```json
 {
@@ -399,7 +377,32 @@ Define your Thing Model for it:
 }
 ```
 
-Then produce your exposed `Thing` by binding the model to the class using the snippet:
+One still needs to make an implementation in code, however unlike the code-first implementation
+as seen previously, a simple object interface would suffice:
+
+```python
+class DCPowerSupply:
+
+    @property
+    def voltage(self) -> float:
+        """Get or set the voltage of the power supply."""
+        # placeholder for actual device interaction
+
+    @voltage.setter
+    def voltage(self, value: float):
+        # placeholder for actual device interaction
+
+    def toggle_power(self, state: bool) -> None:
+        """Turn the power supply on or off."""
+        # add logic here to turn the power supply on or off
+
+```
+
+Name your properties, actions and events the same as the names in the `Thing Model` (or
+one specify a name mapping). Its not necessary to implement any validations of the property
+types or the action arguments, as this would be enforced at runtime.
+
+Expose your `Thing` by binding the model to the class, in a protocol of your choice:
 
 ```python
 from hololinked.metadata.wot import ThingModel
@@ -412,7 +415,11 @@ dc_power_supply.run_with_http_server()
 # dc_power_supply.run_with_zmq_server()
 ```
 
-Using Thing Models are extremely useful to expose existing device implementation that are not implemented for a remote access. 
+One can consider using an this approach when:
+
+- One has a plain device implementation that is not remote capable but have segregations of properties, actions and events (or any subset of them like properties and methods etc.)
+- Share device Thing Models with other users or API consumers. Clients and servers have a single source of truth
+- To develop proper integrations with CI-CD
 
 </details>
 
