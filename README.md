@@ -338,7 +338,7 @@ There are other improved ways to configure protocol servers, please refer docume
 
 > status: Experimental/alpha
 
-In an API-first approach, instead of writing code to begin with, one could first define a "Thing Model", written either in JSON or YAML which then binds to an implementation. A Thing Model can be defined as a description of the capabilities of the device, without the protocol specific information, as similar device capabilites may be exposed in any protocol and protocols do not define how a hardware behaves. It is similar to a class in OOP, except only the contract and data models are defined.
+In an API-first approach, instead of writing code to begin with, one could first define a "Thing Model", written either in JSON or YAML which then binds to an implementation. A Thing Model can be defined as a description of the capabilities of the device, without the protocol specific information, as similar hardware capabilites may be exposed in any protocol and protocols do not define how a hardware behaves. It is similar to a class in OOP, except only the contract and data models are defined.
 
 A Thing Model for a DC Power Supply could like the follows:
 
@@ -355,7 +355,6 @@ A Thing Model for a DC Power Supply could like the follows:
             "minimum": 0,
             "maximum": 30,
             "readOnly": false,
-            "writeOnly": false
         }
     },
     "actions": {
@@ -373,7 +372,7 @@ A Thing Model for a DC Power Supply could like the follows:
 }
 ```
 
-One still needs to make an implementation in code, however unlike the code-first implementation
+One still needs to make an implementation in code, however [unlike the code-first implementation](#code-first)
 as seen previously, a simple object interface would suffice:
 
 ```python
@@ -395,7 +394,7 @@ class DCPowerSupply:
 ```
 
 Name your properties, actions and events the same as the names in the `Thing Model` (or
-one specify a name mapping). Its not necessary to implement any validations of the property
+one can specify a name mapping). Its not necessary to implement any validations of the property
 types or the action arguments, as this would be enforced at runtime.
 
 Expose your `Thing` by binding the model to the class, in a protocol of your choice:
@@ -411,11 +410,15 @@ dc_power_supply.run_with_http_server()
 # dc_power_supply.run_with_zmq_server()
 ```
 
-One can consider using an this approach when:
+One can consider using this approach when:
 
-- One has a plain device implementation that is not remote capable but have segregations of properties, actions and events (or any subset of them like properties and methods etc.)
-- Share device Thing Models with other users or API consumers. Clients and servers have a single source of truth
-- To develop proper integrations with CI-CD
+- One has a plain device implementation that is not remote capable but have segregations of properties, actions and events (or any subset of them like properties and methods etc.). This is the simplest way to reuse code or existing drivers, as a YAML or JSON is all that is necessary.
+- Share device Thing Models with other users, apps or API consumers, possibly without having to sync with device server updates. 
+- When clients and servers need to have a single source of truth.
+- To develop proper integrations with CI-CD.
+- One would like to think about the device interface upfront, before thinking about the code to implement them.
+- Provide documents to AI agents.
+
 
 ## Client Side Applications
 
