@@ -29,7 +29,14 @@ Each device or thing can be controlled systematically when their design in softw
 - actions are methods which issue commands like connect/disconnect, execute a control routine, start/stop measurement, or run arbitrary python logic
 - events can asynchronously communicate/push arbitrary data to a client, like alarm messages, streaming measured quantities etc.
 
-For example, consider an optical spectrometer, the following code is possible:
+One may call these "attributes, commands, events" or similar terms, but the underlying concepts remain the same.   
+
+For example, consider an optical spectrometer. Two approaches are possible based on whether you want to write code first, or define an API first:
+
+<details open>
+<summary><b>Code-first</b></summary>
+
+Import all the necessary objects that define a `Thing`:
 
 ### Import Statements
 
@@ -327,6 +334,87 @@ There are other improved ways to configure protocol servers, please refer docume
 
 [![Protocol Servers Documentation](https://img.shields.io/badge/Protocol%20Servers%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/beginners-guide/articles/protocols/general/)
 [![Resources to Get Started](https://img.shields.io/badge/Resources-Get%20Started-orange?logo=book)](#resources)
+
+</details>
+
+<details>
+<summary><b>API-first</b></summary>
+
+> status: Experimental/alpha
+
+One would require a "Thing Model" of the sorts, written either in JSON or YAML, which then binds to an implementation. A Thing Model can be defined as a description of the capabilities of the device, without the protocol specific information, as similar capabilites may be exposed in any protocol and protocols do not define how a device behaves. It is similar to a class in OOP, except only the contract and data models are defined. 
+
+Lets say one has a device driver already implemented as follows:
+
+```python
+class DCPowerSupply:
+
+    @property
+    def voltage(self) -> float:
+        """Get or set the voltage of the power supply."""
+        # placeholder for actual device interaction
+
+    @voltage.setter
+    def voltage(self, value: float):
+        if not (0 <= value <= 30):
+            raise ValueError("Voltage must be between 0 and 30V")
+        # placeholder for actual device interaction
+
+    def toggle_power(self, state: bool) -> None:
+        """Turn the power supply on or off."""
+        # add logic here to turn the power supply on or off
+
+```
+
+Define your Thing Model for it:
+
+```json
+{
+    "@context": "https://www.w3.org/2022/wot/td/v1.1",
+    "@type": "tm:ThingModel",
+    "title": "DCPowerSupply",
+    "properties": {
+        "voltage": {
+            "description": "Get or set the voltage of the power supply.",
+            "type": "number",
+            "unit": "V",
+            "minimum": 0,
+            "maximum": 30,
+            "readOnly": false,
+            "writeOnly": false
+        }
+    },
+    "actions": {
+        "toggle_power": {
+            "description": "Turn the power supply on or off.",
+            "input": {
+                "type": "object",
+                "properties": {
+                    "state": {"type": "boolean"}
+                },
+                "required": ["state"]
+            }
+        }
+    }
+}
+```
+
+Then produce your exposed `Thing` by binding the model to the class using the snippet:
+
+```python
+from hololinked.metadata.wot import ThingModel
+from dc_power_supply import DCPowerSupply
+
+thing_model = ThingModel.from_file("tm.json")
+dc_power_supply = thing_model.produce(impl=DCPowerSupply(address="COM10"), id="dc-power-supply")
+
+dc_power_supply.run_with_http_server()
+# dc_power_supply.run_with_zmq_server()
+```
+
+Using Thing Models are extremely useful to expose existing device implementation that are not implemented for a remote access. 
+
+</details>
 
 ## Client Side Applications
 
