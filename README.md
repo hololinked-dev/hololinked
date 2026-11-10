@@ -448,7 +448,7 @@ Operations which rely on request-reply pattern (properties and actions) also sup
 
 ### Javascript Clients
 
-Similary, one could consume the Thing Description in a Node.js script using Eclipse [ThingWeb node-wot](https://github.com/eclipse-thingweb/node-wot):
+Similarly, one could consume the Thing Description in a Node.js script using Eclipse [ThingWeb node-wot](https://github.com/eclipse-thingweb/node-wot):
 
 ```js
 const { Servient } = require("@node-wot/core");
