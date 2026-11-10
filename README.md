@@ -33,8 +33,7 @@ One may call these "attributes, commands, events" or similar terms, but the unde
 
 For example, consider an optical spectrometer. Two approaches are possible based on whether you want to write code first, or define an API first:
 
-<details open>
-<summary><h3>Code-first</h3></summary>
+### Code-first
 
 Import all the necessary objects that define a `Thing`:
 
@@ -335,10 +334,7 @@ There are other improved ways to configure protocol servers, please refer docume
 [![Protocol Servers Documentation](https://img.shields.io/badge/Protocol%20Servers%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/beginners-guide/articles/protocols/general/)
 [![Resources to Get Started](https://img.shields.io/badge/Resources-Get%20Started-orange?logo=book)](#resources)
 
-</details>
-
-<details>
-<summary><h3>API-first</h3></summary>
+### API-first
 
 > status: Experimental/alpha
 
@@ -420,8 +416,6 @@ One can consider using an this approach when:
 - One has a plain device implementation that is not remote capable but have segregations of properties, actions and events (or any subset of them like properties and methods etc.)
 - Share device Thing Models with other users or API consumers. Clients and servers have a single source of truth
 - To develop proper integrations with CI-CD
-
-</details>
 
 ## Client Side Applications
 
