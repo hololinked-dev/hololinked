@@ -31,9 +31,9 @@ Each device or thing can be controlled systematically when their design in softw
 
 One may call these "attributes, commands, events" or similar terms, but the underlying concepts remain the same.   
 
-For example, consider an optical spectrometer. Two approaches are possible based on whether you want to write code first, or define an API first:
+For example, consider an optical spectrometer. Two approaches are possible based on whether you want to [write code first](#code-first), or [define an API first](#api-first):
 
-### Code-first
+### <ins>Code-first</ins>
 
 Import all the necessary objects that define a `Thing`:
 
@@ -334,7 +334,7 @@ There are other improved ways to configure protocol servers, please refer docume
 [![Protocol Servers Documentation](https://img.shields.io/badge/Protocol%20Servers%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/beginners-guide/articles/protocols/general/)
 [![Resources to Get Started](https://img.shields.io/badge/Resources-Get%20Started-orange?logo=book)](#resources)
 
-### API-first
+### <ins>API-first</ins>
 
 > status: Experimental/alpha
 
