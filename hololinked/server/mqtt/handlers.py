@@ -32,6 +32,8 @@ class TopicPublisher:
         config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
+        topic: str | None = None,
+        qos: int | None = None,
     ) -> None:
         """
         Initialize the publisher for one event or observable property.
@@ -48,14 +50,18 @@ class TopicPublisher:
             The logger to use for logging messages
         thing: Thing
             the `Thing` whose event or property this publisher pushes
+        topic: str, optional
+            The MQTT topic to publish to (default: auto-generate from thing_id/name)
+        qos: int, optional
+            MQTT QoS level (default: None → use config.qos)
         """
         self.client = client
         self.resource = resource
-        self.topic = f"{self.resource.thing_id}/{self.resource.name}"
+        self.topic = topic or f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config
         self.logger = logger.bind(impl=self.__class__.__name__, topic=self.topic)
         self.thing: Thing = thing
-        self.qos = self.config.qos
+        self.qos = qos if qos is not None else self.config.qos
         self._stop_publishing = False
 
     def stop(self):
@@ -105,6 +111,7 @@ class ThingDescriptionPublisher:
         config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
+        custom_topics: dict[tuple[str, str], str] | None = None,
     ) -> None:
         """
         Initialize the Thing Description publisher.
@@ -119,6 +126,8 @@ class ThingDescriptionPublisher:
             The logger to use for logging messages
         thing: Thing
             The `Thing` whose description is being published
+        custom_topics: dict, optional
+            Custom MQTT topics for properties and events (key: (thing_id, name))
         """
         self.client = client
         self.thing = thing  # type: Thing
@@ -132,6 +141,7 @@ class ThingDescriptionPublisher:
             thing=thing,
             ssl=self.client._client._ssl_context is not None,
             use_websocket=self.config.use_websocket,
+            custom_topics=custom_topics,
         )
 
     async def publish(self) -> None:
