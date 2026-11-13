@@ -27,7 +27,7 @@ from hololinked.core.eventloop import (
 from hololinked.core.eventloop.operations import Reply, SerializableNone
 from hololinked.core.eventloop.payloads import PreserializedData, SerializableData
 from hololinked.core.thing import Thing
-from hololinked.metadata.td import (
+from hololinked.metadata.wot import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,

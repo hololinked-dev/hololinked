@@ -14,8 +14,8 @@ from hololinked.core.properties import (
     Selector,
     String,
 )
-from hololinked.metadata.td.data_schema import DataSchema
-from hololinked.metadata.td.interaction_affordance import PropertyAffordance
+from hololinked.metadata.wot.data_schema import DataSchema
+from hololinked.metadata.wot.interaction_affordance import PropertyAffordance
 from hololinked.utils import issubklass, uuid_hex
 
 

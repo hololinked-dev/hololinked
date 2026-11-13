@@ -10,7 +10,7 @@ from testkit.things import OscilloscopeDriver, oscilloscope_TD
 from hololinked.core import Action, Event, Property, Thing
 from hololinked.core.interfaces import Metadata
 from hololinked.core.interfaces.metadata import ConformanceError, InteractionMetadata
-from hololinked.metadata.td import ThingModel
+from hololinked.metadata.wot import ThingModel
 from hololinked.utils import uuid_hex
 
 

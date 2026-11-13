@@ -12,8 +12,8 @@ import structlog
 from hololinked import Serializers
 from hololinked.constants import Operations
 from hololinked.core.thing import Thing
-from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
-from hololinked.metadata.td.forms import Form
+from hololinked.metadata.wot import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.wot.forms import Form
 
 
 if TYPE_CHECKING:

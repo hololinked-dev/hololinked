@@ -14,14 +14,14 @@ from typing import Any, ClassVar
 from pydantic import ConfigDict, Field
 
 from hololinked.core.interfaces import Metadata
-from hololinked.metadata.td.base import WoTSchema
-from hololinked.metadata.td.interaction_affordance import (
+from hololinked.metadata.wot.base import WoTSchema
+from hololinked.metadata.wot.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
     PropertyAffordance,
 )
-from hololinked.metadata.td.metadata import VersionInfo
-from hololinked.metadata.td.utils import a_class_name_from_title_string, model_spec_has_extensions
+from hololinked.metadata.wot.metadata import VersionInfo
+from hololinked.metadata.wot.utils import a_class_name_from_title_string, model_spec_has_extensions
 
 
 from hololinked.core import Thing  # isort: skip

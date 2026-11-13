@@ -2,7 +2,7 @@ import pytest
 
 from hololinked.core.exceptions import ValidationError
 from hololinked.core.interfaces.schema_validators import BaseSchemaValidator
-from hololinked.metadata.td.pydantic_extensions import dataschema_to_model
+from hololinked.metadata.wot.pydantic_extensions import dataschema_to_model
 from hololinked.schema_validators.fast_json_schema import FastJSONSchemaValidator
 from hololinked.schema_validators.json_schema import JSONSchemaValidator
 from hololinked.schema_validators.pydantic_model import PydanticSchemaValidator

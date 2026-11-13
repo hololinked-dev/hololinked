@@ -13,7 +13,7 @@ from paho.mqtt.properties import Properties
 from hololinked import Serializers
 from hololinked.core.eventloop import EventSubscription
 from hololinked.core.thing import Thing
-from hololinked.metadata.td import EventAffordance, PropertyAffordance
+from hololinked.metadata.wot import EventAffordance, PropertyAffordance
 
 
 if TYPE_CHECKING:

@@ -4,7 +4,7 @@ from testkit.things import TestThing
 
 from hololinked.core.eventloop.pubsub import EventBus
 from hololinked.core.events import Event, EventDispatcher
-from hololinked.metadata.td.interaction_affordance import EventAffordance
+from hololinked.metadata.wot.interaction_affordance import EventAffordance
 from hololinked.utils import uuid_hex
 
 

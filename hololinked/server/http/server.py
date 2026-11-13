@@ -21,7 +21,7 @@ from hololinked.core.events import Event
 from hololinked.core.interfaces import BaseProtocolServer
 from hololinked.core.property import Property
 from hololinked.core.thing import Thing
-from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.wot import ActionAffordance, EventAffordance, PropertyAffordance
 
 # from tornado_http2.server import Server as TornadoHTTP2Server
 from hololinked.param.parameters import ClassSelector, IPAddress

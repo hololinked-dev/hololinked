@@ -9,7 +9,7 @@ from testkit.helpers import hostname_prefix, stop_all_runs, wait_until_server_re
 from testkit.things import OscilloscopeDriver, oscilloscope_TD
 
 from hololinked.core import Thing
-from hololinked.metadata.td import ThingModel
+from hololinked.metadata.wot import ThingModel
 from hololinked.utils import uuid_hex
 
 

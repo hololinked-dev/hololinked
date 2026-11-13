@@ -26,8 +26,8 @@ from hololinked.core.properties import (
     TypedList,
 )
 from hololinked.core.schema import JSONSchema
-from hololinked.metadata.td.base import WoTSchema
-from hololinked.metadata.td.utils import get_summary
+from hololinked.metadata.wot.base import WoTSchema
+from hololinked.metadata.wot.utils import get_summary
 from hololinked.utils import issubklass
 
 
