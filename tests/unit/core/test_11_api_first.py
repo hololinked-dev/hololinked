@@ -4,6 +4,7 @@ import json
 from inspect import getattr_static
 
 import pytest
+import yaml
 
 from testkit.things import OscilloscopeDriver, oscilloscope_TD
 
@@ -19,16 +20,20 @@ def TD():
     return copy.deepcopy(oscilloscope_TD)
 
 
-@pytest.mark.parametrize("source", ["file", "json variable"])
-def test_01_load_thing_model(TD, source, tmp_path):
-    if source == "file":
-        path = tmp_path / "oscilloscope.td.json"
-        path.write_text(json.dumps({key: value for key, value in TD.items() if key != "id"}))  # a Thing Model has no id
-        model = ThingModel.from_file(str(path))
-        assert (model.id, model.title) == (None, "Oscilloscope")
-    else:
+@pytest.mark.parametrize(
+    "file_name, dump_fn",
+    [("oscilloscope.td.json", json.dumps), ("oscilloscope.td.yaml", yaml.safe_dump), (None, None)],
+    ids=["json file", "yaml file", "json variable"],
+)
+def test_01_load_thing_model(TD, file_name, dump_fn, tmp_path):
+    if file_name is None:
         model = ThingModel.from_metadata(TD)
         assert (model.id, model.title) == ("oscilloscope", "Oscilloscope")
+    else:
+        path = tmp_path / file_name
+        path.write_text(dump_fn({key: value for key, value in TD.items() if key != "id"}))  # a Thing Model has no id
+        model = ThingModel.from_file(path)
+        assert (model.id, model.title) == (None, "Oscilloscope")
 
     interactions: list[InteractionMetadata] = [
         *model.properties.values(),

@@ -340,36 +340,29 @@ There are other improved ways to configure protocol servers, please refer docume
 
 In an API-first approach, instead of writing code to begin with, one could first define a "Thing Model", written either in JSON or YAML which then binds to an implementation. A Thing Model can be defined as a description of the capabilities of the device, without the protocol specific information, as similar hardware capabilites may be exposed in any protocol and protocols do not define how a hardware behaves. It is similar to a class in OOP, except only the contract and data models are defined.
 
-A Thing Model for a DC Power Supply could like the follows:
+A Thing Model for a DC Power Supply could look like the following, in YAML (JSON compatible or also a JSON file):
 
-```json
-{
-    "@context": "https://www.w3.org/2022/wot/td/v1.1",
-    "@type": "tm:ThingModel",
-    "title": "DCPowerSupply",
-    "properties": {
-        "voltage": {
-            "description": "Get or set the voltage of the power supply.",
-            "type": "number",
-            "unit": "V",
-            "minimum": 0,
-            "maximum": 30,
-            "readOnly": false,
-        }
-    },
-    "actions": {
-        "toggle_power": {
-            "description": "Turn the power supply on or off.",
-            "input": {
-                "type": "object",
-                "properties": {
-                    "state": {"type": "boolean"}
-                },
-                "required": ["state"]
-            }
-        }
-    }
-}
+```yaml
+"@context": https://www.w3.org/2022/wot/td/v1.1
+"@type": tm:ThingModel
+title: DCPowerSupply
+properties:
+  voltage:
+    description: Get or set the voltage of the power supply.
+    type: number
+    unit: V
+    minimum: 0
+    maximum: 30
+    readOnly: false
+actions:
+  toggle_power:
+    description: Turn the power supply on or off.
+    input:
+      type: object
+      properties:
+        state:
+          type: boolean
+      required: [state]
 ```
 
 One still needs to make an implementation in code, however [unlike the code-first implementation](#code-first)
@@ -400,10 +393,11 @@ types or the action arguments, as this would be enforced at runtime.
 Expose your `Thing` by binding the model to the class, in a protocol of your choice:
 
 ```python
-from hololinked.metadata.wot import ThingModel
+from hololinked.metadata.td import ThingModel
 from dc_power_supply import DCPowerSupply
 
-thing_model = ThingModel.from_file("tm.json")
+thing_model = ThingModel.from_file("dcpowersupply.yaml")  # needs pip install hololinked[yaml]
+# thing_model = ThingModel.from_file("dcpowersupply.json")
 dc_power_supply = thing_model.produce(impl=DCPowerSupply(address="COM10"), id="dc-power-supply")
 
 dc_power_supply.run_with_http_server()
