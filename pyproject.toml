@@ -80,7 +80,10 @@ mongo = [
     "pymongo>=4.15.2"
 ]
 storage = ["hololinked[sqlalchemy,postgresql,mongo]"]
-all = ["hololinked[protocols,validators,serializers,storage]"]
+yaml = [
+    "pyyaml>=6.0"
+]
+all = ["hololinked[protocols,validators,serializers,storage,yaml]"]
 
 [project.urls]
 Documentation = "https://docs.hololinked.dev"
@@ -107,6 +110,8 @@ test = [
     "fastjsonschema==2.20.0",
     # serializers
     "serpent>=1.41,<2.0",
+    # metadata file formats
+    "pyyaml>=6.0",
     # libraries
     "requests==2.32.3",
     "faker==37.5.0",
