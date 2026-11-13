@@ -19,10 +19,12 @@ import zmq.asyncio
 from zmq.utils.monitor import parse_monitor_message
 
 from hololinked import Serializers
+from hololinked.client.exceptions import raise_local_exception
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.exceptions import BreakLoop
 from hololinked.server.zmq.message import (
+    CONTRACT_VERSION,
     ERROR,
     EXIT,
     HANDSHAKE,
@@ -716,9 +718,18 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         self.stop_poll = True
 
     async def _handshake(self, request_message: RequestMessage) -> None:
-        """Inner method that handles handshake. Scheduled by `handshake()` method, signature same as `handshake()`."""
+        """Inner method that handles handshake. Scheduled by `handshake()` method, signature same as `handshake()`."""  # noqa: DOC501
         # Note that for ROUTER sockets, once the message goes through the sending socket, the address of the receiver
         # is replaced by the address of the sender once received
+        if request_message.header.version != CONTRACT_VERSION:
+            try:
+                raise ConnectionRefusedError(
+                    f"message contract version mismatch, client '{request_message.sender_id}' sent "
+                    + f"'{request_message.header.version}', server '{self.id}' expects '{CONTRACT_VERSION}'"
+                )
+            except ConnectionRefusedError as ex:
+                await self._handle_error_message(request_message, ex)
+            return
         handshake_message = ResponseMessage.craft_from_arguments(
             receiver_id=request_message.sender_id,
             sender_id=self.id,
@@ -1099,6 +1110,32 @@ class BaseZMQClient(BaseZMQ):
             return True
         return False
 
+    def verify_handshake_response(self, response_message: ResponseMessage, handshake_ids: set[str]) -> None:
+        """
+        Raise if the server refused the handshake or speaks a different message contract version.
+
+        Parameters
+        ----------
+        response_message: ResponseMessage
+            the message received from the server while handshaking
+        handshake_ids: set[str]
+            message ids of the handshake requests sent so far
+
+        Raises
+        ------
+        ConnectionRefusedError
+            if the server answered a handshake with an error or with a different contract version
+        """
+        if response_message.type == ERROR and response_message.id in handshake_ids:
+            raise_local_exception(response_message.payload.deserialize())
+        if response_message.type == HANDSHAKE:
+            server_version = response_message.header["version"]
+            if server_version != CONTRACT_VERSION:
+                raise ConnectionRefusedError(
+                    f"message contract version mismatch, server '{self.server_id}' sent "
+                    + f"'{server_version}', client '{self.id}' expects '{CONTRACT_VERSION}'"
+                )
+
     def stop(self) -> None:
         """Stop polling for messages from server. Automatically reset when polling starts again."""
         self._stop = True
@@ -1337,13 +1374,17 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         ------
         ConnectionError
             if the server could not be contacted within the specified timeout
+        ConnectionRefusedError
+            if the server refused the handshake because of a message contract version mismatch
         """
         self._stop = False
         start_time = time.time_ns()
+        handshake_ids = set()
         while not self._stop:
             if timeout is not None and (time.time_ns() - start_time) / 1e6 > timeout:
                 raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
             handshake_message = RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE)
+            handshake_ids.add(handshake_message.id)
             self.socket.send_multipart(handshake_message.byte_array)
             self.logger.info("sent Handshake to server")
             if self.poller.poll(500):
@@ -1353,6 +1394,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                 except zmq.Again:
                     pass
                 else:
+                    self.verify_handshake_response(response_message, handshake_ids)
                     if response_message.type == HANDSHAKE:
                         self.logger.info("client handshook with server")
                         break
@@ -1448,16 +1490,20 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         ------
         ConnectionError
             if the server could not be contacted within the specified timeout
+        ConnectionRefusedError
+            if the server refused the handshake because of a message contract version mismatch
         """
         self._stop = False
         if self._monitor_socket is not None and self._monitor_socket in self.poller:
             self.poller.unregister(self._monitor_socket)
         self._handshake_event.clear()
         start_time = time.time_ns()
+        handshake_ids = set()
         while not self._stop:
             if timeout is not None and (time.time_ns() - start_time) / 1e6 > timeout:
                 raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
             handshake_message = RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE)
+            handshake_ids.add(handshake_message.id)
             await self.socket.send_multipart(handshake_message.byte_array)
             self.logger.info("sent Handshake to server")
             if await self.poller.poll(500):
@@ -1467,6 +1513,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                 except zmq.Again:
                     pass
                 else:
+                    self.verify_handshake_response(response_message, handshake_ids)
                     if response_message.type == HANDSHAKE:
                         self.logger.info("client handshook with server")
                         break

@@ -23,6 +23,18 @@
         "preencodedPayloadContentType" : {
             "type": "string",
             "description" : "content type of the pre-encoded payload"
+        },
+        "timestamp" : {
+            "type": "integer",
+            "description" : "time at which the message was created, in microseconds since the epoch"
+        },
+        "version" : {
+            "type": "string",
+            "description" : "version of the message contract, for example v1. Not a semantic version. The client refuses the handshake if it does not match its own version"
+        },
+        "authorization" : {
+            "type": "string",
+            "description" : "authorization credentials of the sender, reserved, not processed yet"
         }
     },
     "required": ["messageType", "messageID"]
