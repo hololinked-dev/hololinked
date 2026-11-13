@@ -9,7 +9,7 @@ import structlog
 
 from hololinked.core import Thing as CoreThing
 from hololinked.core.interfaces import BaseProtocolServer
-from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
+from hololinked.metadata.wot.interaction_affordance import EventAffordance, PropertyAffordance
 from hololinked.param.parameters import ClassSelector, String
 from hololinked.server.mqtt.config import RuntimeConfig
 from hololinked.server.mqtt.handlers import ThingDescriptionPublisher, TopicPublisher

@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from pydantic import Field
 
-from hololinked.metadata.td.base import WoTSchema
+from hololinked.metadata.wot.base import WoTSchema
 
 
 class ExpectedResponse(WoTSchema):

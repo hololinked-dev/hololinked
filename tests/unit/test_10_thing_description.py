@@ -7,8 +7,8 @@ from testkit.things import OceanOpticsSpectrometer, TestThing
 
 from hololinked.constants import ResourceTypes
 from hololinked.core.properties import Property
-from hololinked.metadata.td.data_schema import DataSchema
-from hololinked.metadata.td.interaction_affordance import (
+from hololinked.metadata.wot.data_schema import DataSchema
+from hololinked.metadata.wot.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,

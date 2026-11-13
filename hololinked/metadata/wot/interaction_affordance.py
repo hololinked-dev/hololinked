@@ -21,11 +21,11 @@ from hololinked.core.interfaces import (
     PropertyMetadata,
 )
 from hololinked.core.utils import check_input_signature
-from hololinked.metadata.td.base import WoTSchema
-from hololinked.metadata.td.data_schema import DataSchema
-from hololinked.metadata.td.forms import Form
-from hololinked.metadata.td.pydantic_extensions import dataschema_to_model, type_to_dataschema
-from hololinked.metadata.td.utils import get_summary
+from hololinked.metadata.wot.base import WoTSchema
+from hololinked.metadata.wot.data_schema import DataSchema
+from hololinked.metadata.wot.forms import Form
+from hololinked.metadata.wot.pydantic_extensions import dataschema_to_model, type_to_dataschema
+from hololinked.metadata.wot.utils import get_summary
 from hololinked.utils import issubklass
 
 

@@ -15,7 +15,7 @@ from hololinked.core.actions import (
     BoundSyncAction,
 )
 from hololinked.core.thing import Thing, action
-from hololinked.metadata.td.interaction_affordance import ActionAffordance
+from hololinked.metadata.wot.interaction_affordance import ActionAffordance
 from hololinked.schema_validators import JSONSchemaValidator
 from hololinked.utils import isclassmethod
 

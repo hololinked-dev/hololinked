@@ -8,7 +8,7 @@ from hololinked.utils import lazy_module_getattr
 __all__ = ["WoTMetadata"]
 
 _lazy: dict[str, str] = {
-    "WoTMetadata": ".td",
+    "WoTMetadata": ".wot",
 }
 """Name of a metadata format mapped to the module it is imported from, resolved lazily."""
 
@@ -16,4 +16,4 @@ __getattr__ = lazy_module_getattr(__name__, _lazy, globals())
 
 
 if TYPE_CHECKING:
-    from .td import WoTMetadata as WoTMetadata
+    from .wot import WoTMetadata as WoTMetadata

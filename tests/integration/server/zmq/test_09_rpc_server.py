@@ -21,8 +21,8 @@ from hololinked.core import Thing
 from hololinked.core.actions import BoundAction
 from hololinked.core.eventloop import EventLoop
 from hololinked.core.utils import get_all_sub_things_recusively
-from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
-from hololinked.metadata.td.forms import Form
+from hololinked.metadata.wot import ActionAffordance, EventAffordance, PropertyAffordance
+from hololinked.metadata.wot.forms import Form
 from hololinked.server.zmq import ZMQServer
 from hololinked.server.zmq.brokers import (  # noqa: F401
     AsyncZMQClient,

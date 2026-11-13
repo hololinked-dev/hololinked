@@ -9,8 +9,8 @@ import structlog
 from hololinked import Serializers
 from hololinked.constants import Operations
 from hololinked.core.thing import Thing
-from hololinked.metadata.td.forms import Form
-from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
+from hololinked.metadata.wot.forms import Form
+from hololinked.metadata.wot.interaction_affordance import EventAffordance, PropertyAffordance
 
 
 class ThingDescriptionService:

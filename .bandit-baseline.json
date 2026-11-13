@@ -561,7 +561,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/__init__.py": {
+    "hololinked/metadata/wot/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -574,7 +574,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/base.py": {
+    "hololinked/metadata/wot/base.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -587,7 +587,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/data_schema.py": {
+    "hololinked/metadata/wot/data_schema.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -600,7 +600,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/forms.py": {
+    "hololinked/metadata/wot/forms.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -613,7 +613,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/interaction_affordance.py": {
+    "hololinked/metadata/wot/interaction_affordance.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -626,7 +626,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/metadata.py": {
+    "hololinked/metadata/wot/metadata.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -639,7 +639,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/pydantic_extensions.py": {
+    "hololinked/metadata/wot/pydantic_extensions.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -652,7 +652,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/security_definitions.py": {
+    "hololinked/metadata/wot/security_definitions.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -665,7 +665,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/tm.py": {
+    "hololinked/metadata/wot/tm.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -678,7 +678,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "hololinked/metadata/td/utils.py": {
+    "hololinked/metadata/wot/utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,

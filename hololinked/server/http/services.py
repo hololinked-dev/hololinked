@@ -11,13 +11,13 @@ import structlog
 from hololinked import Serializers
 from hololinked.constants import JSONSerializable, Operations
 from hololinked.core.thing import Thing
-from hololinked.metadata.td import (
+from hololinked.metadata.wot import (
     ActionAffordance,
     EventAffordance,
     InteractionAffordance,
     PropertyAffordance,
 )
-from hololinked.metadata.td.forms import Form
+from hololinked.metadata.wot.forms import Form
 from hololinked.server.security import (
     APIKeySecurity,
     Argon2BasicSecurity,
@@ -320,7 +320,7 @@ class ThingDescriptionService:
 
     def add_security_definitions(self, TD: dict[str, JSONSerializable]) -> None:
         """Adds security definitions to the TD."""
-        from hololinked.metadata.td.security_definitions import (
+        from hololinked.metadata.wot.security_definitions import (
             APIKeySecurityScheme,
             BasicSecurityScheme,
             NoSecurityScheme,

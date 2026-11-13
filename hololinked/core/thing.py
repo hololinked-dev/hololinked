@@ -231,7 +231,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
 
         Returns
         -------
-        hololinked.metadata.td.ThingModel
+        hololinked.metadata.wot.ThingModel
             represented as an object in python, gets automatically serialized to JSON when pushed out of the socket.
         """
         # allow_loose_schema: bool, optional, Default False

@@ -7,8 +7,8 @@ import pytest
 
 from pydantic import BaseModel, Field, RootModel, TypeAdapter, ValidationError
 
-from hololinked.metadata.td.pydantic_extensions import dataschema_to_model, type_to_dataschema
-from hololinked.metadata.td.pydantic_extensions.to_dataschema import GenerateJsonSchemaWithoutDefaultTitles
+from hololinked.metadata.wot.pydantic_extensions import dataschema_to_model, type_to_dataschema
+from hololinked.metadata.wot.pydantic_extensions.to_dataschema import GenerateJsonSchemaWithoutDefaultTitles
 from hololinked.utils import issubklass
 
 
