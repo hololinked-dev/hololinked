@@ -13,7 +13,7 @@ import structlog
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.actions import BoundAction, action
 from hololinked.core.events import EventDispatcher
-from hololinked.core.interfaces import BaseConfigurationRepository, Metadata
+from hololinked.core.interfaces import BaseConfigurationRepository
 from hololinked.core.meta import EventSource, Propertized, RemoteInvokable, ThingMeta
 from hololinked.core.properties import ClassSelector, String
 from hololinked.core.property import Property
@@ -213,7 +213,7 @@ class Thing(Propertized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         ignore_errors: bool = False,
         skip_names: list[str] = [],
         format: str = "wot",
-    ) -> Metadata:
+    ):
         """
         Generate the [Thing Model](https://www.w3.org/TR/wot-thing-description11/#introduction-tm) of the object.
 

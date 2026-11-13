@@ -1,5 +1,6 @@
 import asyncio
 import itertools
+import ssl
 
 from collections.abc import Generator
 from typing import Any
@@ -11,7 +12,6 @@ from testcontainers.mqtt import (
 )
 from testkit.helpers import (
     hostname_prefix,
-    mqtt_ssl_context,
     stop_all_runs,
     wait_until_server_ready,
 )
@@ -42,6 +42,7 @@ def thing(
     http_port: int,
     mqtt_host: str,
     mqtt_port: int,
+    mqtt_ssl: ssl.SSLContext,
 ) -> Generator[TestThing, None, None]:
     thing = TestThing(id=f"test-thing-{uuid_hex()}", serial_number="simulation")
     http_server = HTTPServer(port=http_port, config={"cors": True})
@@ -50,7 +51,7 @@ def thing(
         port=mqtt_port,
         username="sampleuser",
         password="samplepass",
-        ssl_context=mqtt_ssl_context(),
+        ssl_context=mqtt_ssl,
     )
     http_server.add_thing(thing)
     mqtt_publisher.add_thing(thing)
@@ -68,6 +69,7 @@ def thing_ws(
     http_port: int,
     mqtt_ws_host: str,
     mqtt_ws_port: int,
+    mqtt_ssl: ssl.SSLContext,
 ) -> Generator[TestThing, None, None]:
     thing = TestThing(id=f"test-thing-ws-{uuid_hex()}", serial_number="simulation")
     http_server = HTTPServer(port=http_port + 1, config={"cors": True})
@@ -76,7 +78,7 @@ def thing_ws(
         port=mqtt_ws_port,
         username="sampleuser",
         password="samplepass",
-        ssl_context=mqtt_ssl_context(),
+        ssl_context=mqtt_ssl,
         use_websocket=True,
     )
     http_server.add_thing(thing)
@@ -113,6 +115,7 @@ def object_proxy_http_ws(td_endpoint_ws: str) -> "ObjectProxy":
 async def object_proxy_mqtt(
     mqtt_host: str,
     mqtt_port: int,
+    mqtt_ssl: ssl.SSLContext,
     thing: TestThing,
 ) -> "ObjectProxy":
     return ClientFactory.mqtt(
@@ -121,7 +124,7 @@ async def object_proxy_mqtt(
         thing_id=thing.id,
         username="sampleuser",
         password="samplepass",
-        ssl_context=mqtt_ssl_context(),
+        ssl_context=mqtt_ssl,
     )
 
 
@@ -129,6 +132,7 @@ async def object_proxy_mqtt(
 async def object_proxy_mqtt_ws(
     mqtt_ws_host: str,
     mqtt_ws_port: int,
+    mqtt_ssl: ssl.SSLContext,
     thing_ws: TestThing,
 ) -> "ObjectProxy":
     return ClientFactory.mqtt(
@@ -137,7 +141,7 @@ async def object_proxy_mqtt_ws(
         thing_id=thing_ws.id,
         username="sampleuser",
         password="samplepass",
-        ssl_context=mqtt_ssl_context(),
+        ssl_context=mqtt_ssl,
         use_websocket=True,
     )
 

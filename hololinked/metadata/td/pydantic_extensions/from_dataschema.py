@@ -10,7 +10,8 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, create_model
 
-from hololinked.utils import ModelRoot, issubklass
+from hololinked.core.utils import ModelRoot
+from hololinked.utils import issubklass
 
 from .to_dataschema import check_recursion, look_up_reference
 
@@ -24,7 +25,7 @@ PRIMITIVE_TYPES: dict[str, type | None] = {
 }
 
 # keywords with no validation meaning, ignored without a warning
-ANNOTATION_KEYWORDS = frozenset({"unit", "readOnly", "writeOnly", "format", "$comment"})
+ANNOTATION_KEYWORDS = frozenset({"unit", "readOnly", "writeOnly", "format", "$comment", "@type"})
 
 NUMBER_CONSTRAINTS = {
     "minimum": "ge",
@@ -141,7 +142,12 @@ def dataschema_to_type(
 
     def convert(subschema: dict[str, Any], pointer: str, suffix: Any) -> Any:
         return dataschema_to_type(
-            subschema, strict, location=f"{location}/{pointer}", name=f"{name}_{suffix}", root=root, depth=depth + 1
+            subschema,
+            strict,
+            location=f"{location}/{pointer}",
+            name=f"{name}_{suffix}",
+            root=root,
+            depth=depth + 1,
         )
 
     if "$ref" in schema:

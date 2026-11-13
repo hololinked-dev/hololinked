@@ -5,18 +5,44 @@ on:
   pull_request:
     branches:
       - main
+  pull_request_target:
+    branches:
+      - main
   push:
     branches:
       - main
 
+permissions:
+  contents: read
+
+env:
+  # empty for every event except fork PRs, so checkout keeps its default behaviour
+  CHECKOUT_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
+
 jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    # internal PRs run via pull_request, fork PRs via pull_request_target (approval required)
+    if: >-
+      github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository)
+    environment: ${{ github.event_name == 'pull_request_target' && 'forks-ci' || '' }}
+    steps:
+      - run: echo "approved"
+
   setup-venv:
     name: set up shared virtual environment
     runs-on: ubuntu-latest
+    needs: gate
 
     steps:
       - name: checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          persist-credentials: false
 
       - name: set up python 3.13
         uses: actions/setup-python@v5
@@ -49,6 +75,9 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          persist-credentials: false
 
       - name: set up python 3.13
         uses: actions/setup-python@v5
@@ -95,7 +124,8 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ env.CHECKOUT_REF }}
+          persist-credentials: false
 
       # ---------------- Bandit branch ----------------
       - name: set up python 3.13
@@ -142,13 +172,6 @@ jobs:
           bandit -c pyproject.toml -r hololinked/ || true
 
       # ---------------- Gitleaks branch ----------------
-      - name: run gitleaks scan on commits
-        if: matrix.tool == 'gitleaks'
-        uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-
       - name: run gitleaks scan on repo folder
         if: matrix.tool == 'gitleaks'
         run: |
@@ -186,6 +209,8 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.CHECKOUT_REF }}
+          persist-credentials: false
           submodules: true
 
       - name: set up python ${{ matrix.python-version }}
@@ -271,6 +296,8 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.CHECKOUT_REF }}
+          persist-credentials: false
           submodules: true
 
       - name: set up python ${{ matrix.python-version }}
@@ -362,28 +389,9 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.CHECKOUT_REF }}
+          persist-credentials: false
           submodules: true
-
-      - name: unpack MQTT certificates (linux)
-        if: runner.os != 'Windows'
-        run: |
-          echo "${{ secrets.MQTT_TEST_CREDENTIALS }}" | base64 -d > certs.tar.gz
-          tar xzf certs.tar.gz
-          # TODO somehow the tar was created with an extra top-level directory
-          mv daq-system-infrastructure/certs tests/testkit/assets/mqtt/certs
-          mv daq-system-infrastructure/conf/passwords.txt tests/testkit/assets/mqtt/passwords.txt
-          rm -rf daq-system-infrastructure certs.tar.gz
-
-      - name: unpack MQTT certificates (windows)
-        if: runner.os == 'Windows'
-        run: |
-          $mqttCerts = "${{ secrets.MQTT_TEST_CREDENTIALS }}"
-          [System.IO.File]::WriteAllBytes("certs.tar.gz", [System.Convert]::FromBase64String($mqttCerts))
-          tar xzf certs.tar.gz
-          # TODO somehow the tar was created with an extra top-level directory
-          Move-Item daq-system-infrastructure/certs tests/testkit/assets/mqtt/certs
-          Move-Item daq-system-infrastructure/conf/passwords.txt tests/testkit/assets/mqtt/passwords.txt
-          Remove-Item -Recurse -Force daq-system-infrastructure, certs.tar.gz
 
       - name: set up python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
@@ -451,7 +459,7 @@ jobs:
     name: publish coverage
     needs: [unit-tests, integration-tests, e2e-tests]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request_target' && github.ref == 'refs/heads/main'
     steps:
       - name: checkout code
         uses: actions/checkout@v4

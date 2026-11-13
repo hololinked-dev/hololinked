@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 
 from typing import Any, ClassVar
 
@@ -52,13 +53,17 @@ class WoTSchema(BaseModel):
         -------
         dict[str, Any]
             JSON representation
-        """  # noqa: D401
+        """
         return self.model_dump()
 
     @classmethod
     def format_doc(cls, doc: str) -> str:
         """
-        Strip tabs, newlines, whitespaces etc. to format the docstring nicely.
+        Format a python docstring to a normal description.
+
+        Strip tabs, newlines, whitespaces etc. to format the docstring nicely. Parameter sections are removed,
+        both numpydoc (`Parameters` underlined with dashes) and Sphinx/reST field
+        lists (`:param x:`, `:returns:`, `:raises:` etc.). Lines are joined with a single space.
 
         Returns
         -------
@@ -71,5 +76,43 @@ class WoTSchema(BaseModel):
         idx = doc.find(marker)
         if idx != -1:
             doc = doc[:idx]
-        doc = doc.replace("\n", "").replace("\t", " ").lstrip().rstrip()
-        return doc
+        # Remove everything from the first Sphinx/reST field on (:param x:, :returns:, :raises: ...)
+        # (re caches compiled patterns, so this is not recompiled on every call)
+        match = re.search(
+            r"^:(param|parameter|arg|argument|key|keyword|type|raises?|except|exception"
+            r"|var|ivar|cvar|vartype|returns?|rtype|yields?|ytype)\b[^:\n]*:",
+            doc,
+            flags=re.MULTILINE,
+        )
+        if match:
+            doc = doc[: match.start()]
+        # join lines with a space and collapse tabs, indentation and blank lines into single spaces
+        return " ".join(doc.split())
+
+    @staticmethod
+    def declared_fields(model: type[BaseModel], skip_subclasses: tuple[type[BaseModel], ...] = ()) -> dict[str, str]:
+        """
+        Collect the fields declared by a schema element and all of its subclasses.
+
+        The subclasses are included because they may declare additional fields that should be considered
+        part of the schema. For example, a dataschema for a string has more fields than a generic dataschema.
+
+        Parameters
+        ----------
+        model: type[BaseModel]
+            the base model
+        skip_subclasses: tuple[type[BaseModel], ...], optional
+            subclasses to skip
+
+        Returns
+        -------
+        dict[str, str]
+            key of each field in the JSON document (its alias, such as `@type`, if it has one) mapped to its
+            attribute name
+        """
+        fields = {field.alias or name: name for name, field in model.model_fields.items()}
+        for subclass in model.__subclasses__():
+            if issubclass(subclass, skip_subclasses):
+                continue
+            fields.update(WoTSchema.declared_fields(subclass, skip_subclasses=skip_subclasses))
+        return fields

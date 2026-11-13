@@ -1,4 +1,5 @@
 import itertools
+import ssl
 import time
 
 from typing import Generator
@@ -8,7 +9,7 @@ import pytest
 from testcontainers.mqtt import (
     MosquittoContainer,  # TODO this will not work from the current release of testcontainers
 )
-from testkit.helpers import mqtt_ssl_context, stop_all_runs, wait_until_server_ready
+from testkit.helpers import stop_all_runs, wait_until_server_ready
 from testkit.things import TestThing
 
 from hololinked.client import ClientFactory, ObjectProxy
@@ -57,6 +58,7 @@ def things(
     zmq_tcp_port: int,
     mqtt_host: str,
     mqtt_port: int,
+    mqtt_ssl: ssl.SSLContext,
 ) -> Generator[TestThing, None, None]:
     http_server = HTTPServer(port=http_port, config=dict(cors=True))
     zmq_server = ZMQServer(id="test-zmq-server", access_points=["IPC", f"tcp://*:{zmq_tcp_port}"])
@@ -66,7 +68,7 @@ def things(
         port=mqtt_port,
         username="sampleuser",
         password="samplepass",
-        ssl_context=mqtt_ssl_context(),
+        ssl_context=mqtt_ssl,
     )
     http_server.add_thing(thing1)
     http_server.add_thing(thing2)
@@ -112,6 +114,7 @@ def object_proxy_thing2_http(td2_endpoint: str) -> "ObjectProxy":
 async def object_proxy_thing1_mqtt(
     mqtt_host: str,
     mqtt_port: int,
+    mqtt_ssl: ssl.SSLContext,
     things: tuple[TestThing, TestThing],
 ) -> "ObjectProxy":
     thing1, _ = things
@@ -121,7 +124,7 @@ async def object_proxy_thing1_mqtt(
         thing_id=thing1.id,
         username="sampleuser",
         password="samplepass",
-        ssl_context=mqtt_ssl_context(),
+        ssl_context=mqtt_ssl,
     )
 
 
@@ -129,6 +132,7 @@ async def object_proxy_thing1_mqtt(
 async def object_proxy_thing2_mqtt(
     mqtt_host: str,
     mqtt_port: int,
+    mqtt_ssl: ssl.SSLContext,
     things: tuple[TestThing, TestThing],
 ) -> "ObjectProxy":
     _, thing2 = things
@@ -138,7 +142,7 @@ async def object_proxy_thing2_mqtt(
         thing_id=thing2.id,
         username="sampleuser",
         password="samplepass",
-        ssl_context=mqtt_ssl_context(),
+        ssl_context=mqtt_ssl,
     )
 
 

@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 Release date format is YYYY-MM-DD.
 
+# [v0.5.0] - 2026-11-07
+
+- First experimental support for API first approach - One can use Thing Models to produce a Thing (only server support added, clients were always API-first)
+- Choose between pydantic or JSON schema validator for API-first payload validation
+
+# [v0.4.2] - 2026-10-10
+
+- MQTT content type for events more strictly enforced
+
 # [v0.4.1] - 2026-10-10
 
 - MQTT Websockets supported

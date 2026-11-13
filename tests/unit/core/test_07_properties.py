@@ -10,6 +10,8 @@ import pytest
 
 from testkit.things import TestThing
 
+from hololinked.core import Property
+from hololinked.core.exceptions import ValidationError
 from hololinked.core.properties import Number
 from hololinked.storage.bases import BaseDB
 from hololinked.storage.sqlalchemydb import SQLAlchemyDB
@@ -289,27 +291,44 @@ def test_08_db_config():
     os.remove("test_sqlite_config.json")
 
 
-def test_property_docstring_from_source():
-    """A trailing string literal after a Property assignment fills prop.doc."""
+def test_09_property_docstring():
+    # A trailing string literal after a Property assignment fills prop.doc.
     assert TestThing.properties.descriptors["prop_with_docstring"].doc == (
         "This doc comes from a trailing string literal."
     )
 
-
-def test_property_explicit_doc_takes_precedence():
-    """Explicit doc="..." overrides any trailing string literal."""
+    # Explicit doc="..." overrides any trailing string literal.
     assert TestThing.properties.descriptors["prop_explicit_doc"].doc == "explicitly provided"
 
-
-def test_property_no_docstring():
-    """A Property with no explicit doc and no trailing string has doc=None."""
+    # A Property with no explicit doc and no trailing string has doc=None.
     assert TestThing.properties.descriptors["prop_no_doc"].doc is None
 
-
-def test_property_empty_docstring():
-    """Empty or whitespace-only string literals are skipped."""
+    # Empty or whitespace-only string literals are skipped.
     assert TestThing.properties.descriptors["prop_empty_doc"].doc is None
     assert TestThing.properties.descriptors["prop_whitespace_doc"].doc is None
+
+
+def test_10_plain_type_models():
+    """a plain type or typing form is wrapped in a pydantic root model by SchemaValidators."""
+
+    test_thing = TestThing(id=f"test-thing-{uuid_hex()}")
+    test_thing.pydantic_plain_type_int_prop = 3
+    test_thing.pydantic_plain_type_list_prop = [1, 2, "3"]  # accepts int and strings
+    assert (test_thing.pydantic_plain_type_int_prop, test_thing.pydantic_plain_type_list_prop) == (3, [1, 2, "3"])
+    with pytest.raises(ValidationError):
+        test_thing.pydantic_plain_type_int_prop = "three"
+    with pytest.raises(ValidationError):
+        test_thing.pydantic_plain_type_list_prop = [tuple()]
+    with pytest.raises(TypeError, match="only plain types are accepted"):
+        Property(model=42)
+
+
+def test_11_casts_input_value_into_models_type():
+    """the value returned by the validator is stored, the wrapped value of a root model, a model instance otherwise."""
+
+    test_thing = TestThing(id=f"test-thing-{uuid_hex()}")
+    test_thing.pydantic_prop = {"foo": "bar", "bar": 1, "foo_bar": 2.1}
+    assert test_thing.pydantic_prop == TestThing.PydanticProp(foo="bar", bar=1, foo_bar=2.1)
 
 
 if __name__ == "__main__":

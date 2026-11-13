@@ -10,8 +10,7 @@ If you are a web developer or an industry professional looking for a web standar
 
 <img src="https://raw.githubusercontent.com/hololinked-dev/hololinked/main/.github/assets/demo-v2.gif" alt="hololinked demo" width="100%">
 
-[![Sign up for SaaS launch](https://img.shields.io/badge/sign%20up-SaaS%20launch-brightgreen)](https://docs.google.com/forms/d/e/1FAIpQLSdNc3OrSANpWKkfcgj1JgwEeNws47ldbta6gJ4swanQwDmABg/viewform?usp=publish-editor) [![CI Pipeline](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml/badge.svg)](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml) [![Documentation Status](https://img.shields.io/github/actions/workflow/status/hololinked-dev/docs/ci.yaml?label=Build%20And%20Publish%20Docs)](https://github.com/hololinked-dev/docs) [![SAST](https://img.shields.io/badge/sast%20reports-bandit-yellow.svg)](https://docs.hololinked.dev/introduction/security-scanning) ![Ruff](https://img.shields.io/badge/linter-ruff-blue?logo=ruff&logoColor=white) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) [![codecov](https://codecov.io/github/hololinked-dev/hololinked/graph/badge.svg?token=5DI4XJ2KX9)](https://codecov.io/github/hololinked-dev/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev) [![Feedback Form](https://img.shields.io/badge/feedback%20form-red)](https://forms.gle/FB4XwkUDt1wV4GGPA)
-
+[![Sign up for SaaS launch](https://img.shields.io/badge/sign%20up-SaaS%20launch-brightgreen)](https://docs.google.com/forms/d/e/1FAIpQLSdNc3OrSANpWKkfcgj1JgwEeNws47ldbta6gJ4swanQwDmABg/viewform?usp=publish-editor) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev) [![Feedback Form](https://img.shields.io/badge/feedback%20form-red)](https://forms.gle/FB4XwkUDt1wV4GGPA) [![CI Pipeline](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml/badge.svg)](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml) [![Documentation Status](https://img.shields.io/github/actions/workflow/status/hololinked-dev/docs/ci.yaml?label=Build%20And%20Publish%20Docs)](https://github.com/hololinked-dev/docs) [![SAST](https://img.shields.io/badge/sast%20reports-bandit-yellow.svg)](https://docs.hololinked.dev/introduction/security-scanning) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) ![Ruff](https://img.shields.io/badge/linter-ruff-blue?logo=ruff&logoColor=white) [![codecov](https://codecov.io/github/hololinked-dev/hololinked/graph/badge.svg?token=5DI4XJ2KX9)](https://codecov.io/github/hololinked-dev/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841)
 ## To Install
 
 From pip - `pip install hololinked[all]` /  `pip install hololinked` <br>
@@ -30,7 +29,13 @@ Each device or thing can be controlled systematically when their design in softw
 - actions are methods which issue commands like connect/disconnect, execute a control routine, start/stop measurement, or run arbitrary python logic
 - events can asynchronously communicate/push arbitrary data to a client, like alarm messages, streaming measured quantities etc.
 
-For example, consider an optical spectrometer, the following code is possible:
+One may call these "attributes, commands, events" or similar terms, but the underlying concepts remain the same.   
+
+For example, consider an optical spectrometer. Two approaches are possible based on whether you want to [write code first](#code-first), or [define an API first](#api-first):
+
+### <ins>Code-first</ins>
+
+Import all the necessary objects that define a `Thing`:
 
 ### Import Statements
 
@@ -329,6 +334,92 @@ There are other improved ways to configure protocol servers, please refer docume
 [![Protocol Servers Documentation](https://img.shields.io/badge/Protocol%20Servers%20Docs-Read%20More-blue?logo=readthedocs)](https://docs.hololinked.dev/beginners-guide/articles/protocols/general/)
 [![Resources to Get Started](https://img.shields.io/badge/Resources-Get%20Started-orange?logo=book)](#resources)
 
+### <ins>API-first</ins>
+
+> status: Experimental/alpha
+
+In an API-first approach, instead of writing code to begin with, one could first define a "Thing Model", written either in JSON or YAML which then binds to an implementation. A Thing Model can be defined as a description of the capabilities of the device, without the protocol specific information, as similar hardware capabilites may be exposed in any protocol and protocols do not define how a hardware behaves. It is similar to a class in OOP, except only the contract and data models are defined.
+
+A Thing Model for a DC Power Supply could like the follows:
+
+```json
+{
+    "@context": "https://www.w3.org/2022/wot/td/v1.1",
+    "@type": "tm:ThingModel",
+    "title": "DCPowerSupply",
+    "properties": {
+        "voltage": {
+            "description": "Get or set the voltage of the power supply.",
+            "type": "number",
+            "unit": "V",
+            "minimum": 0,
+            "maximum": 30,
+            "readOnly": false,
+        }
+    },
+    "actions": {
+        "toggle_power": {
+            "description": "Turn the power supply on or off.",
+            "input": {
+                "type": "object",
+                "properties": {
+                    "state": {"type": "boolean"}
+                },
+                "required": ["state"]
+            }
+        }
+    }
+}
+```
+
+One still needs to make an implementation in code, however [unlike the code-first implementation](#code-first)
+as seen previously, a simple object interface would suffice:
+
+```python
+class DCPowerSupply:
+
+    @property
+    def voltage(self) -> float:
+        """Get or set the voltage of the power supply."""
+        # placeholder for actual device interaction
+
+    @voltage.setter
+    def voltage(self, value: float):
+        # placeholder for actual device interaction
+
+    def toggle_power(self, state: bool) -> None:
+        """Turn the power supply on or off."""
+        # add logic here to turn the power supply on or off
+
+```
+
+Name your properties, actions and events the same as the names in the `Thing Model` (or
+one can specify a name mapping). Its not necessary to implement any validations of the property
+types or the action arguments, as this would be enforced at runtime.
+
+Expose your `Thing` by binding the model to the class, in a protocol of your choice:
+
+```python
+from hololinked.metadata.wot import ThingModel
+from dc_power_supply import DCPowerSupply
+
+thing_model = ThingModel.from_file("tm.json")
+dc_power_supply = thing_model.produce(impl=DCPowerSupply(address="COM10"), id="dc-power-supply")
+
+dc_power_supply.run_with_http_server()
+# dc_power_supply.run_with_zmq_server()
+```
+
+One can consider using this approach when:
+
+- One has a plain device implementation that is not remote capable but have segregations of properties, actions and events (or any subset of them like properties and methods etc.). This is the simplest way to reuse code or existing drivers, as a YAML or JSON is all that is necessary.
+- Share device Thing Models with other users, apps or API consumers, possibly without having to sync with device server updates. 
+- When clients and servers need to have a single source of truth.
+- To develop proper integrations with CI-CD.
+- One would like to think about the device interface upfront, before thinking about the code to implement them.
+- Provide documents to AI agents.
+
+
 ## Client Side Applications
 
 To compose client objects, the JSON description of the properties, actions and events are used, which are summarized into a [Thing Description](https://www.w3.org/TR/wot-thing-description11). These descriptions are autogenerated, so at least in the beginner stages, you dont need to know how they work. The following code would be possible:
@@ -342,7 +433,7 @@ from hololinked.client import ClientFactory
 
 # for HTTP
 thing = ClientFactory.http(url="http://localhost:8000/spectrometer/resources/wot-td")
-# For HTTP, one needs to append `/resource/wot-td` to the base URL to construct the full URL as `http(s)://<hostname>:<port>/<thing_id>/resources/wot-td`. At this endpoint, the Thing Description will be autogenerated and loaded to compose a client.
+# For HTTP, one needs to append `/resources/wot-td` to the base URL to construct the full URL as `http(s)://<hostname>:<port>/<thing_id>/resources/wot-td`. At this endpoint, the Thing Description will be autogenerated and loaded to compose a client.
 
 # zmq IPC
 thing = ClientFactory.zmq(thing_id='spectrometer', access_point='IPC')
@@ -449,7 +540,7 @@ Operations which rely on request-reply pattern (properties and actions) also sup
 
 ### Javascript Clients
 
-Similary, one could consume the Thing Description in a Node.js script using Eclipse [ThingWeb node-wot](https://github.com/eclipse-thingweb/node-wot):
+Similarly, one could consume the Thing Description in a Node.js script using Eclipse [ThingWeb node-wot](https://github.com/eclipse-thingweb/node-wot):
 
 ```js
 const { Servient } = require("@node-wot/core");
