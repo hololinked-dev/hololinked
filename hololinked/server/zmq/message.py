@@ -118,7 +118,7 @@ class ResponseHeader(msgspec.Struct):
     preencodedPayloadContentType: str | None = ""
     timestamp: int = msgspec.field(default_factory=lambda: time.time_ns() // 1000)
     version: str = CONTRACT_VERSION
-    authorization: str = ""
+ 
 
     def __getitem__(self, key: str) -> Any:
         try:
