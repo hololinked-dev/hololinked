@@ -722,13 +722,10 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         # Note that for ROUTER sockets, once the message goes through the sending socket, the address of the receiver
         # is replaced by the address of the sender once received
         if request_message.header.version != CONTRACT_VERSION:
-            try:
-                raise ConnectionRefusedError(
-                    f"message contract version mismatch, client '{request_message.sender_id}' sent "
-                    + f"'{request_message.header.version}', server '{self.id}' expects '{CONTRACT_VERSION}'"
-                )
-            except ConnectionRefusedError as ex:
-                await self._handle_error_message(request_message, ex)
+             message = f"message contract version mismatch, client '{request_message.sender_id}' sent " + \
+                    f"'{request_message.header.version}', server '{self.id}' expects '{CONTRACT_VERSION}'"
+                
+             await self._handle_error_message(request_message, message)
             return
         handshake_message = ResponseMessage.craft_from_arguments(
             receiver_id=request_message.sender_id,
