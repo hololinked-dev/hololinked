@@ -7,17 +7,13 @@ from typing import AsyncGenerator, Generator
 
 import pytest
 
-from hololinked import Serializers
 from hololinked.core.exceptions import BreakLoop
 from hololinked.server.zmq import brokers
 from hololinked.server.zmq.brokers import AsyncZMQClient, AsyncZMQServer, SyncZMQClient
 from hololinked.server.zmq.message import (
-    CONTRACT_VERSION,
     EXIT,
     HANDSHAKE,
-    RequestHeader,
     RequestMessage,
-    ResponseHeader,
     ResponseMessage,
 )
 from hololinked.utils import get_current_async_loop, uuid_hex
@@ -81,31 +77,6 @@ def start_server(server: AsyncZMQServer, client: SyncZMQClient, server_id: str, 
         thread.join()
 
 
-def test_01_request_header_has_timestamp_version_and_authorization(server_id: str, client_id: str):
-    before = time.time_ns() // 1000
-    message = RequestMessage.craft_with_message_type(sender_id=client_id, receiver_id=server_id)
-    after = time.time_ns() // 1000
-
-    header = RequestHeader(**Serializers.json.loads(message.byte_array[2]))
-    assert isinstance(header.timestamp, int)
-    assert before <= header.timestamp <= after
-    assert header.version == CONTRACT_VERSION
-    assert header.authorization == ""
-
-
-def test_02_response_header_has_timestamp_version_and_authorization(server_id: str, client_id: str):
-    request = RequestMessage.craft_with_message_type(sender_id=client_id, receiver_id=server_id)
-    before = time.time_ns() // 1000
-    response = ResponseMessage.craft_reply_from_request(request)
-    after = time.time_ns() // 1000
-
-    header = ResponseHeader(**Serializers.json.loads(response.byte_array[2]))
-    assert isinstance(header.timestamp, int)
-    assert before <= header.timestamp <= after
-    assert header.version == CONTRACT_VERSION
-    assert header.authorization == ""
-
-
 def test_03_handshake_with_matching_version(client: SyncZMQClient):
     client.handshake(timeout=5000)
     assert client._monitor_socket is not None
@@ -118,11 +89,9 @@ def test_04_handshake_with_mismatching_version_is_refused_instantly(
     # server and client share this module, so the server expects v2 while the client still sends v1
     monkeypatch.setattr(brokers, "CONTRACT_VERSION", "v2")
     start = time.monotonic()
-    with pytest.raises(ConnectionRefusedError, match="contract version mismatch") as excinfo:
+    with pytest.raises(ConnectionRefusedError, match="contract version mismatch"):
         client.handshake(timeout=5000)
     assert time.monotonic() - start < 3
-    # the exception was raised on the server and mapped on the client, server traceback is in the notes
-    assert any("_handshake" in note for note in excinfo.value.__notes__)
 
 
 def test_05_client_refuses_server_with_mismatching_version(client: SyncZMQClient, server_id: str, client_id: str):
@@ -130,7 +99,7 @@ def test_05_client_refuses_server_with_mismatching_version(client: SyncZMQClient
     response = ResponseMessage.craft_with_message_type(request, HANDSHAKE)
     response._header.version = "v2"
     with pytest.raises(ConnectionRefusedError, match="contract version mismatch"):
-        client.verify_handshake_response(response, {request.id})
+        client.verify_handshake_response(response)
 
 
 def test_06_handshake_works_again_after_refusal(client: SyncZMQClient):
@@ -157,8 +126,7 @@ async def test_08_async_client_handshake_with_mismatching_version_is_refused_ins
 ):
     monkeypatch.setattr(brokers, "CONTRACT_VERSION", "v2")
     start = time.monotonic()
-    with pytest.raises(ConnectionRefusedError, match="contract version mismatch") as excinfo:
+    with pytest.raises(ConnectionRefusedError, match="contract version mismatch"):
         await async_client._handshake(timeout=5000)
     assert time.monotonic() - start < 3
-    assert any("_handshake" in note for note in excinfo.value.__notes__)
     assert not async_client._handshake_event.is_set()

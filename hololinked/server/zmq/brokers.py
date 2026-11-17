@@ -722,10 +722,13 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         # Note that for ROUTER sockets, once the message goes through the sending socket, the address of the receiver
         # is replaced by the address of the sender once received
         if request_message.header.version != CONTRACT_VERSION:
-             message = f"message contract version mismatch, client '{request_message.sender_id}' sent " + \
-                    f"'{request_message.header.version}', server '{self.id}' expects '{CONTRACT_VERSION}'"
-                
-             await self._handle_error_message(request_message, message)
+            await self._handle_error_message(
+                request_message,
+                ConnectionRefusedError(
+                    f"message contract version mismatch, client '{request_message.sender_id}' sent "
+                    + f"'{request_message.header.version}', server '{self.id}' expects '{CONTRACT_VERSION}'"
+                ),
+            )
             return
         handshake_message = ResponseMessage.craft_from_arguments(
             receiver_id=request_message.sender_id,
@@ -1107,7 +1110,7 @@ class BaseZMQClient(BaseZMQ):
             return True
         return False
 
-    def verify_handshake_response(self, response_message: ResponseMessage, handshake_ids: set[str]) -> None:
+    def verify_handshake_response(self, response_message: ResponseMessage) -> None:
         """
         Raise if the server refused the handshake or speaks a different message contract version.
 
@@ -1115,15 +1118,13 @@ class BaseZMQClient(BaseZMQ):
         ----------
         response_message: ResponseMessage
             the message received from the server while handshaking
-        handshake_ids: set[str]
-            message ids of the handshake requests sent so far
 
         Raises
         ------
         ConnectionRefusedError
             if the server answered a handshake with an error or with a different contract version
         """
-        if response_message.type == ERROR and response_message.id in handshake_ids:
+        if response_message.type == ERROR:
             raise_local_exception(response_message.payload.deserialize())
         if response_message.type == HANDSHAKE:
             server_version = response_message.header["version"]
@@ -1376,12 +1377,10 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         """
         self._stop = False
         start_time = time.time_ns()
-        handshake_ids = set()
         while not self._stop:
             if timeout is not None and (time.time_ns() - start_time) / 1e6 > timeout:
                 raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
             handshake_message = RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE)
-            handshake_ids.add(handshake_message.id)
             self.socket.send_multipart(handshake_message.byte_array)
             self.logger.info("sent Handshake to server")
             if self.poller.poll(500):
@@ -1391,7 +1390,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                 except zmq.Again:
                     pass
                 else:
-                    self.verify_handshake_response(response_message, handshake_ids)
+                    self.verify_handshake_response(response_message)
                     if response_message.type == HANDSHAKE:
                         self.logger.info("client handshook with server")
                         break
@@ -1495,12 +1494,10 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             self.poller.unregister(self._monitor_socket)
         self._handshake_event.clear()
         start_time = time.time_ns()
-        handshake_ids = set()
         while not self._stop:
             if timeout is not None and (time.time_ns() - start_time) / 1e6 > timeout:
                 raise ConnectionError(f"Unable to contact server '{self.server_id}' from client '{self.id}'")
             handshake_message = RequestMessage.craft_with_message_type(self.id, self.server_id, HANDSHAKE)
-            handshake_ids.add(handshake_message.id)
             await self.socket.send_multipart(handshake_message.byte_array)
             self.logger.info("sent Handshake to server")
             if await self.poller.poll(500):
@@ -1510,7 +1507,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                 except zmq.Again:
                     pass
                 else:
-                    self.verify_handshake_response(response_message, handshake_ids)
+                    self.verify_handshake_response(response_message)
                     if response_message.type == HANDSHAKE:
                         self.logger.info("client handshook with server")
                         break
