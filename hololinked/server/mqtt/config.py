@@ -28,3 +28,16 @@ class RuntimeConfig(BaseModel):
 
     thing_description_service: type[ThingDescriptionService] | Any = ThingDescriptionService
     """Thing Description generation service, used by `ThingDescriptionPublisher` to generate the Thing Description"""
+
+
+class TopicPublisherMetadata(BaseModel):
+    """Per event/observable property overrides for `TopicPublisher`, unset fields use the defaults."""
+
+    topic: str | None = None
+    """MQTT topic name, defaults to `{thing_id}/{name}`"""
+
+    qos: Annotated[int, Field(ge=0, le=2)] | None = None
+    """MQTT QoS level, defaults to `RuntimeConfig.qos`"""
+
+    publisher_class: type[TopicPublisher] | None = None
+    """handler class to publish this topic, defaults to `RuntimeConfig.topic_publisher`"""

@@ -17,7 +17,7 @@ from hololinked.metadata.td import EventAffordance, PropertyAffordance
 
 
 if TYPE_CHECKING:
-    from hololinked.server.mqtt.config import RuntimeConfig
+    from hololinked.server.mqtt.config import RuntimeConfig, TopicPublisherMetadata
 
 
 class TopicPublisher:
@@ -32,8 +32,7 @@ class TopicPublisher:
         config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
-        topic: str | None = None,
-        qos: int | None = None,
+        metadata: TopicPublisherMetadata | None = None,
     ) -> None:
         """
         Initialize the publisher for one event or observable property.
@@ -50,18 +49,19 @@ class TopicPublisher:
             The logger to use for logging messages
         thing: Thing
             the `Thing` whose event or property this publisher pushes
-        topic: str, optional
-            The MQTT topic to publish to (default: auto-generate from thing_id/name)
-        qos: int, optional
-            MQTT QoS level (default: None → use config.qos)
+        metadata: TopicPublisherMetadata, optional
+            overrides for topic name and QoS, unset fields fall back to `{thing_id}/{name}` and `config.qos`
         """
+        from hololinked.server.mqtt.config import TopicPublisherMetadata
+
+        metadata = metadata or TopicPublisherMetadata()
         self.client = client
         self.resource = resource
-        self.topic = topic or f"{self.resource.thing_id}/{self.resource.name}"
+        self.topic = metadata.topic or f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config
         self.logger = logger.bind(impl=self.__class__.__name__, topic=self.topic)
         self.thing: Thing = thing
-        self.qos = qos if qos is not None else self.config.qos
+        self.qos = metadata.qos if metadata.qos is not None else self.config.qos
         self._stop_publishing = False
 
     def stop(self):
@@ -111,7 +111,7 @@ class ThingDescriptionPublisher:
         config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
-        custom_topics: dict[tuple[str, str], str] | None = None,
+        publisher_overrides: dict[tuple[str, str], TopicPublisherMetadata] | None = None,
     ) -> None:
         """
         Initialize the Thing Description publisher.
@@ -126,8 +126,8 @@ class ThingDescriptionPublisher:
             The logger to use for logging messages
         thing: Thing
             The `Thing` whose description is being published
-        custom_topics: dict, optional
-            Custom MQTT topics for properties and events (key: (thing_id, name))
+        publisher_overrides: dict[tuple[str, str], TopicPublisherMetadata], optional
+            per event/observable property overrides keyed by (thing_id, name), used for the topics in the TD forms
         """
         self.client = client
         self.thing = thing  # type: Thing
@@ -141,7 +141,7 @@ class ThingDescriptionPublisher:
             thing=thing,
             ssl=self.client._client._ssl_context is not None,
             use_websocket=self.config.use_websocket,
-            custom_topics=custom_topics,
+            publisher_overrides=publisher_overrides,
         )
 
     async def publish(self) -> None:
