@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 Release date format is YYYY-MM-DD.
 
+# [v0.5.1] - 2026-11-xx
+
+- Thing Models (or Thing Descriptions) can be loaded from YAML files with `ThingModel.from_file()`, the YAML must be JSON compatible
+
 # [v0.5.0] - 2026-11-07
 
 - First experimental support for API first approach - One can use Thing Models to produce a Thing (only server support added, clients were always API-first)
