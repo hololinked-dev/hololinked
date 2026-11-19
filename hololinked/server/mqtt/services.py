@@ -1,8 +1,10 @@
 """Add logic here that would be invoked by the handlers that dont have to go through a Thing directly, or has MQTT specific business logic."""
 
+from __future__ import annotations
+
 import copy
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -11,6 +13,10 @@ from hololinked.constants import Operations
 from hololinked.core.thing import Thing
 from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
+
+
+if TYPE_CHECKING:
+    from hololinked.server.mqtt.config import TopicPublisherMetadata
 
 
 class ThingDescriptionService:
@@ -24,6 +30,7 @@ class ThingDescriptionService:
         thing: Thing,
         ssl: bool = True,
         use_websocket: bool = False,
+        publisher_overrides: dict[tuple[str, str], TopicPublisherMetadata] | None = None,
     ) -> None:
         """
         Initialize the Thing Description service.
@@ -42,6 +49,8 @@ class ThingDescriptionService:
             Whether the broker is using SSL or not
         use_websocket: bool
             Whether the broker is using WebSocket transport
+        publisher_overrides: dict[tuple[str, str], TopicPublisherMetadata], optional
+            per event/observable property overrides keyed by (thing_id, name), used for the topics in the TD forms
         """
         self.hostname = hostname
         self.port = port
@@ -49,6 +58,7 @@ class ThingDescriptionService:
         self.thing = thing  # type: Thing
         self.ssl = ssl
         self.use_websocket = use_websocket
+        self.publisher_overrides = publisher_overrides or {}  # type: dict[tuple[str, str], TopicPublisherMetadata]
 
     async def generate(
         self,
@@ -119,7 +129,9 @@ class ThingDescriptionService:
                 else:
                     scheme = "mqtts" if self.ssl else "mqtt"
                 form.href = f"{scheme}://{self.hostname}:{self.port}"
-                form.mqv_topic = f"{TD['id']}/{name}"
+                form.mqv_topic = (
+                    getattr(self.publisher_overrides.get((TD["id"], name)), "topic", None) or f"{TD['id']}/{name}"
+                )
                 TD["properties"][name]["forms"].append(form.json())
             except Exception as ex:
                 if ignore_errors:
@@ -164,7 +176,9 @@ class ThingDescriptionService:
                 else:
                     scheme = "mqtts" if self.ssl else "mqtt"
                 form.href = f"{scheme}://{self.hostname}:{self.port}"
-                form.mqv_topic = f"{TD['id']}/{name}"
+                form.mqv_topic = (
+                    getattr(self.publisher_overrides.get((TD["id"], name)), "topic", None) or f"{TD['id']}/{name}"
+                )
                 TD["events"][name]["forms"].append(form.json())
             except Exception as ex:
                 if ignore_errors:

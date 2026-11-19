@@ -17,7 +17,7 @@ from hololinked.metadata.td import EventAffordance, PropertyAffordance
 
 
 if TYPE_CHECKING:
-    from hololinked.server.mqtt.config import RuntimeConfig
+    from hololinked.server.mqtt.config import RuntimeConfig, TopicPublisherMetadata
 
 
 class TopicPublisher:
@@ -32,6 +32,7 @@ class TopicPublisher:
         config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
+        metadata: TopicPublisherMetadata | None = None,
     ) -> None:
         """
         Initialize the publisher for one event or observable property.
@@ -48,14 +49,19 @@ class TopicPublisher:
             The logger to use for logging messages
         thing: Thing
             the `Thing` whose event or property this publisher pushes
+        metadata: TopicPublisherMetadata, optional
+            overrides for topic name and QoS, unset fields fall back to `{thing_id}/{name}` and `config.qos`
         """
+        from hololinked.server.mqtt.config import TopicPublisherMetadata
+
+        metadata = metadata or TopicPublisherMetadata()
         self.client = client
         self.resource = resource
-        self.topic = f"{self.resource.thing_id}/{self.resource.name}"
+        self.topic = metadata.topic or f"{self.resource.thing_id}/{self.resource.name}"
         self.config = config
         self.logger = logger.bind(impl=self.__class__.__name__, topic=self.topic)
         self.thing: Thing = thing
-        self.qos = self.config.qos
+        self.qos = metadata.qos if metadata.qos is not None else self.config.qos
         self._stop_publishing = False
 
     def stop(self):
@@ -105,6 +111,7 @@ class ThingDescriptionPublisher:
         config: RuntimeConfig,
         logger: structlog.stdlib.BoundLogger,
         thing: Thing,
+        publisher_overrides: dict[tuple[str, str], TopicPublisherMetadata] | None = None,
     ) -> None:
         """
         Initialize the Thing Description publisher.
@@ -119,6 +126,8 @@ class ThingDescriptionPublisher:
             The logger to use for logging messages
         thing: Thing
             The `Thing` whose description is being published
+        publisher_overrides: dict[tuple[str, str], TopicPublisherMetadata], optional
+            per event/observable property overrides keyed by (thing_id, name), used for the topics in the TD forms
         """
         self.client = client
         self.thing = thing  # type: Thing
@@ -132,6 +141,7 @@ class ThingDescriptionPublisher:
             thing=thing,
             ssl=self.client._client._ssl_context is not None,
             use_websocket=self.config.use_websocket,
+            publisher_overrides=publisher_overrides,
         )
 
     async def publish(self) -> None:

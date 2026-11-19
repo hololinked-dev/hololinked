@@ -11,6 +11,7 @@ from paho.mqtt.client import MQTTMessage
 
 from hololinked import Serializers
 from hololinked.client.abstractions import SSE, ConsumedThingEvent
+from hololinked.constants import Operations
 from hololinked.core.interfaces import BaseSerializer  # noqa: F401
 from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.interaction_affordance import (
@@ -35,6 +36,7 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
         "schema_validator",
         "subscribed",
         "sync_client",
+        "topic",
     ]
     # __slots__ dont support multiple inheritance. Here there is no multiple inheritance but just to be consistent
     # with other protocols which use multiple inheritance, we will keep the slots in the lowest child
@@ -71,6 +73,9 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
         self.sync_client = sync_client
         self.async_client = async_client
         self.subscribed = True
+        op = Operations.observeproperty if isinstance(resource, PropertyAffordance) else Operations.subscribeevent
+        form = resource.retrieve_form(op, None)
+        self.topic = (form.mqv_topic if form else None) or f"{resource.thing_id}/{resource.name}"
 
     def listen(  # noqa: D102
         self,
@@ -81,19 +86,18 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
     ) -> None:
         # This method is called from a different thread but also finishes quickly, we wont redo this way
         # for the time being.
-        topic = form.mqv_topic or f"{self.resource.thing_id}/{self.resource.name}"
 
         def on_topic_message(client: PahoMQTTClient, userdata, message: MQTTMessage):
             try:
                 payload = message.payload
-                content_type = getattr(message.properties, "ContentType", None) or form.contentType or "application/json"
+                content_type = getattr(message.properties, "ContentType", form.contentType or "application/json")
                 serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
                 if deserialize and content_type and serializer:
                     try:
                         payload = serializer.loads(payload)
                     except Exception as ex:
                         self.logger.error(
-                            f"Error deserializing MQTT message for topic {topic}, "
+                            f"Error deserializing MQTT message for topic {self.topic}, "
                             + f"passing payload as it is. message - {ex}",
                             exc_info=True,
                         )
@@ -102,9 +106,9 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
                 event_data.id = message.mid
                 self.schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
             except Exception as ex:
-                self.logger.error(f"Error handling MQTT message for topic {topic} - {ex}", exc_info=True)
+                self.logger.error(f"Error handling MQTT message for topic {self.topic} - {ex}", exc_info=True)
 
-        self.sync_client.message_callback_add(topic, on_topic_message)
+        self.sync_client.message_callback_add(self.topic, on_topic_message)
 
     async def async_listen(  # noqa: D102
         self,
@@ -113,27 +117,26 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
         concurrent: bool = True,
         deserialize: bool = True,
     ) -> None:
-        topic = form.mqv_topic or f"{self.resource.thing_id}/{self.resource.name}"
         try:
             await self.async_client.__aenter__()
         except aiomqtt.MqttReentrantError:
             pass
-        await self.async_client.subscribe(topic, qos=self.qos)
+        await self.async_client.subscribe(self.topic, qos=self.qos)
         async for message in self.async_client.messages:
             if not self.subscribed:
                 break
-            if not message.topic.matches(topic):
+            if not message.topic.matches(self.topic):
                 continue
             try:
                 payload = message.payload
-                content_type = getattr(message.properties, "ContentType", None) or form.contentType or "application/json"
+                content_type = getattr(message.properties, "ContentType", form.contentType or "application/json")
                 serializer = Serializers.content_types.get(content_type, None)  # type: BaseSerializer
                 if deserialize and content_type and serializer:
                     try:
                         payload = serializer.loads(payload)
                     except Exception as ex:
                         self.logger.error(
-                            f"Error deserializing MQTT message for topic {topic}, "
+                            f"Error deserializing MQTT message for topic {self.topic}, "
                             + f"passing payload as it is. message - {ex}",
                             exc_info=True,
                         )
@@ -142,9 +145,9 @@ class MQTTConsumer(ConsumedThingEvent):  # noqa: D101
                 event_data.id = message.mid
                 await self.async_schedule_callbacks(callbacks=callbacks, event_data=event_data, concurrent=concurrent)
             except Exception as ex:
-                self.logger.error(f"Error handling MQTT message for topic {topic} - {ex}", exc_info=True)
-        self.async_client.unsubscribe(topic)
+                self.logger.error(f"Error handling MQTT message for topic {self.topic} - {ex}", exc_info=True)
+        await self.async_client.unsubscribe(self.topic)
 
     def unsubscribe(self) -> None:  # noqa: D102
         self.subscribed = False
-        self.sync_client.message_callback_remove(f"{self.resource.thing_id}/{self.resource.name}")
+        self.sync_client.message_callback_remove(self.topic)

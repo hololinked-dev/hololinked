@@ -2,16 +2,17 @@
 
 import ssl
 
-from typing import Any, Optional, Self, Type  # noqa: F401
+from typing import Any, Optional, Self  # noqa: F401
 
 import aiomqtt
 import structlog
 
-from hololinked.core import Thing as CoreThing
+from hololinked.core import Thing
 from hololinked.core.interfaces import BaseProtocolServer
+from hololinked.core.property import Property
 from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
 from hololinked.param.parameters import ClassSelector, String
-from hololinked.server.mqtt.config import RuntimeConfig
+from hololinked.server.mqtt.config import RuntimeConfig, TopicPublisherMetadata
 from hololinked.server.mqtt.handlers import ThingDescriptionPublisher, TopicPublisher
 from hololinked.server.mqtt.services import ThingDescriptionService
 from hololinked.utils import get_current_async_loop
@@ -44,7 +45,7 @@ class MQTTPublisher(BaseProtocolServer):
         username: str,
         password: str,
         qos: int = 1,
-        things: Optional[list[CoreThing]] = None,
+        things: Optional[list[Thing]] = None,
         config: Optional[dict] = None,
         use_websocket: bool = False,
         **kwargs,
@@ -81,7 +82,7 @@ class MQTTPublisher(BaseProtocolServer):
             qos=qos,
             use_websocket=use_websocket,
         )
-        default_config.update(config or dict())
+        default_config.update(config or {})
 
         super().__init__(config=RuntimeConfig(**default_config))
 
@@ -91,7 +92,8 @@ class MQTTPublisher(BaseProtocolServer):
         self.port = port
         self.username = username
         self.password = password
-        self.publishers = dict()  # type: dict[str, TopicPublisher]
+        self.publishers = {}  # type: dict[str, TopicPublisher]
+        self.publisher_overrides = {}  # type: dict[tuple[str, str], TopicPublisherMetadata]
         self.logger = kwargs.get("logger", structlog.get_logger()).bind(component="mqtt-publisher", hostname=endpoint)
         self.ssl_context = kwargs.get("ssl_context", None)
         self.id = endpoint
@@ -125,7 +127,7 @@ class MQTTPublisher(BaseProtocolServer):
         for thing in self.things.values():
             loop.create_task(self.start_publishers(thing))
 
-    async def start_publishers(self, thing: CoreThing) -> None:
+    async def start_publishers(self, thing: Thing) -> None:
         """
         Start the publishers for a given `Thing`.
 
@@ -141,12 +143,16 @@ class MQTTPublisher(BaseProtocolServer):
 
         for event_name in TD.get("events", {}).keys():
             event_affordance = EventAffordance.from_TD(event_name, TD)
-            topic_publisher = self.config.topic_publisher(
+            metadata = self.publisher_overrides.get((thing.id, event_name), TopicPublisherMetadata())
+            publisher_class = metadata.publisher_class or self.config.topic_publisher
+
+            topic_publisher = publisher_class(
                 client=self.client,
                 resource=event_affordance,
                 logger=self.logger,
                 config=self.config,
                 thing=thing,
+                metadata=metadata,
             )
             self.publishers[topic_publisher.topic] = topic_publisher
             loop.create_task(topic_publisher.publish())
@@ -155,12 +161,17 @@ class MQTTPublisher(BaseProtocolServer):
             property_affordance = PropertyAffordance.from_TD(prop_name, TD)
             if not property_affordance.observable:
                 continue
-            topic_publisher = self.config.topic_publisher(
+
+            metadata = self.publisher_overrides.get((thing.id, prop_name), TopicPublisherMetadata())
+            publisher_class = metadata.publisher_class or self.config.topic_publisher
+
+            topic_publisher = publisher_class(
                 client=self.client,
                 resource=property_affordance,
                 logger=self.logger,
                 config=self.config,
                 thing=thing,
+                metadata=metadata,
             )
             self.publishers[topic_publisher.topic] = topic_publisher
             loop.create_task(topic_publisher.publish())
@@ -171,6 +182,7 @@ class MQTTPublisher(BaseProtocolServer):
             logger=self.logger,
             thing=thing,
             config=self.config,
+            publisher_overrides=self.publisher_overrides,
         )
         self.publishers[td_publisher.topic] = td_publisher
         loop.create_task(td_publisher.publish())
@@ -196,3 +208,101 @@ class MQTTPublisher(BaseProtocolServer):
         """Stop publishing, the client is not closed automatically."""
         for publisher in self.publishers.values():
             publisher.stop()
+
+    def add_observable(
+        self,
+        name: str,
+        thing: Thing,
+        topic_name: str,
+        publisher: type[TopicPublisher] | None = None,
+        qos: int | None = None,
+    ) -> None:
+        """
+        Add an observable property with a custom MQTT topic name.
+
+        Parameters
+        ----------
+        name: str
+            The name of the observable property
+        thing: Thing
+            The Thing containing the property
+        topic_name: str
+            The custom MQTT topic name to use
+        publisher: type[TopicPublisher], optional
+            Custom publisher class (default: None uses config.topic_publisher)
+        qos: int, optional
+            MQTT QoS level (default: None uses global config.qos)
+
+        Raises
+        ------
+        RuntimeError
+            If the property is not observable
+        TypeError
+            If `thing` is not a Thing
+        """
+        if not isinstance(thing, Thing):
+            raise TypeError(f"thing should be type Thing, given type {type(thing)}")
+
+        # Get property from thing class
+        property = getattr(thing.__class__, name, None)
+        if not isinstance(property, Property):
+            raise TypeError(f"{name} is not a Property of {thing.__class__.__name__}")
+
+        affordance = PropertyAffordance.from_descriptor(property, owner=thing)
+        if not affordance.observable:
+            raise RuntimeError(f"Property {name} is not observable, cannot add to MQTT publisher")
+
+        self.publisher_overrides[(thing.id, name)] = TopicPublisherMetadata(
+            topic=topic_name,
+            qos=qos,
+            publisher_class=publisher,
+        )
+
+    def add_property(
+        self,
+        name: str,
+        thing: Thing,
+        topic_name: str,
+        publisher: type[TopicPublisher] | None = None,
+        qos: int | None = None,
+    ) -> None:
+        """Alias for add_observable."""
+        self.add_observable(name, thing, topic_name, publisher, qos)
+
+    def add_event(
+        self,
+        name: str,
+        thing: Thing,
+        topic_name: str,
+        publisher: type[TopicPublisher] | None = None,
+        qos: int | None = None,
+    ) -> None:
+        """
+        Add an event with a custom MQTT topic name.
+
+        Parameters
+        ----------
+        name: str
+            The name of the event
+        thing: Thing
+            The Thing containing the event
+        topic_name: str
+            The custom MQTT topic name to use
+        publisher: type[TopicPublisher], optional
+            Custom publisher class (default: None uses config.topic_publisher)
+        qos: int, optional
+            MQTT QoS level (default: None uses global config.qos)
+
+        Raises
+        ------
+        TypeError
+            If `thing` is not a Thing
+        """
+        if not isinstance(thing, Thing):
+            raise TypeError(f"thing should be type Thing, given type {type(thing)}")
+
+        self.publisher_overrides[(thing.id, name)] = TopicPublisherMetadata(
+            topic=topic_name,
+            qos=qos,
+            publisher_class=publisher,
+        )

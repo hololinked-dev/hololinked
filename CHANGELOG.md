@@ -13,6 +13,7 @@ Release date format is YYYY-MM-DD.
 # [v0.5.1] - 2026-11-xx
 
 - Thing Models (or Thing Descriptions) can be loaded from YAML files with `ThingModel.from_file()`, the YAML must be JSON compatible
+- One can assign custom topic names and use custom publishers for events published with MQTT. `MQTTPublisher.add_observable` and `MQTTPublisher.add_event`
 
 # [v0.5.0] - 2026-11-07
 
