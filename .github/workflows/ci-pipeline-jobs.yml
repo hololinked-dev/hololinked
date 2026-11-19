@@ -1,34 +1,34 @@
-name: CI Pipeline
+name: CI Pipeline Jobs
 
+# reusable jobs, called by ci-pipeline.yml (pushes, internal PRs) and ci-pipeline-forks.yml (fork PRs)
 on:
-  workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-  pull_request_target:
-    branches:
-      - main
-  push:
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      checkout_ref:
+        description: commit to check out, empty for the default of the triggering event
+        type: string
+        default: ""
+      environment:
+        description: deployment environment of the gate job, whose required reviewers approve the run
+        type: string
+        default: ""
+      publish_coverage:
+        type: boolean
+        default: false
+    secrets:
+      OIDC_TEST_CONFIG_1_B64:
+        required: false
+      CODECOV_TOKEN:
+        required: false
 
 permissions:
   contents: read
-
-env:
-  # empty for every event except fork PRs, so checkout keeps its default behaviour
-  CHECKOUT_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
 
 jobs:
   gate:
     name: gate
     runs-on: ubuntu-latest
-    # internal PRs run via pull_request, fork PRs via pull_request_target (approval required)
-    if: >-
-      github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository)
-    environment: ${{ github.event_name == 'pull_request_target' && 'forks-ci' || '' }}
+    environment: ${{ inputs.environment }}
     steps:
       - run: echo "approved"
 
@@ -41,7 +41,9 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.CHECKOUT_REF }}
+          ref: ${{ inputs.checkout_ref }}
+          # fork code is checked out only after approval in the forks-ci environment
+          allow-unsafe-pr-checkout: ${{ inputs.checkout_ref != '' }}
           persist-credentials: false
 
       - name: set up python 3.13
@@ -76,7 +78,9 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.CHECKOUT_REF }}
+          ref: ${{ inputs.checkout_ref }}
+          # fork code is checked out only after approval in the forks-ci environment
+          allow-unsafe-pr-checkout: ${{ inputs.checkout_ref != '' }}
           persist-credentials: false
 
       - name: set up python 3.13
@@ -124,7 +128,9 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.CHECKOUT_REF }}
+          ref: ${{ inputs.checkout_ref }}
+          # fork code is checked out only after approval in the forks-ci environment
+          allow-unsafe-pr-checkout: ${{ inputs.checkout_ref != '' }}
           persist-credentials: false
 
       # ---------------- Bandit branch ----------------
@@ -209,7 +215,9 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.CHECKOUT_REF }}
+          ref: ${{ inputs.checkout_ref }}
+          # fork code is checked out only after approval in the forks-ci environment
+          allow-unsafe-pr-checkout: ${{ inputs.checkout_ref != '' }}
           persist-credentials: false
           submodules: true
 
@@ -296,7 +304,9 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.CHECKOUT_REF }}
+          ref: ${{ inputs.checkout_ref }}
+          # fork code is checked out only after approval in the forks-ci environment
+          allow-unsafe-pr-checkout: ${{ inputs.checkout_ref != '' }}
           persist-credentials: false
           submodules: true
 
@@ -389,7 +399,9 @@ jobs:
       - name: checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.CHECKOUT_REF }}
+          ref: ${{ inputs.checkout_ref }}
+          # fork code is checked out only after approval in the forks-ci environment
+          allow-unsafe-pr-checkout: ${{ inputs.checkout_ref != '' }}
           persist-credentials: false
           submodules: true
 
@@ -459,7 +471,7 @@ jobs:
     name: publish coverage
     needs: [unit-tests, integration-tests, e2e-tests]
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request_target' && github.ref == 'refs/heads/main'
+    if: inputs.publish_coverage
     steps:
       - name: checkout code
         uses: actions/checkout@v4
