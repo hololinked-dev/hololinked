@@ -1,4 +1,4 @@
-name: CI Pipeline (forks)
+name: CI Pipeline (Forks)
 
 on:
   pull_request_target:
