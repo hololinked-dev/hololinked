@@ -24,6 +24,7 @@ from hololinked.client.security import (
 )
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core import Thing
+from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
     EventAffordance,
@@ -337,6 +338,7 @@ class ClientFactory:
         from hololinked.client.http.consumed_interactions import (
             HTTPAction,
             HTTPEvent,
+            HTTPMultiplePropertiesAction,
             HTTPProperty,
         )
 
@@ -474,6 +476,28 @@ class ClientFactory:
                 logger=logger,
             )
             ClientFactory.add_event(object_proxy, consumed_event)
+        top_level_forms = [Form.from_TD(form) for form in TD.get("forms", [])]
+        for opname, method, form_op in [
+            ("_get_properties", Thing._get_properties, "readmultipleproperties"),
+            ("_set_properties", Thing._set_properties, "writemultipleproperties"),
+        ]:
+            form = next((form for form in top_level_forms if form.op == form_op), None)
+            if form is None:
+                continue
+            setattr(
+                object_proxy,
+                opname,
+                HTTPMultiplePropertiesAction(
+                    method=method,
+                    form=form,
+                    sync_client=req_rep_sync_client,
+                    async_client=req_rep_async_client,
+                    invokation_timeout=invokation_timeout,
+                    execution_timeout=execution_timeout,
+                    owner_inst=object_proxy,
+                    logger=logger,
+                ),
+            )
 
         return object_proxy
 

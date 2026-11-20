@@ -21,6 +21,7 @@ from hololinked.client.abstractions import (
 )
 from hololinked.client.exceptions import raise_local_exception
 from hololinked.constants import Operations
+from hololinked.core import Thing
 from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
@@ -307,6 +308,37 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):  # noqa: D10
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
         return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
+
+
+class HTTPMultiplePropertiesAction(HTTPAction):  # noqa: D101
+    # Read or write multiple properties, invoked as an action since the handler lives inside a sub object.
+    # please dont add classdoc
+
+    def __init__(
+        self,
+        method: Any,
+        form: Form,
+        sync_client: httpx.Client,
+        async_client: httpx.AsyncClient,
+        logger: structlog.stdlib.BoundLogger,
+        owner_inst: Any,
+        invokation_timeout: int = 5,
+        execution_timeout: int = 5,
+    ) -> None:
+        resource = method.to_metadata(Thing)
+        resource._thing_id = owner_inst.thing_id
+        form = deepcopy(form)
+        form.op = Operations.invokeaction
+        resource.forms = [form]
+        super().__init__(
+            resource=resource,
+            sync_client=sync_client,
+            async_client=async_client,
+            logger=logger,
+            owner_inst=owner_inst,
+            invokation_timeout=invokation_timeout,
+            execution_timeout=execution_timeout,
+        )
 
 
 class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):  # noqa: D101
@@ -702,5 +734,6 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):  # noqa: D101
 __all__ = [
     "HTTPAction",
     "HTTPEvent",
+    "HTTPMultiplePropertiesAction",
     "HTTPProperty",
 ]
