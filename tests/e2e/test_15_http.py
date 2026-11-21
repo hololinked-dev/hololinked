@@ -50,8 +50,7 @@ def client(td_endpoint: str) -> "ObjectProxy":
 
 @pytest.mark.asyncio(loop_scope="class")
 class TestHTTP_E2E(BaseRPC_E2E):
-    def test_14_rw_multiple_properties(self, client: ObjectProxy):
-        pass
+    pass
 
 
 if __name__ == "__main__":
