@@ -1,5 +1,8 @@
 """Message types - requests, responses and events, with their headers and payloads."""
 
+import time
+
+from enum import Enum
 from typing import Any
 from uuid import uuid4
 
@@ -45,6 +48,17 @@ SUCCESS = "SUCCESS"
 
 EMPTY_BYTE = b""
 
+
+class ContractVersion(str, Enum):
+    """Known versions of the message contract between client and server."""
+
+    V1 = "v1"
+
+
+# version of the message contract between client and server, enforced at handshake, not a semantic version
+CONTRACT_VERSION = ContractVersion.V1.value
+
+
 """
 Message indices 
 
@@ -79,6 +93,9 @@ class RequestHeader(msgspec.Struct):
     operation: str | None = ""
     payloadContentType: str | None = "application/json"
     preencodedPayloadContentType: str | None = "text/plain"
+    timestamp: int = msgspec.field(default_factory=lambda: time.time_ns() // 1000)
+    version: str = CONTRACT_VERSION
+    authorization: str = ""
 
     def __getitem__(self, key: str) -> Any:
         try:
@@ -107,6 +124,8 @@ class ResponseHeader(msgspec.Struct):
     senderID: str
     payloadContentType: str | None = "application/json"
     preencodedPayloadContentType: str | None = ""
+    timestamp: int = msgspec.field(default_factory=lambda: time.time_ns() // 1000)
+    version: str = CONTRACT_VERSION
 
     def __getitem__(self, key: str) -> Any:
         try:
