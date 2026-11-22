@@ -11,12 +11,15 @@ from hololinked.core.exceptions import BreakLoop
 from hololinked.server.zmq import brokers
 from hololinked.server.zmq.brokers import AsyncZMQClient, AsyncZMQServer, SyncZMQClient
 from hololinked.server.zmq.message import (
+    ERROR,
     EXIT,
     HANDSHAKE,
+    HANDSHAKE_ERROR,
     RequestMessage,
     ResponseMessage,
+    SerializableData,
 )
-from hololinked.utils import get_current_async_loop, uuid_hex
+from hololinked.utils import format_exception_as_json, get_current_async_loop, uuid_hex
 
 
 @pytest.fixture(scope="module")
@@ -130,3 +133,110 @@ async def test_08_async_client_handshake_with_mismatching_version_is_refused_ins
         await async_client._handshake(timeout=5000)
     assert time.monotonic() - start < 3
     assert not async_client._handshake_event.is_set()
+
+
+def stale_error_for(server_id: str, client_id: str) -> ResponseMessage:
+    request = RequestMessage.craft_with_message_type(
+        sender_id=client_id, receiver_id=server_id, message_type="OPERATION"
+    )
+    return ResponseMessage.craft_with_message_type(
+        request,
+        ERROR,
+        payload=SerializableData(
+            dict(exception=format_exception_as_json(ValueError("error of an earlier request"))),
+            content_type="application/json",
+        ),
+    )
+
+
+async def test_09_async_client_ignores_stale_error_during_handshake():
+    server_id, client_id = f"test-stale-server-{uuid_hex()}", f"test-stale-client-{uuid_hex()}"
+    server = AsyncZMQServer(id=server_id)
+    client = AsyncZMQClient(id=client_id, server_id=server_id, handshake=False)
+    await asyncio.sleep(0.3)
+    await server.socket.send_multipart(stale_error_for(server_id, client_id).byte_array)
+
+    async def serve():
+        while True:
+            await server.async_recv_requests()
+            await asyncio.sleep(0.01)
+
+    task = asyncio.create_task(serve())
+    start = time.monotonic()
+    await client._handshake(timeout=5000)
+    assert time.monotonic() - start < 3
+    assert client._handshake_event.is_set()
+    task.cancel()
+    client.exit()
+    server.exit()
+    await asyncio.sleep(0.2)
+
+
+def test_10_sync_client_ignores_stale_error_during_handshake():
+    server_id, client_id = f"test-stale-server-{uuid_hex()}", f"test-stale-client-{uuid_hex()}"
+    ready, stop = threading.Event(), threading.Event()
+    client = SyncZMQClient(id=client_id, server_id=server_id, handshake=False)
+
+    def run_server():
+        loop = get_current_async_loop()
+        server = AsyncZMQServer(id=server_id)
+
+        async def run():
+            await asyncio.sleep(0.3)
+            await server.socket.send_multipart(stale_error_for(server_id, client_id).byte_array)
+            ready.set()
+            while not stop.is_set():
+                await server.async_recv_requests()
+                await asyncio.sleep(0.01)
+
+        loop.run_until_complete(run())
+        server.exit()
+
+    thread = threading.Thread(target=run_server, daemon=True)
+    thread.start()
+    assert ready.wait(timeout=3)
+    start = time.monotonic()
+    client.handshake(timeout=5000)
+    assert time.monotonic() - start < 3
+    assert client._monitor_socket is not None
+    stop.set()
+    thread.join(timeout=3)
+    client.exit()
+
+
+def test_11_server_refuses_mismatching_version_with_handshake_error(
+    server_id: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    raw_client_id = f"test-raw-client-{uuid_hex()}"
+    raw_client = SyncZMQClient(id=raw_client_id, server_id=server_id, handshake=False)
+    monkeypatch.setattr(brokers, "CONTRACT_VERSION", "v2")
+    request = RequestMessage.craft_with_message_type(sender_id=raw_client_id, receiver_id=server_id)
+    # a ROUTER drops messages sent before the connection is up, so send again like a handshake does
+    for _ in range(6):
+        raw_client.socket.send_multipart(request.byte_array)
+        if raw_client.poller.poll(500):
+            break
+    else:
+        pytest.fail("server did not answer the handshake")
+    response = ResponseMessage(raw_client.socket.recv_multipart())
+    assert response.type == HANDSHAKE_ERROR
+    assert response.id == request.id
+    raw_client.exit()
+
+
+def test_12_client_raises_on_handshake_error_and_ignores_plain_error(
+    client: SyncZMQClient, server_id: str, client_id: str
+):
+    client.verify_handshake_response(stale_error_for(server_id, client_id))
+    request = RequestMessage.craft_with_message_type(sender_id=client_id, receiver_id=server_id)
+    refusal = ResponseMessage.craft_with_message_type(
+        request,
+        HANDSHAKE_ERROR,
+        payload=SerializableData(
+            dict(exception=format_exception_as_json(ConnectionRefusedError("contract version mismatch"))),
+            content_type="application/json",
+        ),
+    )
+    with pytest.raises(ConnectionRefusedError, match="contract version mismatch"):
+        client.verify_handshake_response(refusal)

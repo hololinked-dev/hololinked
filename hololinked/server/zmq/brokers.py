@@ -19,15 +19,16 @@ import zmq.asyncio
 from zmq.utils.monitor import parse_monitor_message
 
 from hololinked import Serializers
-from hololinked.client.exceptions import raise_local_exception
 from hololinked.config import global_config
 from hololinked.constants import ZMQ_TRANSPORTS
 from hololinked.core.exceptions import BreakLoop
+from hololinked.server.zmq.exceptions import raise_local_exception
 from hololinked.server.zmq.message import (
     CONTRACT_VERSION,
     ERROR,
     EXIT,
     HANDSHAKE,
+    HANDSHAKE_ERROR,
     INVALID_MESSAGE,
     REPLY,
     SERVER_DISCONNECTED,
@@ -722,12 +723,23 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
         # Note that for ROUTER sockets, once the message goes through the sending socket, the address of the receiver
         # is replaced by the address of the sender once received
         if request_message.header.version != CONTRACT_VERSION:
-            await self._handle_error_message(
-                request_message,
-                ConnectionRefusedError(
-                    f"message contract version mismatch, client '{request_message.sender_id}' sent "
-                    + f"'{request_message.header.version}', server '{self.id}' expects '{CONTRACT_VERSION}'"
+            refusal = ConnectionRefusedError(
+                f"message contract version mismatch, client '{request_message.sender_id}' sent "
+                + f"'{request_message.header.version}', server '{self.id}' expects '{CONTRACT_VERSION}'"
+            )
+            handshake_error = ResponseMessage.craft_with_message_type(
+                request_message=request_message,
+                message_type=HANDSHAKE_ERROR,
+                payload=SerializableData(
+                    dict(exception=format_exception_as_json(refusal)),
+                    content_type="application/json",
                 ),
+            )
+            await self.socket.send_multipart(handshake_error.byte_array)
+            self.logger.warning(
+                f"refused handshake from client for exception - {str(refusal)}",
+                receiver_id=handshake_error.receiver_id,
+                msg_id=handshake_error.id,
             )
             return
         handshake_message = ResponseMessage.craft_from_arguments(
@@ -1124,7 +1136,7 @@ class BaseZMQClient(BaseZMQ):
         ConnectionRefusedError
             if the server answered a handshake with an error or with a different contract version
         """
-        if response_message.type == ERROR:
+        if response_message.type == HANDSHAKE_ERROR:
             raise_local_exception(response_message.payload.deserialize())
         if response_message.type == HANDSHAKE:
             server_version = response_message.header["version"]

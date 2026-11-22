@@ -37,6 +37,7 @@ TIMEOUT = "TIMEOUT"  # 5 - timeout message, operation could not be completed
 ERROR = "EXCEPTION"  # 6 - exception occurred while executing operation
 INVALID_MESSAGE = "INVALID_MESSAGE"  # 7 - invalid message
 SERVER_DISCONNECTED = "EVENT_DISCONNECTED"  # 8 - socket died - zmq's builtin event EVENT_DISCONNECTED
+HANDSHAKE_ERROR = "HANDSHAKE_ERROR"  # server refused the handshake, for example due to a contract version mismatch
 # peer to peer
 INTERRUPT = "INTERRUPT"  # 9 - interrupt a socket while polling
 
