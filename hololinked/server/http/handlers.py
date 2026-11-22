@@ -513,7 +513,10 @@ class RPCHandler(BaseHandler):
                 if reply.timed_out:
                     self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
                     return
-                self.set_status(200, "ok")
+                if reply.is_error:
+                    self.set_status(500, "error while executing the operation")
+                else:
+                    self.set_status(200, "ok")
                 await self.write_reply(reply)
         except ConnectionAbortedError as ex:
             self.set_status(503, f"lost connection to thing - {str(ex)}")
@@ -550,7 +553,10 @@ class RPCHandler(BaseHandler):
             if reply.timed_out:
                 self.set_status(408, f"{reply.kind.value.replace('_', ' ')} while executing the operation")
             else:
-                self.set_status(200, "ok")
+                if reply.is_error:
+                    self.set_status(500, "error while executing the operation")
+                else:
+                    self.set_status(200, "ok")
                 await self.write_reply(reply)
             future = None  # answered - the caller has no reason to come back with this message ID
         except KeyError as ex:

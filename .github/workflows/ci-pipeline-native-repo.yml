@@ -1,0 +1,25 @@
+name: CI Pipeline (Native Repo)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: ci
+    # PRs from forks run in ci-pipeline-forks.yml instead, after approval
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/ci-pipeline-jobs.yml
+    with:
+      publish_coverage: ${{ github.ref == 'refs/heads/main' }}
+    secrets:
+      OIDC_TEST_CONFIG_1_B64: ${{ secrets.OIDC_TEST_CONFIG_1_B64 }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

@@ -10,7 +10,7 @@ If you are a web developer or an industry professional looking for a web standar
 
 <img src="https://raw.githubusercontent.com/hololinked-dev/hololinked/main/.github/assets/demo-v2.gif" alt="hololinked demo" width="100%">
 
-[![Sign up for SaaS launch](https://img.shields.io/badge/sign%20up-SaaS%20launch-brightgreen)](https://docs.google.com/forms/d/e/1FAIpQLSdNc3OrSANpWKkfcgj1JgwEeNws47ldbta6gJ4swanQwDmABg/viewform?usp=publish-editor) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev) [![Feedback Form](https://img.shields.io/badge/feedback%20form-red)](https://forms.gle/FB4XwkUDt1wV4GGPA) [![CI Pipeline](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml/badge.svg)](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline.yml) [![Documentation Status](https://img.shields.io/github/actions/workflow/status/hololinked-dev/docs/ci.yaml?label=Build%20And%20Publish%20Docs)](https://github.com/hololinked-dev/docs) [![SAST](https://img.shields.io/badge/sast%20reports-bandit-yellow.svg)](https://docs.hololinked.dev/introduction/security-scanning) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) ![Ruff](https://img.shields.io/badge/linter-ruff-blue?logo=ruff&logoColor=white) [![codecov](https://codecov.io/github/hololinked-dev/hololinked/graph/badge.svg?token=5DI4XJ2KX9)](https://codecov.io/github/hololinked-dev/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841)
+[![Sign up for SaaS launch](https://img.shields.io/badge/sign%20up-SaaS%20launch-brightgreen)](https://docs.google.com/forms/d/e/1FAIpQLSdNc3OrSANpWKkfcgj1JgwEeNws47ldbta6gJ4swanQwDmABg/viewform?usp=publish-editor) [![Discord](https://img.shields.io/discord/1265289049783140464?label=Discord%20Members&logo=discord)](https://discord.com/invite/kEz87zqQXh) [![email](https://img.shields.io/badge/email-brown)](mailto:info@hololinked.dev) [![Feedback Form](https://img.shields.io/badge/feedback%20form-red)](https://forms.gle/FB4XwkUDt1wV4GGPA) [![CI Pipeline](https://img.shields.io/github/actions/workflow/status/hololinked-dev/hololinked/ci-pipeline-native-repo.yml?branch=main&label=CI%20Pipeline)](https://github.com/hololinked-dev/hololinked/actions/workflows/ci-pipeline-native-repo.yml) [![Documentation Status](https://img.shields.io/github/actions/workflow/status/hololinked-dev/docs/ci.yaml?label=Build%20And%20Publish%20Docs)](https://github.com/hololinked-dev/docs) [![SAST](https://img.shields.io/badge/sast%20reports-bandit-yellow.svg)](https://docs.hololinked.dev/introduction/security-scanning) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/version.svg)](https://anaconda.org/conda-forge/hololinked) ![Ruff](https://img.shields.io/badge/linter-ruff-blue?logo=ruff&logoColor=white) [![codecov](https://codecov.io/github/hololinked-dev/hololinked/graph/badge.svg?token=5DI4XJ2KX9)](https://codecov.io/github/hololinked-dev/hololinked) [![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15155942.svg)](https://doi.org/10.5281/zenodo.12802841)
 ## To Install
 
 From pip - `pip install hololinked[all]` /  `pip install hololinked` <br>
@@ -340,36 +340,29 @@ There are other improved ways to configure protocol servers, please refer docume
 
 In an API-first approach, instead of writing code to begin with, one could first define a "Thing Model", written either in JSON or YAML which then binds to an implementation. A Thing Model can be defined as a description of the capabilities of the device, without the protocol specific information, as similar hardware capabilites may be exposed in any protocol and protocols do not define how a hardware behaves. It is similar to a class in OOP, except only the contract and data models are defined.
 
-A Thing Model for a DC Power Supply could like the follows:
+A Thing Model for a DC Power Supply could look like the following, in YAML (JSON compatible or also a JSON file):
 
-```json
-{
-    "@context": "https://www.w3.org/2022/wot/td/v1.1",
-    "@type": "tm:ThingModel",
-    "title": "DCPowerSupply",
-    "properties": {
-        "voltage": {
-            "description": "Get or set the voltage of the power supply.",
-            "type": "number",
-            "unit": "V",
-            "minimum": 0,
-            "maximum": 30,
-            "readOnly": false,
-        }
-    },
-    "actions": {
-        "toggle_power": {
-            "description": "Turn the power supply on or off.",
-            "input": {
-                "type": "object",
-                "properties": {
-                    "state": {"type": "boolean"}
-                },
-                "required": ["state"]
-            }
-        }
-    }
-}
+```yaml
+"@context": https://www.w3.org/2022/wot/td/v1.1
+"@type": tm:ThingModel
+title: DCPowerSupply
+properties:
+  voltage:
+    description: Get or set the voltage of the power supply.
+    type: number
+    unit: V
+    minimum: 0
+    maximum: 30
+    readOnly: false
+actions:
+  toggle_power:
+    description: Turn the power supply on or off.
+    input:
+      type: object
+      properties:
+        state:
+          type: boolean
+      required: [state]
 ```
 
 One still needs to make an implementation in code, however [unlike the code-first implementation](#code-first)
@@ -400,10 +393,11 @@ types or the action arguments, as this would be enforced at runtime.
 Expose your `Thing` by binding the model to the class, in a protocol of your choice:
 
 ```python
-from hololinked.metadata.wot import ThingModel
+from hololinked.metadata.td import ThingModel
 from dc_power_supply import DCPowerSupply
 
-thing_model = ThingModel.from_file("tm.json")
+thing_model = ThingModel.from_file("dcpowersupply.yaml")  # needs pip install hololinked[yaml]
+# thing_model = ThingModel.from_file("dcpowersupply.json")
 dc_power_supply = thing_model.produce(impl=DCPowerSupply(address="COM10"), id="dc-power-supply")
 
 dc_power_supply.run_with_http_server()
@@ -643,13 +637,3 @@ See [organization info](https://github.com/hololinked-dev) for details regarding
 - [discord group](https://discord.com/invite/kEz87zqQXh)
 - [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and
 - [project planning](https://github.com/orgs/hololinked-dev/projects/4) to discuss activities around this repository.
-
-## Currently Supported Features
-
-Some other features that are currently supported:
-
-- use a custom finite state machine.
-- database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties when the object dies and restarts.
-- auto-generate Thing Description for Web of Things applications.
-- use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement
-- asyncio event loops on server side

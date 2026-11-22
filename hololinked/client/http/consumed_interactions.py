@@ -21,6 +21,7 @@ from hololinked.client.abstractions import (
 )
 from hololinked.client.exceptions import raise_local_exception
 from hololinked.constants import Operations
+from hololinked.core import Thing
 from hololinked.metadata.td.forms import Form
 from hololinked.metadata.td.interaction_affordance import (
     ActionAffordance,
@@ -110,20 +111,39 @@ class HTTPConsumedAffordanceMixin:
         ValueError
             If the content type of the response is not supported
         """
-        if response.status_code >= 200 and response.status_code < 300 or response.status_code == 304:
-            body = response.content
-            if not body:
-                return
-            givenContentType = response.headers.get("Content-Type", None)
-            serializer = Serializers.content_types.get(givenContentType or form.contentType or "application/json")
-            if serializer is None:
-                raise ValueError(f"Unsupported content type: {form.contentType}")
-            body = serializer.loads(body)
-            if isinstance(body, dict) and "exception" in body and raise_exception:
-                raise_local_exception(body)
-            return body
-        response.raise_for_status()
-        # return None
+        is_success = (
+            response.status_code >= 200 and response.status_code < 300
+            or response.status_code == 304
+        )
+
+        if not is_success and not raise_exception:
+            response.raise_for_status()
+
+        body = response.content
+        if not body:
+            if not is_success:
+                response.raise_for_status()
+            return
+
+        givenContentType = response.headers.get("Content-Type", None)
+        serializer = Serializers.content_types.get(
+            givenContentType or form.contentType or "application/json"
+        )
+
+        if serializer is None:
+            if not is_success:
+                response.raise_for_status()
+            raise ValueError(f"Unsupported content type: {form.contentType}")
+
+        body = serializer.loads(body)
+
+        if isinstance(body, dict) and "exception" in body and raise_exception:
+            raise_local_exception(body)
+
+        if not is_success:
+            response.raise_for_status()
+
+        return body
 
     def _merge_auth_headers(self, base: dict[str, str]) -> dict[str, str]:
         """
@@ -307,6 +327,37 @@ class HTTPAction(ConsumedThingAction, HTTPConsumedAffordanceMixin):  # noqa: D10
         if form is None:
             raise ValueError(f"No form found for invokeAction operation for {self.resource.name}")
         return HTTPConsumedAffordanceMixin.read_reply(self, form, message_id, timeout)
+
+
+class HTTPMultiplePropertiesAction(HTTPAction):  # noqa: D101
+    # Read or write multiple properties, invoked as an action since the handler lives inside a sub object.
+    # please dont add classdoc
+
+    def __init__(
+        self,
+        method: Any,
+        form: Form,
+        sync_client: httpx.Client,
+        async_client: httpx.AsyncClient,
+        logger: structlog.stdlib.BoundLogger,
+        owner_inst: Any,
+        invokation_timeout: int = 5,
+        execution_timeout: int = 5,
+    ) -> None:
+        resource = method.to_metadata(Thing)
+        resource._thing_id = owner_inst.thing_id
+        form = deepcopy(form)
+        form.op = Operations.invokeaction
+        resource.forms = [form]
+        super().__init__(
+            resource=resource,
+            sync_client=sync_client,
+            async_client=async_client,
+            logger=logger,
+            owner_inst=owner_inst,
+            invokation_timeout=invokation_timeout,
+            execution_timeout=execution_timeout,
+        )
 
 
 class HTTPProperty(ConsumedThingProperty, HTTPConsumedAffordanceMixin):  # noqa: D101
@@ -702,5 +753,6 @@ class HTTPEvent(ConsumedThingEvent, HTTPConsumedAffordanceMixin):  # noqa: D101
 __all__ = [
     "HTTPAction",
     "HTTPEvent",
+    "HTTPMultiplePropertiesAction",
     "HTTPProperty",
 ]

@@ -748,6 +748,7 @@ all = [
     { name = "paho-mqtt" },
     { name = "psycopg2-binary" },
     { name = "pymongo" },
+    { name = "pyyaml" },
     { name = "pyzmq" },
     { name = "serpent" },
     { name = "sqlalchemy" },
@@ -783,6 +784,9 @@ validators = [
     { name = "fastjsonschema" },
     { name = "jsonschema" },
 ]
+yaml = [
+    { name = "pyyaml" },
+]
 zmq = [
     { name = "pyzmq" },
 ]
@@ -807,6 +811,7 @@ all = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "pytest-order" },
+    { name = "pyyaml" },
     { name = "pyzmq" },
     { name = "requests" },
     { name = "ruff" },
@@ -841,6 +846,7 @@ test = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "pytest-order" },
+    { name = "pyyaml" },
     { name = "pyzmq" },
     { name = "requests" },
     { name = "serpent" },
@@ -856,7 +862,7 @@ requires-dist = [
     { name = "bcrypt", specifier = "==4.3.0" },
     { name = "cryptography", specifier = ">=46.0.5" },
     { name = "fastjsonschema", marker = "extra == 'validators'", specifier = "==2.20.0" },
-    { name = "hololinked", extras = ["protocols", "validators", "serializers", "storage"], marker = "extra == 'all'" },
+    { name = "hololinked", extras = ["protocols", "validators", "serializers", "storage", "yaml"], marker = "extra == 'all'" },
     { name = "hololinked", extras = ["sqlalchemy"], marker = "extra == 'postgresql'" },
     { name = "hololinked", extras = ["sqlalchemy", "postgresql", "mongo"], marker = "extra == 'storage'" },
     { name = "httpx", specifier = ">=0.28.1,<29.0" },
@@ -869,6 +875,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.8.0,<3.0.0" },
     { name = "pyjwt", specifier = ">=2.11.0" },
     { name = "pymongo", marker = "extra == 'mongo'", specifier = ">=4.15.2" },
+    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0" },
     { name = "pyzmq", marker = "extra == 'protocols'", specifier = ">=25.1.0,<26.2" },
     { name = "pyzmq", marker = "extra == 'zmq'", specifier = ">=25.1.0,<26.2" },
     { name = "serpent", marker = "extra == 'serializers'", specifier = ">=1.41,<2.0" },
@@ -877,7 +884,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=25.5.0" },
     { name = "tornado", specifier = ">=6.3.3" },
 ]
-provides-extras = ["zmq", "mqtt", "protocols", "validators", "serializers", "sqlalchemy", "postgresql", "mongo", "storage", "all"]
+provides-extras = ["zmq", "mqtt", "protocols", "validators", "serializers", "sqlalchemy", "postgresql", "mongo", "storage", "yaml", "all"]
 
 [package.metadata.requires-dev]
 all = [
@@ -899,6 +906,7 @@ all = [
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "pytest-cov", specifier = ">=4.0.0" },
     { name = "pytest-order", specifier = ">=1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "pyzmq", specifier = ">=25.1.0,<26.2" },
     { name = "requests", specifier = "==2.32.3" },
     { name = "ruff", specifier = "==0.14.2" },
@@ -931,6 +939,7 @@ test = [
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "pytest-cov", specifier = ">=4.0.0" },
     { name = "pytest-order", specifier = ">=1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "pyzmq", specifier = ">=25.1.0,<26.2" },
     { name = "requests", specifier = "==2.32.3" },
     { name = "serpent", specifier = ">=1.41,<2.0" },

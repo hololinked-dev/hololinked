@@ -1,6 +1,8 @@
 from typing import Any, Generator
+from urllib.parse import urlsplit, urlunsplit
 
 import pytest
+import requests
 
 from testkit.helpers import hostname_prefix, stop_all_runs, wait_until_server_ready
 from testkit.suites import TestRPC_E2E as BaseRPC_E2E
@@ -50,9 +52,31 @@ def client(td_endpoint: str) -> "ObjectProxy":
 
 @pytest.mark.asyncio(loop_scope="class")
 class TestHTTP_E2E(BaseRPC_E2E):
-    def test_14_rw_multiple_properties(self, client: ObjectProxy):
-        pass
+    pass
 
+    def test_15_http_action_error_status(self, thing: TestThing, port: int):
+        td_url = f"{hostname_prefix}:{port}/{thing.id}/resources/wot-td?ignore_errors=true"
+        td_response = requests.get(td_url)
+        assert td_response.status_code == 200
 
+        td = td_response.json()
+        action_form = td["actions"]["set_non_remote_number_prop"]["forms"][0]
+        parsed_url = urlsplit(action_form["href"])
+        action_url = urlunsplit(
+            (
+                parsed_url.scheme,
+                f"127.0.0.1:{port}",
+                parsed_url.path,
+                parsed_url.query,
+                parsed_url.fragment,
+            )
+        )
+
+        response = requests.post(action_url, json={"__args__": [5]})
+        assert response.status_code == 200
+
+        response = requests.post(action_url, json={"__args__": [-1]})
+        assert response.status_code == 500
+        assert response.json()["exception"]["type"] == "ValueError"
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
