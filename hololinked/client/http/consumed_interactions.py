@@ -110,20 +110,39 @@ class HTTPConsumedAffordanceMixin:
         ValueError
             If the content type of the response is not supported
         """
-        if response.status_code >= 200 and response.status_code < 300 or response.status_code == 304:
-            body = response.content
-            if not body:
-                return
-            givenContentType = response.headers.get("Content-Type", None)
-            serializer = Serializers.content_types.get(givenContentType or form.contentType or "application/json")
-            if serializer is None:
-                raise ValueError(f"Unsupported content type: {form.contentType}")
-            body = serializer.loads(body)
-            if isinstance(body, dict) and "exception" in body and raise_exception:
-                raise_local_exception(body)
-            return body
-        response.raise_for_status()
-        # return None
+        is_success = (
+            response.status_code >= 200 and response.status_code < 300
+            or response.status_code == 304
+        )
+
+        if not is_success and not raise_exception:
+            response.raise_for_status()
+
+        body = response.content
+        if not body:
+            if not is_success:
+                response.raise_for_status()
+            return
+
+        givenContentType = response.headers.get("Content-Type", None)
+        serializer = Serializers.content_types.get(
+            givenContentType or form.contentType or "application/json"
+        )
+
+        if serializer is None:
+            if not is_success:
+                response.raise_for_status()
+            raise ValueError(f"Unsupported content type: {form.contentType}")
+
+        body = serializer.loads(body)
+
+        if isinstance(body, dict) and "exception" in body and raise_exception:
+            raise_local_exception(body)
+
+        if not is_success:
+            response.raise_for_status()
+
+        return body
 
     def _merge_auth_headers(self, base: dict[str, str]) -> dict[str, str]:
         """
