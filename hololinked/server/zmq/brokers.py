@@ -1362,7 +1362,9 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                         self._response_cache[response_message.id] = response_message
             else:
                 self.logger.info("got no response for handshake")
-        self._monitor_socket = self.socket.get_monitor_socket()
+        # pyzmq's default monitor address is derived from the socket FD
+        # which is reused in fast successive connections, like tests for example
+        self._monitor_socket = self.socket.get_monitor_socket(addr=f"inproc://monitor-{uuid_hex()}")
         self.poller.register(self._monitor_socket, zmq.POLLIN)
         # sufficient to know when server dies only while receiving messages, not continuous polling
 
@@ -1416,7 +1418,9 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             access_point=access_point,
             **kwargs,
         )
-        self._monitor_socket = self.socket.get_monitor_socket()
+        # pyzmq's default monitor address is derived from the socket FD
+        # which is reused in fast successive connections, like tests for example
+        self._monitor_socket = self.socket.get_monitor_socket(addr=f"inproc://monitor-{uuid_hex()}")
         self.poller = zmq.asyncio.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
         self.poller.register(self._monitor_socket, zmq.POLLIN)
