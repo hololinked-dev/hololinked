@@ -1049,6 +1049,8 @@ class BaseZMQClient(BaseZMQ):
         try:
             if self._monitor_socket is not None:
                 self._monitor_socket.close(0)
+                # the monitor endpoint is named after the socket's FD; release it before the FD can be reused
+                self.socket.disable_monitor()
             self.socket.close(0)
             self.logger.info("terminated socket of client")
         except Exception as ex:
