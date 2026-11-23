@@ -10,10 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 Release date format is YYYY-MM-DD.
 
-# [v0.5.1] - 2026-11-xx
+# [v0.6.0] - 2026-11-xx
 
 - Thing Models (or Thing Descriptions) can be loaded from YAML files with `ThingModel.from_file()`, the YAML must be JSON compatible
 - One can assign custom topic names and use custom publishers for events published with MQTT. `MQTTPublisher.add_observable` and `MQTTPublisher.add_event`
+- multiple properties can be read and written over HTTP with the `ObjectProxy` (was always enabled on the server side)
+- HTTP correctly reports status code for error messages 
+- ZMQ protocol was upgraded to use a contract version to version the protocol. This is a breaking change for ZMQ and not compatible with 0.5.x or lower.
 
 # [v0.5.0] - 2026-11-07
 
