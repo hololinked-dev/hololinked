@@ -87,7 +87,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if sys.platform == "win32":
         skip_mqtt = pytest.mark.skip(reason="an MQTT broker is not available on Windows")
         for item in items:
-            if "mqtt" in item.keywords:
+            if item.get_closest_marker("mqtt"):
                 item.add_marker(skip_mqtt)
 
 
