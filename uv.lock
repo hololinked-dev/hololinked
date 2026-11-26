@@ -588,6 +588,25 @@ wheels = [
 ]
 
 [[package]]
+name = "descriptorkit"
+version = "1.0.0"
+source = { editable = "../descriptorkit" }
+
+[package.metadata]
+requires-dist = [
+    { name = "descriptorkit", extras = ["numpy", "pandas"], marker = "extra == 'all'" },
+    { name = "numpy", marker = "extra == 'numpy'", specifier = ">=2.0.0" },
+    { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.2.0" },
+]
+provides-extras = ["numpy", "pandas", "all"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pre-commit", specifier = ">=4.5.0" },
+    { name = "ruff", specifier = "==0.14.2" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -730,6 +749,7 @@ dependencies = [
     { name = "argon2-cffi" },
     { name = "bcrypt" },
     { name = "cryptography" },
+    { name = "descriptorkit" },
     { name = "httpx" },
     { name = "ifaddr" },
     { name = "msgspec" },
@@ -861,6 +881,7 @@ requires-dist = [
     { name = "argon2-cffi", specifier = ">=23.1.0" },
     { name = "bcrypt", specifier = "==4.3.0" },
     { name = "cryptography", specifier = ">=46.0.5" },
+    { name = "descriptorkit", editable = "../descriptorkit" },
     { name = "fastjsonschema", marker = "extra == 'validators'", specifier = "==2.20.0" },
     { name = "hololinked", extras = ["protocols", "validators", "serializers", "storage", "yaml"], marker = "extra == 'all'" },
     { name = "hololinked", extras = ["sqlalchemy"], marker = "extra == 'postgresql'" },
