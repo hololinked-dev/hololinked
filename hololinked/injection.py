@@ -8,6 +8,7 @@ import warnings
 from collections.abc import Callable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from descriptorkit.parameters import Parameter, String
 from pydantic import BaseModel
 
 from hololinked.config import global_config
@@ -18,7 +19,6 @@ from hololinked.core.interfaces import (
     BaseSerializer,
     MetadataFormat,
 )
-from hololinked.param.parameters import Parameter, String
 from hololinked.utils import MappableSingleton, issubklass
 
 

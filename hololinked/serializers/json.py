@@ -11,16 +11,16 @@ from collections import deque
 from enum import Enum
 from typing import Any
 
+from descriptorkit.parameters import (
+    TypeConstrainedDict,
+    TypeConstrainedList,
+    TypedKeyMappingsConstrainedDict,
+)
 from msgspec import Struct
 from msgspec import json as msgspecjson
 
 from hololinked.constants import JSONSerializable
 from hololinked.core.interfaces import BaseSerializer
-from hololinked.param.parameters import (
-    TypeConstrainedDict,
-    TypeConstrainedList,
-    TypedKeyMappingsConstrainedDict,
-)
 from hololinked.utils import format_exception_as_json
 
 

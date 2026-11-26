@@ -7,15 +7,16 @@ from collections.abc import KeysView
 from types import FunctionType
 from typing import TYPE_CHECKING, Any
 
+from descriptorkit.parameterized import EventDispatcher as ParamEventDispatcher
+from descriptorkit.parameterized import EventResolver as ParamEventResolver
+from descriptorkit.parameterized import Parameter, Parameterized, ParameterizedMetaclass
+from descriptorkit.parameterized import edit_constant as edit_constant_parameters
+
 from hololinked.constants import JSON, JSONSerializable
 from hololinked.core.actions import Action, BoundAction, action
 from hololinked.core.events import Event, EventDispatcher
 from hololinked.core.property import Property
 from hololinked.core.utils import resolve_property_docstrings
-from hololinked.param.parameterized import EventDispatcher as ParamEventDispatcher
-from hololinked.param.parameterized import EventResolver as ParamEventResolver
-from hololinked.param.parameterized import Parameter, Parameterized, ParameterizedMetaclass
-from hololinked.param.parameterized import edit_constant as edit_constant_parameters
 from hololinked.utils import getattr_without_descriptor_read
 
 

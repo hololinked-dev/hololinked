@@ -8,10 +8,10 @@ import collections.abc
 from enum import Enum
 from collections import OrderedDict
 
-from hololinked.param.utils import *
-from hololinked.param.exceptions import *
-from hololinked.param.parameterized import Parameterized, dt_types, Parameter
-from hololinked.param.parameters import (
+from descriptorkit.utils import *
+from descriptorkit.exceptions import *
+from descriptorkit.parameterized import Parameterized, dt_types, Parameter
+from descriptorkit.parameters import (
     TypeConstrainedList,
     TypeConstrainedDict,
     abbreviate_paths,

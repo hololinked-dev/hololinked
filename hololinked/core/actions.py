@@ -11,6 +11,8 @@ from inspect import getfullargspec, iscoroutinefunction, signature
 from types import FunctionType, MethodType
 from typing import TYPE_CHECKING, Any
 
+from descriptorkit.parameterized import ParameterizedFunction
+from descriptorkit.parameters import Tuple
 from pydantic import BaseModel, RootModel
 
 from hololinked import SchemaValidators
@@ -19,8 +21,6 @@ from hololinked.constants import JSON
 from hololinked.core.exceptions import StateMachineError
 from hololinked.core.interfaces.metadata import ActionMetadata
 from hololinked.core.utils import get_input_model_from_signature, get_return_type_from_signature
-from hololinked.param.parameterized import ParameterizedFunction
-from hololinked.param.parameters import Tuple
 from hololinked.utils import (
     has_async_def,
     isclassmethod,
