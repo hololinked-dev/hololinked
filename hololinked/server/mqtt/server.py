@@ -7,11 +7,12 @@ from typing import Any, Optional, Self  # noqa: F401
 import aiomqtt
 import structlog
 
+from descriptorkit.parameters import ClassSelector, String
+
 from hololinked.core import Thing
 from hololinked.core.interfaces import BaseProtocolServer
 from hololinked.core.property import Property
 from hololinked.metadata.td.interaction_affordance import EventAffordance, PropertyAffordance
-from hololinked.param.parameters import ClassSelector, String
 from hololinked.server.mqtt.config import RuntimeConfig, TopicPublisherMetadata
 from hololinked.server.mqtt.handlers import ThingDescriptionPublisher, TopicPublisher
 from hololinked.server.mqtt.services import ThingDescriptionService

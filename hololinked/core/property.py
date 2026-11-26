@@ -7,12 +7,13 @@ from enum import Enum
 from operator import attrgetter
 from typing import TYPE_CHECKING, Any
 
+from descriptorkit.parameterized import Parameter, ParameterizedMetaclass
+from descriptorkit.parameters import Tuple
+
 from hololinked import SchemaValidators
 from hololinked.config import global_config
 from hololinked.core.events import Event, EventDispatcher  # noqa: F401
 from hololinked.core.exceptions import StateMachineError
-from hololinked.param.parameterized import Parameter, ParameterizedMetaclass
-from hololinked.param.parameters import Tuple
 from hololinked.utils import issubklass
 
 

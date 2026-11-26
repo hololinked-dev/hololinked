@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, Self
 
 import structlog
 
+from descriptorkit import Parameterized
+from descriptorkit.parameters import ClassSelector, Integer, String, TypeConstrainedDict
 from pydantic import BaseModel
 
-from hololinked.param import Parameterized
-from hololinked.param.parameters import ClassSelector, Integer, String, TypeConstrainedDict
 from hololinked.utils import forkable
 
 

@@ -8,6 +8,8 @@ from uuid import uuid4
 
 import msgspec
 
+from descriptorkit.parameters import Integer
+
 from hololinked import Serializers
 from hololinked.constants import byte_types
 from hololinked.core.eventloop.operations import (  # noqa: F401
@@ -22,7 +24,6 @@ from hololinked.core.eventloop.operations import (  # noqa: F401
     qualified_operation_key,
 )
 from hololinked.core.eventloop.payloads import PreserializedData, SerializableData
-from hololinked.param.parameters import Integer
 
 
 # message types

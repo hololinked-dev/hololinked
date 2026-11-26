@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 
 import numpy as np
 
+from descriptorkit import ParameterizedFunction
 from pydantic import BaseModel, Field, WithJsonSchema
 
 from hololinked import JSONSchema
@@ -19,7 +20,6 @@ from hololinked.core.properties import (
     Selector,
     String,
 )
-from hololinked.param import ParameterizedFunction
 
 
 class TestThing(Thing):

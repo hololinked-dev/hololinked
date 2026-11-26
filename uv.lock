@@ -588,6 +588,15 @@ wheels = [
 ]
 
 [[package]]
+name = "descriptorkit"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/62/3b/605a17bc13c8afff1c8cf691c412f611857e9c106ca90459d5d4ff120a85/descriptorkit-1.0.0.tar.gz", hash = "sha256:88c96ce6839177b976676775a248c45bd7bb618116cae61d769d80b2c5707bac", size = 54711, upload-time = "2026-11-26T18:50:13.597Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/a1/ba869c76c0a625b42e027d56e76a1284af605d958e8000d808d11dfe79c5/descriptorkit-1.0.0-py3-none-any.whl", hash = "sha256:9c530828ab09eb0aa38b5b6131ff99d673d1799532958470f12bae2d5026a30b", size = 57303, upload-time = "2026-11-26T18:50:12.556Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -730,6 +739,7 @@ dependencies = [
     { name = "argon2-cffi" },
     { name = "bcrypt" },
     { name = "cryptography" },
+    { name = "descriptorkit" },
     { name = "httpx" },
     { name = "ifaddr" },
     { name = "msgspec" },
@@ -861,6 +871,7 @@ requires-dist = [
     { name = "argon2-cffi", specifier = ">=23.1.0" },
     { name = "bcrypt", specifier = "==4.3.0" },
     { name = "cryptography", specifier = ">=46.0.5" },
+    { name = "descriptorkit", specifier = ">=1.0.0,<2" },
     { name = "fastjsonschema", marker = "extra == 'validators'", specifier = "==2.20.0" },
     { name = "hololinked", extras = ["protocols", "validators", "serializers", "storage", "yaml"], marker = "extra == 'all'" },
     { name = "hololinked", extras = ["sqlalchemy"], marker = "extra == 'postgresql'" },
