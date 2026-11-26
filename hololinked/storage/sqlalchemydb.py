@@ -93,6 +93,11 @@ class BaseSyncDB(BaseDB):
         if self.config.provider == "sqlite":
             ThingTableBase.metadata.create_all(self.engine)
 
+    def __del__(self) -> None:
+        engine = getattr(self, "engine", None)
+        if engine is not None:
+            engine.dispose()
+
 
 class SQLAlchemyDB(BaseSyncDB):
     """SQLAlchemy-based database engine composed within `Thing`."""
