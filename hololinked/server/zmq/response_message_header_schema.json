@@ -11,7 +11,7 @@
             "type": "string",
             "description": "type of the message",
             "enum": ["REPLY", "ERROR", "TIMEOUT",
-                    "INVALID_MESSAGE", "EVENT_DISCONNECTED"]
+                    "INVALID_MESSAGE", "EVENT_DISCONNECTED","UNAUTHENTICATED"]
         },
         "payloadContentType" : {
             "type": "string",
