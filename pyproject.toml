@@ -141,6 +141,9 @@ all = [
 [tool.uv.sources]
 descriptorkit = { path = "../descriptorkit", editable = true }
 
+[tool.uv.config-settings-package]
+descriptorkit = { editable_mode = "compat" }
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra --strict-markers --strict-config --ignore=lib64"
@@ -171,7 +174,6 @@ filterwarnings = [
 line-length = 120
 exclude = [
     "hololinked/core/properties.py",
-    "hololinked/param"
 ]
 
 [tool.ruff.lint]
@@ -198,9 +200,6 @@ lines-after-imports = 2
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
-
-[tool.ty.src]
-exclude = ["hololinked/param"]
 
 [tool.ty.environment]
 python-platform = "linux" # for sys.platform machine specific
