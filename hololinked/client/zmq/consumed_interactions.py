@@ -35,11 +35,12 @@ from hololinked.server.zmq.message import (
     ERROR,
     INVALID_MESSAGE,
     TIMEOUT,
+    UNAUTHENTICATED,
     ResponseMessage,
 )
 
 
-__error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE]
+__error_message_types__ = [TIMEOUT, ERROR, INVALID_MESSAGE, UNAUTHENTICATED]
 
 
 class ZMQConsumedAffordanceMixin:

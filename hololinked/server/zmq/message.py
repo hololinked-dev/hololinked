@@ -39,9 +39,11 @@ ERROR = "EXCEPTION"  # 6 - exception occurred while executing operation
 INVALID_MESSAGE = "INVALID_MESSAGE"  # 7 - invalid message
 SERVER_DISCONNECTED = "EVENT_DISCONNECTED"  # 8 - socket died - zmq's builtin event EVENT_DISCONNECTED
 HANDSHAKE_ERROR = "HANDSHAKE_ERROR"  # server refused the handshake, for example due to a contract version mismatch
+
+UNAUTHENTICATED = "UNAUTHENTICATED" # server rejected request, missing or invalid credentials
+
 # peer to peer
 INTERRUPT = "INTERRUPT"  # 9 - interrupt a socket while polling
-
 # not used now
 EVENT = "EVENT"
 EVENT_SUBSCRIPTION = "EVENT_SUBSCRIPTION"
