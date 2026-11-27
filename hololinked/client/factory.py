@@ -18,6 +18,7 @@ from hololinked.client.abstractions import (
 )
 from hololinked.client.proxy import ObjectProxy
 from hololinked.client.security import (
+    APIKeySecurity,
     BasicSecurity,
     OAuth2Security,
     OAuthDirectAccessGrant,
@@ -111,6 +112,15 @@ class ClientFactory:
         )
         ```
 
+        ```python
+        client = ClientFactory.zmq(
+            server_id="thing1-server",
+            thing_id="thing1",
+            access_point="tcp://localhost:3569",
+            security=APIKeySecurity(value=os.getenv("APIKEY")),
+        )
+        ```
+
         Parameters
         ----------
         server_id: str
@@ -133,6 +143,9 @@ class ClientFactory:
                 The timeout for invokation requests (in seconds)
             - `execution_timeout`: `float`, optional, default `5.0`.
                 The timeout for execution requests (in seconds)
+            - `security`: `APIKeySecurity`, optional.
+                API key sent with every request as the `authorization` header in the format `apikey <value>`.
+                Only API keys are supported over ZMQ.
 
         Returns
         -------
@@ -141,6 +154,8 @@ class ClientFactory:
 
         Raises
         ------
+        ValueError
+            if `security` is not an `APIKeySecurity`
         ImportError
             if `pyzmq` is not installed - `pip install pyzmq`. Version should be less than 26.2 to support IPC in
             windows machines.
@@ -170,9 +185,27 @@ class ClientFactory:
             thing_id=thing_id,
         )
 
-        # ZMQ req-rep clients
-        sync_zmq_client = SyncZMQClient(f"{id}|sync", server_id=server_id, logger=logger, access_point=access_point)
-        async_zmq_client = AsyncZMQClient(f"{id}|async", server_id=server_id, logger=logger, access_point=access_point)
+        # an unsupported scheme fails here, rather than being silently ignored and rejected by the server later
+        security = kwargs.get("security", None)
+        if security is not None and not isinstance(security, APIKeySecurity):
+            raise ValueError(f"ZMQ client supports only APIKeySecurity, got {type(security).__name__}")
+        authorization = f"apikey {security.value}" if security is not None else ""
+
+        # ZMQ req-rep clients, both carry the credentials so the TD fetch below is authenticated as well
+        sync_zmq_client = SyncZMQClient(
+            f"{id}|sync",
+            server_id=server_id,
+            logger=logger,
+            access_point=access_point,
+            authorization=authorization,
+        )
+        async_zmq_client = AsyncZMQClient(
+            f"{id}|async",
+            server_id=server_id,
+            logger=logger,
+            access_point=access_point,
+            authorization=authorization,
+        )
 
         # Fetch the TD
         Thing.get_thing_model  # noqa: B018  # type: Action
@@ -200,7 +233,7 @@ class ClientFactory:
             logger=logger,
             invokation_timeout=invokation_timeout,
             execution_timeout=execution_timeout,
-            security=kwargs.get("security", None),
+            security=security,
         )
 
         # add properties

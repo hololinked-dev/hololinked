@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from functools import partial
 from typing import Any, Self
 
@@ -17,6 +19,7 @@ from hololinked.core.exceptions import BreakLoop
 from hololinked.core.interfaces import BaseProtocolServer
 from hololinked.core.properties import ClassSelector
 from hololinked.core.thing import Thing
+from hololinked.server.security import APIKeySecurity
 from hololinked.server.zmq.brokers import AsyncZMQServer, EventPublisher
 from hololinked.server.zmq.config import RuntimeConfig
 from hololinked.server.zmq.message import ERROR, REPLY, RequestMessage
@@ -77,6 +80,8 @@ class ZMQServer(BaseProtocolServer):
 
             - `logger`: `structlog.stdlib.BoundLogger`, custom logger instance.
             - `poll_timeout`: `int`, polling timeout in milliseconds.
+            - `security_schemes`: `list[APIKeySecurity]`, API key schemes enforced on every request.
+              Authentication is disabled when not given.
 
         Raises
         ------
@@ -96,6 +101,7 @@ class ZMQServer(BaseProtocolServer):
 
         default_config: dict[str, Any] = dict(
             thing_description_service=kwargs.pop("thing_description_service", ThingDescriptionService),
+            security_schemes=kwargs.pop("security_schemes", None),
         )
         default_config.update(config or dict())
 
@@ -217,9 +223,53 @@ class ZMQServer(BaseProtocolServer):
         self.stop()
         self.logger.info(f"stopped polling at socket {server.socket_address.split(':')[0].upper()}")
 
+    async def is_authenticated(self, request_message: RequestMessage) -> bool:
+        """
+        Check the request's `authorization` header against the configured security schemes.
+
+        The header format is `apikey <value>`, with the scheme name case-insensitive. Any parsing or
+        validation error counts as not authenticated, so a failure can never fall through to execution.
+
+        Parameters
+        ----------
+        request_message: RequestMessage
+            the request, whose header carries the credentials
+
+        Returns
+        -------
+        bool
+            `True` if authentication is disabled or one API key scheme accepted the key
+        """
+        if not self.config.security_schemes:
+            return True
+        authorization = request_message.header["authorization"] or ""
+        scheme, _, apikey = authorization.strip().partition(" ")
+        apikey = apikey.strip()
+        if scheme.lower() != "apikey" or not apikey:
+            return False
+        loop = asyncio.get_running_loop()
+        for security_scheme in self.config.security_schemes:
+            if not isinstance(security_scheme, APIKeySecurity):
+                continue
+            try:
+                # argon2 verification is CPU-bound by design, keep it off the serving event loop
+                if await loop.run_in_executor(None, security_scheme.validate_input, apikey):
+                    return True
+            except Exception as ex:  # noqa: BLE001 - any failure must mean "not authenticated"
+                # never log the key itself, only the scheme and the failure reason
+                self.logger.error(
+                    f"error while authenticating client with API key - {ex!s}",
+                    security_scheme=security_scheme.name,
+                    sender_id=request_message.sender_id,
+                )
+        return False
+
     async def process_request(self, server: AsyncZMQServer, request_message: RequestMessage) -> None:
         """
         Convert one ZMQ request, run it through the event loop and write the answer back.
+
+        Requests failing authentication are rejected with an `UNAUTHENTICATED` response before
+        anything reaches the event loop.
 
         Parameters
         ----------
@@ -228,6 +278,18 @@ class ZMQServer(BaseProtocolServer):
         request_message: RequestMessage
             the request, still in its wire format
         """
+        if not await self.is_authenticated(request_message):
+            self.logger.warning(
+                "rejected unauthenticated request",
+                sender_id=request_message.sender_id,
+                msg_id=request_message.id,
+            )
+            # one generic message for every failure cause, so the reply does not reveal which check failed
+            await server._handle_unauthenticated_message(
+                request_message=request_message,
+                exception=PermissionError("authentication failed, invalid or missing API key"),
+            )
+            return
         try:
             # this is the border: the 5-frame layout, the header structs and the message types are
             # ZMQ artifacts and stop here, an Operation is all the event loop is told

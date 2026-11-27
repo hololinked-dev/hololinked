@@ -17,6 +17,7 @@ Release date format is YYYY-MM-DD.
 - multiple properties can be read and written over HTTP with the `ObjectProxy` (was always enabled on the server side)
 - HTTP correctly reports status code for error messages 
 - ZMQ protocol was upgraded to use a contract version to version the protocol. This is a breaking change for ZMQ and not compatible with 0.5.x or lower.
+- API key authentication for ZMQ: pass `security_schemes=[APIKeySecurity(...)]` to the ZMQ server and `security=APIKeySecurity(value=...)` to `ClientFactory.zmq()`. The key is sent in the message header as `authorization: apikey <value>`. Failed requests are answered with a new `UNAUTHENTICATED` message type and raise `PermissionError` on the client.
 
 # [v0.5.0] - 2026-11-07
 

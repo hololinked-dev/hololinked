@@ -33,6 +33,7 @@ from hololinked.server.zmq.message import (
     REPLY,
     SERVER_DISCONNECTED,
     TIMEOUT,
+    UNAUTHENTICATED,
     EventMessage,
     PreserializedData,
     PreserializedEmptyByte,
@@ -454,6 +455,27 @@ class BaseZMQServer(BaseZMQ):
             f"- implement _handle_error_message in {self.__class__} to handle exceptions.",
         )
 
+    def handle_unauthenticated_message(self, request_message: RequestMessage, exception: Exception) -> None:
+        """
+        Pass an unauthenticated message to the client when the request has no valid credentials.
+
+        Parameters
+        ----------
+        request_message: RequestMessage
+            the client message that was rejected
+        exception: Exception
+            exception describing why the request was rejected
+        """
+        run_callable_somehow(self._handle_unauthenticated_message(request_message, exception))
+
+    def _handle_unauthenticated_message(
+        self, request_message: RequestMessage, exception: Exception
+    ) -> Coroutine[Any, Any, None]:
+        raise NotImplementedError(
+            "unauthenticated messages cannot be handled"
+            + f" - implement _handle_unauthenticated_message in {self.__class__} to handle them."
+        )
+
     def handled_default_message_types(self, request_message: RequestMessage) -> bool:
         """
         Handle default cases for the server without further processing of the request (for example, `HANDSHAKE`).
@@ -810,6 +832,27 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
             msg_id=error_message.id,
         )
 
+    async def _handle_unauthenticated_message(self, request_message: RequestMessage, exception: Exception) -> None:
+        """
+        Inner method that handles unauthenticated messages.
+
+        Scheduled by `handle_unauthenticated_message()`, signature same as `handle_unauthenticated_message()`.
+        """
+        unauthenticated_message = ResponseMessage.craft_with_message_type(
+            request_message=request_message,
+            message_type=UNAUTHENTICATED,
+            payload=SerializableData(
+                dict(exception=format_exception_as_json(exception)),
+                content_type="application/json",
+            ),
+        )
+        await self.socket.send_multipart(unauthenticated_message.byte_array)
+        self.logger.warning(
+            "rejected unauthenticated request",
+            receiver_id=unauthenticated_message.receiver_id,
+            msg_id=unauthenticated_message.id,
+        )
+
     def exit(self) -> None:
         """Unregister socket from poller and terminate socket. context is not terminated as it may be shared."""
         try:
@@ -1030,6 +1073,8 @@ class BaseZMQClient(BaseZMQ):
             Additional arguments:
 
             - `poll_timeout`: `int`, time in milliseconds to poll the socket for messages, default is 1000 ms.
+            - `authorization`: `str`, credentials sent with every operation request, in the format
+                `apikey <value>`. Handshakes are sent without it. Empty by default, i.e. no authentication.
         """
         super().__init__(id=id, **kwargs)
         if not logger:
@@ -1040,6 +1085,8 @@ class BaseZMQClient(BaseZMQ):
         self._response_cache = dict()
         self._poll_timeout = kwargs.get("poll_timeout", 1000)  # default to 1000 ms
         self._stop = False  # in general, stop any loop with this variable
+        # credentials belong to the client rather than to each request, so every operation carries them
+        self._authorization: str = kwargs.get("authorization", "")
 
     @property
     def poll_timeout(self) -> int:
@@ -1251,6 +1298,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             preserialized_payload=preserialized_payload,
             server_execution_context=server_execution_context,
             thing_execution_context=thing_execution_context,
+            authorization=self._authorization,
         )
         self.socket.send_multipart(request_message.byte_array)
         self.logger.debug(
@@ -1600,6 +1648,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             preserialized_payload=preserialized_payload,
             server_execution_context=server_execution_context,
             thing_execution_context=thing_execution_context,
+            authorization=self._authorization,
         )
         await self.socket.send_multipart(request_message.byte_array)
         self.logger.debug(
