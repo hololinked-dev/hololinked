@@ -418,3 +418,14 @@ class ZMQServer(BaseProtocolServer):
 
 
 __all__ = [ZMQServer.__name__]
+
+
+def _extract_apikey(header: str | None) -> str | None:
+    """Return the key from an `authorization: apikey <value>` header, or None."""
+    if not header:
+        return None
+    scheme, _, value = header.partition(" ")
+    if scheme.strip().lower() != "apikey":
+        return None
+    value = value.strip()
+    return value or None
