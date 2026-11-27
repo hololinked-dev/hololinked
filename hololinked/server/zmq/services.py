@@ -14,6 +14,8 @@ from hololinked.constants import Operations
 from hololinked.core.thing import Thing
 from hololinked.metadata.td import ActionAffordance, EventAffordance, PropertyAffordance
 from hololinked.metadata.td.forms import Form
+from hololinked.metadata.td.security_definitions import APIKeySecurityScheme, NoSecurityScheme
+from hololinked.server.security import APIKeySecurity
 
 
 if TYPE_CHECKING:
@@ -138,6 +140,7 @@ class ThingDescriptionService:
         self.add_properties(TD, TM, thing, req_rep_socket_address, pub_sub_socket_address, ignore_errors)
         self.add_actions(TD, TM, thing, req_rep_socket_address, ignore_errors)
         self.add_events(TD, TM, thing, pub_sub_socket_address, ignore_errors)
+        self.add_security_definitions(TD)
 
         return TD
 
@@ -311,6 +314,38 @@ class ThingDescriptionService:
                     name=name,
                     error=str(ex),
                 )
+
+    def add_security_definitions(self, TD: dict[str, Any]) -> None:
+        """
+        Add the security schemes this server enforces to the TD, `nosec` when authentication is disabled.
+
+        Only API key schemes are listed, as `RuntimeConfig` rejects every other scheme for ZMQ. Clients send
+        the key in the message header as `authorization: apikey <value>`.
+
+        Parameters
+        ----------
+        TD: dict[str, Any]
+            The Thing Description to modify in place
+        """
+        security_definitions: dict[str, Any] = {}
+        security: list[str] = []
+        TD["securityDefinitions"] = security_definitions
+        TD["security"] = security
+
+        if not self.server.config.security_schemes:
+            nosec = NoSecurityScheme()
+            nosec.build()
+            security_definitions["nosec"] = nosec.json()
+            security.append("nosec")
+            return
+
+        for scheme in self.server.config.security_schemes:
+            if not isinstance(scheme, APIKeySecurity):
+                continue
+            apikey = APIKeySecurityScheme()
+            apikey.build()
+            security_definitions[scheme.name] = apikey.json()
+            security.append(scheme.name)
 
 
 __all__ = [ThingDescriptionService.__name__]
