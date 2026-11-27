@@ -39,8 +39,7 @@ ERROR = "EXCEPTION"  # 6 - exception occurred while executing operation
 INVALID_MESSAGE = "INVALID_MESSAGE"  # 7 - invalid message
 SERVER_DISCONNECTED = "EVENT_DISCONNECTED"  # 8 - socket died - zmq's builtin event EVENT_DISCONNECTED
 HANDSHAKE_ERROR = "HANDSHAKE_ERROR"  # server refused the handshake, for example due to a contract version mismatch
-
-UNAUTHENTICATED = "UNAUTHENTICATED" # server rejected request, missing or invalid credentials
+UNAUTHENTICATED = "UNAUTHENTICATED"  # server rejected request, missing or invalid credentials
 
 # peer to peer
 INTERRUPT = "INTERRUPT"  # 9 - interrupt a socket while polling
@@ -311,6 +310,7 @@ class RequestMessage:
         preserialized_payload: PreserializedData = PreserializedEmptyByte,
         server_execution_context: SchedulerExecutionContext | dict[str, Any] = default_scheduler_execution_context,
         thing_execution_context: ThingExecutionContext | dict[str, Any] = default_thing_execution_context,
+        authorization: str = "",
     ) -> "RequestMessage":
         """
         Create a request message from the given arguments.
@@ -335,6 +335,8 @@ class RequestMessage:
             server-level execution context while performing the operation
         thing_execution_context: Dict[str, Any]
             thing-level execution context while performing the operation
+        authorization: str
+            credentials of the sender, format `apikey <value>`. Empty when the server needs no authentication.
 
         Returns
         -------
@@ -356,6 +358,7 @@ class RequestMessage:
             payloadContentType=payload.content_type,
             preencodedPayloadContentType=preserialized_payload.content_type,
             thingExecutionContext=thing_execution_context,  # ty: ignore[invalid-argument-type]
+            authorization=authorization,
         )
         message._body = [payload, preserialized_payload]
         message._bytes = [

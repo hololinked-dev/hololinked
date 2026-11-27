@@ -70,12 +70,22 @@ class APIKeySecurity(BaseModel):
     """
     API Key Security Scheme.
 
-    The API key is added into a header named `X-API-Key`.
+    Over HTTP, the API key is added into a header named `X-API-Key`. Over ZMQ, it is sent in the
+    message header as `authorization: apikey <value>`.
 
     ```python
     client = ClientFactory.http(
         url="http://localhost:9000/my-thing/resources/wot-td",
-        security_scheme=APIKeySecurity(value=os.getenv("APIKEY", "default-api-key"))
+        security=APIKeySecurity(value=os.getenv("APIKEY", "default-api-key"))
+    )
+    ```
+
+    ```python
+    client = ClientFactory.zmq(
+        server_id="thing1-server",
+        thing_id="thing1",
+        access_point="tcp://localhost:3569",
+        security=APIKeySecurity(value=os.getenv("APIKEY", "default-api-key"))
     )
     ```
     """
