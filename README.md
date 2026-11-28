@@ -18,7 +18,7 @@ From conda - <br>
 `pip install aiomqtt` (needs to be installed separately) <br>
 `conda install -c conda-forge hololinked` <br>
 
-Or, clone the repository (main branch for latest codebase, which can also contain bugs) and install `pip install .` / `pip install -e .`. The [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
+Or, clone the repository (main branch for latest codebase, which can also contain bugs) and install `pip install .` / `pip install -e .`. The [uv environment `uv.lock`](https://docs.hololinked.dev/introduction/contributing#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
 
 ## Usage/Quickstart
 
@@ -635,5 +635,5 @@ See [organization info](https://github.com/hololinked-dev) for details regarding
 - [good first issues](https://github.com/hololinked-dev/hololinked/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 - [setup development environment](https://docs.hololinked.dev/introduction/contributing#setup-development-environment)
 - [discord group](https://discord.com/invite/kEz87zqQXh)
-- [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and
+- [weekly meetings](https://docs.hololinked.dev/#benefits-you-get-when-you-use-hololinked) and
 - [project planning](https://github.com/orgs/hololinked-dev/projects/4) to discuss activities around this repository.

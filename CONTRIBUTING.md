@@ -8,7 +8,7 @@ All types of contributions are encouraged and valued.
 >
 > - Star the project
 > - Tweet about it or share in social media
-> - Create examples & refer to this project in your project's readme. I can add your example in my [example repository](https://github.com/hololinked-dev/hololinked-examples) if it's really helpful, including use cases in more sophisticated integrations
+> - Create examples & refer to this project in your project's readme. I can add your example in my [example repository](https://github.com/hololinked-dev/examples) if it's really helpful, including use cases in more sophisticated integrations
 > - Mention the project at local meetups/conferences and tell your friends/colleagues
 > - Donate to cover the costs of maintaining it
 
@@ -38,7 +38,7 @@ To start developing and complete the contribution, the following steps may be fo
 There are also other repositories which can use your skills:
 
 - [Documentation](https://github.com/hololinked-dev/docs) in mkdocs which needs significant improvement in beginner level docs which may teach people concepts of data acquisition or IoT, Docstring or API documentation of this repository itself
-- [Examples](https://github.com/hololinked-dev/hololinked-examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package. Hardware implementations of non-existent examples are also welcome, I can open a directory where people can search for code based on hardware and just download your code.
+- [Examples](https://github.com/hololinked-dev/examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package. Hardware implementations of non-existent examples are also welcome, I can open a directory where people can search for code based on hardware and just download your code.
 
 ## I Have a Question
 
