@@ -6,7 +6,7 @@
 
 As a novice, you have a requirement to control and capture data from your hardware, say in your electronics or science lab, and you want to show the data in a dashboard, provide a PyQt GUI or run automated scripts, `hololinked` can help. Even for isolated desktop applications or a small setup without networking, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 
-If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice. By conforming to [W3C Web of Things](https://www.w3.org/WoT/), one can expect a consistent API and flexible bidirectional message flow to interact with your devices, irrespective of the underlying protocol. Currently HTTP, MQTT & ZMQ are supported. See [Use Cases Table](https://docs.hololinked.dev/introduction/use-cases).
+If you are a web developer or an industry professional looking for a web standards compatible (high-speed) IoT runtime, `hololinked` can be a decent choice. By conforming to [W3C Web of Things](https://www.w3.org/WoT/), one can expect a consistent API and flexible bidirectional message flow to interact with your devices, irrespective of the underlying protocol. Currently HTTP, MQTT & ZMQ are supported. See [Use Cases Table](https://docs.hololinked.dev/introduction/protocols/).
 
 <img src="https://raw.githubusercontent.com/hololinked-dev/hololinked/main/.github/assets/demo-v2.gif" alt="hololinked demo" width="100%">
 
@@ -18,7 +18,7 @@ From conda - <br>
 `pip install aiomqtt` (needs to be installed separately) <br>
 `conda install -c conda-forge hololinked` <br>
 
-Or, clone the repository (main branch for latest codebase, which can also contain bugs) and install `pip install .` / `pip install -e .`. The [uv environment `uv.lock`](#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
+Or, clone the repository (main branch for latest codebase, which can also contain bugs) and install `pip install .` / `pip install -e .`. The [uv environment `uv.lock`](https://docs.hololinked.dev/introduction/contributing#setup-development-environment) can also help to setup all dependencies. Currently the dependencies are hard pinned to promote stability, therefore consider using a virtual environment.
 
 ## Usage/Quickstart
 
@@ -58,7 +58,7 @@ class OceanOpticsSpectrometer(Thing):
 
 ### Instantiating Properties
 
-Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc. or one may define one's own using [pydantic or JSON schema](https://docs.hololinked.dev/howto/articles/properties/#schema-constrained-property). To create properties:
+Say, we wish to make device serial number, integration time and the captured intensity as properties. There are certain predefined properties available like `String`, `Number`, `Boolean` etc. or one may define one's own using [pydantic or JSON schema](https://docs.hololinked.dev/beginners-guide/articles/properties/#schema-constrained-property). To create properties:
 
 ```python
 class OceanOpticsSpectrometer(Thing):
@@ -635,5 +635,5 @@ See [organization info](https://github.com/hololinked-dev) for details regarding
 - [good first issues](https://github.com/hololinked-dev/hololinked/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 - [setup development environment](https://docs.hololinked.dev/introduction/contributing#setup-development-environment)
 - [discord group](https://discord.com/invite/kEz87zqQXh)
-- [weekly meetings](https://github.com/hololinked-dev/#monthly-meetings) and
+- [weekly meetings](https://docs.hololinked.dev/#benefits-you-get-when-you-use-hololinked) and
 - [project planning](https://github.com/orgs/hololinked-dev/projects/4) to discuss activities around this repository.
