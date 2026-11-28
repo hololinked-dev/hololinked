@@ -629,7 +629,12 @@ def test_13_object_proxy_with_apikey(port: int) -> None:
         )
         assert len(object_proxy.td["security"]) > 0
         assert security_scheme.name in object_proxy.td["security"]
-        assert security_scheme.name in object_proxy.td["securityDefinitions"]
+        assert object_proxy.td["securityDefinitions"][security_scheme.name] == {
+            "scheme": "apikey",
+            "description": "API Key Authentication",
+            "in": "header",
+            "name": "X-API-Key",
+        }
 
         assert object_proxy.read_property("max_intensity") == 16384
 

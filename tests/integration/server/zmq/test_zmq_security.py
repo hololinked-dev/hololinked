@@ -79,6 +79,8 @@ def test_04_valid_key(secured_thing: TestThing, apikey_scheme: tuple[APIKeySecur
     # the TD advertises the scheme the server enforces
     assert client.td["security"] == [scheme.name]
     assert client.td["securityDefinitions"][scheme.name]["scheme"] == "apikey"
+    assert client.td["securityDefinitions"][scheme.name]["in"] == "header"
+    assert client.td["securityDefinitions"][scheme.name]["name"] == "authorization"
 
 
 @pytest.mark.parametrize(

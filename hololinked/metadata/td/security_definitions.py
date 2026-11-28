@@ -41,22 +41,47 @@ class BasicSecurityScheme(SecurityScheme):
     """Basic Security Scheme - username and password."""
 
     in_: str = Field(default="header", alias="in")
+    name: Optional[str] = None
 
-    def build(self):  # noqa: D102
+    def build(self, name: str = "Authorization", in_: str = "header") -> None:  # ty: ignore[invalid-method-override]
+        """
+        Populate the security scheme metadata.
+
+        Parameters
+        ----------
+        name: str
+            name of the header (or query/cookie parameter) carrying the credentials, default `Authorization`
+        in_: str
+            location of the credentials, default `header`
+        """
         self.scheme = "basic"
         self.description = "HTTP Basic Authentication"
-        self.in_ = "header"
+        self.in_ = in_
+        self.name = name
 
 
 class APIKeySecurityScheme(SecurityScheme):
     """API Key Security Scheme."""
 
     in_: str = Field(default="header", alias="in")
+    name: Optional[str] = None
 
-    def build(self):  # noqa: D102
+    def build(self, name: str, in_: str = "header") -> None:  # ty: ignore[invalid-method-override]
+        """
+        Populate the security scheme metadata.
+
+        Parameters
+        ----------
+        name: str
+            name of the header (or query/cookie parameter) carrying the API key,
+            for example `X-API-Key` over HTTP or `authorization` over ZMQ
+        in_: str
+            location of the API key, default `header`
+        """
         self.scheme = "apikey"
         self.description = "API Key Authentication"
-        self.in_ = "header"
+        self.in_ = in_
+        self.name = name
 
 
 class OIDCSecurityScheme(SecurityScheme):
@@ -71,6 +96,7 @@ class OIDCSecurityScheme(SecurityScheme):
         token_url: str,
         scopes: list[str] | None = ["openid"],
     ) -> None:  # ty: ignore[invalid-method-override]
+        self.scheme = "oauth2"
         self.description = "OpenID Connect Authentication"
         self.token = token_url
         if scopes is not None:

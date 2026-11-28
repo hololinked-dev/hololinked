@@ -343,7 +343,7 @@ class ThingDescriptionService:
             if not isinstance(scheme, APIKeySecurity):
                 continue
             apikey = APIKeySecurityScheme()
-            apikey.build()
+            apikey.build(name="authorization")
             security_definitions[scheme.name] = apikey.json()
             security.append(scheme.name)
 
