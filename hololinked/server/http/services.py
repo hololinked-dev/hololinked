@@ -347,11 +347,12 @@ class ThingDescriptionService:
                 security.append(scheme.name)
             if isinstance(scheme, APIKeySecurity):
                 sec = APIKeySecurityScheme()
+                sec.build(name="X-API-Key")
                 security_definitions[scheme.name] = sec.json()
                 security.append(scheme.name)
             if isinstance(scheme, OIDCSecurity):
                 oidc_sec = OIDCSecurityScheme()
-                oidc_sec.token = f"{scheme.issuer}/protocol/openid-connect/token"
+                oidc_sec.build(token_url=f"{scheme.issuer}/protocol/openid-connect/token")
                 security_definitions[scheme.name] = oidc_sec.json()
                 security.append(scheme.name)
 
